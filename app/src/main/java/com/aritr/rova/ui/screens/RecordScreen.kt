@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.screens
+package com.aritr.rova.ui.screens
 
 import android.Manifest
 import android.os.Build
@@ -31,10 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.aritr.loom.data.LoomPreset
-import com.aritr.loom.service.LoomRecordingService
-import com.aritr.loom.ui.components.*
-import com.aritr.loom.ui.components.LoomAnimations.pulsingOpacity
+import com.aritr.rova.data.RovaPreset
+import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.components.*
+import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.launch
@@ -120,7 +120,7 @@ fun RecordScreen(
             text = { Text("The camera connection was lost during recording.") },
             confirmButton = {
                 Button(
-                    onClick = { LoomRecordingService.stop(context) },
+                    onClick = { RovaRecordingService.stop(context) },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("STOP RECORDING")
@@ -205,8 +205,8 @@ fun RecordScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             val defaultPresets = listOf(
-                                LoomPreset("Drill", 10, 1, 10, "FHD"),
-                                LoomPreset("Vlog", 60, 0, -1, "HD"),
+                                RovaPreset("Drill", 10, 1, 10, "FHD"),
+                                RovaPreset("Vlog", 60, 0, -1, "HD"),
                             )
                             items(defaultPresets) { p ->
                                 val isSelected = duration == p.duration && interval == p.interval
@@ -397,7 +397,7 @@ fun RecordScreen(
                     } else if (serviceState.isRecording && !isCameraActive) {
                         Text("INITIALIZING...", color = Color.Yellow, fontWeight = FontWeight.Bold)
                     } else {
-                        Text("Loom", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     Row {
                         val iconTint = if (isUiLocked) Color.Gray else Color.White
@@ -408,13 +408,13 @@ fun RecordScreen(
                             enabled = !isUiLocked
                         ) {
                             val icon = when (flashMode) {
-                                LoomRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn
-                                LoomRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto
+                                RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn
+                                RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto
                                 else -> Icons.Default.FlashOff
                             }
                             Icon(
                                 icon, "Flash",
-                                tint = if (flashMode == LoomRecordingService.FLASH_MODE_ON) Color.Yellow else iconTint
+                                tint = if (flashMode == RovaRecordingService.FLASH_MODE_ON) Color.Yellow else iconTint
                             )
                         }
                         IconButton(
@@ -470,10 +470,10 @@ fun RecordScreen(
                     ExtendedFloatingActionButton(
                         onClick = {
                             if (serviceState.isPeriodicActive) {
-                                LoomRecordingService.stop(context)
+                                RovaRecordingService.stop(context)
                             } else {
                                 if (permissionsState.allPermissionsGranted) {
-                                    LoomRecordingService.start(
+                                    RovaRecordingService.start(
                                         context,
                                         viewModel.duration.value.toFloat(),
                                         viewModel.interval.value.toFloat(),
@@ -541,7 +541,7 @@ fun RecordScreen(
                                     Spacer(Modifier.height(16.dp))
                                     Text("Hands-Free Mode", style = MaterialTheme.typography.titleLarge, color = Color.White)
                                     Text(
-                                        "Loom will automatically start and stop recording loops based on your settings.",
+                                        "Rova will automatically start and stop recording loops based on your settings.",
                                         color = Color.White.copy(0.8f),
                                         textAlign = TextAlign.Center
                                     )

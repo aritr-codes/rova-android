@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.components
+package com.aritr.rova.ui.components
 
 import android.content.Context
 import android.os.PowerManager

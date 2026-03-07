@@ -14,6 +14,10 @@ captures/
 # Local environment — never commit
 local.properties
 
+# IDE
+.vscode/
+.idea/
+
 # macOS
 .DS_Store
 

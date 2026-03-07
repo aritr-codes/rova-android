@@ -23,7 +23,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Loom"
+        android:theme="@style/Theme.Rova"
         tools:targetApi="31">
         
         <!-- MAIN ACTIVITY -->
@@ -41,12 +41,12 @@
         <activity 
             android:name=".ui.PreviewActivity"
             android:exported="false"
-            android:theme="@style/Theme.Loom"
+            android:theme="@style/Theme.Rova"
             android:screenOrientation="unspecified" />
         
         <!-- BACKGROUND SERVICE -->
         <service 
-            android:name=".service.LoomRecordingService"
+            android:name=".service.RovaRecordingService"
             android:foregroundServiceType="camera|microphone"
             android:exported="false"
             android:stopWithTask="true" />

@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.screens
+package com.aritr.rova.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,13 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.aritr.loom.ui.components.SwitchRow
+import com.aritr.rova.ui.components.SwitchRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
-    val settings = remember { com.aritr.loom.data.LoomSettings(context) }
+    val settings = remember { com.aritr.rova.data.RovaSettings(context) }
     
     // Simple state mapping for now
     var enableBeeps by remember { mutableStateOf(settings.enableBeeps) }

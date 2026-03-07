@@ -1,4 +1,4 @@
-package com.aritr.loom.ui
+package com.aritr.rova.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -13,10 +13,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.aritr.loom.ui.screens.HistoryScreen
-import com.aritr.loom.ui.screens.RecordScreen
-import com.aritr.loom.ui.screens.ScheduleScreen
-import com.aritr.loom.ui.screens.SettingsScreen
+import com.aritr.rova.ui.screens.HistoryScreen
+import com.aritr.rova.ui.screens.RecordScreen
+import com.aritr.rova.ui.screens.ScheduleScreen
+import com.aritr.rova.ui.screens.SettingsScreen
 
 @Composable
 fun MainScreen() {

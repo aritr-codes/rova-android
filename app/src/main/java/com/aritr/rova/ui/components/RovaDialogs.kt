@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.components
+package com.aritr.rova.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -125,7 +125,7 @@ fun PermissionRationaleDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Permissions Required") },
-        text = { Text("Loom needs Camera and Microphone permissions to record videos, and Storage access to save them.") },
+        text = { Text("Rova needs Camera and Microphone permissions to record videos, and Storage access to save them.") },
         confirmButton = {
             TextButton(onClick = onGrant) {
                 Text("Grant")

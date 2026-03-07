@@ -1,4 +1,4 @@
-package com.aritr.loom
+package com.aritr.rova
 
 import org.junit.Test
 

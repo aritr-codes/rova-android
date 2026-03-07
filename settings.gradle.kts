@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Loom"
+rootProject.name = "Rova"
 include(":app")

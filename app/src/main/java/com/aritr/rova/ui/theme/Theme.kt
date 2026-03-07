@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.theme
+package com.aritr.rova.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -44,7 +44,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun LoomTheme(
+fun RovaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,

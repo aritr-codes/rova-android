@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.components
+package com.aritr.rova.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.border
@@ -11,7 +11,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-object LoomAnimations {
+object RovaAnimations {
 
     @Composable
     fun pulsingOpacity(

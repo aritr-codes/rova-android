@@ -1,4 +1,4 @@
-package com.aritr.loom
+package com.aritr.rova
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,8 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.aritr.loom.ui.theme.LoomTheme
-import com.aritr.loom.ui.MainScreen
+import com.aritr.rova.ui.theme.RovaTheme
+import com.aritr.rova.ui.MainScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            LoomTheme {
+            RovaTheme {
                 MainScreen()
             }
         }
@@ -38,7 +38,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-    LoomTheme {
+    RovaTheme {
         Greeting("Android")
     }
 }

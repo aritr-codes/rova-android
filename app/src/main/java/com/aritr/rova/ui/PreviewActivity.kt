@@ -1,4 +1,4 @@
-package com.aritr.loom.ui
+package com.aritr.rova.ui
 
 import android.app.Activity
 import android.content.ContentValues
@@ -85,9 +85,9 @@ class PreviewActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) {
                     val videoFile = File(videoPath)
                     val values = ContentValues().apply {
-                        put(MediaStore.Video.Media.DISPLAY_NAME, "Loom_${System.currentTimeMillis()}.mp4")
+                        put(MediaStore.Video.Media.DISPLAY_NAME, "Rova_${System.currentTimeMillis()}.mp4")
                         put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                        put(MediaStore.Video.Media.RELATIVE_PATH, "Pictures/Loom")
+                        put(MediaStore.Video.Media.RELATIVE_PATH, "Pictures/Rova")
                         put(MediaStore.Video.Media.IS_PENDING, 1)
                     }
 
@@ -132,7 +132,7 @@ class PreviewActivity : ComponentActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(intent, "Share Loom Video"))
+            startActivity(Intent.createChooser(intent, "Share Rova Video"))
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "❌ Share failed", Toast.LENGTH_SHORT).show()
@@ -169,7 +169,7 @@ fun PreviewScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Loom Preview", color = Color.White) },
+                title = { Text("Rova Preview", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)

@@ -1,4 +1,4 @@
-package com.aritr.loom.service
+package com.aritr.rova.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -27,8 +27,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import com.aritr.loom.MainActivity
-import com.aritr.loom.R
+import com.aritr.rova.MainActivity
+import com.aritr.rova.R
 import android.os.Binder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -45,8 +45,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
-import com.aritr.loom.data.LoomSettings
-import com.aritr.loom.utils.VideoMerger
+import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.utils.VideoMerger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,7 +54,7 @@ import androidx.camera.video.VideoRecordEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
 
-data class LoomServiceState(
+data class RovaServiceState(
     val isRecording: Boolean = false,
     val nextRecordingCountdown: Long = 0,
     val segmentCount: Int = 0,
@@ -67,7 +67,7 @@ data class LoomServiceState(
     val isCameraActive: Boolean = false
 )
 
-class LoomRecordingService : Service(), LifecycleOwner {
+class RovaRecordingService : Service(), LifecycleOwner {
 
     private lateinit var lifecycleRegistry: LifecycleRegistry
     private var cameraProvider: ProcessCameraProvider? = null
@@ -78,7 +78,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
     private val setupMutex = kotlinx.coroutines.sync.Mutex()
 
     // C1: State is now an instance field, not a companion object global
-    private val _serviceState = MutableStateFlow(LoomServiceState())
+    private val _serviceState = MutableStateFlow(RovaServiceState())
 
     // C2: Signals when the UI has provided a SurfaceProvider so recording can begin
     private var surfaceProviderReady = CompletableDeferred<Unit>()
@@ -102,15 +102,15 @@ class LoomRecordingService : Service(), LifecycleOwner {
     private var resolutionStr = "FHD"
 
     inner class LocalBinder : Binder() {
-        fun getService(): LoomRecordingService = this@LoomRecordingService
+        fun getService(): RovaRecordingService = this@RovaRecordingService
         // C1: State exposed through the binder, not via static companion accessor
-        fun getStateFlow(): StateFlow<LoomServiceState> = _serviceState.asStateFlow()
+        fun getStateFlow(): StateFlow<RovaServiceState> = _serviceState.asStateFlow()
     }
 
     private val binder = LocalBinder()
 
     fun setSurfaceProvider(surfaceProvider: Preview.SurfaceProvider?) {
-        android.util.Log.d("LoomService", "setSurfaceProvider: received: $surfaceProvider")
+        android.util.Log.d("RovaService", "setSurfaceProvider: received: $surfaceProvider")
         currentSurfaceProvider = surfaceProvider
 
         if (surfaceProvider != null) {
@@ -130,17 +130,17 @@ class LoomRecordingService : Service(), LifecycleOwner {
         if (!_serviceState.value.isCameraActive) {
             serviceScope.launch { setupCamera() }
         } else {
-            android.util.Log.d("LoomService", "startCameraPreview: Camera already active, skipping setup")
+            android.util.Log.d("RovaService", "startCameraPreview: Camera already active, skipping setup")
         }
     }
 
     companion object {
-        const val CHANNEL_ID = "LoomRecordingChannel"
+        const val CHANNEL_ID = "RovaRecordingChannel"
         const val NOTIFICATION_ID = 1
         const val ACTION_STOP = "STOP_RECORDING"
 
         fun start(context: Context, nSeconds: Float, mMinutes: Float, limitLoops: Int = -1, resolution: String = "FHD") {
-            val intent = Intent(context, LoomRecordingService::class.java).apply {
+            val intent = Intent(context, RovaRecordingService::class.java).apply {
                 putExtra("N_SECONDS", nSeconds)
                 putExtra("M_MINUTES", mMinutes)
                 putExtra("LIMIT_LOOPS", limitLoops)
@@ -150,7 +150,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, LoomRecordingService::class.java)
+            val intent = Intent(context, RovaRecordingService::class.java)
             context.stopService(intent)
         }
 
@@ -187,8 +187,8 @@ class LoomRecordingService : Service(), LifecycleOwner {
             resolutionStr = intent.getStringExtra("RESOLUTION") ?: "FHD"
         } else {
             // C4: OS restarted service (START_STICKY) — restore from user settings
-            android.util.Log.w("LoomService", "onStartCommand: null intent (OS restart) — restoring params from LoomSettings")
-            val settings = LoomSettings(this)
+            android.util.Log.w("RovaService", "onStartCommand: null intent (OS restart) — restoring params from RovaSettings")
+            val settings = RovaSettings(this)
             nSeconds = settings.durationSeconds.toLong()
             mMinutes = settings.intervalMinutes.toLong()
             limitLoops = settings.loopCount
@@ -200,7 +200,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
         // R4: Abort early if there is not enough free storage
         val estimatedBytes = estimateSessionBytes()
         if (!hasEnoughStorage(estimatedBytes)) {
-            android.util.Log.e("LoomService", "onStartCommand: Insufficient storage — aborting session")
+            android.util.Log.e("RovaService", "onStartCommand: Insufficient storage — aborting session")
             val notification = createNotification("Not enough storage to record. Free up space and try again.")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -238,7 +238,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
                 // If it never arrives (background-only launch), proceed headlessly.
                 val surfaceArrived = withTimeoutOrNull(3000) { surfaceProviderReady.await() }
                 if (surfaceArrived == null) {
-                    android.util.Log.w("LoomService", "startPeriodicRecording: SurfaceProvider timeout — proceeding headlessly")
+                    android.util.Log.w("RovaService", "startPeriodicRecording: SurfaceProvider timeout — proceeding headlessly")
                 }
 
                 setupCamera()
@@ -287,34 +287,34 @@ class LoomRecordingService : Service(), LifecycleOwner {
 
     private suspend fun setupCamera() {
         setupMutex.withLock {
-            android.util.Log.d("LoomService", "setupCamera: Starting setup workflow")
+            android.util.Log.d("RovaService", "setupCamera: Starting setup workflow")
 
             if (currentSurfaceProvider == null) {
-                android.util.Log.w("LoomService", "setupCamera: No SurfaceProvider — binding without preview display")
+                android.util.Log.w("RovaService", "setupCamera: No SurfaceProvider — binding without preview display")
             }
 
             if (cameraProvider != null) {
                 if (_serviceState.value.isCameraActive) {
-                    android.util.Log.d("LoomService", "setupCamera: Camera already active. Skipping setup.")
+                    android.util.Log.d("RovaService", "setupCamera: Camera already active. Skipping setup.")
                     return@withLock
                 }
                 if (_serviceState.value.isRecording) {
-                    android.util.Log.w("LoomService", "setupCamera: Attempted to setup while recording! Aborting.")
+                    android.util.Log.w("RovaService", "setupCamera: Attempted to setup while recording! Aborting.")
                     return@withLock
                 }
-                android.util.Log.d("LoomService", "setupCamera: Unbinding existing provider for clean setup")
+                android.util.Log.d("RovaService", "setupCamera: Unbinding existing provider for clean setup")
                 try { cameraProvider?.unbindAll() } catch (e: Exception) {}
                 _serviceState.update { it.copy(isCameraActive = false) }
             } else {
                 val provider = withContext(Dispatchers.IO) {
-                    ProcessCameraProvider.getInstance(this@LoomRecordingService).get()
+                    ProcessCameraProvider.getInstance(this@RovaRecordingService).get()
                 }
                 cameraProvider = provider
             }
 
             val provider = cameraProvider ?: return@withLock
 
-            android.util.Log.d("LoomService", "setupCamera: Initializing UseCases (Preview + VideoCapture)")
+            android.util.Log.d("RovaService", "setupCamera: Initializing UseCases (Preview + VideoCapture)")
 
             val quality = when (resolutionStr) {
                 "4K" -> Quality.UHD
@@ -339,7 +339,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
 
             try {
                 provider.unbindAll()
-                android.util.Log.d("LoomService", "setupCamera: Binding to lifecycle")
+                android.util.Log.d("RovaService", "setupCamera: Binding to lifecycle")
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector,
@@ -347,11 +347,11 @@ class LoomRecordingService : Service(), LifecycleOwner {
                     videoCapture
                 )
                 _serviceState.update { it.copy(isCameraActive = true) }
-                android.util.Log.d("LoomService", "setupCamera: Camera binding COMPLETED. Active: true")
+                android.util.Log.d("RovaService", "setupCamera: Camera binding COMPLETED. Active: true")
                 applyFlashState()
             } catch (e: Exception) {
                 e.printStackTrace()
-                android.util.Log.e("LoomService", "setupCamera: Binding failed", e)
+                android.util.Log.e("RovaService", "setupCamera: Binding failed", e)
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
@@ -360,7 +360,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
     // R1: Guard against flipping camera while a segment is actively recording
     fun flipCamera() {
         if (_serviceState.value.isRecording) {
-            android.util.Log.d("LoomService", "flipCamera: Ignored — recording in progress")
+            android.util.Log.d("RovaService", "flipCamera: Ignored — recording in progress")
             return
         }
         currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
@@ -388,7 +388,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
     private suspend fun recordSegment() {
         try {
             val videoCap = videoCapture ?: run {
-                android.util.Log.e("LoomService", "recordSegment: VideoCapture is null!")
+                android.util.Log.e("RovaService", "recordSegment: VideoCapture is null!")
                 return
             }
 
@@ -397,7 +397,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
 
             val timestamp = System.currentTimeMillis()
             val videoFile = File(videoDir, "segment_bg_$timestamp.mp4")
-            android.util.Log.d("LoomService", "recordSegment: Preparing file: ${videoFile.absolutePath}")
+            android.util.Log.d("RovaService", "recordSegment: Preparing file: ${videoFile.absolutePath}")
 
             val outputOptions = FileOutputOptions.Builder(videoFile).build()
 
@@ -406,7 +406,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 pendingRecording = pendingRecording.withAudioEnabled()
             } else {
-                android.util.Log.w("LoomService", "recordSegment: Audio permission missing, recording video only")
+                android.util.Log.w("RovaService", "recordSegment: Audio permission missing, recording video only")
             }
 
             // R2: Fresh deferred for this segment's finalize event
@@ -415,16 +415,16 @@ class LoomRecordingService : Service(), LifecycleOwner {
             currentRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
-                        android.util.Log.d("LoomService", "Recording STARTED")
+                        android.util.Log.d("RovaService", "Recording STARTED")
                     }
                     is VideoRecordEvent.Finalize -> {
                         if (!event.hasError()) {
-                            android.util.Log.d("LoomService", "Recording FINALIZED. Size: ${videoFile.length()} bytes")
+                            android.util.Log.d("RovaService", "Recording FINALIZED. Size: ${videoFile.length()} bytes")
                             updateNotification("Segment Saved: ${(videoFile.length() / 1024)} KB")
                         } else {
                             currentRecording?.close()
                             currentRecording = null
-                            android.util.Log.e("LoomService", "Recording ERROR: ${event.error}")
+                            android.util.Log.e("RovaService", "Recording ERROR: ${event.error}")
                             updateNotification("Recording Error: ${event.error}")
                             if (videoFile.exists()) videoFile.delete()
                         }
@@ -435,10 +435,10 @@ class LoomRecordingService : Service(), LifecycleOwner {
                 }
             }
 
-            android.util.Log.d("LoomService", "recordSegment: Recording initialized, waiting ${nSeconds}s")
+            android.util.Log.d("RovaService", "recordSegment: Recording initialized, waiting ${nSeconds}s")
             delay(nSeconds * 1000)
 
-            android.util.Log.d("LoomService", "recordSegment: Stopping recording normally")
+            android.util.Log.d("RovaService", "recordSegment: Stopping recording normally")
             currentRecording?.stop()
             currentRecording = null
 
@@ -446,14 +446,14 @@ class LoomRecordingService : Service(), LifecycleOwner {
             withTimeoutOrNull(3000) { recordingFinalized.await() }
 
         } catch (e: CancellationException) {
-            android.util.Log.d("LoomService", "recordSegment: Cancelled")
+            android.util.Log.d("RovaService", "recordSegment: Cancelled")
             try { currentRecording?.stop() } catch (e2: Exception) {}
             currentRecording = null
             recordingFinalized.complete(Unit)
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            android.util.Log.e("LoomService", "recordSegment: Exception: ${e.message}", e)
+            android.util.Log.e("RovaService", "recordSegment: Exception: ${e.message}", e)
             recordingFinalized.complete(Unit)
         }
     }
@@ -462,7 +462,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Loom Background Recording",
+                "Rova Background Recording",
                 NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -470,14 +470,14 @@ class LoomRecordingService : Service(), LifecycleOwner {
     }
 
     private fun createNotification(contentText: String): Notification {
-        val stopIntent = Intent(this, LoomRecordingService::class.java).apply { action = ACTION_STOP }
+        val stopIntent = Intent(this, RovaRecordingService::class.java).apply { action = ACTION_STOP }
         val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
         val openPendingIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🎥 Loom Recording Active")
+            .setContentTitle("🎥 Rova Recording Active")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setContentIntent(openPendingIntent)
@@ -509,8 +509,8 @@ class LoomRecordingService : Service(), LifecycleOwner {
         currentRecording = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
         serviceScope.cancel()
-        _serviceState.update { LoomServiceState() }
-        android.util.Log.d("LoomService", "releaseResources: Resources released")
+        _serviceState.update { RovaServiceState() }
+        android.util.Log.d("RovaService", "releaseResources: Resources released")
     }
 
     private fun stopPeriodicRecordingAndMerge() {
@@ -545,7 +545,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
 
             val videoDir = File(getExternalFilesDir("videos"), "")
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val outputFile = File(videoDir, "Loom_${timestamp}.mp4")
+            val outputFile = File(videoDir, "Rova_${timestamp}.mp4")
 
             VideoMerger.mergeSegments(segments, outputFile) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
@@ -570,13 +570,13 @@ class LoomRecordingService : Service(), LifecycleOwner {
 
     // Q3: Short beep on recording start/stop using loom_beep.mp3, respects enableBeeps setting
     private fun beep() {
-        if (!LoomSettings(this).enableBeeps) return
+        if (!RovaSettings(this).enableBeeps) return
         try {
-            val mp = MediaPlayer.create(this, R.raw.loom_beep)
+            val mp = MediaPlayer.create(this, R.raw.rova_beep)
             mp.setOnCompletionListener { it.release() }
             mp.start()
         } catch (e: Exception) {
-            android.util.Log.w("LoomService", "beep: Failed to play sound", e)
+            android.util.Log.w("RovaService", "beep: Failed to play sound", e)
         }
     }
 
@@ -588,7 +588,7 @@ class LoomRecordingService : Service(), LifecycleOwner {
                 name.startsWith("segment_bg_") && name.endsWith(".mp4")
             } ?: return@launch
             if (orphans.isNotEmpty()) {
-                android.util.Log.w("LoomService", "cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s)")
+                android.util.Log.w("RovaService", "cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s)")
                 orphans.forEach { it.delete() }
             }
         }
@@ -612,11 +612,11 @@ class LoomRecordingService : Service(), LifecycleOwner {
             val available = stat.availableBlocksLong * stat.blockSizeLong
             val required = estimatedBytes + 50 * 1024 * 1024L
             if (available < required) {
-                android.util.Log.w("LoomService", "hasEnoughStorage: Available=${available / 1024 / 1024}MB, Required=${required / 1024 / 1024}MB")
+                android.util.Log.w("RovaService", "hasEnoughStorage: Available=${available / 1024 / 1024}MB, Required=${required / 1024 / 1024}MB")
             }
             available >= required
         } catch (e: Exception) {
-            android.util.Log.w("LoomService", "hasEnoughStorage: Check failed, proceeding optimistically", e)
+            android.util.Log.w("RovaService", "hasEnoughStorage: Check failed, proceeding optimistically", e)
             true
         }
     }

@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.screens
+package com.aritr.rova.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn

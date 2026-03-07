@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.components
+package com.aritr.rova.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -13,7 +13,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.aritr.loom.ui.components.LoomAnimations.pulsingOpacity
+import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 
 @Composable
 fun BackgroundRecordingBanner(

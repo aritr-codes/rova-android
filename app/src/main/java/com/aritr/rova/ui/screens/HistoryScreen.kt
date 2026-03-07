@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.screens
+package com.aritr.rova.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi

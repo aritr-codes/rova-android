@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.theme
+package com.aritr.rova.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

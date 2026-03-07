@@ -1,4 +1,4 @@
-package com.aritr.loom.ui.screens
+package com.aritr.rova.ui.screens
 
 import android.app.Application
 import android.content.ComponentName
@@ -9,10 +9,10 @@ import android.os.IBinder
 import androidx.camera.core.Preview
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.aritr.loom.data.LoomPreset
-import com.aritr.loom.data.LoomSettings
-import com.aritr.loom.service.LoomRecordingService
-import com.aritr.loom.service.LoomServiceState
+import com.aritr.rova.data.RovaPreset
+import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.service.RovaServiceState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +24,7 @@ import org.json.JSONObject
  * ViewModel for RecordScreen.
  *
  * A1: Owns all recording settings state (duration, interval, loopCount, resolution, flashMode,
- *     keepScreenOn, enableBeeps, backgroundMode) and persists changes to LoomSettings.
+ *     keepScreenOn, enableBeeps, backgroundMode) and persists changes to RovaSettings.
  *
  * A2: Manages the ServiceConnection lifecycle — binds in init, unbinds in onCleared.
  *     Collects state from the service instance (C1) and re-exposes it as a StateFlow.
@@ -32,17 +32,17 @@ import org.json.JSONObject
 class RecordViewModel(application: Application) : AndroidViewModel(application) {
 
     private val context: Context = application
-    private val settings = LoomSettings(context)
+    private val settings = RovaSettings(context)
 
     // --- Service state (C1: pulled from instance, not companion static) ---
-    private var serviceBinder: LoomRecordingService.LocalBinder? = null
-    private val _serviceState = MutableStateFlow(LoomServiceState())
-    val serviceState: StateFlow<LoomServiceState> = _serviceState.asStateFlow()
+    private var serviceBinder: RovaRecordingService.LocalBinder? = null
+    private val _serviceState = MutableStateFlow(RovaServiceState())
+    val serviceState: StateFlow<RovaServiceState> = _serviceState.asStateFlow()
 
     // A2: ServiceConnection managed here, not in the Composable
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            val localBinder = binder as LoomRecordingService.LocalBinder
+            val localBinder = binder as RovaRecordingService.LocalBinder
             serviceBinder = localBinder
             localBinder.getService().startCameraPreview()
             // Collect from the service instance's StateFlow
@@ -63,7 +63,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val interval = MutableStateFlow(settings.intervalMinutes)
     val loopCount = MutableStateFlow(settings.loopCount)
     val resolution = MutableStateFlow(settings.resolution)
-    val flashMode = MutableStateFlow(LoomRecordingService.FLASH_MODE_OFF)
+    val flashMode = MutableStateFlow(RovaRecordingService.FLASH_MODE_OFF)
 
     // --- App settings (Q3: now readable and writable from ViewModel) ---
     val keepScreenOn = MutableStateFlow(settings.keepScreenOn)
@@ -72,12 +72,12 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Presets ---
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
-    val customPresets: StateFlow<List<LoomPreset>> = _customPresets.asStateFlow()
+    val customPresets: StateFlow<List<RovaPreset>> = _customPresets.asStateFlow()
 
     init {
         // A2: Bind to the service. BIND_AUTO_CREATE starts the service process if needed
         // but does NOT call onStartCommand — recording only starts when start() is called.
-        val intent = Intent(context, LoomRecordingService::class.java)
+        val intent = Intent(context, RovaRecordingService::class.java)
         context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         // A1: Persist any settings changes back to SharedPreferences
@@ -113,7 +113,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     // --- Preset management ---
 
     fun savePreset(name: String) {
-        val newPreset = LoomPreset(
+        val newPreset = RovaPreset(
             name = name,
             duration = duration.value,
             interval = interval.value,
@@ -125,18 +125,18 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         persistPresets(updated)
     }
 
-    fun deletePreset(preset: LoomPreset) {
+    fun deletePreset(preset: RovaPreset) {
         val updated = _customPresets.value - preset
         _customPresets.value = updated
         persistPresets(updated)
     }
 
-    private fun loadPresetsFromSettings(): List<LoomPreset> {
+    private fun loadPresetsFromSettings(): List<RovaPreset> {
         return try {
             val array = JSONArray(settings.customPresetsJson)
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
-                LoomPreset(
+                RovaPreset(
                     obj.getString("name"),
                     obj.getInt("duration"),
                     obj.getInt("interval"),
@@ -149,7 +149,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun persistPresets(presets: List<LoomPreset>) {
+    private fun persistPresets(presets: List<RovaPreset>) {
         val array = JSONArray()
         presets.forEach { p ->
             array.put(JSONObject().apply {

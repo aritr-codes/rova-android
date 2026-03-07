@@ -1,10 +1,10 @@
-package com.aritr.loom.data
+package com.aritr.rova.data
 
 import android.content.Context
 import androidx.core.content.edit
 
-class LoomSettings(context: Context) {
-    private val prefs = context.getSharedPreferences("loom_settings", Context.MODE_PRIVATE)
+class RovaSettings(context: Context) {
+    private val prefs = context.getSharedPreferences("rova_settings", Context.MODE_PRIVATE)
 
     var durationSeconds: Int
         get() = prefs.getInt("duration", 10)
@@ -52,7 +52,7 @@ class LoomSettings(context: Context) {
         set(value) = prefs.edit { putString("custom_presets", value) }
 }
 
-data class LoomPreset(
+data class RovaPreset(
     val name: String,
     val duration: Int,
     val interval: Int,
