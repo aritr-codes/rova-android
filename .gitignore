@@ -1,0 +1,30 @@
+# Android / Gradle build outputs
+**/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Android Studio / IntelliJ IDEA
+*.iml
+.idea/
+.gradle/
+captures/
+
+# Local environment — never commit
+local.properties
+
+# macOS
+.DS_Store
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# Keystore / signing — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Profiling
+*.hprof
