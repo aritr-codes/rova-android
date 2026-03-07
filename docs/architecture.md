@@ -13,7 +13,7 @@
 | Permissions | Accompanist Permissions |
 | Navigation | Navigation Compose |
 | State | AndroidViewModel + MutableStateFlow |
-| Persistence | SharedPreferences (via LoomSettings) |
+| Persistence | SharedPreferences (via RovaSettings) |
 | Video Merge | Android MediaMuxer + MediaExtractor |
 
 ---
@@ -21,25 +21,31 @@
 ## 2. Project Structure
 
 ```
-app/src/main/java/com/aritr/loom/
+app/src/main/java/com/aritr/rova/
 ├── MainActivity.kt                  # Entry point, renders MainScreen
 ├── data/
-│   └── LoomSettings.kt             # SharedPreferences wrapper + LoomPreset data class
+│   └── RovaSettings.kt             # SharedPreferences wrapper + RovaPreset data class
 ├── service/
-│   └── LoomRecordingService.kt     # Foreground service: CameraX, recording loops, merge
+│   └── RovaRecordingService.kt     # Foreground service: CameraX, recording loops, merge
 ├── ui/
-│   ├── MainScreen.kt               # Navigation shell (bottom tabs)
+│   ├── MainScreen.kt               # Navigation shell (3 tabs: Record, History, Settings)
+│   ├── PreviewActivity.kt          # In-app video player
 │   ├── components/
-│   │   ├── LoomAnimations.kt       # Pulsing opacity, slide animations
-│   │   ├── LoomCardComponents.kt   # VideoCard, SwitchRow, StepperControl, etc.
-│   │   ├── LoomDialogs.kt          # MergeProgressSheet, CustomDurationDialog, etc.
-│   │   └── BackgroundRecordingBanner.kt
+│   │   ├── RovaAnimations.kt       # Pulsing opacity, slide animations
+│   │   ├── RovaCardComponents.kt   # SwitchRow and other shared UI components
+│   │   ├── RovaComponents.kt       # StepperControl
+│   │   ├── RovaDialogs.kt          # Shared dialog components
+│   │   ├── BackgroundRecordingBanner.kt
+│   │   └── BatteryOptimizationBanner.kt
 │   ├── screens/
 │   │   ├── RecordScreen.kt         # Camera preview + recording controls
-│   │   ├── RecordViewModel.kt      # ViewModel for RecordScreen state + service binding
-│   │   ├── HistoryScreen.kt        # Video library with batch operations
-│   │   ├── ScheduleScreen.kt       # Placeholder
-│   │   └── SettingsScreen.kt       # App preferences
+│   │   ├── RecordViewModel.kt      # ViewModel: service binding, recording settings, presets
+│   │   ├── HistoryScreen.kt        # Video library with thumbnails and batch operations
+│   │   ├── HistoryViewModel.kt     # Off-thread metadata loading for HistoryScreen
+│   │   ├── SettingsScreen.kt       # App preferences
+│   │   ├── SettingsViewModel.kt    # Activity-scoped: single source of truth for app settings
+│   │   ├── BatteryOptimizationHelper.kt
+│   │   └── VideoMetadataUtils.kt   # Thumbnail + resolution extraction helpers
 │   └── theme/
 │       ├── Color.kt
 │       ├── Theme.kt
@@ -49,7 +55,7 @@ app/src/main/java/com/aritr/loom/
 
 app/src/main/res/
 ├── raw/
-│   └── loom_beep.mp3               # Custom beep sound for recording start/stop
+│   └── rova_beep.mp3               # Custom beep sound for recording start/stop
 └── ...
 ```
 
@@ -57,13 +63,13 @@ app/src/main/res/
 
 ## 3. Core Architecture
 
-### 3.1 Recording Service (`LoomRecordingService`)
+### 3.1 Recording Service (`RovaRecordingService`)
 
 The service is the heart of the app. It manages the entire recording lifecycle independently of the UI.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                LoomRecordingService                  │
+│                RovaRecordingService                  │
 │  (Foreground Service + LifecycleOwner)               │
 │                                                      │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
@@ -116,9 +122,6 @@ Bridges the UI and service. Survives configuration changes (rotation, tab switch
 │    loopCount: MutableStateFlow   │
 │    resolution: MutableStateFlow  │
 │    flashMode: MutableStateFlow   │
-│    keepScreenOn: MutableStateFlow│
-│    backgroundMode: MutableStateFlow │
-│    enableBeeps: MutableStateFlow │
 │    customPresets: StateFlow      │
 │    serviceState: StateFlow       │◄── collected from service binder
 │                                  │
@@ -130,7 +133,24 @@ Bridges the UI and service. Survives configuration changes (rotation, tab switch
 │                                  │
 │  Persistence:                    │
 │    Each flow auto-persists to    │
-│    LoomSettings via collect {}   │
+│    RovaSettings via collect {}   │
+└──────────────────────────────────┘
+
+┌──────────────────────────────────┐
+│         SettingsViewModel        │
+│  (Activity-scoped AndroidViewModel)│
+│                                  │
+│  Shared between RecordScreen and │
+│  SettingsScreen via MainScreen.  │
+│                                  │
+│  State flows:                    │
+│    enableBeeps: MutableStateFlow │
+│    vibrateAlerts: MutableStateFlow│
+│    keepScreenOn: MutableStateFlow│
+│                                  │
+│  Persistence:                    │
+│    Each flow auto-persists to    │
+│    RovaSettings via collect {}   │
 └──────────────────────────────────┘
 ```
 
@@ -169,13 +189,13 @@ Concatenates MP4 segments using Android's `MediaMuxer` and `MediaExtractor`.
 - **Rotation preservation** — Extracts rotation metadata from the first segment and applies it to the output via `setOrientationHint()`.
 - **Coroutine-aware** — Checks `coroutineContext.isActive` for cancellation support.
 
-### 3.5 Data Layer (`LoomSettings`)
+### 3.5 Data Layer (`RovaSettings`)
 
 Thin SharedPreferences wrapper. All properties use `apply()` (async write) via Kotlin's `prefs.edit { }` extension.
 
-Persisted settings: `durationSeconds`, `intervalMinutes`, `loopCount`, `resolution`, `backgroundMode`, `keepScreenOn`, `enableBeeps`, `vibrateAlerts`, `preBeepDelay`, `postBeepDelay`, `customPresetsJson`.
+Persisted settings: `durationSeconds`, `intervalMinutes`, `loopCount`, `resolution`, `keepScreenOn`, `enableBeeps`, `vibrateAlerts`, `customPresetsJson`.
 
-Custom presets are stored as a JSON string (`customPresetsJson`) and parsed to `List<LoomPreset>` by the ViewModel.
+Custom presets are stored as a JSON string (`customPresetsJson`) and parsed to `List<RovaPreset>` by the ViewModel.
 
 ---
 
@@ -185,7 +205,7 @@ Custom presets are stored as a JSON string (`customPresetsJson`) and parsed to `
 User taps START
     │
     ▼
-RecordScreen → LoomRecordingService.start(context, duration, interval, loops, resolution)
+RecordScreen → RovaRecordingService.start(context, duration, interval, loops, resolution)
     │
     ▼
 Service.onStartCommand() → startForeground() → startPeriodicRecording()
@@ -233,7 +253,7 @@ Delete segments → stopSelf() → RecordScreen navigates to Library
 ## 6. Known Limitations
 
 - **No database** — Video metadata (duration, resolution, thumbnails) is extracted from files at runtime, not cached. Will need Room or DataStore if the library grows large.
-- **No unit tests** — `VideoMerger` and `LoomSettings` have no test coverage. Core logic changes risk silent regressions.
+- **No unit tests** — `VideoMerger` and `RovaSettings` have no test coverage. Core logic changes risk silent regressions.
 - **SharedPreferences on main thread** — Reads are synchronous. Not a problem at current scale but would need DataStore migration for complex settings.
 - **No ProGuard/R8** — `isMinifyEnabled = false` in release build. Larger APK, no obfuscation.
 - **Single recorder instance** — The service assumes one active recording session. No support for multiple concurrent sessions.

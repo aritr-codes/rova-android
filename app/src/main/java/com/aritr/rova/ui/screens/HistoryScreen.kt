@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.screens
 
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -14,45 +16,48 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aritr.rova.ui.PreviewActivity
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen() {
+fun HistoryScreen(viewModel: HistoryViewModel = viewModel()) {
     val context = LocalContext.current
-    var videoFiles by remember { mutableStateOf(emptyList<File>()) }
-    var refreshTrigger by remember { mutableIntStateOf(0) }
-    
-    // Multi-select State
+    val items by viewModel.items.collectAsStateWithLifecycle()
+
+    // Multi-select state
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFiles by remember { mutableStateOf(setOf<File>()) }
 
-    LaunchedEffect(refreshTrigger) {
-        val dir = File(context.getExternalFilesDir("videos"), "")
-        if (dir.exists()) {
-            videoFiles = dir.listFiles()
-                ?.filter { it.extension == "mp4" && !it.name.startsWith("segment_bg_") }
-                ?.sortedByDescending { it.lastModified() }
-                ?: emptyList()
-        }
-        // Reset selection on refresh if files gone
-        if(isSelectionMode) {
-             selectedFiles = selectedFiles.filter { it.exists() }.toSet()
-             if(selectedFiles.isEmpty()) isSelectionMode = false
+    // Load on entry
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
+    // Clean up stale selections after a refresh
+    LaunchedEffect(items) {
+        if (isSelectionMode) {
+            val existingFiles = items.map { it.file }.toSet()
+            selectedFiles = selectedFiles.intersect(existingFiles)
+            if (selectedFiles.isEmpty()) isSelectionMode = false
         }
     }
 
-    val groupedFiles = remember(videoFiles) {
-        videoFiles.groupBy { file ->
-            SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault()).format(Date(file.lastModified()))
+    val groupedItems = remember(items) {
+        items.groupBy { item ->
+            SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault()).format(Date(item.file.lastModified()))
         }
     }
 
@@ -68,23 +73,23 @@ fun HistoryScreen() {
                     },
                     actions = {
                         IconButton(onClick = {
-                            // Share Multiple
-                             val uris = ArrayList(selectedFiles.map { FileProvider.getUriForFile(context, "${context.packageName}.provider", it) })
-                             val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                                 type = "video/mp4"
-                                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                             }
-                             context.startActivity(Intent.createChooser(intent, "Share Videos"))
+                            val uris = ArrayList(selectedFiles.map {
+                                FileProvider.getUriForFile(context, "${context.packageName}.provider", it)
+                            })
+                            val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                type = "video/mp4"
+                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share Videos"))
                         }) {
                             Icon(Icons.Default.Share, "Share")
                         }
                         IconButton(onClick = {
-                            // Delete Multiple
                             selectedFiles.forEach { it.delete() }
-                            refreshTrigger++
                             isSelectionMode = false
                             selectedFiles = emptySet()
+                            viewModel.refresh()
                         }) {
                             Icon(Icons.Default.Delete, "Delete")
                         }
@@ -108,7 +113,7 @@ fun HistoryScreen() {
             }
         }
     ) { innerPadding ->
-        if (videoFiles.isEmpty()) {
+        if (items.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -138,7 +143,7 @@ fun HistoryScreen() {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                groupedFiles.forEach { (date, files) ->
+                groupedItems.forEach { (date, dateItems) ->
                     stickyHeader {
                         Text(
                             text = date,
@@ -151,31 +156,29 @@ fun HistoryScreen() {
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    
-                    items(files) { file ->
-                        val isSelected = selectedFiles.contains(file)
+
+                    items(dateItems, key = { it.file.absolutePath }) { item ->
+                        val isSelected = selectedFiles.contains(item.file)
                         VideoCard(
-                            file = file,
+                            item = item,
                             isSelectionMode = isSelectionMode,
                             isSelected = isSelected,
                             onToggleSelection = {
                                 if (isSelectionMode) {
-                                    selectedFiles = if (isSelected) selectedFiles - file else selectedFiles + file
+                                    selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
                                     if (selectedFiles.isEmpty()) isSelectionMode = false
                                 } else {
                                     isSelectionMode = true
-                                    selectedFiles = setOf(file)
+                                    selectedFiles = setOf(item.file)
                                 }
                             },
                             onPlay = {
                                 if (isSelectionMode) {
-                                    selectedFiles = if (isSelected) selectedFiles - file else selectedFiles + file
+                                    selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
                                     if (selectedFiles.isEmpty()) isSelectionMode = false
                                 } else {
-                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, "video/mp4")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    val intent = Intent(context, PreviewActivity::class.java).apply {
+                                        putExtra("VIDEO_PATH", item.file.absolutePath)
                                     }
                                     context.startActivity(intent)
                                 }
@@ -191,7 +194,7 @@ fun HistoryScreen() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoCard(
-    file: File,
+    item: VideoItem,
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onToggleSelection: () -> Unit,
@@ -204,9 +207,17 @@ fun VideoCard(
                 onClick = onPlay,
                 onLongClick = onToggleSelection
             )
-            .then(if(isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier),
+            .then(
+                if (isSelected)
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
+                else
+                    Modifier
+            ),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
         )
     ) {
         Row(
@@ -215,7 +226,6 @@ fun VideoCard(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox for selection mode
             if (isSelectionMode) {
                 Checkbox(
                     checked = isSelected,
@@ -224,45 +234,70 @@ fun VideoCard(
                 Spacer(modifier = Modifier.width(8.dp))
             }
 
-            // Thumbnail Placeholder
-            Box(
+            VideoThumbnail(
+                thumbnail = item.thumbnail,
                 modifier = Modifier
                     .size(80.dp, 60.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.PlayCircle, contentDescription = "Play", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+                    .clip(MaterialTheme.shapes.small)
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = file.name,
+                    text = item.file.name,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = formatFileSize(file.length()) + " • " + formatTime(file.lastModified()),
+                    text = formatFileSize(item.file.length()) + " • " + formatTime(item.file.lastModified()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Resolution badge placeholder if metadata available
-                 Surface(
-                     shape = MaterialTheme.shapes.extraSmall,
-                     color = MaterialTheme.colorScheme.secondaryContainer,
-                     modifier = Modifier.padding(top = 4.dp)
-                 ) {
-                     Text(
-                         text = "FHD", // Placeholder, need integration with metadata
-                         style = MaterialTheme.typography.labelSmall,
-                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                         color = MaterialTheme.colorScheme.onSecondaryContainer
-                     )
-                 }
+                Surface(
+                    shape = MaterialTheme.shapes.extraSmall,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = item.resolution,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (thumbnail != null) {
+            Image(
+                bitmap = thumbnail.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Icon(
+                Icons.Default.PlayCircle,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.75f),
+                modifier = Modifier.size(24.dp)
+            )
+        } else {
+            Icon(
+                Icons.Default.PlayCircle,
+                contentDescription = "Play",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

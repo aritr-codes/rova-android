@@ -45,11 +45,10 @@
             android:screenOrientation="unspecified" />
         
         <!-- BACKGROUND SERVICE -->
-        <service 
+        <service
             android:name=".service.RovaRecordingService"
             android:foregroundServiceType="camera|microphone"
-            android:exported="false"
-            android:stopWithTask="true" />
+            android:exported="false" />
 
         <!-- FILE PROVIDER -->
         <provider

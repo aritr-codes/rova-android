@@ -14,21 +14,9 @@ class RovaSettings(context: Context) {
         get() = prefs.getInt("interval", 1)
         set(value) = prefs.edit { putInt("interval", value) }
 
-    var backgroundMode: Boolean
-        get() = prefs.getBoolean("background_mode", true)
-        set(value) = prefs.edit { putBoolean("background_mode", value) }
-
     var resolution: String
         get() = prefs.getString("resolution", "FHD") ?: "FHD"
         set(value) = prefs.edit { putString("resolution", value) }
-        
-    var preBeepDelay: Int
-        get() = prefs.getInt("pre_beep", 1)
-        set(value) = prefs.edit { putInt("pre_beep", value) }
-        
-    var postBeepDelay: Int
-        get() = prefs.getInt("post_beep", 1)
-        set(value) = prefs.edit { putInt("post_beep", value) }
 
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous

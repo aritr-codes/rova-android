@@ -103,10 +103,10 @@
 
 ## Implementation Note
 
-If renaming, update the following:
-- `applicationId` in `app/build.gradle.kts`
-- Package name throughout source (`com.aritr.loom` → `com.{studio}.{appname}`)
-- App label in `AndroidManifest.xml` (`android:label`)
-- Notification channel name and ID strings in `LoomRecordingService`
-- File output path prefix (`Loom_` prefix in `performMerge()`)
-- Orphaned segment prefix (`segment_bg_` can stay, or rename to match new brand)
+**Rova has been chosen and the rebrand is complete.** The following were updated:
+- `applicationId` → `com.aritr.rova` in `app/build.gradle.kts`
+- Package name throughout source → `com.aritr.rova`
+- App label in `AndroidManifest.xml` → `"Rova"`
+- Notification channel and service class → `RovaRecordingService`
+- Settings class → `RovaSettings`
+- Beep sound file → `res/raw/rova_beep.mp3`

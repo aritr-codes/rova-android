@@ -7,8 +7,8 @@ Chronological record of major implementation milestones and fixes.
 ## Phase 0: Initial Build
 
 ### Core Architecture
-- Built `LoomRecordingService` as a foreground service managing CameraX lifecycle independently of the Activity
-- Implemented `LoomServiceState` with Kotlin StateFlow for reactive UI updates
+- Built `RovaRecordingService` as a foreground service managing CameraX lifecycle independently of the Activity
+- Implemented `RovaServiceState` with Kotlin StateFlow for reactive UI updates
 - Created persistent notification channel with STOP action
 - Implemented `RecordScreen` in Jetpack Compose with Material3:
   - Live camera preview via `AndroidView` + CameraX `PreviewView`
@@ -16,10 +16,10 @@ Chronological record of major implementation milestones and fixes.
   - Quick presets (Drill, Vlog) and custom user presets
   - Flash toggle (Off/On/Auto), camera flip, settings drawer
   - Pulsing REC indicator and countdown overlay
-- Built `LoomSettings` SharedPreferences wrapper for persistence
+- Built `RovaSettings` SharedPreferences wrapper for persistence
 - JSON-based custom preset storage
 - Permissions handling via Accompanist (Camera, Microphone)
-- Navigation shell with bottom tabs (Record, History, Schedule, Settings)
+- Navigation shell with bottom tabs (Record, History, Settings)
 
 ### Video Merging Integration
 - Extracted `mergeVideos()` from legacy monolithic UI into standalone `VideoMerger.kt`
@@ -49,10 +49,10 @@ Chronological record of major implementation milestones and fixes.
 | ID | Fix | File |
 |----|-----|------|
 | Q2 | `formatInterval(0)` now returns "No wait" instead of misleading "30s" | `RecordScreen.kt` |
-| Q1 | Removed duplicate `// Config` comment blocks | `LoomRecordingService.kt` |
-| C3 | Wrapped `ProcessCameraProvider.getInstance().get()` in `withContext(Dispatchers.IO)` to prevent ANR | `LoomRecordingService.kt` |
+| Q1 | Removed duplicate `// Config` comment blocks | `RovaRecordingService.kt` |
+| C3 | Wrapped `ProcessCameraProvider.getInstance().get()` in `withContext(Dispatchers.IO)` to prevent ANR | `RovaRecordingService.kt` |
 | R5 | Added `POST_NOTIFICATIONS` permission request for Android 13+ | `RecordScreen.kt` |
-| C4 | `onStartCommand` with null intent now restores params from `LoomSettings` instead of using wrong defaults | `LoomRecordingService.kt` |
+| C4 | `onStartCommand` with null intent now restores params from `RovaSettings` instead of using wrong defaults | `RovaRecordingService.kt` |
 | N4 | Replaced deprecated `Divider()` with `HorizontalDivider()` | `RecordScreen.kt` |
 
 ---
@@ -61,12 +61,12 @@ Chronological record of major implementation milestones and fixes.
 
 | ID | Fix | File |
 |----|-----|------|
-| C2 | Added `surfaceProviderReady: CompletableDeferred` — recording loop waits up to 3s for UI surface before proceeding headlessly | `LoomRecordingService.kt` |
-| R2 | Added `recordingFinalized: CompletableDeferred` — both `recordSegment()` and `stopPeriodicRecordingAndMerge()` await Finalize callback with 3s timeout, replacing unreliable `delay(500)` | `LoomRecordingService.kt` |
-| C5 | Added `cleanupOrphanedSegments()` in `onCreate()` — deletes leftover `segment_bg_*.mp4` files from crashed sessions | `LoomRecordingService.kt` |
+| C2 | Added `surfaceProviderReady: CompletableDeferred` — recording loop waits up to 3s for UI surface before proceeding headlessly | `RovaRecordingService.kt` |
+| R2 | Added `recordingFinalized: CompletableDeferred` — both `recordSegment()` and `stopPeriodicRecordingAndMerge()` await Finalize callback with 3s timeout, replacing unreliable `delay(500)` | `RovaRecordingService.kt` |
+| C5 | Added `cleanupOrphanedSegments()` in `onCreate()` — deletes leftover `segment_bg_*.mp4` files from crashed sessions | `RovaRecordingService.kt` |
 | R3 | Changed VideoMerger track mapping from index-based to MIME-type-based — safe regardless of per-segment track ordering | `VideoMerger.kt` |
-| R1 | `flipCamera()` returns early with log if `isRecording` is true — prevents silent inconsistency | `LoomRecordingService.kt` |
-| R4 | Added `hasEnoughStorage()` + `estimateSessionBytes()` — aborts session with notification if insufficient free space | `LoomRecordingService.kt` |
+| R1 | `flipCamera()` returns early with log if `isRecording` is true — prevents silent inconsistency | `RovaRecordingService.kt` |
+| R4 | Added `hasEnoughStorage()` + `estimateSessionBytes()` — aborts session with notification if insufficient free space | `RovaRecordingService.kt` |
 
 ---
 
@@ -74,12 +74,12 @@ Chronological record of major implementation milestones and fixes.
 
 | ID | Change | File |
 |----|--------|------|
-| C1 | Moved `_serviceState` from companion object to instance field. `LocalBinder.getStateFlow()` exposes it. Prevents state leakage across service restarts | `LoomRecordingService.kt` |
+| C1 | Moved `_serviceState` from companion object to instance field. `LocalBinder.getStateFlow()` exposes it. Prevents state leakage across service restarts | `RovaRecordingService.kt` |
 | A1+A2 | Created `RecordViewModel` (AndroidViewModel) — owns service binding lifecycle (`init`/`onCleared`), all settings as `MutableStateFlow`, preset management, camera action delegation | `RecordViewModel.kt` (new) |
 | — | Added `lifecycle-viewmodel-compose:2.8.7` dependency | `build.gradle.kts` |
 | A1+A2 | Rewrote `RecordScreen` — removed inline `ServiceConnection`, local state, `LaunchedEffect` persistence. All state from ViewModel via `collectAsStateWithLifecycle()` | `RecordScreen.kt` |
 | Q3 | Wired `keepScreenOn` via `DisposableEffect` setting `view.keepScreenOn` | `RecordScreen.kt` |
-| Q3 | Added `beep()` method using `ToneGenerator` for recording start/stop sounds | `LoomRecordingService.kt` |
+| Q3 | Added `beep()` method using `ToneGenerator` for recording start/stop sounds | `RovaRecordingService.kt` |
 
 ---
 
@@ -87,9 +87,9 @@ Chronological record of major implementation milestones and fixes.
 
 | ID | Change | File |
 |----|--------|------|
-| A4 | Deleted `LoomAppLegacy.kt` (945 lines of dead code). Removed `USE_NEW_UI` flag and `if/else` branch from `MainActivity` | `MainActivity.kt`, `LoomAppLegacy.kt` (deleted) |
+| A4 | Deleted `RovaAppLegacy.kt` (945 lines of dead code). Removed `USE_NEW_UI` flag and `if/else` branch from `MainActivity` | `MainActivity.kt`, `RovaAppLegacy.kt` (deleted) |
 | P3 | Changed merge progress from segment-count-based to byte-weighted. `bytesProcessed / totalBytes` gives accurate progress for uneven segment sizes | `VideoMerger.kt` |
-| — | Replaced `ToneGenerator` beep with `MediaPlayer` playing custom `res/raw/loom_beep.mp3` | `LoomRecordingService.kt` |
+| — | Replaced `ToneGenerator` beep with `MediaPlayer` playing custom `res/raw/rova_beep.mp3` | `RovaRecordingService.kt` |
 
 ---
 

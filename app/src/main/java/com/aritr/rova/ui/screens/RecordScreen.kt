@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.screens
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.os.Build
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
@@ -43,7 +44,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecordScreen(
     onMergeFinished: () -> Unit = {},
-    viewModel: RecordViewModel = viewModel()
+    viewModel: RecordViewModel = viewModel(),
+    settingsViewModel: SettingsViewModel
 ) {
     val context = LocalContext.current
     val localView = LocalView.current
@@ -54,10 +56,10 @@ fun RecordScreen(
     val interval by viewModel.interval.collectAsStateWithLifecycle()
     val loopCount by viewModel.loopCount.collectAsStateWithLifecycle()
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
-    val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
-    val backgroundMode by viewModel.backgroundMode.collectAsStateWithLifecycle()
-    val enableBeeps by viewModel.enableBeeps.collectAsStateWithLifecycle()
     val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
+
+    val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
+    val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
 
     // Q3: Wire keepScreenOn to the view flag
     DisposableEffect(keepScreenOn) {
@@ -101,6 +103,10 @@ fun RecordScreen(
     // Tutorial State
     var showTutorial by remember { mutableStateOf(false) }
     var tutorialStep by remember { mutableIntStateOf(0) }
+
+    // Battery optimization banner — dismissed flag survives rotation; resets on next app launch
+    var batteryBannerDismissed by rememberSaveable { mutableStateOf(false) }
+    val showBatteryBanner = !batteryBannerDismissed && !BatteryOptimizationHelper.isIgnoring(context)
 
     // Auto-collapse sheet on recording start
     LaunchedEffect(serviceState.isRecording) {
@@ -154,17 +160,13 @@ fun RecordScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     SwitchRow(
-                        Icons.Default.Lock, "Background Mode", "Record with screen off",
-                        backgroundMode
-                    ) { viewModel.backgroundMode.value = it }
-                    SwitchRow(
                         Icons.Default.Smartphone, "Keep Screen On", "Prevent screen timeout",
                         keepScreenOn
-                    ) { viewModel.keepScreenOn.value = it }
+                    ) { settingsViewModel.keepScreenOn.value = it }
                     SwitchRow(
                         Icons.Default.VolumeUp, "Sounds", "Start/Stop beeps",
                         enableBeeps
-                    ) { viewModel.enableBeeps.value = it }
+                    ) { settingsViewModel.enableBeeps.value = it }
                 }
             }
         }
@@ -363,7 +365,8 @@ fun RecordScreen(
                     }
                 }
 
-                // Top Bar
+                // Top Bar + Battery Optimization Banner
+                Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -431,6 +434,16 @@ fun RecordScreen(
                         }
                     }
                 }
+                if (showBatteryBanner) {
+                    BatteryOptimizationBanner(
+                        onAction = {
+                            val intent = BatteryOptimizationHelper.buildRequestIntent(context.packageName)
+                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+                        },
+                        onDismiss = { batteryBannerDismissed = true }
+                    )
+                }
+                } // Column: top bar + battery banner
 
                 // Bottom Overlay
                 if (serviceState.isPeriodicActive) {

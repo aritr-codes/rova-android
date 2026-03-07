@@ -492,9 +492,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        releaseResources()
-        stopForeground(true)
-        stopSelf()
+        // Trigger a clean stop: finalize any in-progress segment, merge, then shut down.
+        // The foreground service survives task removal (stopWithTask removed from manifest)
+        // until performMerge() calls stopSelf() after the merge completes.
+        stopPeriodicRecordingAndMerge()
     }
 
     override fun onDestroy() {

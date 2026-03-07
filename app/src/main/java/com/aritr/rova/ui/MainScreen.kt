@@ -2,25 +2,29 @@ package com.aritr.rova.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aritr.rova.ui.screens.HistoryScreen
 import com.aritr.rova.ui.screens.RecordScreen
-import com.aritr.rova.ui.screens.ScheduleScreen
 import com.aritr.rova.ui.screens.SettingsScreen
+import com.aritr.rova.ui.screens.SettingsViewModel
 
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    // Instantiated here (outside NavHost) so it uses the Activity as its ViewModelStoreOwner.
+    // This single instance is shared between RecordScreen and SettingsScreen, ensuring that
+    // a setting changed in one screen is immediately reflected in the other.
+    val settingsViewModel: SettingsViewModel = viewModel()
     
     Scaffold(
         bottomBar = {
@@ -55,19 +59,6 @@ fun MainScreen() {
                     }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Schedule") },
-                    label = { Text("Schedule") },
-                    selected = currentRoute == "schedule",
-                    onClick = {
-                        if (currentRoute != "schedule") {
-                            navController.navigate("schedule") {
-                                popUpTo(navController.graph.startDestinationId)
-                                launchSingleTop = true
-                            }
-                        }
-                    }
-                )
-                NavigationBarItem(
                     icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
                     label = { Text("Settings") },
                     selected = currentRoute == "settings",
@@ -88,19 +79,19 @@ fun MainScreen() {
             startDestination = "record",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable("record") { 
+            composable("record") {
                 RecordScreen(
                     onMergeFinished = {
                         navController.navigate("history") {
                             popUpTo(navController.graph.startDestinationId)
                             launchSingleTop = true
                         }
-                    }
-                ) 
+                    },
+                    settingsViewModel = settingsViewModel
+                )
             }
             composable("history") { HistoryScreen() }
-            composable("schedule") { ScheduleScreen() }
-            composable("settings") { SettingsScreen() }
+            composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel) }
         }
     }
 }

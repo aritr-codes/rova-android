@@ -10,24 +10,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.ui.components.SwitchRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
-    val context = LocalContext.current
-    val settings = remember { com.aritr.rova.data.RovaSettings(context) }
-    
-    // Simple state mapping for now
-    var enableBeeps by remember { mutableStateOf(settings.enableBeeps) }
-    var vibrateAlerts by remember { mutableStateOf(settings.vibrateAlerts) }
-    var keepScreenOn by remember { mutableStateOf(settings.keepScreenOn) }
-    
-    LaunchedEffect(enableBeeps) { settings.enableBeeps = enableBeeps }
-    LaunchedEffect(vibrateAlerts) { settings.vibrateAlerts = vibrateAlerts }
-    LaunchedEffect(keepScreenOn) { settings.keepScreenOn = keepScreenOn }
+fun SettingsScreen(settingsViewModel: SettingsViewModel) {
+    val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
+    val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
+    val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -44,11 +36,11 @@ fun SettingsScreen() {
         ) {
             // Section: General
             SettingsSection(title = "General Preferences") {
-                 SwitchRow(Icons.Default.VolumeUp, "Sound Effects", "Play beeps on start/stop", enableBeeps) { enableBeeps = it }
+                 SwitchRow(Icons.Default.VolumeUp, "Sound Effects", "Play beeps on start/stop", enableBeeps) { settingsViewModel.enableBeeps.value = it }
                  Spacer(Modifier.height(16.dp))
-                 SwitchRow(Icons.Default.Vibration, "Haptic Feedback", "Vibrate on interactions", vibrateAlerts) { vibrateAlerts = it }
+                 SwitchRow(Icons.Default.Vibration, "Haptic Feedback", "Vibrate on interactions", vibrateAlerts) { settingsViewModel.vibrateAlerts.value = it }
                  Spacer(Modifier.height(16.dp))
-                 SwitchRow(Icons.Default.Smartphone, "Keep Screen On", "Prevent screen timeout", keepScreenOn) { keepScreenOn = it }
+                 SwitchRow(Icons.Default.Smartphone, "Keep Screen On", "Prevent screen timeout", keepScreenOn) { settingsViewModel.keepScreenOn.value = it }
             }
 
             // Section: Storage

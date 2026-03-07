@@ -23,8 +23,9 @@ import org.json.JSONObject
 /**
  * ViewModel for RecordScreen.
  *
- * A1: Owns all recording settings state (duration, interval, loopCount, resolution, flashMode,
- *     keepScreenOn, enableBeeps, backgroundMode) and persists changes to RovaSettings.
+ * A1: Owns recording settings state (duration, interval, loopCount, resolution, flashMode)
+ *     and persists changes to RovaSettings. App-wide settings (keepScreenOn, enableBeeps,
+ *     backgroundMode, vibrateAlerts) are owned by SettingsViewModel.
  *
  * A2: Manages the ServiceConnection lifecycle — binds in init, unbinds in onCleared.
  *     Collects state from the service instance (C1) and re-exposes it as a StateFlow.
@@ -65,11 +66,6 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val resolution = MutableStateFlow(settings.resolution)
     val flashMode = MutableStateFlow(RovaRecordingService.FLASH_MODE_OFF)
 
-    // --- App settings (Q3: now readable and writable from ViewModel) ---
-    val keepScreenOn = MutableStateFlow(settings.keepScreenOn)
-    val backgroundMode = MutableStateFlow(settings.backgroundMode)
-    val enableBeeps = MutableStateFlow(settings.enableBeeps)
-
     // --- Presets ---
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
     val customPresets: StateFlow<List<RovaPreset>> = _customPresets.asStateFlow()
@@ -85,9 +81,6 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { interval.collect { settings.intervalMinutes = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
-        viewModelScope.launch { keepScreenOn.collect { settings.keepScreenOn = it } }
-        viewModelScope.launch { backgroundMode.collect { settings.backgroundMode = it } }
-        viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
     }
 
     override fun onCleared() {

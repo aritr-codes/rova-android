@@ -2,7 +2,7 @@
 
 ## 1. Product Overview
 
-**Loom** is an Android app for **automated periodic video recording**. Unlike standard camera apps that require manual start/stop, Loom runs recording loops autonomously: record for N seconds, wait M minutes, repeat K times, then merge all segments into a single video.
+**Rova** is an Android app for **automated periodic video recording**. Unlike standard camera apps that require manual start/stop, Rova runs recording loops autonomously: record for N seconds, wait M minutes, repeat K times, then merge all segments into a single video.
 
 The app runs as a foreground service, continuing to record even when the screen is off or the app is in the background. This makes it ideal for hands-free, unattended recording scenarios.
 
