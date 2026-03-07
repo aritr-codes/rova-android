@@ -1,8 +1,8 @@
-# Loom — Periodic Background Video Recorder
+# Rova — Periodic Background Video Recorder
 
 An Android app for **automated, hands-free periodic video recording**.
 
-Set a duration, interval, and loop count — Loom records in the background, then merges all segments into a single video when done. Designed for athletes, creators, and anyone who needs unattended recording.
+Set a duration, interval, and loop count — Rova records in the background, then merges all segments into a single video when done. Designed for athletes, creators, and anyone who needs unattended recording.
 
 ---
 
@@ -19,9 +19,22 @@ Set a duration, interval, and loop count — Loom records in the background, the
 2. Select a preset or configure Duration / Interval / Loops in the bottom sheet
 3. Tap **START RECORDING** and walk away
 4. Tap **STOP** (in-app or in the notification) when done
-5. The merged video appears in the Library tab
+5. The merged video appears in the **History** tab
 
-Videos are saved to `Android/data/com.aritr.loom/files/videos/`.
+Videos are saved to `Android/data/com.aritr.rova/files/videos/`.
+
+---
+
+## Features
+
+- **Periodic loop recording** — record N seconds, wait M minutes, repeat K times
+- **Background recording** — continues with screen off via foreground service
+- **Auto-merge** — all segments stitched into a single MP4 on completion
+- **Video library** — real thumbnails, resolution badges, batch delete, in-app playback
+- **Quick presets** — one-tap configs (Drill, Vlog) plus custom user-saved presets
+- **Resolution selection** — SD / HD / FHD / 4K
+- **Battery optimization prompt** — detects Doze mode and guides user to exempt the app
+- **Storage safety** — estimates required space before recording, aborts if insufficient
 
 ---
 
@@ -33,7 +46,8 @@ Videos are saved to `Android/data/com.aritr.loom/files/videos/`.
 | UI | Jetpack Compose (Material3) |
 | Camera | AndroidX CameraX |
 | Concurrency | Kotlin Coroutines + StateFlow |
-| Video Merge | Android MediaMuxer |
+| State | AndroidViewModel + MutableStateFlow |
+| Video Merge | Android MediaMuxer + MediaExtractor |
 | Min SDK | 24 (Android 7.0) |
 
 ---
