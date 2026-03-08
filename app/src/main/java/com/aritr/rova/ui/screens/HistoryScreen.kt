@@ -32,9 +32,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+private val dateGroupFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
+private val timeDisplayFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: HistoryViewModel = viewModel()) {
+fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord: () -> Unit = {}) {
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
 
@@ -57,7 +60,7 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel()) {
 
     val groupedItems = remember(items) {
         items.groupBy { item ->
-            SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault()).format(Date(item.file.lastModified()))
+            dateGroupFormat.format(Date(item.file.lastModified()))
         }
     }
 
@@ -103,8 +106,10 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel()) {
                 TopAppBar(
                     title = { Text("History") },
                     actions = {
-                        IconButton(onClick = { /* Sort/Filter */ }) { Icon(Icons.Default.Sort, "Sort") }
-                        IconButton(onClick = { /* Search */ }) { Icon(Icons.Default.Search, "Search") }
+                        if (items.isNotEmpty()) {
+                            IconButton(onClick = { /* Sort/Filter */ }) { Icon(Icons.Default.Sort, "Sort") }
+                            IconButton(onClick = { /* Search */ }) { Icon(Icons.Default.Search, "Search") }
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface
@@ -133,6 +138,18 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel()) {
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Your recorded videos will appear here",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    FilledTonalButton(onClick = onNavigateToRecord) {
+                        Icon(Icons.Default.Videocam, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Start Recording")
+                    }
                 }
             }
         } else {
@@ -280,8 +297,9 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         if (thumbnail != null) {
+            val imageBitmap = remember(thumbnail) { thumbnail.asImageBitmap() }
             Image(
-                bitmap = thumbnail.asImageBitmap(),
+                bitmap = imageBitmap,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -309,5 +327,5 @@ private fun formatFileSize(size: Long): String {
 }
 
 private fun formatTime(millis: Long): String {
-    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+    return timeDisplayFormat.format(Date(millis))
 }

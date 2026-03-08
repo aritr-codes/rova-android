@@ -31,6 +31,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.data.RovaPreset
@@ -57,6 +60,7 @@ fun RecordScreen(
     val interval by viewModel.interval.collectAsStateWithLifecycle()
     val loopCount by viewModel.loopCount.collectAsStateWithLifecycle()
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
+    val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
 
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
@@ -105,18 +109,44 @@ fun RecordScreen(
     var showTutorial by remember { mutableStateOf(false) }
     var tutorialStep by remember { mutableIntStateOf(0) }
 
+    // Bottom sheet expanded controls scroll state (hoisted to avoid recreation)
+    val expandedScrollState = rememberScrollState()
+
     // Battery optimization banner — dismissed flag survives rotation; resets on next app launch
     var batteryBannerDismissed by rememberSaveable { mutableStateOf(false) }
     val showBatteryBanner = !batteryBannerDismissed && !BatteryOptimizationHelper.isIgnoring(context)
 
+    // Recording error snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(serviceState.recordingError) {
+        serviceState.recordingError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearRecordingError()
+        }
+    }
+
     // Auto-collapse sheet on recording start
-    LaunchedEffect(serviceState.isRecording) {
-        if (serviceState.isRecording) {
+    LaunchedEffect(serviceState.isPeriodicActive) {
+        if (serviceState.isPeriodicActive) {
             scaffoldState.bottomSheetState.partialExpand()
         }
     }
 
-    val isUiLocked = serviceState.isRecording || serviceState.isMerging
+    // Release camera when app goes to background (unless recording)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> viewModel.stopCameraPreview()
+                Lifecycle.Event.ON_START -> viewModel.startCameraPreview()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val isUiLocked = serviceState.isPeriodicActive || serviceState.isMerging
     val isCameraActive = serviceState.isCameraActive
 
     // Camera Disconnected Alert
@@ -174,6 +204,7 @@ fun RecordScreen(
     ) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             sheetPeekHeight = 130.dp,
             sheetSwipeEnabled = !isUiLocked,
             sheetContainerColor = MaterialTheme.colorScheme.surface,
@@ -181,7 +212,8 @@ fun RecordScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .alpha(if (isUiLocked) 0.5f else 1f),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // PEEK Area
@@ -197,8 +229,11 @@ fun RecordScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             if (scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded) {
-                                TextButton(onClick = { presetNameInput = ""; showSavePresetDialog = true }) {
-                                    Text("Save Current")
+                                OutlinedButton(
+                                    onClick = { presetNameInput = ""; showSavePresetDialog = true },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Save Current", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -275,7 +310,7 @@ fun RecordScreen(
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
                     // EXPANDED Controls
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Column(modifier = Modifier.verticalScroll(expandedScrollState)) {
                         Text(
                             "Record Duration",
                             style = MaterialTheme.typography.labelSmall,
@@ -324,7 +359,7 @@ fun RecordScreen(
                             FilterChip(
                                 selected = loopCount == -1,
                                 onClick = { viewModel.loopCount.value = if (loopCount == -1) 10 else -1 },
-                                label = { Text("∞") },
+                                label = { Text("∞ Continuous") },
                                 enabled = !isUiLocked
                             )
                         }
@@ -342,11 +377,12 @@ fun RecordScreen(
                 // Camera Preview
                 if (permissionsState.allPermissionsGranted) {
                     AndroidView(
-                        factory = { _ -> previewView },
-                        modifier = Modifier.fillMaxSize(),
-                        update = { view ->
-                            viewModel.setSurfaceProvider(view.surfaceProvider)
-                        }
+                        factory = { _ ->
+                            previewView.also { view ->
+                                viewModel.setSurfaceProvider(view.surfaceProvider)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
@@ -459,7 +495,11 @@ fun RecordScreen(
                             .padding(16.dp)
                     ) {
                         Text(
-                            if (serviceState.isRecording) "Recording..." else "Next in ${serviceState.nextRecordingCountdown}s",
+                            buildString {
+                                append(if (serviceState.isRecording) "Recording..." else "Next in ${serviceState.nextRecordingCountdown}s")
+                                if (serviceState.totalLoops > 0) append("  ·  Loop ${serviceState.currentLoop} of ${serviceState.totalLoops}")
+                                else if (serviceState.totalLoops == -1) append("  ·  Loop ${serviceState.currentLoop}")
+                            },
                             color = Color.White
                         )
                         LinearProgressIndicator(
@@ -471,6 +511,24 @@ fun RecordScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
+                        )
+                    }
+                }
+
+                // Config summary (visible when idle)
+                if (!serviceState.isPeriodicActive) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 90.dp),
+                        shape = MaterialTheme.shapes.small,
+                        color = Color.Black.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            "${formatDuration(duration)} × ${if (loopCount == -1) "∞" else loopCount} loops · ${formatInterval(interval)} interval · $resolution",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }

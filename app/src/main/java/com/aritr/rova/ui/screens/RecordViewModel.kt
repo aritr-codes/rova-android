@@ -39,12 +39,15 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private var serviceBinder: RovaRecordingService.LocalBinder? = null
     private val _serviceState = MutableStateFlow(RovaServiceState())
     val serviceState: StateFlow<RovaServiceState> = _serviceState.asStateFlow()
+    private var pendingSurfaceProvider: Preview.SurfaceProvider? = null
 
     // A2: ServiceConnection managed here, not in the Composable
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             val localBinder = binder as RovaRecordingService.LocalBinder
             serviceBinder = localBinder
+            // Apply any surface provider that was set before the service connected
+            pendingSurfaceProvider?.let { localBinder.getService().setSurfaceProvider(it) }
             localBinder.getService().startCameraPreview()
             // Collect from the service instance's StateFlow
             viewModelScope.launch {
@@ -91,7 +94,20 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     // --- Camera / Service actions ---
 
     fun setSurfaceProvider(surfaceProvider: Preview.SurfaceProvider?) {
+        pendingSurfaceProvider = surfaceProvider
         serviceBinder?.getService()?.setSurfaceProvider(surfaceProvider)
+    }
+
+    fun clearRecordingError() {
+        serviceBinder?.getService()?.clearRecordingError()
+    }
+
+    fun stopCameraPreview() {
+        serviceBinder?.getService()?.stopCameraPreview()
+    }
+
+    fun startCameraPreview() {
+        serviceBinder?.getService()?.startCameraPreview()
     }
 
     fun flipCamera() {

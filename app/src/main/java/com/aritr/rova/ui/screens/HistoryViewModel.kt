@@ -22,6 +22,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val _items = MutableStateFlow<List<VideoItem>>(emptyList())
     val items: StateFlow<List<VideoItem>> = _items.asStateFlow()
 
+    // Cache thumbnails and resolution to avoid re-extracting on every refresh()
+    private val metadataCache = mutableMapOf<String, Pair<Bitmap?, String>>()
+
     /**
      * Scans the videos directory and loads thumbnail + resolution for every file on
      * Dispatchers.IO so the main thread is never blocked.
@@ -40,12 +43,22 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val newItems = files.map { file ->
-                VideoItem(
-                    file = file,
-                    thumbnail = VideoMetadataUtils.getThumbnail(file.absolutePath),
-                    resolution = VideoMetadataUtils.getResolutionLabel(file.absolutePath)
-                )
+                val path = file.absolutePath
+                val cached = metadataCache[path]
+                if (cached != null) {
+                    VideoItem(file = file, thumbnail = cached.first, resolution = cached.second)
+                } else {
+                    val thumb = VideoMetadataUtils.getThumbnail(path)
+                    val res = VideoMetadataUtils.getResolutionLabel(path)
+                    metadataCache[path] = Pair(thumb, res)
+                    VideoItem(file = file, thumbnail = thumb, resolution = res)
+                }
             }
+
+            // Clean stale entries for deleted files
+            val currentPaths = files.map { it.absolutePath }.toSet()
+            metadataCache.keys.retainAll(currentPaths)
+
             _items.value = newItems
         }
     }

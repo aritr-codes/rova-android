@@ -61,8 +61,9 @@ object VideoMerger {
 
         val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         muxer.setOrientationHint(rotation)
-        
+
         val extractors = mutableListOf<MediaExtractor>()
+        var muxerStarted = false
 
         try {
             // 1. Setup Extractors
@@ -96,6 +97,7 @@ object VideoMerger {
             if (bufferSize <= 0) bufferSize = BUFFER_SIZE
 
             muxer.start()
+            muxerStarted = true
 
             // 3. Write Data
             val buffer = ByteBuffer.allocate(bufferSize)
@@ -155,8 +157,6 @@ object VideoMerger {
                     trackOffsets[idx] = (trackOffsets[idx] ?: 0L) + durationUs
                 }
                 
-                extractor.release()
-
                 // P3: Byte-weighted progress — large segments take proportionally more time
                 bytesProcessed += validSegments[index].length()
                 onProgress(if (totalBytes > 0) bytesProcessed.toFloat() / totalBytes else (index + 1).toFloat() / totalSegments)
@@ -169,17 +169,14 @@ object VideoMerger {
             outputFile.delete() // Cleanup partial file
             throw e
         } finally {
-            try {
-                muxer.stop()
-            } catch (e: Exception) {
-                // Ignore error on stop if it failed before start
-                e.printStackTrace()
+            if (muxerStarted) {
+                try { muxer.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
             }
             muxer.release()
-            
+
             // Ensure all extractors are released
-            extractors.forEach { 
-                try { it.release() } catch (e: Exception) {} 
+            extractors.forEach {
+                try { it.release() } catch (_: Exception) {}
             }
         }
     }

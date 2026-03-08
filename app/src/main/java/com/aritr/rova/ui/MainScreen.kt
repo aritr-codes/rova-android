@@ -90,7 +90,14 @@ fun MainScreen() {
                     settingsViewModel = settingsViewModel
                 )
             }
-            composable("history") { HistoryScreen() }
+            composable("history") {
+                HistoryScreen(onNavigateToRecord = {
+                    navController.navigate("record") {
+                        popUpTo(navController.graph.startDestinationId)
+                        launchSingleTop = true
+                    }
+                })
+            }
             composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel) }
         }
     }
