@@ -34,6 +34,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -78,7 +79,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private lateinit var lifecycleRegistry: LifecycleRegistry
     private var cameraProvider: ProcessCameraProvider? = null
     private var recordingJob: Job? = null
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentRecording: Recording? = null
     private var segmentCount = 0
     private val setupMutex = kotlinx.coroutines.sync.Mutex()
@@ -160,7 +161,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     fun startCameraPreview() {
         if (lifecycleRegistry.currentState < Lifecycle.State.STARTED) {
-            lifecycleRegistry.currentState = Lifecycle.State.STARTED
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         }
         if (!_serviceState.value.isCameraActive) {
             serviceScope.launch { setupCamera() }
@@ -203,7 +204,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     override fun onCreate() {
         super.onCreate()
         lifecycleRegistry = LifecycleRegistry(this)
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         createNotificationChannel()
         // C5: Remove any segment files left over from a prior crashed session
         cleanupOrphanedSegments()
@@ -244,6 +245,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            @Suppress("DEPRECATION")
             stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
@@ -256,7 +258,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         // Reset surface provider gate for this new session
         surfaceProviderReady = CompletableDeferred()
         if (currentSurfaceProvider != null) surfaceProviderReady.complete(Unit)
@@ -296,7 +298,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     android.util.Log.e("RovaService", "startPeriodicRecording: Camera failed to activate within 5s — aborting")
                     updateNotification("Camera failed to start. Please restart recording.")
                     _serviceState.update { it.copy(isPeriodicActive = false) }
-                    stopForeground(true)
+                    @Suppress("DEPRECATION")
+            stopForeground(true)
                     stopSelf()
                     return@launch
                 }
@@ -344,7 +347,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
 
                     val intervalSeconds = (mMinutes * 60).toInt()
-                    val waitSeconds = intervalSeconds - nSeconds
+                    val waitSeconds = (intervalSeconds - nSeconds).coerceAtLeast(0)
 
                     if (waitSeconds > 0) {
                         for (i in waitSeconds.toInt() downTo 1) {
@@ -647,7 +650,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     override fun onDestroy() {
         super.onDestroy()
         releaseResources()
-        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
 
     private fun releaseResources() {
@@ -670,7 +673,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
         serviceScope.launch {
             // R2: Wait for the Finalize callback before scanning segments
-            withTimeoutOrNull(3000) { recordingFinalized.await() }
+            // H-1: Capture reference locally to avoid race with recordSegment replacing the field
+            val finalized = recordingFinalized
+            withTimeoutOrNull(3000) { finalized.await() }
 
             val videoDir = File(getExternalFilesDir("videos"), "")
             val segments = videoDir.listFiles { _, name ->
@@ -680,7 +685,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             if (segments.isNotEmpty()) {
                 performMerge(segments)
             } else {
-                stopForeground(true)
+                @Suppress("DEPRECATION")
+            stopForeground(true)
                 stopSelf()
             }
         }
@@ -713,6 +719,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             delay(3000)
         } finally {
             _serviceState.update { it.copy(isMerging = false) }
+            @Suppress("DEPRECATION")
             stopForeground(true)
             stopSelf()
         }
@@ -723,17 +730,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val values = ContentValues().apply {
                 put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Rova")
-                put(MediaStore.Video.Media.IS_PENDING, 1)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Rova")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
             }
-            val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
+            val uri = contentResolver.insert(collection, values)
             if (uri != null) {
                 contentResolver.openOutputStream(uri)?.use { out ->
                     file.inputStream().use { it.copyTo(out) }
                 }
-                values.clear()
-                values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                contentResolver.update(uri, values, null, null)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    contentResolver.update(uri, values, null, null)
+                }
                 android.util.Log.d("RovaService", "copyToPublicMovies: Saved to gallery: $uri")
             }
         } catch (e: Exception) {
@@ -741,11 +757,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    // Q3: Short beep on recording start/stop using loom_beep.mp3, respects enableBeeps setting
+    // Q3: Short beep on recording start/stop using rova_beep.mp3, respects enableBeeps setting
     private fun beep() {
         if (!RovaSettings(this).enableBeeps) return
         try {
-            val mp = MediaPlayer.create(this, R.raw.rova_beep)
+            val mp = MediaPlayer.create(this, R.raw.rova_beep) ?: return
             mp.setOnCompletionListener { it.release() }
             mp.start()
         } catch (e: Exception) {
@@ -754,14 +770,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     // C5: Delete segment files left over from a previous crashed session
+    // H-3: Only delete segments older than 24 hours to avoid destroying in-progress merge data
     private fun cleanupOrphanedSegments() {
         serviceScope.launch(Dispatchers.IO) {
             val videoDir = File(getExternalFilesDir("videos"), "")
+            val ageThresholdMs = 24 * 60 * 60 * 1000L // 24 hours
+            val cutoff = System.currentTimeMillis() - ageThresholdMs
             val orphans = videoDir.listFiles { _, name ->
                 name.startsWith("segment_bg_") && name.endsWith(".mp4")
-            } ?: return@launch
+            }?.filter { it.lastModified() < cutoff } ?: return@launch
             if (orphans.isNotEmpty()) {
-                android.util.Log.w("RovaService", "cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s)")
+                android.util.Log.w("RovaService", "cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s) older than 24h")
                 orphans.forEach { it.delete() }
             }
         }

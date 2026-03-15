@@ -63,7 +63,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
             SettingsSection(title = "About") {
                 ListItem(
                     headlineContent = { Text("Version") },
-                    supportingContent = { Text("1.0.0 (Beta)") },
+                    supportingContent = { Text("${com.aritr.rova.BuildConfig.VERSION_NAME}") },
                     leadingContent = { Icon(Icons.Default.Info, null) }
                 )
                 ListItem(

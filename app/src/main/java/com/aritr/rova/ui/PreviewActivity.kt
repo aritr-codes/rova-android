@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -84,14 +84,16 @@ class PreviewActivity : ComponentActivity() {
             try {
                 withContext(Dispatchers.IO) {
                     val videoFile = File(videoPath)
+                    val resolver = contentResolver
                     val values = ContentValues().apply {
                         put(MediaStore.Video.Media.DISPLAY_NAME, "Rova_${System.currentTimeMillis()}.mp4")
                         put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                        put(MediaStore.Video.Media.RELATIVE_PATH, "Pictures/Rova")
-                        put(MediaStore.Video.Media.IS_PENDING, 1)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/Rova")
+                            put(MediaStore.Video.Media.IS_PENDING, 1)
+                        }
                     }
 
-                    val resolver = contentResolver
                     val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                     } else {
@@ -101,14 +103,21 @@ class PreviewActivity : ComponentActivity() {
                     val itemUri = resolver.insert(collection, values)
 
                     itemUri?.let { uri ->
-                        resolver.openOutputStream(uri).use { out ->
+                        val out = resolver.openOutputStream(uri)
+                        if (out == null) {
+                            resolver.delete(uri, null, null)
+                            return@withContext
+                        }
+                        out.use { outputStream ->
                             FileInputStream(videoFile).use { input ->
-                                input.copyTo(out!!)
+                                input.copyTo(outputStream)
                             }
                         }
-                        values.clear()
-                        values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                        resolver.update(uri, values, null, null)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            values.clear()
+                            values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                            resolver.update(uri, values, null, null)
+                        }
                     }
                 }
                 Toast.makeText(this@PreviewActivity, "✅ Saved to Gallery", Toast.LENGTH_SHORT).show()
@@ -172,7 +181,7 @@ fun PreviewScreen(
                 title = { Text("Rova Preview", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
@@ -248,7 +257,7 @@ fun PreviewScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = formatDuration(currentPosition),
+                        text = formatDurationMillis(currentPosition),
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -269,7 +278,7 @@ fun PreviewScreen(
                             .padding(horizontal = 8.dp)
                     )
                     Text(
-                        text = formatDuration(duration),
+                        text = formatDurationMillis(duration),
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -317,7 +326,7 @@ fun BottomControls(
     }
 }
 
-fun formatDuration(millis: Long): String {
+fun formatDurationMillis(millis: Long): String {
     val seconds = (millis / 1000) % 60
     val minutes = (millis / (1000 * 60)) % 60
     return String.format("%d:%02d", minutes, seconds)

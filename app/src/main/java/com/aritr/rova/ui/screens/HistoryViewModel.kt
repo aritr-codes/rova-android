@@ -23,7 +23,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     val items: StateFlow<List<VideoItem>> = _items.asStateFlow()
 
     // Cache thumbnails and resolution to avoid re-extracting on every refresh()
-    private val metadataCache = mutableMapOf<String, Pair<Bitmap?, String>>()
+    private val metadataCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Bitmap?, String>>()
 
     /**
      * Scans the videos directory and loads thumbnail + resolution for every file on
@@ -60,6 +60,16 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             metadataCache.keys.retainAll(currentPaths)
 
             _items.value = newItems
+        }
+    }
+
+    /**
+     * Deletes the given files on a background thread, then refreshes the list.
+     */
+    fun deleteFiles(files: Set<File>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            files.forEach { it.delete() }
+            refresh()
         }
     }
 }

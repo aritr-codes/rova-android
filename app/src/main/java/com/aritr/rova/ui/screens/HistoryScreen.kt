@@ -89,10 +89,9 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                             Icon(Icons.Default.Share, "Share")
                         }
                         IconButton(onClick = {
-                            selectedFiles.forEach { it.delete() }
+                            viewModel.deleteFiles(selectedFiles)
                             isSelectionMode = false
                             selectedFiles = emptySet()
-                            viewModel.refresh()
                         }) {
                             Icon(Icons.Default.Delete, "Delete")
                         }

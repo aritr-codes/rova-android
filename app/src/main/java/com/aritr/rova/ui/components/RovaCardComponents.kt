@@ -1,12 +1,9 @@
 package com.aritr.rova.ui.components
 
-import android.content.Context
-import android.os.PowerManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -75,68 +72,6 @@ fun SessionStatusCard(
                     color = statusColor,
                     trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun BatteryOptimizationBanner(
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-        if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                modifier = modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.BatteryAlert,
-                        contentDescription = "Battery Warning",
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Battery Optimization Enabled",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = "May interrupt background recording",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            // Intent to open settings would go here, 
-                            // typically Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                            // For safety, just opening battery settings
-                             try {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                                context.startActivity(intent)
-                             } catch(e: Exception) {
-                                e.printStackTrace()
-                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
-                            contentColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Text("FIX")
-                    }
-                }
             }
         }
     }

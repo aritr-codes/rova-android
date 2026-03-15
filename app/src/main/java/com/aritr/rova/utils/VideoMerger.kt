@@ -59,13 +59,13 @@ object VideoMerger {
             Log.w(TAG, "Failed to extract rotation", e)
         }
 
-        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        muxer.setOrientationHint(rotation)
-
         val extractors = mutableListOf<MediaExtractor>()
         var muxerStarted = false
+        var muxer: MediaMuxer? = null
 
         try {
+            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer.setOrientationHint(rotation)
             // 1. Setup Extractors
             validSegments.forEach { file ->
                 val extractor = MediaExtractor()
@@ -78,13 +78,14 @@ object VideoMerger {
             val mimeToMuxerIndex = mutableMapOf<String, Int>() // MIME type -> muxer track index
             var bufferSize = 0
             val firstExtractor = extractors[0]
+            val mux = muxer // smart-cast to non-null
 
             for (i in 0 until firstExtractor.trackCount) {
                 val format = firstExtractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
 
                 if (mime.startsWith("video/") || mime.startsWith("audio/")) {
-                    val newIndex = muxer.addTrack(format)
+                    val newIndex = mux.addTrack(format)
                     mimeToMuxerIndex[mime] = newIndex
 
                     if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
@@ -96,7 +97,7 @@ object VideoMerger {
 
             if (bufferSize <= 0) bufferSize = BUFFER_SIZE
 
-            muxer.start()
+            mux.start()
             muxerStarted = true
 
             // 3. Write Data
@@ -142,7 +143,7 @@ object VideoMerger {
                     bufferInfo.flags = extractor.sampleFlags
                     bufferInfo.presentationTimeUs = presentationTimeUs + offset
 
-                    muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    mux.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
 
                     if (presentationTimeUs > maxTimeStampUs) {
                         maxTimeStampUs = presentationTimeUs
@@ -170,9 +171,9 @@ object VideoMerger {
             throw e
         } finally {
             if (muxerStarted) {
-                try { muxer.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
+                try { muxer?.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
             }
-            muxer.release()
+            muxer?.release()
 
             // Ensure all extractors are released
             extractors.forEach {
