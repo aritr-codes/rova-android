@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.utils.RovaLog
 import com.aritr.rova.utils.VideoMerger
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -126,7 +127,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     fun setSurfaceProvider(surfaceProvider: Preview.SurfaceProvider?) {
-        android.util.Log.d("RovaService", "setSurfaceProvider: received: $surfaceProvider")
+        RovaLog.d("setSurfaceProvider: received: $surfaceProvider")
         currentSurfaceProvider = surfaceProvider
 
         if (surfaceProvider != null) {
@@ -149,7 +150,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     fun stopCameraPreview() {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
-        android.util.Log.d("RovaService", "stopCameraPreview: Unbinding camera for background")
+        RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
         releaseDummySurface()
         preview = null
@@ -166,7 +167,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         if (!_serviceState.value.isCameraActive) {
             serviceScope.launch { setupCamera() }
         } else {
-            android.util.Log.d("RovaService", "startCameraPreview: Camera already active, skipping setup")
+            RovaLog.d("startCameraPreview: Camera already active, skipping setup")
         }
     }
 
@@ -225,7 +226,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             resolutionStr = intent.getStringExtra("RESOLUTION") ?: "FHD"
         } else {
             // C4: OS restarted service (START_STICKY) — restore from user settings
-            android.util.Log.w("RovaService", "onStartCommand: null intent (OS restart) — restoring params from RovaSettings")
+            RovaLog.w("onStartCommand: null intent (OS restart) — restoring params from RovaSettings")
             val settings = RovaSettings(this)
             nSeconds = settings.durationSeconds.toLong()
             mMinutes = settings.intervalMinutes.toLong()
@@ -238,7 +239,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // R4: Abort early if there is not enough free storage
         val estimatedBytes = estimateSessionBytes()
         if (!hasEnoughStorage(estimatedBytes)) {
-            android.util.Log.e("RovaService", "onStartCommand: Insufficient storage — aborting session")
+            RovaLog.e("onStartCommand: Insufficient storage — aborting session")
             val notification = createNotification("Not enough storage to record. Free up space and try again.")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -277,15 +278,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // If it never arrives (background-only launch), proceed headlessly.
                 val surfaceArrived = withTimeoutOrNull(3000) { surfaceProviderReady.await() }
                 if (surfaceArrived == null) {
-                    android.util.Log.w("RovaService", "startPeriodicRecording: SurfaceProvider timeout — proceeding headlessly")
+                    RovaLog.w("startPeriodicRecording: SurfaceProvider timeout — proceeding headlessly")
                 }
 
                 // Re-setup camera only if resolution changed or camera isn't active
                 if (configuredResolution != resolutionStr || !_serviceState.value.isCameraActive) {
-                    android.util.Log.d("RovaService", "startPeriodicRecording: Reconfiguring camera (configured=$configuredResolution, requested=$resolutionStr)")
+                    RovaLog.d("startPeriodicRecording: Reconfiguring camera (configured=$configuredResolution, requested=$resolutionStr)")
                     forceReconfigureCamera()
                 } else {
-                    android.util.Log.d("RovaService", "startPeriodicRecording: Camera already configured for $resolutionStr, reusing")
+                    RovaLog.d("startPeriodicRecording: Camera already configured for $resolutionStr, reusing")
                 }
 
                 // Wait for camera to be fully active before recording
@@ -295,7 +296,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
                 }
                 if (cameraReady == null) {
-                    android.util.Log.e("RovaService", "startPeriodicRecording: Camera failed to activate within 5s — aborting")
+                    RovaLog.e("startPeriodicRecording: Camera failed to activate within 5s — aborting")
                     updateNotification("Camera failed to start. Please restart recording.")
                     _serviceState.update { it.copy(isPeriodicActive = false) }
                     @Suppress("DEPRECATION")
@@ -306,7 +307,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // Let CameraX pipeline fully stabilize (encoder init, frame production)
                 // Samsung devices need extra time for MediaCodec initialization
                 delay(2500)
-                android.util.Log.d("RovaService", "startPeriodicRecording: Camera ready, starting recording loop")
+                RovaLog.d("startPeriodicRecording: Camera ready, starting recording loop")
 
                 while (isActive) {
                     if (limitLoops != -1 && segmentCount >= limitLoops) {
@@ -331,7 +332,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             break
                         }
                         if (attempt < 3) {
-                            android.util.Log.w("RovaService", "Segment failed (attempt $attempt), retrying after camera reconfigure...")
+                            RovaLog.w("Segment failed (attempt $attempt), retrying after camera reconfigure...")
                             forceReconfigureCamera()
                             delay(2500)
                             withTimeoutOrNull(5000) {
@@ -359,7 +360,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
                 }
             } catch (e: CancellationException) {
-                android.util.Log.d("RovaService", "startPeriodicRecording: Cancelled")
+                RovaLog.d("startPeriodicRecording: Cancelled")
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -376,7 +377,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
      */
     private suspend fun forceReconfigureCamera() {
         setupMutex.withLock {
-            android.util.Log.d("RovaService", "forceReconfigureCamera: Unbinding for fresh setup")
+            RovaLog.d("forceReconfigureCamera: Unbinding for fresh setup")
             try { cameraProvider?.unbindAll() } catch (e: Exception) {}
             preview = null
             videoCapture = null
@@ -389,20 +390,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private suspend fun setupCamera() {
         setupMutex.withLock {
-            android.util.Log.d("RovaService", "setupCamera: Starting setup workflow")
+            RovaLog.d("setupCamera: Starting setup workflow")
 
-            android.util.Log.d("RovaService", "setupCamera: currentSurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "null (will use dummy)"}")
+            RovaLog.d("setupCamera: currentSurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "null (will use dummy)"}")
 
             if (cameraProvider != null) {
                 if (_serviceState.value.isCameraActive) {
-                    android.util.Log.d("RovaService", "setupCamera: Camera already active. Skipping setup.")
+                    RovaLog.d("setupCamera: Camera already active. Skipping setup.")
                     return@withLock
                 }
                 if (_serviceState.value.isRecording) {
-                    android.util.Log.w("RovaService", "setupCamera: Attempted to setup while recording! Aborting.")
+                    RovaLog.w("setupCamera: Attempted to setup while recording! Aborting.")
                     return@withLock
                 }
-                android.util.Log.d("RovaService", "setupCamera: Unbinding existing provider for clean setup")
+                RovaLog.d("setupCamera: Unbinding existing provider for clean setup")
                 try { cameraProvider?.unbindAll() } catch (e: Exception) {}
                 _serviceState.update { it.copy(isCameraActive = false) }
             } else {
@@ -414,7 +415,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
-            android.util.Log.d("RovaService", "setupCamera: Initializing UseCases (Preview + VideoCapture)")
+            RovaLog.d("setupCamera: Initializing UseCases (Preview + VideoCapture)")
 
             val quality = when (resolutionStr) {
                 "4K" -> Quality.UHD
@@ -439,11 +440,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // to produce frames. Use a dummy surface as fallback when UI hasn't connected yet.
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
-            android.util.Log.d("RovaService", "setupCamera: SurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "DUMMY"}")
+            RovaLog.d("setupCamera: SurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "DUMMY"}")
 
             try {
                 provider.unbindAll()
-                android.util.Log.d("RovaService", "setupCamera: Binding to lifecycle")
+                RovaLog.d("setupCamera: Binding to lifecycle")
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector,
@@ -452,11 +453,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 )
                 configuredResolution = resolutionStr
                 _serviceState.update { it.copy(isCameraActive = true) }
-                android.util.Log.d("RovaService", "setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr")
+                RovaLog.d("setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr")
                 applyFlashState()
             } catch (e: Exception) {
                 e.printStackTrace()
-                android.util.Log.e("RovaService", "setupCamera: Binding failed", e)
+                RovaLog.e("setupCamera: Binding failed", e)
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
@@ -465,7 +466,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // R1: Guard against flipping camera while a segment is actively recording
     fun flipCamera() {
         if (_serviceState.value.isRecording) {
-            android.util.Log.d("RovaService", "flipCamera: Ignored — recording in progress")
+            RovaLog.d("flipCamera: Ignored — recording in progress")
             return
         }
         currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
@@ -496,7 +497,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * gates VideoCapture frame production on Preview having an active surface.
      */
     private fun createDummySurfaceProvider(): Preview.SurfaceProvider {
-        android.util.Log.d("RovaService", "createDummySurfaceProvider: Creating headless surface")
+        RovaLog.d("createDummySurfaceProvider: Creating headless surface")
         return Preview.SurfaceProvider { request ->
             releaseDummySurface()
             val texture = SurfaceTexture(0)
@@ -526,7 +527,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private suspend fun recordSegment() {
         try {
             val videoCap = videoCapture ?: run {
-                android.util.Log.e("RovaService", "recordSegment: VideoCapture is null!")
+                RovaLog.e("recordSegment: VideoCapture is null!")
                 return
             }
 
@@ -535,7 +536,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val timestamp = System.currentTimeMillis()
             val videoFile = File(videoDir, "segment_bg_$timestamp.mp4")
-            android.util.Log.d("RovaService", "recordSegment: Preparing file: ${videoFile.absolutePath}")
+            RovaLog.d("recordSegment: Preparing file: ${videoFile.absolutePath}")
 
             val outputOptions = FileOutputOptions.Builder(videoFile).build()
 
@@ -544,7 +545,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 pendingRecording = pendingRecording.withAudioEnabled()
             } else {
-                android.util.Log.w("RovaService", "recordSegment: Audio permission missing, recording video only")
+                RovaLog.w("recordSegment: Audio permission missing, recording video only")
             }
 
             // R2: Fresh deferred for this segment's finalize event
@@ -553,16 +554,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
             currentRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
-                        android.util.Log.d("RovaService", "Recording STARTED")
+                        RovaLog.d("Recording STARTED")
                     }
                     is VideoRecordEvent.Finalize -> {
                         if (!event.hasError()) {
-                            android.util.Log.d("RovaService", "Recording FINALIZED. Size: ${videoFile.length()} bytes")
+                            RovaLog.d("Recording FINALIZED. Size: ${videoFile.length()} bytes")
                             updateNotification("Segment Saved: ${(videoFile.length() / 1024)} KB")
                         } else {
                             currentRecording?.close()
                             currentRecording = null
-                            android.util.Log.e("RovaService", "Recording ERROR: ${event.error}")
+                            RovaLog.e("Recording ERROR: ${event.error}")
                             val errorMsg = describeRecordingError(event.error)
                             updateNotification(errorMsg)
                             _serviceState.update { it.copy(recordingError = errorMsg) }
@@ -575,10 +576,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
             }
 
-            android.util.Log.d("RovaService", "recordSegment: Recording initialized, waiting ${nSeconds}s")
+            RovaLog.d("recordSegment: Recording initialized, waiting ${nSeconds}s")
             delay(nSeconds * 1000)
 
-            android.util.Log.d("RovaService", "recordSegment: Stopping recording normally")
+            RovaLog.d("recordSegment: Stopping recording normally")
             currentRecording?.stop()
             currentRecording = null
 
@@ -586,14 +587,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
             withTimeoutOrNull(3000) { recordingFinalized.await() }
 
         } catch (e: CancellationException) {
-            android.util.Log.d("RovaService", "recordSegment: Cancelled")
+            RovaLog.d("recordSegment: Cancelled")
             try { currentRecording?.stop() } catch (e2: Exception) {}
             currentRecording = null
             recordingFinalized.complete(Unit)
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            android.util.Log.e("RovaService", "recordSegment: Exception: ${e.message}", e)
+            RovaLog.e("recordSegment: Exception: ${e.message}", e)
             recordingFinalized.complete(Unit)
         }
     }
@@ -661,7 +662,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         releaseDummySurface()
         serviceScope.cancel()
         _serviceState.update { RovaServiceState() }
-        android.util.Log.d("RovaService", "releaseResources: Resources released")
+        RovaLog.d("releaseResources: Resources released")
     }
 
     private fun stopPeriodicRecordingAndMerge() {
@@ -750,10 +751,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     values.put(MediaStore.Video.Media.IS_PENDING, 0)
                     contentResolver.update(uri, values, null, null)
                 }
-                android.util.Log.d("RovaService", "copyToPublicMovies: Saved to gallery: $uri")
+                RovaLog.d("copyToPublicMovies: Saved to gallery: $uri")
             }
         } catch (e: Exception) {
-            android.util.Log.e("RovaService", "copyToPublicMovies: Failed to save to gallery", e)
+            RovaLog.e("copyToPublicMovies: Failed to save to gallery", e)
         }
     }
 
@@ -765,7 +766,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             mp.setOnCompletionListener { it.release() }
             mp.start()
         } catch (e: Exception) {
-            android.util.Log.w("RovaService", "beep: Failed to play sound", e)
+            RovaLog.w("beep: Failed to play sound", e)
         }
     }
 
@@ -780,7 +781,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 name.startsWith("segment_bg_") && name.endsWith(".mp4")
             }?.filter { it.lastModified() < cutoff } ?: return@launch
             if (orphans.isNotEmpty()) {
-                android.util.Log.w("RovaService", "cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s) older than 24h")
+                RovaLog.w("cleanupOrphanedSegments: Deleting ${orphans.size} orphaned segment(s) older than 24h")
                 orphans.forEach { it.delete() }
             }
         }
@@ -804,11 +805,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val available = stat.availableBlocksLong * stat.blockSizeLong
             val required = estimatedBytes + 50 * 1024 * 1024L
             if (available < required) {
-                android.util.Log.w("RovaService", "hasEnoughStorage: Available=${available / 1024 / 1024}MB, Required=${required / 1024 / 1024}MB")
+                RovaLog.w("hasEnoughStorage: Available=${available / 1024 / 1024}MB, Required=${required / 1024 / 1024}MB")
             }
             available >= required
         } catch (e: Exception) {
-            android.util.Log.w("RovaService", "hasEnoughStorage: Check failed, proceeding optimistically", e)
+            RovaLog.w("hasEnoughStorage: Check failed, proceeding optimistically", e)
             true
         }
     }

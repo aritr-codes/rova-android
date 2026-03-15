@@ -1,5 +1,8 @@
 package com.aritr.rova.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,13 +13,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.ui.components.SwitchRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(settingsViewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
@@ -50,12 +59,30 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
                     supportingContent = { Text("Never") },
                     leadingContent = { Icon(Icons.Default.DeleteSweep, null) },
                     trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                    modifier = Modifier.clickable { /* Todo */ }
+                    modifier = Modifier.clickable {
+                        Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show()
+                    }
                 )
                 ListItem(
                     headlineContent = { Text("Clear Cache") },
                     leadingContent = { Icon(Icons.Default.CleaningServices, null) },
-                     modifier = Modifier.clickable { /* Todo */ }
+                    modifier = Modifier.clickable {
+                        scope.launch(Dispatchers.IO) {
+                            val cacheDir = context.cacheDir
+                            val deleted = cacheDir.walkBottomUp().sumOf { file ->
+                                val size = if (file != cacheDir && file.delete()) file.length() else 0L
+                                size
+                            }
+                            val mb = deleted / 1024.0 / 1024.0
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    if (mb > 0.1) "Cleared %.1f MB".format(mb) else "Cache is empty",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
                 )
             }
 
@@ -69,7 +96,10 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
                 ListItem(
                     headlineContent = { Text("Privacy Policy") },
                     leadingContent = { Icon(Icons.Default.PrivacyTip, null) },
-                     modifier = Modifier.clickable { /* Todo */ }
+                    modifier = Modifier.clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aritr.com/rova/privacy"))
+                        context.startActivity(intent)
+                    }
                 )
             }
         }
