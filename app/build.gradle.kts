@@ -1076,6 +1076,75 @@ val checkExportPendingVisibilityOnQuery = tasks.register("checkExportPendingVisi
     }
 }
 
+/**
+ * Phase 1.7 commit-6 — cleanup-pass predicate must reference all four
+ * gates per ADR 0006 §"Ownership table" + the commit-6 NO-GO patch:
+ *
+ *  1. `AUTO_DISCARD_ELIGIBLE` — Phase 1.5 eligibility gate.
+ *  2. `privateTempPath` — Tier 2/3 deferred-scan retention gate.
+ *  3. `RetryableFailure` AND `ManifestWriteFailed` — per-session
+ *     export-recovery terminal-clean gate.
+ *  4. `QueryFailed` — Tier 1 orphan sweep clean gate (post-NO-GO patch:
+ *     QueryFailed blocks ALL physical cleanup this run because pending-
+ *     row reference safety is unknown when the listing seam threw).
+ *
+ * Source-text presence check; cannot enforce semantic correctness, but
+ * documents that the predicate covers every load-bearing dimension. A
+ * predicate edit that drops any gate trips this lint at preBuild.
+ *
+ * Allow-list: only `ExportCleanupPredicate.kt` is required to contain
+ * all four tokens. The check runs against that one file.
+ */
+val checkExportCleanupPredicate = tasks.register("checkExportCleanupPredicate") {
+    group = "verification"
+    description = "ExportCleanupPredicate must reference all four cleanup gates (ADR 0006 §Ownership table + commit-6 NO-GO patch)."
+    val targetFile = file(
+        "src/main/java/com/aritr/rova/service/export/ExportCleanupPredicate.kt"
+    )
+    inputs.file(targetFile).withPropertyName("exportCleanupPredicate")
+    doLast {
+        if (!targetFile.exists()) {
+            throw GradleException(
+                "Phase 1.7 commit-6 source missing: ${targetFile.relativeTo(rootDir)}"
+            )
+        }
+        // Strip comment lines so a doc-only mention doesn't satisfy the
+        // gate; the gate must be exercised by code.
+        val codeText = targetFile.readLines()
+            .filter {
+                val t = it.trimStart()
+                !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
+            }
+            .joinToString("\n")
+        val problems = mutableListOf<String>()
+        if (!codeText.contains("AUTO_DISCARD_ELIGIBLE")) {
+            problems += "missing AUTO_DISCARD_ELIGIBLE (Phase 1.5 eligibility gate)"
+        }
+        if (!codeText.contains("privateTempPath")) {
+            problems += "missing privateTempPath check (Tier 2/3 deferred-scan retention gate)"
+        }
+        if (!codeText.contains("RetryableFailure")) {
+            problems += "missing RetryableFailure check (per-session recovery clean gate)"
+        }
+        if (!codeText.contains("ManifestWriteFailed")) {
+            problems += "missing ManifestWriteFailed check (per-session recovery clean gate)"
+        }
+        if (!codeText.contains("QueryFailed")) {
+            problems += "missing QueryFailed check (sweep clean gate; commit-6 NO-GO patch)"
+        }
+        if (problems.isNotEmpty()) {
+            val report = problems.joinToString("\n") { "  $it" }
+            throw GradleException(
+                "ExportCleanupPredicate cleanup gate violation (ADR 0006 §Ownership table " +
+                    "+ commit-6 NO-GO patch):\n$report\n" +
+                    "All four gates MUST be referenced in the predicate source. " +
+                    "Dropping any gate risks deleting a manifest still needed to " +
+                    "protect a referenced pending row."
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1096,6 +1165,7 @@ afterEvaluate {
         dependsOn(checkExportSetIncludePendingGuarded)
         dependsOn(checkExportQueryArgMatchPendingGuarded)
         dependsOn(checkExportPendingVisibilityOnQuery)
+        dependsOn(checkExportCleanupPredicate)
     }
 }
 

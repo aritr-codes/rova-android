@@ -2,7 +2,23 @@ package com.aritr.rova
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
+import com.aritr.rova.data.ExportTier
+import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
+import com.aritr.rova.service.export.AndroidMediaScanWaiter
+import com.aritr.rova.service.export.ExportCleanupPredicate
+import com.aritr.rova.service.export.ExportRecoveryReport
+import com.aritr.rova.service.export.ExportRecoveryRunner
+import com.aritr.rova.service.export.OrphanSweepResult
+import com.aritr.rova.service.export.RecoveryResult
+import com.aritr.rova.service.export.Tier1AndroidOps
+import com.aritr.rova.service.export.Tier1AndroidSweepOps
+import com.aritr.rova.service.export.Tier1Exporter
+import com.aritr.rova.service.export.Tier1OrphanSweep
+import com.aritr.rova.service.export.Tier2Exporter
+import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
 import com.aritr.rova.utils.RovaCrashReporter
@@ -168,8 +184,37 @@ class RovaApp : Application() {
                 return@withLock
             }
 
+            // ADR 0006 §"Ownership table" — Phase 1.7 export recovery runs
+            // BEFORE the Phase 1.5 classifier so the classifier sees post-
+            // recovery manifest state when it builds discard eligibility.
+            // The runner snapshots referencedPendingUris BEFORE per-session
+            // recovery mutates manifests (a setExportFailed during recovery
+            // would clear pendingUri and orphan the row to the sweep).
+            val exportReport = buildExportRecoveryRunner().run()
+            RovaLog.d(
+                "RovaApp.runRecoveryScan: export recovery complete " +
+                    "(perSession=${exportReport.perSession.size}, " +
+                    "lateTerminals=${exportReport.lateTerminals.size}, " +
+                    "sweep=${exportReport.sweep.javaClass.simpleName})"
+            )
+
             val scanner = RecoveryScanner(sessionStore)
             val classifications = scanner.classifyAll(scanStart)
+
+            // Cleanup pass — gated by all four conditions per ADR 0006:
+            // (1) AUTO_DISCARD_ELIGIBLE, (2) privateTempPath == null,
+            // (3) per-session recovery is terminal-clean (not RetryableFailure
+            // / ManifestWriteFailed), (4) sweep returned Swept (not
+            // QueryFailed). The deletion call site lives in the export-
+            // package helper so RovaApp.kt remains free of deletion APIs
+            // (per checkRecoveryNoDeletion).
+            val deleted = ExportCleanupPredicate.runCleanupPass(
+                sessionStore, classifications, exportReport
+            )
+            if (deleted.isNotEmpty()) {
+                RovaLog.d("RovaApp.runRecoveryScan: cleanup pass discarded ${deleted.size} session(s)")
+            }
+
             _recoveryReport.value = RecoveryReport(
                 classifications = classifications,
                 scanStartMillis = scanStart,
@@ -178,6 +223,134 @@ class RovaApp : Application() {
             )
             RovaLog.d("RovaApp.runRecoveryScan: classified ${classifications.size} session(s)")
         }
+    }
+
+    /**
+     * Phase 1.7 commit-6 — production [ExportRecoveryRunner] wiring. The
+     * runner consumes per-tier `recover()` seams; live `export()` wiring
+     * is commit 7's territory and intentionally absent here. The
+     * recovery seams (`finalizePendingRow`, `validatePending`,
+     * `deletePendingRow` for Tier 1; `copyFile` / `renameFile` /
+     * `deleteFile` defaults for Tier 2/3) cover the full set of platform
+     * calls that `recover()` makes — the `mux` seam is wired to a
+     * recovery-only sentinel that never gets called by the recovery code
+     * path (see [PreQExportCore.recover] and [Tier1Exporter.recover]
+     * shape).
+     */
+    private fun buildExportRecoveryRunner(): ExportRecoveryRunner {
+        val mediaScanWaiter = AndroidMediaScanWaiter(this)
+
+        // Recovery never invokes mux — see PreQExportCore.recover() and
+        // Tier1Exporter.recover() shape. Live mux wiring lands in commit 7.
+        val recoveryOnlyMux: suspend (List<File>, File) -> Unit = { _, _ ->
+            error("RovaApp recovery wiring: live mux is commit-7 territory; recover() never calls this")
+        }
+
+        val tier2Exporter = Tier2Exporter(
+            sessionStore = sessionStore,
+            mediaScanWaiter = mediaScanWaiter,
+            mux = recoveryOnlyMux
+        )
+        val tier3Exporter = Tier3Exporter(
+            sessionStore = sessionStore,
+            mediaScanWaiter = mediaScanWaiter,
+            mux = recoveryOnlyMux
+        )
+
+        val recoverSession: suspend (SessionManifest) -> RecoveryResult = { m ->
+            when (m.exportTier) {
+                ExportTier.TIER1_API29_PLUS -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        buildTier1Exporter().recover(m)
+                    } else {
+                        // Defensive only — a TIER1 manifest can only exist on
+                        // an API 29+ device, and SDK_INT does not regress for
+                        // a device. Defer rather than crash if the impossible
+                        // happens (e.g., manifest copied across devices).
+                        RecoveryResult.RetryableFailure(
+                            phase = "tier1-on-pre-q",
+                            cause = IllegalStateException(
+                                "TIER1 manifest on API ${Build.VERSION.SDK_INT}"
+                            )
+                        )
+                    }
+                }
+                ExportTier.TIER2_API26_28 -> tier2Exporter.recover(m)
+                ExportTier.TIER3_API24_25 -> tier3Exporter.recover(m)
+            }
+        }
+
+        // Tier-specific artifact validator. Used by the late-terminal
+        // reconciliation pass — only writes `markTerminated(COMPLETED)`
+        // when the artifact this manifest claims is intact on disk /
+        // MediaStore. Tier 1: validatePending(uri) probes the row via
+        // MediaExtractor (works post-finalize too — IS_PENDING=0 doesn't
+        // affect MediaExtractor.setDataSource(fd)). Tier 2/3: the public
+        // file must exist with non-zero length.
+        val validateTierArtifact: suspend (SessionManifest) -> Boolean = { m ->
+            when (m.exportTier) {
+                ExportTier.TIER1_API29_PLUS -> {
+                    val uri = m.pendingUri
+                    if (uri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        Tier1AndroidOps.validatePending(contentResolver, uri)
+                    } else {
+                        false
+                    }
+                }
+                ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> {
+                    val path = m.publicTargetPath
+                    if (path != null) {
+                        val f = File(path)
+                        f.exists() && f.length() > 0L
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+
+        val orphanSweep: (suspend (Set<String>) -> OrphanSweepResult)? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                { uris -> buildTier1OrphanSweep().sweepTier1OrphanPendingRows(uris) }
+            } else {
+                null
+            }
+
+        return ExportRecoveryRunner(
+            sessionStore = sessionStore,
+            recoverSession = recoverSession,
+            validateTierArtifact = validateTierArtifact,
+            orphanSweep = orphanSweep
+        )
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun buildTier1Exporter(): Tier1Exporter {
+        val resolver = contentResolver
+        return Tier1Exporter(
+            sessionStore = sessionStore,
+            insertPendingRow = { _ -> error("recovery wiring: insertPendingRow lands in commit 7") },
+            withPendingFd = { _, _, _ -> error("recovery wiring: withPendingFd lands in commit 7") },
+            mux = { _, _ -> error("recovery wiring: mux lands in commit 7") },
+            finalizePendingRow = { uri -> Tier1AndroidOps.finalizePendingRow(resolver, uri) },
+            deletePendingRow = { uri -> Tier1AndroidOps.deletePendingRow(resolver, uri) },
+            validatePending = { uri -> Tier1AndroidOps.validatePending(resolver, uri) }
+        )
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun buildTier1OrphanSweep(): Tier1OrphanSweep {
+        val resolver = contentResolver
+        val pkg = packageName
+        return Tier1OrphanSweep(
+            ourPackageName = pkg,
+            listVisiblePendingRows = {
+                Tier1AndroidSweepOps.listVisiblePendingRows(resolver, pkg)
+            },
+            deletePendingRow = { uri ->
+                Tier1AndroidSweepOps.deletePendingRow(resolver, uri)
+            }
+        )
     }
 
     companion object {
