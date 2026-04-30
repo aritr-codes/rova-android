@@ -126,6 +126,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var camera: androidx.camera.core.Camera? = null
     private var currentSurfaceProvider: Preview.SurfaceProvider? = null
 
+    // Smoke-test fix: tracks whether the live Preview is bound to the DUMMY
+    // headless surface. CameraX's `Preview.setSurfaceProvider` hot-swap from
+    // DUMMY → UI does not reliably re-cycle a fresh `SurfaceRequest` to the
+    // new provider on all devices, so a DUMMY-bound first loop can leave the
+    // PreviewView black until the next teardown/rebind. We use this flag to
+    // gate a one-shot rebind in `startPeriodicRecording` once it's safe (no
+    // active recording → no VideoCapture mid-segment teardown).
+    private var boundToDummy = false
+
     // C13 / ADR 0002: headless Preview.SurfaceProvider for background recording.
     // Per-request surface lifecycle is internal to HeadlessPreviewSurface; the
     // service holds only the provider handle and closes it on teardown.
@@ -338,6 +347,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         videoCapture = null
         camera = null
         configuredResolution = null
+        boundToDummy = false
         _serviceState.update { it.copy(isCameraActive = false) }
     }
 
@@ -346,7 +356,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         }
         if (!_serviceState.value.isCameraActive) {
-            serviceScope.launch { setupCamera() }
+            serviceScope.launch {
+                // Smoke-test fix: brief grace window for the UI's
+                // SurfaceProvider to attach before falling back to the
+                // headless DUMMY surface. ServiceConnection.onServiceConnected
+                // typically fires before RecordScreen's DisposableEffect runs
+                // setSurfaceProvider, so without this window the cold-start
+                // first loop binds to DUMMY and the later UI swap leaves
+                // PreviewView black on devices where CameraX does not
+                // re-cycle the SurfaceRequest. Background-only startup (no
+                // UI ever) still proceeds via DUMMY after the timeout — the
+                // existing 3 s `surfaceProviderReady.await()` in
+                // startPeriodicRecording is the headless ceiling, so this
+                // 500 ms window cannot delay a true headless launch by more
+                // than a frame.
+                if (currentSurfaceProvider == null) {
+                    val waited = withTimeoutOrNull(500) {
+                        while (currentSurfaceProvider == null) delay(20)
+                    }
+                    RovaLog.d(
+                        "startCameraPreview: surface grace ${if (waited != null) "UI arrived" else "expired -> DUMMY"}"
+                    )
+                }
+                setupCamera()
+            }
         } else {
             RovaLog.d("startCameraPreview: Camera already active, skipping setup")
         }
@@ -786,6 +819,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     markInitFailedAndStop(manifest.sessionId, "camera-ready-timeout")
                     return@launch
                 }
+
+                // Smoke-test fix: if the live binding is DUMMY but a UI
+                // SurfaceProvider has since arrived (grace window in
+                // startCameraPreview expired before the UI attached, or
+                // the user tapped START before the swap could re-cycle a
+                // SurfaceRequest), force a fresh rebind here. This runs
+                // BEFORE recordSegment, so VideoCapture is never torn down
+                // mid-segment. Headless launches (currentSurfaceProvider
+                // still null after the 3 s surfaceProviderReady await)
+                // skip this branch and proceed with DUMMY.
+                if (boundToDummy && currentSurfaceProvider != null) {
+                    RovaLog.d("startPeriodicRecording: live binding=DUMMY but UI provider available; rebinding for first-frame readiness")
+                    forceReconfigureCamera()
+                    val rebindReady = withTimeoutOrNull(5000) {
+                        while (!_serviceState.value.isCameraActive) { delay(100) }
+                    }
+                    if (rebindReady == null) {
+                        RovaLog.e("startPeriodicRecording: rebind to UI surface timed out — aborting")
+                        updateNotification("Camera failed to start. Please restart recording.")
+                        markInitFailedAndStop(manifest.sessionId, "ui-rebind-timeout")
+                        return@launch
+                    }
+                }
+
                 // Let CameraX pipeline fully stabilize (encoder init, frame production)
                 // Samsung devices need extra time for MediaCodec initialization
                 delay(2500)
@@ -973,9 +1030,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
             preview = Preview.Builder().build()
             // Samsung devices require Preview to have an active surface for VideoCapture
             // to produce frames. Use a dummy surface as fallback when UI hasn't connected yet.
+            val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
-            RovaLog.d("setupCamera: SurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "DUMMY"}")
+            RovaLog.d("setupCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}")
 
             try {
                 provider.unbindAll()
@@ -987,8 +1045,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     videoCapture
                 )
                 configuredResolution = resolutionStr
+                boundToDummy = useDummy
                 _serviceState.update { it.copy(isCameraActive = true) }
-                RovaLog.d("setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr")
+                RovaLog.d("setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr, boundToDummy=$boundToDummy")
                 applyFlashState()
             } catch (e: Exception) {
                 e.printStackTrace()
