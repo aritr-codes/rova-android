@@ -1,19 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup / restore rules for API 31+ (data-extraction-rules).
+    See ADR 0003 and ROADMAP_v6.md Phase 0 DoD: session segments, manifests,
+    and private export temp files must NEVER flow through cloud backup OR
+    device-to-device transfer.
+
+    cloud-backup     -> Google account auto-backup.
+    device-transfer  -> D2D restore on new device setup-wizard.
+
+    Both branches exclude the entire external domain (getExternalFilesDir),
+    which covers videos/ (segments + manifests) and export/ (Tier 2/3 temp).
+    sharedpref domain is allowed to back up (RovaSettings = user config).
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="external" path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="external" path="." />
     </device-transfer>
-    -->
 </data-extraction-rules>

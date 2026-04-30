@@ -1,13 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Auto Backup rules for API 23-30 (full-backup-content).
+    See ADR 0003 and ROADMAP_v6.md Phase 0 DoD: session segments, manifests,
+    and private export temp files must NEVER flow through Auto Backup.
+
+    Domains:
+      external  -> getExternalFilesDir() — contains videos/ (segments + manifests)
+                   and export/ (Tier 2/3 private temp). Excluded entirely.
+      sharedpref-> RovaSettings (user config: interval, duration, presets).
+                   Allowed to back up; this is user-facing config, not session state.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="external" path="." />
 </full-backup-content>

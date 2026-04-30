@@ -1,0 +1,459 @@
+package com.aritr.rova.data
+
+import android.content.Context
+import android.os.Build
+import com.aritr.rova.utils.RovaLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+/**
+ * Owns the on-disk layout under `getExternalFilesDir("videos")`:
+ *
+ * ```
+ * videos/
+ *   <sessionId>/
+ *     manifest.json
+ *     segment_0001.mp4
+ *     segment_0002.mp4
+ *     ...
+ * ```
+ *
+ * **Durability contract:**
+ * - Manifest writes are atomic-replace. API 26+ uses `Files.move(... ATOMIC_MOVE,
+ *   REPLACE_EXISTING)`; API 24-25 falls back to `File.renameTo`, which on
+ *   Android (POSIX `rename(2)` over ext4/F2FS) is atomic-replace on the same
+ *   filesystem. The only window in which the manifest can be missing is the
+ *   instant before the very first write — which is also the only window where
+ *   no segments could possibly exist yet.
+ * - [appendSegment] runs on a serial dispatcher (`Dispatchers.IO.limitedParallelism(1)`)
+ *   so concurrent finalize callbacks queue in dispatch order, preserving
+ *   sequence — no per-segment append can overtake an earlier one.
+ *
+ * See ROADMAP_v6.md §1.1 (C18) and ADR 0003 (storage-export-tiered).
+ */
+open class SessionStore internal constructor(rootDirArg: File) {
+
+    /**
+     * Test-friendly secondary constructor (Phase 1.5 / ADR 0005).
+     *
+     * Phase 1.4 (ADR 0006 B21) **deprecates this overload for production**.
+     * Production callers MUST resolve the external root via
+     * `RovaApp.videosRoot` and pass the resolved [File] through the
+     * primary constructor. This overload remains only for
+     * test-by-Robolectric paths and silently falls back to the legacy
+     * `getExternalFilesDir(null)/videos` resolution. Production lint
+     * `checkExternalRootShared` flags any non-`RovaApp` use.
+     *
+     * Throws if external storage is unavailable, matching the row 3
+     * cleanup contract — never returns a SessionStore writing to a
+     * relative path.
+     */
+    @Deprecated(
+        "Use SessionStore(rootDir: File) with RovaApp.videosRoot per ADR 0006 B21",
+        ReplaceWith("SessionStore(File(context.getExternalFilesDir(null)!!, \"videos\"))")
+    )
+    constructor(context: Context) : this(
+        File(
+            context.getExternalFilesDir(null)
+                ?: error(
+                    "SessionStore(Context): external storage unavailable. " +
+                        "Use SessionStore(File) with RovaApp.videosRoot per ADR 0006 B21."
+                ),
+            "videos"
+        )
+    )
+
+    private val rootDir: File = rootDirArg.also {
+        if (!it.exists()) it.mkdirs()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val persistDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    /**
+     * Coroutines launched on [persistScope] are dispatched directly onto the
+     * serial [persistDispatcher], so submission order == queue order. Going
+     * via `Dispatchers.IO` first would let the work-body-start order race —
+     * which is exactly the segment-N+1-overtakes-N bug we're avoiding.
+     *
+     * Lifecycle: cancelled by [close]. Keep alive as long as the owning
+     * service's session is active.
+     */
+    private val persistScope = CoroutineScope(SupervisorJob() + persistDispatcher)
+
+    fun rootDir(): File = rootDir
+
+    fun sessionDir(sessionId: String): File = File(rootDir, sessionId)
+
+    /**
+     * Allocates a new session: generates a unique id (collision-checked against
+     * existing dirs), picks tier per [Build.VERSION.SDK_INT], creates the dir,
+     * persists the initial manifest. Synchronous — caller must invoke from a
+     * non-Main dispatcher.
+     */
+    fun createSession(
+        config: SessionConfig,
+        audioMode: AudioMode = AudioMode.VIDEO_ONLY
+    ): SessionManifest {
+        val sessionId = generateUniqueSessionId()
+        val tier = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ExportTier.TIER1_API29_PLUS
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> ExportTier.TIER2_API26_28
+            else -> ExportTier.TIER3_API24_25
+        }
+        val manifest = SessionManifest(
+            sessionId = sessionId,
+            startedAt = System.currentTimeMillis(),
+            config = config,
+            segments = emptyList(),
+            exportTier = tier,
+            audioMode = audioMode
+        )
+        val dir = sessionDir(sessionId)
+        if (!dir.exists()) dir.mkdirs()
+        writeManifestAtomic(dir, manifest)
+        RovaLog.d("SessionStore: created session $sessionId (tier=$tier, audioMode=$audioMode)")
+        return manifest
+    }
+
+    /**
+     * Submit a finalized segment for persistence. Returns a [Deferred] that
+     * completes once the manifest has been atomically updated.
+     *
+     * The async is launched on [persistScope], whose dispatcher is the serial
+     * [persistDispatcher]. Each call queues directly on that dispatcher in
+     * call order, so segment N+1 cannot append before segment N — even if N's
+     * sha1 happens to be slower.
+     *
+     * The returned [Deferred] re-throws on `await()`; callers MUST await
+     * (not join) so failures surface at the merge barrier. [join] silently
+     * swallows exceptions and would let merge proceed with a missing record.
+     */
+    fun submitPersistFinalizedSegment(
+        sessionId: String,
+        segmentFile: File,
+        filename: String,
+        durationMs: Long
+    ): Deferred<SegmentRecord> = persistScope.async {
+        val sha1 = try {
+            sha1Of(segmentFile)
+        } catch (e: Exception) {
+            RovaLog.w("submitPersistFinalizedSegment: sha1 failed for ${segmentFile.name}", e)
+            ""
+        }
+        val record = SegmentRecord(
+            filename = filename,
+            durationMs = durationMs,
+            sizeBytes = segmentFile.length(),
+            sha1 = sha1
+        )
+        val dir = sessionDir(sessionId)
+        val current = loadManifest(sessionId)
+            ?: throw IllegalStateException("submitPersistFinalizedSegment: unknown session $sessionId")
+        val updated = current.copy(segments = current.segments + record)
+        writeManifestAtomic(dir, updated)
+        record
+    }
+
+    /**
+     * Pure manifest append. Used by recovery flows (Phase 1.5) and tests where
+     * the caller has a pre-computed [SegmentRecord]. Runs on the same serial
+     * dispatcher as [persistFinalizedSegment] so mixed callers cannot
+     * interleave.
+     */
+    open suspend fun appendSegment(sessionId: String, record: SegmentRecord) =
+        withContext(persistDispatcher) {
+            val dir = sessionDir(sessionId)
+            val current = loadManifest(sessionId)
+                ?: throw IllegalStateException("appendSegment: unknown session $sessionId")
+            val updated = current.copy(segments = current.segments + record)
+            writeManifestAtomic(dir, updated)
+        }
+
+    /**
+     * Phase 1.4 (ADR 0006 B2 / B9): atomic terminal-write. Writes
+     * [Terminated] AND [StopReason] in a single manifest commit. Replaces
+     * the Phase 1.2 two-arg form.
+     *
+     * Idempotent on first set — if [SessionManifest.terminated] is already
+     * non-null, the existing pair wins (a later KILLED_BY_SYSTEM tick must
+     * not overwrite an earlier COMPLETED; a duplicate user STOP must not
+     * overwrite an earlier permission-revoked terminal). Returns
+     * [MarkTerminatedResult.AlreadyTerminal] in that case, with the
+     * existing pair so the loser thread can update its UI / log
+     * accordingly.
+     *
+     * Atomicity: implemented via the existing manifest temp-file write +
+     * `Files.move(ATOMIC_MOVE)` rename (API 26+). Single fsync, single
+     * rename. Both fields land together or neither does.
+     *
+     * Retry: on `IOException` from temp-file write or rename, retries up
+     * to 2 more times with a 50 ms backoff (3 attempts total). Other
+     * `Throwable` types do not retry. On terminal failure, returns
+     * [MarkTerminatedResult.Failed] with the cause and attempt count.
+     * Caller MUST inspect the result; B9 caller contract: on `Failed`,
+     * skip merge, surface a degraded-state notification, and defer to
+     * cold-launch recovery.
+     *
+     * Runs on the serial [persistDispatcher] so the read-then-write is
+     * race-free and cannot interleave with concurrent appendSegment /
+     * submitPersistFinalizedSegment writes.
+     *
+     * Per ADR 0006 §"Migration table" the [stopReason] argument value is
+     * driven by the meaning of the terminal write, not the writing class:
+     * - [Terminated.KILLED_BY_SYSTEM] / [Terminated.KILLED_FORCE_STOP]
+     *   writers pass [StopReason.NONE].
+     * - [Terminated.COMPLETED] (merge-success) writer passes
+     *   [StopReason.NONE].
+     * - All [Terminated.USER_STOPPED] writers pass a non-`NONE` value.
+     */
+    open suspend fun markTerminated(
+        sessionId: String,
+        terminated: Terminated,
+        stopReason: StopReason = StopReason.NONE
+    ): MarkTerminatedResult = withContext(persistDispatcher) {
+        val dir = sessionDir(sessionId)
+        val current = loadManifest(sessionId)
+            ?: return@withContext MarkTerminatedResult.Failed(
+                cause = IllegalStateException("markTerminated: unknown session $sessionId"),
+                attempts = 0
+            )
+        if (current.terminated != null) {
+            RovaLog.d(
+                "SessionStore: markTerminated($sessionId, $terminated, $stopReason) skipped" +
+                    " — already ${current.terminated}/${current.stopReason}"
+            )
+            return@withContext MarkTerminatedResult.AlreadyTerminal(
+                existingTerminated = current.terminated,
+                existingStopReason = current.stopReason
+            )
+        }
+        val updated = current.copy(
+            terminated = terminated,
+            terminatedAt = System.currentTimeMillis(),
+            stopReason = stopReason
+        )
+
+        // 3-attempt retry on IOException (manifest temp-file write or
+        // ATOMIC_MOVE rename). 50 ms backoff between attempts. Other
+        // Throwable types do not retry.
+        var attempt = 0
+        var lastCause: Throwable? = null
+        while (attempt < MARK_TERMINATED_MAX_ATTEMPTS) {
+            attempt++
+            try {
+                writeManifestAtomic(dir, updated)
+                RovaLog.d(
+                    "SessionStore: markTerminated($sessionId, $terminated, $stopReason)" +
+                        " written (attempt=$attempt)"
+                )
+                return@withContext MarkTerminatedResult.Wrote(terminated, stopReason)
+            } catch (e: java.io.IOException) {
+                lastCause = e
+                RovaLog.w(
+                    "SessionStore: markTerminated IOException (attempt $attempt/$MARK_TERMINATED_MAX_ATTEMPTS)" +
+                        " for $sessionId", e
+                )
+                if (attempt < MARK_TERMINATED_MAX_ATTEMPTS) {
+                    delay(MARK_TERMINATED_BACKOFF_MILLIS)
+                }
+            } catch (t: Throwable) {
+                RovaLog.e(
+                    "SessionStore: markTerminated non-retryable failure for $sessionId", t
+                )
+                return@withContext MarkTerminatedResult.Failed(t, attempt)
+            }
+        }
+        MarkTerminatedResult.Failed(
+            cause = lastCause ?: IllegalStateException("markTerminated retry exhausted"),
+            attempts = attempt
+        )
+    }
+
+    /**
+     * Phase 1.3 cooperative-stop signal. Idempotent — once true, stays true.
+     * Phase 1.2 only needs the field-shape; the writer is RovaStopReceiver in
+     * Phase 1.3.
+     */
+    suspend fun setStopRequested(sessionId: String) =
+        withContext(persistDispatcher) {
+            val dir = sessionDir(sessionId)
+            val current = loadManifest(sessionId)
+                ?: throw IllegalStateException("setStopRequested: unknown session $sessionId")
+            if (current.stopRequested) return@withContext
+            writeManifestAtomic(dir, current.copy(stopRequested = true))
+        }
+
+    fun loadManifest(sessionId: String): SessionManifest? {
+        val file = manifestFile(sessionId)
+        if (!file.exists() || file.length() == 0L) return null
+        return try {
+            SessionManifest.fromJson(JSONObject(file.readText()))
+        } catch (e: Exception) {
+            RovaLog.e("SessionStore: failed to parse manifest for $sessionId", e)
+            null
+        }
+    }
+
+    fun listSessionIds(): List<String> =
+        rootDir.listFiles { f -> f.isDirectory }?.map { it.name }?.sorted() ?: emptyList()
+
+    /**
+     * Wired in Phase 2 by user-action ("Discard previous session"). Not called
+     * automatically in Phase 1.1 — see C12.
+     */
+    fun discardSession(sessionId: String) {
+        val dir = sessionDir(sessionId)
+        if (!dir.exists()) return
+        dir.deleteRecursively()
+        RovaLog.d("SessionStore: discarded session $sessionId")
+    }
+
+    fun nextSegmentFilename(currentSegmentCount: Int): String =
+        "segment_${"%04d".format(currentSegmentCount + 1)}.mp4"
+
+    fun manifestFile(sessionId: String): File = File(sessionDir(sessionId), MANIFEST_NAME)
+
+    /**
+     * Cancels [persistScope] so any pending persist coroutines complete or
+     * cancel. Call from the owning service's teardown path. Safe to invoke
+     * multiple times.
+     */
+    fun close() {
+        persistScope.cancel()
+    }
+
+    /**
+     * Atomic-replace manifest write. Crash-safe: at every instant the on-disk
+     * `manifest.json` is either the previous version or the new one — never
+     * partial, never absent (after the first successful create).
+     */
+    private fun writeManifestAtomic(dir: File, manifest: SessionManifest) {
+        val target = File(dir, MANIFEST_NAME)
+        val tmp = File(dir, MANIFEST_NAME_TMP)
+        tmp.writeText(manifest.toJson().toString(2))
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // NIO Files.move with ATOMIC_MOVE + REPLACE_EXISTING gives the
+            // strongest guarantee the platform supports.
+            Files.move(
+                tmp.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        } else {
+            // API 24-25: java.nio.file.Files is API 26+. Fall back to
+            // File.renameTo, which on Android maps to POSIX rename(2) — atomic
+            // and replace-existing on the same filesystem.
+            if (!tmp.renameTo(target)) {
+                // Last-ditch fallback: re-attempt with explicit delete only if
+                // the rename failed. Leaves a small unsafe window, but only
+                // reachable if the FS itself is misbehaving.
+                target.delete()
+                if (!tmp.renameTo(target)) {
+                    // Direct copy-and-delete. Manifest may end up partial on
+                    // crash here; logged loudly so triage finds it.
+                    RovaLog.e("SessionStore: atomic rename failed; falling back to copy")
+                    target.writeText(tmp.readText())
+                    tmp.delete()
+                }
+            }
+        }
+    }
+
+    /**
+     * Generate a session id that is (a) human-readable and (b) collision-free
+     * against existing session dirs. Format: `yyyyMMdd_HHmmss_<8-hex>` —
+     * 32 bits of randomness on top of 1-second-resolution timestamp.
+     * The dir-existence loop is belt-and-braces: even at one start per ms with
+     * 32-bit random, collision probability is ~10^-7 per attempt; the loop
+     * makes the actual probability of collision-without-detection zero.
+     */
+    private fun generateUniqueSessionId(): String {
+        val tsFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        repeat(MAX_ID_ATTEMPTS) {
+            val ts = tsFormat.format(Date())
+            val rand = UUID.randomUUID().toString().replace("-", "").take(8)
+            val candidate = "${ts}_$rand"
+            if (!sessionDir(candidate).exists()) return candidate
+        }
+        // Pathological: 16 collisions in a row. Fall back to full UUID.
+        return "uuid_${UUID.randomUUID()}"
+    }
+
+    companion object {
+        const val MANIFEST_NAME = "manifest.json"
+        const val MANIFEST_NAME_TMP = "manifest.json.tmp"
+        private const val MAX_ID_ATTEMPTS = 16
+
+        /** Phase 1.4 (ADR 0006 B9): retry budget for [markTerminated]. */
+        const val MARK_TERMINATED_MAX_ATTEMPTS = 3
+        const val MARK_TERMINATED_BACKOFF_MILLIS = 50L
+
+        /**
+         * Streaming SHA-1 of a file. 64 KB chunks. Use from Dispatchers.IO.
+         */
+        fun sha1Of(file: File): String {
+            val md = MessageDigest.getInstance("SHA-1")
+            file.inputStream().buffered(64 * 1024).use { input ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    md.update(buf, 0, n)
+                }
+            }
+            return md.digest().joinToString("") { "%02x".format(it) }
+        }
+    }
+}
+
+/**
+ * Phase 1.4 (ADR 0006 B2 / B9). Result of an atomic terminal-write.
+ * Callers MUST inspect the result and act per the §"Caller contract":
+ *
+ * - [Wrote] — proceed: update notification, cancel alarms, run merge for
+ *   `USER_STOPPED` flavors (merge happens AFTER the write per B3).
+ * - [AlreadyTerminal] — proceed idempotently: existing terminal stays.
+ *   The loser thread logs the suppressed write but continues to merge /
+ *   stop via the same controller-coordinated path so we don't double-
+ *   merge.
+ * - [Failed] — DO NOT proceed with merge. Surface a degraded-state
+ *   notification ("Stopped — recording state could not be saved. Will
+ *   recover on next launch."), cancel alarms, log via
+ *   [com.aritr.rova.utils.RovaCrashReporter], then `stopForeground +
+ *   stopSelf`. Phase 1.5 cold-launch classifies the residual session.
+ */
+sealed class MarkTerminatedResult {
+    data class Wrote(
+        val terminated: Terminated,
+        val stopReason: StopReason
+    ) : MarkTerminatedResult()
+
+    data class AlreadyTerminal(
+        val existingTerminated: Terminated,
+        val existingStopReason: StopReason
+    ) : MarkTerminatedResult()
+
+    data class Failed(
+        val cause: Throwable,
+        val attempts: Int
+    ) : MarkTerminatedResult()
+}

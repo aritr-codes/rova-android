@@ -13,6 +13,9 @@ import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.service.RovaServiceState
+import com.aritr.rova.service.ServiceController
+import com.aritr.rova.utils.RovaLog
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +40,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Service state (C1: pulled from instance, not companion static) ---
     private var serviceBinder: RovaRecordingService.LocalBinder? = null
+    private var serviceStateJob: Job? = null
     private val _serviceState = MutableStateFlow(RovaServiceState())
     val serviceState: StateFlow<RovaServiceState> = _serviceState.asStateFlow()
     private var pendingSurfaceProvider: Preview.SurfaceProvider? = null
@@ -50,7 +54,8 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
             pendingSurfaceProvider?.let { localBinder.getService().setSurfaceProvider(it) }
             localBinder.getService().startCameraPreview()
             // Collect from the service instance's StateFlow
-            viewModelScope.launch {
+            serviceStateJob?.cancel()
+            serviceStateJob = viewModelScope.launch {
                 localBinder.getStateFlow().collect { state ->
                     _serviceState.value = state
                 }
@@ -58,6 +63,8 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            serviceStateJob?.cancel()
+            serviceStateJob = null
             serviceBinder = null
         }
     }
@@ -87,6 +94,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        serviceStateJob?.cancel()
         super.onCleared()
         try { context.unbindService(serviceConnection) } catch (e: Exception) {}
     }
@@ -117,6 +125,30 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     fun setFlashMode(mode: Int) {
         flashMode.value = mode
         serviceBinder?.getService()?.setFlashMode(mode)
+    }
+
+    /**
+     * Phase 1.3 — UI stop entrypoint.
+     *
+     * Resolves the live sessionId via [ServiceController.current] (the
+     * canonical source — avoids racing against a stale ViewModel field
+     * after a config change or rebind). Drops if no live controller; the
+     * notification cannot show its STOP action in that state either, so
+     * the user has no observable affordance to invoke this from a
+     * sessionless service. Logged for diagnostic visibility.
+     *
+     * Sends through [RovaRecordingService.stop] which broadcasts to
+     * [com.aritr.rova.service.RovaStopReceiver]. No service start, no
+     * bind — required by ROADMAP_v4 §1.3 and Android 12+ FGS-from-
+     * background restrictions.
+     */
+    fun stopRecording() {
+        val sid = ServiceController.current()?.sessionId
+        if (sid == null) {
+            RovaLog.w("RecordViewModel.stopRecording: no live controller; ignoring tap")
+            return
+        }
+        RovaRecordingService.stop(context, sid)
     }
 
     // --- Preset management ---

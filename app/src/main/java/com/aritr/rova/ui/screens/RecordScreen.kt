@@ -12,8 +12,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -41,6 +43,7 @@ import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.components.*
 import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.launch
 
@@ -83,6 +86,13 @@ fun RecordScreen(
         }
     }
 
+    DisposableEffect(previewView) {
+        viewModel.setSurfaceProvider(previewView.surfaceProvider)
+        onDispose {
+            viewModel.setSurfaceProvider(null)
+        }
+    }
+
     // Permissions
     val permissionsState = rememberMultiplePermissionsState(
         permissions = buildList {
@@ -93,6 +103,20 @@ fun RecordScreen(
             }
         }
     )
+    // Phase 1.4 (ADR 0006) permission policy:
+    // - CAMERA: mandatory (always required to start).
+    // - POST_NOTIFICATIONS on API 33+: mandatory at session start
+    //   (§"POST_NOTIFICATIONS revoked (33+)" hard-block lock).
+    //   Mid-session revocation remains tolerant (service continues; UI
+    //   re-prompts on next foreground entry).
+    // - RECORD_AUDIO: OPTIONAL. The service's pre-FGS Phase 1 preflight
+    //   reads RECORD_AUDIO state and decides AudioMode (VIDEO_AUDIO vs
+    //   VIDEO_ONLY) per B18. Audio-permission absence does NOT block
+    //   start — it just locks the session into VIDEO_ONLY mode for the
+    //   duration.
+    val hasCapturePermissions = permissionsState.permissions
+        .filterNot { it.permission == Manifest.permission.RECORD_AUDIO }
+        .all { it.status is PermissionStatus.Granted }
 
     // UI State
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -157,7 +181,7 @@ fun RecordScreen(
             text = { Text("The camera connection was lost during recording.") },
             confirmButton = {
                 Button(
-                    onClick = { RovaRecordingService.stop(context) },
+                    onClick = { viewModel.stopRecording() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("STOP RECORDING")
@@ -172,12 +196,6 @@ fun RecordScreen(
         gesturesEnabled = !serviceState.isRecording,
         drawerContent = {
             ModalDrawerSheet {
-                Text(
-                    "Settings & Defaults",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                HorizontalDivider()
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -185,17 +203,35 @@ fun RecordScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Column(modifier = Modifier.padding(18.dp)) {
+                            Text(
+                                "Quick settings",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Adjust capture behavior without leaving the camera.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
+                            )
+                        }
+                    }
                     Text(
                         "Recording",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.secondary
                     )
                     SwitchRow(
                         Icons.Default.Smartphone, "Keep Screen On", "Prevent screen timeout",
                         keepScreenOn
                     ) { settingsViewModel.keepScreenOn.value = it }
                     SwitchRow(
-                        Icons.Default.VolumeUp, "Sounds", "Start/Stop beeps",
+                        Icons.AutoMirrored.Filled.VolumeUp, "Sounds", "Start/Stop beeps",
                         enableBeeps
                     ) { settingsViewModel.enableBeeps.value = it }
                 }
@@ -207,7 +243,7 @@ fun RecordScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             sheetPeekHeight = 130.dp,
             sheetSwipeEnabled = !isUiLocked,
-            sheetContainerColor = MaterialTheme.colorScheme.surface,
+            sheetContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
             sheetContent = {
                 Column(
                     modifier = Modifier
@@ -293,16 +329,14 @@ fun RecordScreen(
                         // Summary (Visible in Peek)
                         if (scaffoldState.bottomSheetState.currentValue == SheetValue.PartiallyExpanded) {
                             Spacer(Modifier.height(12.dp))
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Duration: ${formatDuration(duration)}", style = MaterialTheme.typography.bodySmall)
-                                Text("Interval: ${formatInterval(interval)}", style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    "Loops: ${if (loopCount == -1) "∞" else loopCount.toString()}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                item { RecordStatChip("Duration ${formatDuration(duration)}") }
+                                item { RecordStatChip("Interval ${formatInterval(interval)}") }
+                                item { RecordStatChip("Loops ${if (loopCount == -1) "∞" else loopCount}") }
+                                item { RecordStatChip(resolution) }
                             }
                         }
                     }
@@ -375,13 +409,9 @@ fun RecordScreen(
                     .background(Color.Black)
             ) {
                 // Camera Preview
-                if (permissionsState.allPermissionsGranted) {
+                if (hasCapturePermissions) {
                     AndroidView(
-                        factory = { _ ->
-                            previewView.also { view ->
-                                viewModel.setSurfaceProvider(view.surfaceProvider)
-                            }
-                        },
+                        factory = { _ -> previewView },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -419,25 +449,40 @@ fun RecordScreen(
                         Icon(Icons.Default.Menu, "Settings", tint = Color.White)
                     }
                     if (serviceState.isRecording && isCameraActive) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(16.dp)
-                                    .background(Color.Red, CircleShape)
-                                    .alpha(pulsingOpacity())
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "REC",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.Black.copy(alpha = 0.35f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(12.dp)
+                                        .background(Color.Red, CircleShape)
+                                        .alpha(pulsingOpacity())
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "REC",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
                         }
                     } else if (serviceState.isRecording && !isCameraActive) {
                         Text("INITIALIZING...", color = Color.Yellow, fontWeight = FontWeight.Bold)
                     } else {
-                        Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Hands-free loop recorder",
+                                color = Color.White.copy(alpha = 0.72f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                     Row {
                         val iconTint = if (isUiLocked) Color.Gray else Color.White
@@ -484,35 +529,16 @@ fun RecordScreen(
 
                 // Bottom Overlay
                 if (serviceState.isPeriodicActive) {
-                    Column(
+                    SessionStatusCard(
+                        isRecording = serviceState.isRecording,
+                        nextRecordingIn = serviceState.nextRecordingCountdown,
+                        currentLoop = serviceState.currentLoop,
+                        totalLoops = serviceState.totalLoops,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
                             .padding(bottom = 140.dp)
-                            .background(
-                                Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.8f)))
-                            )
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            buildString {
-                                append(if (serviceState.isRecording) "Recording..." else "Next in ${serviceState.nextRecordingCountdown}s")
-                                if (serviceState.totalLoops > 0) append("  ·  Loop ${serviceState.currentLoop} of ${serviceState.totalLoops}")
-                                else if (serviceState.totalLoops == -1) append("  ·  Loop ${serviceState.currentLoop}")
-                            },
-                            color = Color.White
-                        )
-                        LinearProgressIndicator(
-                            progress = {
-                                if (serviceState.totalLoops > 0)
-                                    serviceState.currentLoop.toFloat() / serviceState.totalLoops
-                                else 0f
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        )
-                    }
+                            .padding(horizontal = 16.dp)
+                    )
                 }
 
                 // Config summary (visible when idle)
@@ -521,15 +547,18 @@ fun RecordScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 90.dp),
-                        shape = MaterialTheme.shapes.small,
-                        color = Color.Black.copy(alpha = 0.6f)
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color.Black.copy(alpha = 0.56f)
                     ) {
-                        Text(
-                            "${formatDuration(duration)} × ${if (loopCount == -1) "∞" else loopCount} loops · ${formatInterval(interval)} interval · $resolution",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            RecordDarkChip(formatDuration(duration))
+                            RecordDarkChip("${if (loopCount == -1) "∞" else loopCount} loops")
+                            RecordDarkChip(formatInterval(interval))
+                            RecordDarkChip(resolution)
+                        }
                     }
                 }
 
@@ -542,16 +571,31 @@ fun RecordScreen(
                     ExtendedFloatingActionButton(
                         onClick = {
                             if (serviceState.isPeriodicActive) {
-                                RovaRecordingService.stop(context)
+                                viewModel.stopRecording()
                             } else {
-                                if (permissionsState.allPermissionsGranted) {
-                                    RovaRecordingService.start(
+                                if (hasCapturePermissions) {
+                                    // Phase 1.4 (ADR 0006 B11) — caller-side
+                                    // FGS guard. RovaRecordingService.start now
+                                    // returns StartResult; surface each Blocked
+                                    // reason with the right message.
+                                    val result = RovaRecordingService.start(
                                         context,
                                         viewModel.duration.value.toFloat(),
                                         viewModel.interval.value.toFloat(),
                                         viewModel.loopCount.value,
                                         viewModel.resolution.value
                                     )
+                                    if (result is com.aritr.rova.service.StartResult.Blocked) {
+                                        val msg = when (result.reason) {
+                                            com.aritr.rova.service.StartBlocked.APP_NOT_VISIBLE ->
+                                                "Open Rova on screen before starting. Android blocks camera launches from the background."
+                                            com.aritr.rova.service.StartBlocked.FGS_RESTRICTED ->
+                                                "Cannot start recording — Android requires the app to be in the foreground."
+                                            com.aritr.rova.service.StartBlocked.UNKNOWN_ISE ->
+                                                "Recording could not start. Please try again."
+                                        }
+                                        scope.launch { snackbarHostState.showSnackbar(msg) }
+                                    }
                                 } else {
                                     permissionsState.launchMultiplePermissionRequest()
                                 }
@@ -722,4 +766,34 @@ fun formatDuration(seconds: Int): String {
 
 fun formatInterval(minutes: Int): String {
     return if (minutes == 0) "No wait" else "${minutes}m"
+}
+
+@Composable
+private fun RecordStatChip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun RecordDarkChip(text: String) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.14f)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White
+        )
+    }
 }

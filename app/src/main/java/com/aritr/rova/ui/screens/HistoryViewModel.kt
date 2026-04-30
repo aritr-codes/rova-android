@@ -33,11 +33,25 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             val context = getApplication<Application>()
             val dir = File(context.getExternalFilesDir("videos"), "")
+            // C18: merged outputs now live under videos/<sessionId>/Rova_*.mp4
+            // (one level deep). Top-level Rova_*.mp4 from pre-Phase-1.1 builds
+            // is still surfaced so existing recordings remain visible.
+            // Per-session segment files (segment_NNNN.mp4) are NOT shown.
             val files = if (dir.exists()) {
-                dir.listFiles()
-                    ?.filter { it.extension == "mp4" && !it.name.startsWith("segment_bg_") }
-                    ?.sortedByDescending { it.lastModified() }
-                    ?: emptyList()
+                val all = dir.listFiles()?.flatMap { entry ->
+                    when {
+                        entry.isDirectory ->
+                            entry.listFiles()
+                                ?.filter { it.extension == "mp4" && it.name.startsWith("Rova_") }
+                                ?.toList() ?: emptyList()
+                        entry.extension == "mp4" &&
+                            !entry.name.startsWith("segment_bg_") &&
+                            !entry.name.startsWith("segment_") ->
+                            listOf(entry)
+                        else -> emptyList()
+                    }
+                } ?: emptyList()
+                all.sortedByDescending { it.lastModified() }
             } else {
                 emptyList()
             }
@@ -71,5 +85,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             files.forEach { it.delete() }
             refresh()
         }
+    }
+
+    override fun onCleared() {
+        metadataCache.values.forEach { (thumbnail, _) ->
+            thumbnail?.recycle()
+        }
+        metadataCache.clear()
+        super.onCleared()
     }
 }

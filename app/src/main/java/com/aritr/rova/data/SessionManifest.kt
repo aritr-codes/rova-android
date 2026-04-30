@@ -1,0 +1,249 @@
+package com.aritr.rova.data
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Per-session recording manifest. One manifest per session, written to
+ * `videos/<sessionId>/manifest.json`. See ROADMAP_v6.md §1.1 (C18).
+ *
+ * Phase 1.1 populates: [sessionId], [startedAt], [config], [segments], [exportTier].
+ * Phase 1.7 populates: [privateTempPath], [pendingUri], [publicTargetPath],
+ * [mediaScanCompleted], [exportState].
+ *
+ * Schema is intentionally hand-serialized (no kotlinx.serialization plugin)
+ * to keep dependencies minimal and survive field additions through field-by-
+ * field reads with safe defaults.
+ */
+data class SessionManifest(
+    val sessionId: String,
+    val startedAt: Long,
+    val config: SessionConfig,
+    val segments: List<SegmentRecord>,
+    val exportTier: ExportTier,
+    val privateTempPath: String? = null,
+    val pendingUri: String? = null,
+    val publicTargetPath: String? = null,
+    val mediaScanCompleted: Boolean = false,
+    val exportState: ExportState = ExportState.NOT_STARTED,
+    /**
+     * Phase 1.2: terminal classification. `null` while the session is
+     * potentially live (or recovery-required from a hard crash). Phase 1.5
+     * recovery scan classifies orphans by inspecting [terminated] together
+     * with on-disk segment count and ServiceController state.
+     */
+    val terminated: Terminated? = null,
+    /** Wall-clock millis when [terminated] was set. `null` iff [terminated] is null. */
+    val terminatedAt: Long? = null,
+    /**
+     * Phase 1.3 cooperative-stop intent flag. Receiver's second-line defense
+     * checks `terminated != null || stopRequested` — a tick whose session
+     * was asked to stop must still be a no-op even if no terminal record
+     * has landed yet.
+     */
+    val stopRequested: Boolean = false,
+    /**
+     * Phase 1.4 (ADR 0006 B18) — locked at session start, immutable for the
+     * session lifetime. Drives the FGS-type bitfield at `startForeground`
+     * and the CameraX recorder configuration. Mid-session
+     * `RECORD_AUDIO` revocation in a [AudioMode.VIDEO_AUDIO] session
+     * forces termination because the FGS-type bitfield is immutable and
+     * cannot legitimately hold `FOREGROUND_SERVICE_TYPE_MICROPHONE`
+     * without permission. Legacy manifests (no field) default to
+     * [AudioMode.VIDEO_ONLY] — the safer default for back-compat.
+     */
+    val audioMode: AudioMode = AudioMode.VIDEO_ONLY,
+    /**
+     * Phase 1.4 (ADR 0006 B2) — atomic sibling of [terminated]. Written in
+     * the same manifest commit as [terminated]; never persisted on its own.
+     * Phase 1.5 recovery scan ignores this field for classification (it is
+     * descriptive, not load-bearing). UI consumes it for the user-facing
+     * stop reason. Default [StopReason.NONE] applies to:
+     * - manifests not yet stopped,
+     * - merge-success [Terminated.COMPLETED],
+     * - system-driven terminals ([Terminated.KILLED_BY_SYSTEM] /
+     *   [Terminated.KILLED_FORCE_STOP]).
+     */
+    val stopReason: StopReason = StopReason.NONE
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("schemaVersion", SCHEMA_VERSION)
+        put("sessionId", sessionId)
+        put("startedAt", startedAt)
+        put("config", config.toJson())
+        put("segments", JSONArray().also { arr -> segments.forEach { arr.put(it.toJson()) } })
+        put("exportTier", exportTier.name)
+        privateTempPath?.let { put("privateTempPath", it) }
+        pendingUri?.let { put("pendingUri", it) }
+        publicTargetPath?.let { put("publicTargetPath", it) }
+        put("mediaScanCompleted", mediaScanCompleted)
+        put("exportState", exportState.name)
+        terminated?.let { put("terminated", it.name) }
+        terminatedAt?.let { put("terminatedAt", it) }
+        put("stopRequested", stopRequested)
+        put("audioMode", audioMode.name)
+        put("stopReason", stopReason.name)
+    }
+
+    companion object {
+        // v3 (Phase 1.4 / ADR 0006): added audioMode, stopReason. v1/v2
+        // manifests read with safe defaults (VIDEO_ONLY, NONE).
+        const val SCHEMA_VERSION = 3
+
+        fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
+            sessionId = json.getString("sessionId"),
+            startedAt = json.getLong("startedAt"),
+            config = SessionConfig.fromJson(json.getJSONObject("config")),
+            segments = json.getJSONArray("segments").let { arr ->
+                List(arr.length()) { SegmentRecord.fromJson(arr.getJSONObject(it)) }
+            },
+            exportTier = ExportTier.valueOf(json.getString("exportTier")),
+            privateTempPath = json.optString("privateTempPath", "").ifEmpty { null },
+            pendingUri = json.optString("pendingUri", "").ifEmpty { null },
+            publicTargetPath = json.optString("publicTargetPath", "").ifEmpty { null },
+            mediaScanCompleted = json.optBoolean("mediaScanCompleted", false),
+            exportState = ExportState.valueOf(json.optString("exportState", ExportState.NOT_STARTED.name)),
+            terminated = json.optString("terminated", "").ifEmpty { null }?.let {
+                runCatching { Terminated.valueOf(it) }.getOrNull()
+            },
+            terminatedAt = if (json.has("terminatedAt")) json.optLong("terminatedAt") else null,
+            stopRequested = json.optBoolean("stopRequested", false),
+            audioMode = json.optString("audioMode", "").ifEmpty { null }?.let {
+                runCatching { AudioMode.valueOf(it) }.getOrNull()
+            } ?: AudioMode.VIDEO_ONLY,
+            stopReason = json.optString("stopReason", "").ifEmpty { null }?.let {
+                runCatching { StopReason.valueOf(it) }.getOrNull()
+            } ?: StopReason.NONE
+        )
+    }
+}
+
+data class SessionConfig(
+    val durationSeconds: Int,
+    val intervalMinutes: Int,
+    val resolution: String,
+    val loopCount: Int
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("durationSeconds", durationSeconds)
+        put("intervalMinutes", intervalMinutes)
+        put("resolution", resolution)
+        put("loopCount", loopCount)
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): SessionConfig = SessionConfig(
+            durationSeconds = json.getInt("durationSeconds"),
+            intervalMinutes = json.getInt("intervalMinutes"),
+            resolution = json.getString("resolution"),
+            loopCount = json.getInt("loopCount")
+        )
+    }
+}
+
+data class SegmentRecord(
+    val filename: String,
+    val durationMs: Long,
+    val sizeBytes: Long,
+    val sha1: String
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("filename", filename)
+        put("durationMs", durationMs)
+        put("sizeBytes", sizeBytes)
+        put("sha1", sha1)
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): SegmentRecord = SegmentRecord(
+            filename = json.getString("filename"),
+            durationMs = json.getLong("durationMs"),
+            sizeBytes = json.getLong("sizeBytes"),
+            sha1 = json.getString("sha1")
+        )
+    }
+}
+
+enum class ExportTier {
+    TIER1_API29_PLUS,
+    TIER2_API26_28,
+    TIER3_API24_25
+}
+
+enum class ExportState {
+    NOT_STARTED,
+    MUXING,
+    COPYING,
+    FINALIZED,
+    FAILED
+}
+
+/**
+ * Phase 1.2 session termination classification. Orthogonal to [ExportState] —
+ * a session can be terminated (recording lifecycle ended) while export is
+ * still in progress.
+ *
+ * - [USER_STOPPED]      Phase 1.3 will write this when stop is user-driven.
+ * - [COMPLETED]         Phase 1.2 writes this on successful merge before
+ *                       stopForeground/stopSelf.
+ * - [KILLED_BY_SYSTEM]  Phase 1.2 writes this when a tick fires but
+ *                       ServiceController has no controller registered
+ *                       (process was killed between ticks).
+ * - [KILLED_FORCE_STOP] Phase 1.5 recovery writes this when an orphan
+ *                       session is detected with no terminated record and
+ *                       no surviving manifest signal (force-stop or hard
+ *                       crash mid-segment).
+ */
+enum class Terminated {
+    USER_STOPPED,
+    COMPLETED,
+    KILLED_BY_SYSTEM,
+    KILLED_FORCE_STOP
+}
+
+/**
+ * Phase 1.4 (ADR 0006 B18). Decided ONCE at session start, persisted in
+ * the manifest, immutable for the session lifetime.
+ *
+ * - [VIDEO_AUDIO] — `RECORD_AUDIO` granted at start. FGS started with
+ *   `FOREGROUND_SERVICE_TYPE_CAMERA | FOREGROUND_SERVICE_TYPE_MICROPHONE`.
+ *   Mid-session mic revocation forces termination (B18).
+ * - [VIDEO_ONLY] — `RECORD_AUDIO` denied at start (or user opted out via
+ *   the "record without audio?" prompt). FGS started with
+ *   `FOREGROUND_SERVICE_TYPE_CAMERA` only. Mid-session mic permission
+ *   changes are no-ops.
+ *
+ * Legacy default: [VIDEO_ONLY] (safer; never claims a microphone
+ * capability the manifest can't verify the FGS actually held).
+ */
+enum class AudioMode {
+    VIDEO_AUDIO,
+    VIDEO_ONLY
+}
+
+/**
+ * Phase 1.4 (ADR 0006 B2). Atomic sibling of [Terminated]. Written by
+ * [com.aritr.rova.data.SessionStore.markTerminated] in the same manifest
+ * commit as the terminal value; never persisted on its own.
+ *
+ * Phase 1.5 recovery scan does NOT read [StopReason] for classification —
+ * it is descriptive, not load-bearing for the recovery decision matrix.
+ *
+ * Per the ADR 0006 §"Migration table":
+ * - [USER_STOPPED] from `RovaStopReceiver` (both branches), `RecoveryScanner`'s
+ *   `stopRequested=true` branch, and `RovaRecordingService.stopPeriodicRecordingAndMerge`
+ *   user-stop path → [USER].
+ * - [USER_STOPPED] from `RovaRecordingService` permission gate → [PERMISSION_REVOKED].
+ * - [USER_STOPPED] from `RovaRecordingService` low-storage gate → [LOW_STORAGE].
+ * - [USER_STOPPED] from `RovaRecordingService` post-manifest init failure
+ *   (controller-register collision; camera bind error) → [INIT_FAILED].
+ * - [Terminated.COMPLETED] (merge-success) → [NONE].
+ * - [Terminated.KILLED_BY_SYSTEM] / [Terminated.KILLED_FORCE_STOP] → [NONE].
+ */
+enum class StopReason {
+    USER,
+    LOW_STORAGE,
+    PERMISSION_REVOKED,
+    INIT_FAILED,
+    NONE
+}

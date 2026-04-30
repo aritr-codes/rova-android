@@ -13,8 +13,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Phase 1.2 (ADR 0001): exact-alarm opt-in path. Inexact fallback
+         remains always-supported via setAndAllowWhileIdle when
+         canScheduleExactAlarms() returns false at runtime. USE_EXACT_ALARM
+         is intentionally NOT declared — Play policy restricts it to
+         calendar/alarm-clock/timer apps. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+                     android:minSdkVersion="31" />
 
     <application
+        android:name=".RovaApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -48,6 +58,33 @@
             android:name=".service.RovaRecordingService"
             android:foregroundServiceType="camera|microphone"
             android:exported="false" />
+
+        <!-- Phase 1.2: alarm tick receiver. exported=false so only the OS
+             AlarmManager (which holds the same UID) can deliver to it. The
+             intent-filter constrains by action+data scheme; PendingIntent
+             identity uses Intent.data = rova://tick/<sessionId>. -->
+        <receiver
+            android:name=".service.RovaTickReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.aritr.rova.action.TICK" />
+                <data android:scheme="rova" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phase 1.3: cooperative-stop receiver. exported=false so only
+             same-UID senders (notification PendingIntent + UI sendBroadcast)
+             can deliver. PendingIntent identity uses
+             Intent.data = rova://stop/<sessionId> so per-session stops do
+             not collide with each other or with tick PIs. -->
+        <receiver
+            android:name=".service.RovaStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.aritr.rova.action.STOP" />
+                <data android:scheme="rova" />
+            </intent-filter>
+        </receiver>
 
         <!-- FILE PROVIDER -->
         <provider
