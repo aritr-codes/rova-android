@@ -112,11 +112,10 @@ open class SessionStore internal constructor(rootDirArg: File) {
         audioMode: AudioMode = AudioMode.VIDEO_ONLY
     ): SessionManifest {
         val sessionId = generateUniqueSessionId()
-        val tier = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ExportTier.TIER1_API29_PLUS
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> ExportTier.TIER2_API26_28
-            else -> ExportTier.TIER3_API24_25
-        }
+        // Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003): tier from the shared
+        // SDK→tier helper so the service preflight (which runs BEFORE
+        // createSession) and this manifest commit cannot drift apart.
+        val tier = currentExportTier()
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = System.currentTimeMillis(),

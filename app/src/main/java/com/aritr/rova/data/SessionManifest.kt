@@ -1,5 +1,6 @@
 package com.aritr.rova.data
 
+import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -169,6 +170,43 @@ enum class ExportTier {
     TIER2_API26_28,
     TIER3_API24_25
 }
+
+/**
+ * Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003) — single source of truth for the
+ * `Build.VERSION.SDK_INT` → [ExportTier] map. Both
+ * [SessionStore.createSession] (manifest commit) and the service-side
+ * preflight (pre-`createSession`, in `onStartCommand`) call this so the
+ * tier seen at preflight matches the tier persisted in the manifest.
+ *
+ * Tier is decided ONCE per session and frozen in the manifest.
+ * Recovery on a downgraded build still treats the row by its **recorded**
+ * tier — so the math must travel with the manifest, not the running build.
+ */
+fun currentExportTier(): ExportTier = when {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ExportTier.TIER1_API29_PLUS
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> ExportTier.TIER2_API26_28
+    else -> ExportTier.TIER3_API24_25
+}
+
+/**
+ * Phase 1.6 (ROADMAP_v6 §1.6) — peak-budget multiplier per tier.
+ * Multiplier is applied to the **capture-bytes** estimate
+ * (`segmentDuration × loops × bytesPerSec`).
+ *
+ * - **Tier 1** ⇒ `2`: capture + final mux into the pending row
+ *   (one in-flight copy of the merged output).
+ * - **Tier 2 / Tier 3** ⇒ `3`: capture + private merged + transient
+ *   public copy (`<name>.mp4.part`) before `renameTo` makes it atomic.
+ *
+ * Does not include the per-segment safety buffer — preflight adds 50 MiB
+ * separately, gate uses [com.aritr.rova.service.RovaRecordingService]'s
+ * `FINALIZE_HEADROOM_MIB`.
+ */
+val ExportTier.peakBudgetMultiplier: Long
+    get() = when (this) {
+        ExportTier.TIER1_API29_PLUS -> 2L
+        ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> 3L
+    }
 
 enum class ExportState {
     NOT_STARTED,

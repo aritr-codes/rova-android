@@ -61,6 +61,7 @@ import com.aritr.rova.data.SegmentRecord
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.data.Terminated
+import com.aritr.rova.data.peakBudgetMultiplier
 import com.aritr.rova.service.surface.HeadlessPreviewSurface
 import com.aritr.rova.service.surface.HeadlessPreviewSurfaces
 import com.aritr.rova.utils.RovaCrashReporter
@@ -296,6 +297,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var limitLoops = -1 // -1 for continuous
     private var resolutionStr = "FHD"
     private var configuredResolution: String? = null // Track what resolution the camera is currently configured for
+
+    /**
+     * Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003). Frozen export tier for the
+     * live session. Cached from the [SessionManifest.exportTier] returned
+     * by `sessionStore.createSession(...)` so the per-segment storage gate
+     * does NOT recompute from `Build.VERSION.SDK_INT` (which would drift if
+     * a recovered session ever runs on a downgraded build) and does NOT
+     * read the manifest from disk on the gate hot path.
+     *
+     * Cleared in [releaseResources] alongside the rest of the per-session
+     * state.
+     */
+    private var currentExportTier: com.aritr.rova.data.ExportTier? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): RovaRecordingService = this@RovaRecordingService
@@ -642,8 +656,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // ---- Phase 2: filesystem preflight (post-FGS, pre-manifest) ----
         // ADR 0006 B19: storage check moves AFTER startForeground because
         // StatFs on adopted/removable storage may stall.
-        val estimatedBytes = estimateSessionBytes()
-        if (!hasEnoughStorage(estimatedBytes)) {
+        // Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003): tier-aware peak budget.
+        // Preflight runs BEFORE createSession; derive tier from the shared
+        // SDK→tier helper that SessionStore.createSession will use moments
+        // later, so preflight and the persisted manifest agree on the tier.
+        val preflightTier = com.aritr.rova.data.currentExportTier()
+        val peakBytes = estimatePeakBytes(preflightTier)
+        if (!hasEnoughStorage(peakBytes)) {
             RovaLog.e("onStartCommand: Insufficient storage — aborting session (row 3)")
             updateNotification("Not enough storage to record. Free up space and try again.")
             @Suppress("DEPRECATION")
@@ -742,6 +761,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
                     currentSessionId = m.sessionId
                     currentSessionDir = sessionStore.sessionDir(m.sessionId)
+                    // Phase 1.6: cache frozen tier from manifest; gate
+                    // reads this, never SDK_INT.
+                    currentExportTier = m.exportTier
                     pendingPersistJobs.clear()
                     stopNeedsRecovery = false
                     // ADR 0006 B-fix-5: reset currentStopReason at session
@@ -1223,21 +1245,44 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
         }
 
-        // Layer 3 — storage gate (uses currentSessionDir per B6).
-        // ADR 0006 B-fix-3: bytesPerSecondForResolution is BYTES per
-        // second; do NOT divide by 8. The previous draft divided by 8
-        // (treating the value as bits/sec), making the gate ~8× too
-        // permissive on every resolution.
+        // Layer 3 — storage gate (Phase 1.6, ROADMAP_v6 §1.6 + ADR 0003).
+        // Uses currentSessionDir per B6. bytesPerSecondForResolution is
+        // BYTES/sec (B-fix-3, do NOT divide by 8).
+        //
+        // Required headroom = next-segment-estimate
+        //                   + accumulatedSessionBytes × (tierMultiplier - 1)
+        //                   + FINALIZE_HEADROOM_MIB.
+        //
+        // The (multiplier - 1) coefficient reserves ONLY the merge-overhead
+        // leg beyond what's already on disk:
+        //   - Tier 1 → 1× accumulated (final mux into the pending row).
+        //   - Tier 2/3 → 2× accumulated (private merged + transient public copy).
+        //
+        // accumulatedSessionBytes() is filesystem-driven with a max(actual,
+        // estimated) conservatism so the gate is not fooled by the lagging
+        // manifest (segment persistence is async on a serial dispatcher;
+        // between segments N and N+1 the manifest can report N records
+        // while disk holds N+1 files).
         try {
-            val bytesPerSec = bytesPerSecondForResolution(resolutionStr)
-            val estimate = bytesPerSec * nSeconds
-            val headroom = FINALIZE_HEADROOM_MIB * 1024 * 1024L
+            val tier = currentExportTier
+                ?: return SegmentGateResult.AbortNoOp  // pre-createSession — layer-1 late failure
+            val nextSegmentEstimate =
+                com.aritr.rova.data.StorageEstimator.bytesPerSecondForResolution(resolutionStr) * nSeconds
+            val accumulated = accumulatedSessionBytes(sdir)
+            val mergeOverhead = accumulated * (tier.peakBudgetMultiplier - 1L)
+            val safetyBuffer = FINALIZE_HEADROOM_MIB * 1024 * 1024L
+            val required = nextSegmentEstimate + mergeOverhead + safetyBuffer
+
             val stat = StatFs(sdir.absolutePath)
             val available = stat.availableBlocksLong * stat.blockSizeLong
-            if (available < estimate + headroom) {
+            if (available < required) {
                 RovaLog.w(
-                    "checkSegmentGates: low storage — available=${available / 1024 / 1024}MB," +
-                        " required=${(estimate + headroom) / 1024 / 1024}MB; terminating"
+                    "checkSegmentGates: low storage (tier=$tier) — available=${available / 1024 / 1024}MB," +
+                        " required=${required / 1024 / 1024}MB" +
+                        " (next=${nextSegmentEstimate / 1024 / 1024}MB," +
+                        " mergeOverhead=${mergeOverhead / 1024 / 1024}MB," +
+                        " buffer=${safetyBuffer / 1024 / 1024}MB," +
+                        " accumulated=${accumulated / 1024 / 1024}MB); terminating"
                 )
                 return SegmentGateResult.Terminate(com.aritr.rova.data.StopReason.LOW_STORAGE)
             }
@@ -1252,23 +1297,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
-     * Phase 1.4 (ADR 0006 B-fix-3) — single source of truth for the
-     * encoded-stream byte rate per resolution. Returns BYTES per second
-     * (NOT bits/sec). Used by both [estimateSessionBytes] (session-level
-     * preflight) and [checkSegmentGates] (per-segment storage gate) so
-     * the unit model stays consistent across both sites.
-     *
-     * Values from ROADMAP §C7 (Storage Realism) — conservative upper
-     * bounds. The previous draft of [checkSegmentGates] mistook these
-     * for bits/sec and divided by 8, making the gate ~8× too permissive.
+     * Phase 1.6 (ROADMAP_v6 §1.6) — thin wrapper around
+     * [com.aritr.rova.data.StorageEstimator.accumulatedSessionBytes] using
+     * the service's live session state ([segmentCount], [nSeconds],
+     * [resolutionStr]). The pure helper lives in `data` so the
+     * manifest-lag regression test does not need Robolectric.
      */
-    private fun bytesPerSecondForResolution(res: String): Long = when (res.uppercase()) {
-        "4K", "UHD", "2160P" -> 10L * 1024 * 1024  // 10 MB/s — 4K HEVC upper bound
-        "FHD", "1080P" -> 2L * 1024 * 1024         // 2 MB/s
-        "HD", "720P" -> 1L * 1024 * 1024           // 1 MB/s
-        "SD", "480P" -> 512L * 1024                // 0.5 MB/s
-        else -> 2L * 1024 * 1024                   // default FHD
-    }
+    private fun accumulatedSessionBytes(sessionDir: File): Long =
+        com.aritr.rova.data.StorageEstimator.accumulatedSessionBytes(
+            sessionDir = sessionDir,
+            segmentCount = segmentCount,
+            durationSeconds = nSeconds,
+            resolution = resolutionStr
+        )
 
     private suspend fun recordSegment(): SegmentResult {
         // ADR 0006 §"Per-Segment Safety Gates" — three-layer gate at top.
@@ -1678,6 +1719,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // here (would cancel the persist scope used by the receiver too).
         currentSessionId = null
         currentSessionDir = null
+        currentExportTier = null
         pendingPersistJobs.clear()
         stopNeedsRecovery = false
         // ADR 0006 B-fix-5: clear gate-fired stop reason on teardown so
@@ -2050,18 +2092,32 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    private fun estimateSessionBytes(): Long {
-        // ADR 0006 B-fix-3: shared bytes/sec helper aligns the
-        // session-level preflight with the per-segment storage gate.
-        // Previously this function used different (smaller) constants,
-        // creating two sources of truth and risking a session that
-        // passes preflight but trips the per-segment gate immediately.
-        val loops = if (limitLoops == -1) 10L else limitLoops.toLong()
-        val bytesPerSecond = bytesPerSecondForResolution(resolutionStr)
-        return nSeconds * loops * bytesPerSecond
-    }
+    /**
+     * Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003 / risk C7) — session-level
+     * peak budget. Tier-aware: capture+final on Tier 1 (2×), or
+     * capture+private+public on Tier 2/3 (3×). Indefinite-loop sessions
+     * (`limitLoops == -1`) reserve [com.aritr.rova.data.StorageEstimator.INDEFINITE_LOOP_PREFLIGHT_HORIZON]
+     * loops; the per-segment gate is the authoritative backstop beyond
+     * that horizon.
+     *
+     * Pure delegate to [com.aritr.rova.data.StorageEstimator.estimatePeakBytes].
+     * Preflight runs BEFORE `createSession`, so the [tier] argument
+     * comes from the shared top-level [com.aritr.rova.data.currentExportTier]
+     * helper — the same `Build.VERSION.SDK_INT` lookup
+     * `SessionStore.createSession` performs moments later. The
+     * service-side cache [currentExportTier] is populated only AFTER
+     * `createSession` returns and is consumed by the per-segment gate,
+     * not by this preflight.
+     */
+    private fun estimatePeakBytes(tier: com.aritr.rova.data.ExportTier): Long =
+        com.aritr.rova.data.StorageEstimator.estimatePeakBytes(
+            durationSeconds = nSeconds,
+            loopCount = limitLoops,
+            resolution = resolutionStr,
+            tier = tier
+        )
 
-    private fun hasEnoughStorage(estimatedBytes: Long): Boolean {
+    private fun hasEnoughStorage(peakBytesRequired: Long): Boolean {
         return try {
             // ADR 0006 B21: read the canonical external root from
             // RovaApp.externalRoot (single resolution per process). If
@@ -2073,7 +2129,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
             val stat = StatFs(path)
             val available = stat.availableBlocksLong * stat.blockSizeLong
-            val required = estimatedBytes + 50 * 1024 * 1024L
+            val required = peakBytesRequired + 50 * 1024 * 1024L
             if (available < required) {
                 RovaLog.w("hasEnoughStorage: Available=${available / 1024 / 1024}MB, Required=${required / 1024 / 1024}MB")
             }
