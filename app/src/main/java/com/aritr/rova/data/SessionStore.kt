@@ -462,7 +462,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
      * `privateTempPath = null`, `publicTargetPath = null`,
      * `mediaScanCompleted = false`. No other field touched.
      */
-    suspend fun setExportFailed(sessionId: String): ExportMutationResult =
+    open suspend fun setExportFailed(sessionId: String): ExportMutationResult =
         mutateExport("setExportFailed", sessionId) { current ->
             current.copy(
                 exportState = ExportState.FAILED,

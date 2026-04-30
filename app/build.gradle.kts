@@ -689,7 +689,7 @@ val checkUserStoppedBeforeMerge = tasks.register("checkUserStoppedBeforeMerge") 
 }
 
 // ============================================================
-// Phase 1.7 commit-0 lint
+// Phase 1.7 lints (commit-0 onwards)
 // ============================================================
 
 /**
@@ -742,6 +742,62 @@ val checkExportTierReadTolerant = tasks.register("checkExportTierReadTolerant") 
     }
 }
 
+/**
+ * Phase 1.7 commit-2 (Patch 2 — bounded scanFile wait).
+ * `MediaScannerConnection.scanFile` is fire-and-forget at the platform
+ * layer; a misbehaving `MediaScanner` can swallow the callback. Holding
+ * the foreground service open waiting indefinitely would block new
+ * sessions and burn wakelock budget. Every call site MUST go through
+ * `MediaScanWaiter.scanAndWait`, which wraps the platform call in a
+ * `withTimeoutOrNull`-bounded `suspendCancellableCoroutine`. Production
+ * exporters (Tier 2 / Tier 3) call the waiter; recovery routines call
+ * the waiter; nothing else may import `MediaScannerConnection.scanFile`
+ * directly.
+ *
+ * Allow-list: `MediaScanWaiter.kt` is the single legitimate call site.
+ */
+val checkScanFileBoundedWait = tasks.register("checkScanFileBoundedWait") {
+    group = "verification"
+    description = "MediaScannerConnection.scanFile must only be called inside the bounded MediaScanWaiter helper (Phase 1.7 Patch 2)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val allowedFile = file(
+        "src/main/java/com/aritr/rova/service/export/MediaScanWaiter.kt"
+    ).canonicalFile
+    inputs.dir(srcDir).withPropertyName("srcAll")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
+        val pattern = Regex("""\bMediaScannerConnection\s*\.\s*scanFile\b""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.canonicalFile != allowedFile }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else pattern.containsMatchIn(line)
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "MediaScannerConnection.scanFile is forbidden outside " +
+                    "MediaScanWaiter.kt — every call must be bounded by " +
+                    "MediaScanWaiter.scanAndWait (Phase 1.7 Patch 2; " +
+                    "naked awaits hang the foreground service if the " +
+                    "scan callback never fires). Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -756,6 +812,7 @@ afterEvaluate {
         dependsOn(checkFGSStartGuarded)
         dependsOn(checkUserStoppedBeforeMerge)
         dependsOn(checkExportTierReadTolerant)
+        dependsOn(checkScanFileBoundedWait)
     }
 }
 
