@@ -3,19 +3,26 @@ package com.aritr.rova.utils
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import java.io.File
+import java.io.FileDescriptor
 import java.nio.ByteBuffer
 
 /**
  * Phase 1.5 media-file validity check (ADR 0005 §"Media Validity Rules").
  *
- * Used for: every segment file the recovery classifier touches — both
- * in-manifest segments and orphan segments. The earlier "skip in-manifest
- * validation to avoid flapping" reasoning was dropped because the per-session
- * live-re-check (concurrency invariant 5) excludes any session owned by a
- * live ServiceController, so a tick cannot race the scan on a session the
- * scan is processing.
- *
- * NOT used for merged output files — that scope belongs to ADR 0003 / Phase 1.7.
+ * Used for:
+ * - Phase 1.5 recovery classifier — every segment file (in-manifest and
+ *   orphan). The earlier "skip in-manifest validation to avoid flapping"
+ *   reasoning was dropped because the per-session live-re-check
+ *   (concurrency invariant 5) excludes any session owned by a live
+ *   ServiceController, so a tick cannot race the scan on a session the
+ *   scan is processing.
+ * - Phase 1.7 commit-4 (NO-GO patch) — Tier 1's `validatePending`
+ *   recovery probe consumes [validateMediaFromFd] over the
+ *   pending-row's read-only PFD. A `trackCount > 0` check alone is
+ *   too weak (accepts a corrupt MP4 with a populated track table but
+ *   no decodable samples); the FD overload mirrors the file-path
+ *   validator's full discipline: video track present + at least one
+ *   readable sample.
  */
 
 /**
@@ -84,5 +91,51 @@ fun inspectMediaFile(file: File): MediaFileInspection {
  * acceptance criterion that names `validateMediaFile` directly).
  */
 fun validateMediaFile(file: File): Boolean = inspectMediaFile(file).isValid
+
+/**
+ * Phase 1.7 commit-4 (NO-GO patch) — FD-based validity probe used by
+ * Tier 1 recovery to verify a `MediaStore` pending row is a real,
+ * decodable artifact before flipping `IS_PENDING=0`. The `trackCount > 0`
+ * gate alone is insufficient (corrupt MP4s can have populated track
+ * tables); this overload applies the same discipline as
+ * [inspectMediaFile]:
+ *   1. extractor opens against the FD,
+ *   2. at least one video track present,
+ *   3. selecting that track and reading one sample yields > 0 bytes.
+ *
+ * `extractor.release()` always runs in `finally`. Returns `false` on
+ * any throw or rejection.
+ */
+fun validateMediaFromFd(fd: FileDescriptor): Boolean {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(fd)
+        if (extractor.trackCount <= 0) return false
+
+        var videoTrackIndex = -1
+        for (i in 0 until extractor.trackCount) {
+            val format = extractor.getTrackFormat(i)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+            if (mime.startsWith("video/")) {
+                videoTrackIndex = i
+                break
+            }
+        }
+        if (videoTrackIndex < 0) return false
+
+        extractor.selectTrack(videoTrackIndex)
+        val buffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+        extractor.readSampleData(buffer, 0) > 0
+    } catch (t: Throwable) {
+        RovaLog.w("validateMediaFromFd: extractor failure", t)
+        false
+    } finally {
+        try {
+            extractor.release()
+        } catch (t: Throwable) {
+            RovaLog.w("validateMediaFromFd: extractor.release() failed", t)
+        }
+    }
+}
 
 private const val SAMPLE_BUFFER_BYTES = 64 * 1024

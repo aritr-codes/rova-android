@@ -798,6 +798,57 @@ val checkScanFileBoundedWait = tasks.register("checkScanFileBoundedWait") {
     }
 }
 
+/**
+ * Phase 1.7 commit-4 — ADR 0003 §"FD Mode Amendment" enforcement.
+ * Tier 1 (`Tier1*.kt` under `service/export/`) opens the pending-row
+ * `MediaStore` FD with `MediaMuxer(FileDescriptor)`. The amendment
+ * forbids mode `"w"` because Android documents it as non-seekable;
+ * `MediaMuxer.stop()` rewrites the moov atom and requires a seekable
+ * FD, so `"w"` corrupts every Tier 1 export at finalize time. Only
+ * `"rw"` is legal for the muxer FD; `"r"` is also acceptable (used by
+ * the recovery extractor probe). This lint scans `Tier1*.kt` files for
+ * the literal `"w"` and rejects any non-comment occurrence.
+ *
+ * Detection: strip the safe substring `"rw"` from each line, then check
+ * for residual `"w"`. Avoids false positives on `"rw"` (which contains
+ * `w` but not the standalone `"w"` literal).
+ */
+val checkPendingFdModeIsRW = tasks.register("checkPendingFdModeIsRW") {
+    group = "verification"
+    description = "Tier 1 sources must use openFileDescriptor mode \"rw\"; \"w\" is non-seekable and breaks MediaMuxer.stop() (ADR 0003 §FD Mode Amendment)."
+    val exportDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(exportDir).withPropertyName("exportSources")
+    doLast {
+        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
+        val offenders = exportDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.name.startsWith("Tier1") }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else line.replace("\"rw\"", "").contains("\"w\"")
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "Forbidden openFileDescriptor mode \"w\" in Tier 1 sources " +
+                    "(ADR 0003 §FD Mode Amendment — \"w\" is non-seekable; " +
+                    "MediaMuxer.stop() rewrites the moov atom and requires a " +
+                    "seekable FD). Use \"rw\" instead. Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -813,6 +864,7 @@ afterEvaluate {
         dependsOn(checkUserStoppedBeforeMerge)
         dependsOn(checkExportTierReadTolerant)
         dependsOn(checkScanFileBoundedWait)
+        dependsOn(checkPendingFdModeIsRW)
     }
 }
 

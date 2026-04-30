@@ -351,7 +351,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
      * Effects: `pendingUri = pendingUri`, `exportState = MUXING`. No
      * other field touched.
      */
-    suspend fun setExportPending(
+    open suspend fun setExportPending(
         sessionId: String,
         pendingUri: String
     ): ExportMutationResult = mutateExport("setExportPending", sessionId) { current ->
@@ -435,7 +435,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
      * Effects: `exportState = FINALIZED`; `privateTempPath = null` iff
      * `clearPrivateTempPath`. No other field touched.
      */
-    suspend fun setExportFinalized(
+    open suspend fun setExportFinalized(
         sessionId: String,
         clearPrivateTempPath: Boolean
     ): ExportMutationResult = mutateExport("setExportFinalized", sessionId) { current ->

@@ -48,6 +48,25 @@ sealed class ExportResult {
     object RenameFailed : ExportResult()
 
     /**
+     * Phase 1.7 commit-4 — Tier 1 only. `ContentResolver.insert` for the
+     * pending `MediaStore` row returned `null` ([cause] is `null`) or
+     * threw ([cause] is the throwable). Manifest pointers are cleared
+     * via `setExportFailed`. No row landed on disk; nothing to clean
+     * outside the manifest.
+     */
+    data class PendingInsertFailed(val cause: Throwable?) : ExportResult()
+
+    /**
+     * Phase 1.7 commit-4 — Tier 1 only. `ContentResolver.update`
+     * flipping `IS_PENDING=0` returned 0 rows ([cause] is `null`) or
+     * threw ([cause] is the throwable). The pending row is cleaned up
+     * (`ContentResolver.delete`) and the manifest is set to `FAILED`.
+     * Tier 1 has no `<name>.mp4.part` analog — finalize is the publish
+     * atom, so a finalize-failure leaves nothing user-visible.
+     */
+    data class FinalizeFailed(val cause: Throwable?) : ExportResult()
+
+    /**
      * A manifest mutation hit `IOException` retry exhaustion or a
      * non-retryable Throwable. Caller defers to the next cold-launch
      * recovery pass — the on-disk manifest may be in an intermediate
@@ -101,4 +120,67 @@ sealed class RecoveryResult {
      * cold launch.
      */
     data class ManifestWriteFailed(val cause: Throwable) : RecoveryResult()
+
+    /**
+     * Phase 1.7 commit-4 (NO-GO patch) — a non-manifest seam threw or
+     * returned an ambiguous result during recovery, AFTER the artifact
+     * was already proven valid by a prior `validatePending` probe. The
+     * row is RETAINED on disk (deleting could destroy a previously-
+     * published artifact whose manifest write was lost in a crash).
+     * Caller leaves the session in place and re-runs recovery on the
+     * next cold launch.
+     *
+     * [phase] names the seam (`"finalizePendingRow"`); [cause] is the
+     * caught throwable. Distinct from [ManifestWriteFailed] because the
+     * underlying failure is a `MediaStore`/`ContentResolver` op, not
+     * the on-disk manifest write — keeping them separate so failure
+     * triage knows where to look.
+     */
+    data class RetryableFailure(val phase: String, val cause: Throwable) : RecoveryResult()
+}
+
+/**
+ * Phase 1.7 commit-4 (NO-GO patch) — Tier 1's `IS_PENDING=0` finalize
+ * step result. Replaces the prior `Boolean` seam shape because the
+ * boolean conflated two semantically different outcomes:
+ *
+ * - `update(uri, IS_PENDING=0)` returning 1+ rows = "the transition
+ *   1→0 just landed on disk".
+ * - `update(...)` returning 0 rows = AMBIGUOUS. Could mean the row was
+ *   removed under us (live should fail), or could mean the row was
+ *   ALREADY at `IS_PENDING=0` (recovery should treat as already-
+ *   finalized, NOT delete).
+ *
+ * Splitting [Finalized] from [NoRowsUpdated] lets live and recovery
+ * dispatch differently:
+ *
+ * | Variant         | Live `export()`                       | Recovery `recover()` (after validatePending=true) |
+ * |-----------------|---------------------------------------|---------------------------------------------------|
+ * | [Finalized]     | proceed → `setExportFinalized`        | proceed → `setExportFinalized` (Resumed)          |
+ * | [NoRowsUpdated] | cleanupAndMap → `FinalizeFailed`      | already-finalized; write FINALIZED, NO delete     |
+ * | [Failed]        | cleanupAndMap → `FinalizeFailed(cause)` | `RetryableFailure("finalizePendingRow", cause)`, NO delete |
+ *
+ * Recovery's "no delete after validate=true" rule is the load-bearing
+ * invariant: a process kill or manifest write failure between a
+ * successful `update(IS_PENDING=0)` and `setExportFinalized` would
+ * leave the artifact published in the gallery with a stale manifest;
+ * the next cold-launch's `validatePending` will see it intact. If
+ * recovery deleted the row in that path, the user's video would
+ * vanish.
+ */
+sealed class Tier1FinalizeResult {
+
+    /** `update(uri, IS_PENDING=0)` reported 1+ rows updated. */
+    object Finalized : Tier1FinalizeResult()
+
+    /**
+     * `update(...)` reported 0 rows. Ambiguous — the seam cannot
+     * distinguish "row missing" from "row already at IS_PENDING=0";
+     * the exporter disambiguates by whether `validatePending` already
+     * succeeded for this URI.
+     */
+    object NoRowsUpdated : Tier1FinalizeResult()
+
+    /** `update(...)` threw. */
+    data class Failed(val cause: Throwable) : Tier1FinalizeResult()
 }
