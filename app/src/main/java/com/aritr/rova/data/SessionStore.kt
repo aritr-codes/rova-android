@@ -286,6 +286,194 @@ open class SessionStore internal constructor(rootDirArg: File) {
     }
 
     /**
+     * Phase 1.7 commit-1 (ADR 0003 §"Recovery routing" + §"FD Mode
+     * Amendment" partner). Shared single-atomic-write primitive for the
+     * export-state setters below. Mirrors [markTerminated]'s discipline:
+     *
+     * - Runs on the serial [persistDispatcher] so read-then-write cannot
+     *   interleave with concurrent appendSegment /
+     *   submitPersistFinalizedSegment / setStopRequested writes.
+     * - One logical manifest write per call. On `IOException` retries up
+     *   to [MARK_TERMINATED_MAX_ATTEMPTS] times with
+     *   [MARK_TERMINATED_BACKOFF_MILLIS] backoff (same budget as
+     *   `markTerminated` — the failure modes and durability requirements
+     *   are identical).
+     * - Unknown session returns [ExportMutationResult.UnknownSession]
+     *   without writing or throwing. The Phase 1.7 export pipeline
+     *   needs the gate-style return contract because a recovered-and-
+     *   discarded session can disappear mid-export; throwing would
+     *   crash the foreground service.
+     */
+    private suspend fun mutateExport(
+        label: String,
+        sessionId: String,
+        transform: (SessionManifest) -> SessionManifest
+    ): ExportMutationResult = withContext(persistDispatcher) {
+        val current = loadManifest(sessionId)
+            ?: return@withContext ExportMutationResult.UnknownSession(sessionId)
+        val updated = transform(current)
+        var attempt = 0
+        var lastCause: Throwable? = null
+        while (attempt < MARK_TERMINATED_MAX_ATTEMPTS) {
+            attempt++
+            try {
+                writeManifestAtomic(sessionDir(sessionId), updated)
+                RovaLog.d("SessionStore: $label($sessionId) written (attempt=$attempt)")
+                return@withContext ExportMutationResult.Wrote(updated)
+            } catch (e: java.io.IOException) {
+                lastCause = e
+                RovaLog.w(
+                    "SessionStore: $label IOException (attempt $attempt/$MARK_TERMINATED_MAX_ATTEMPTS) for $sessionId",
+                    e
+                )
+                if (attempt < MARK_TERMINATED_MAX_ATTEMPTS) {
+                    delay(MARK_TERMINATED_BACKOFF_MILLIS)
+                }
+            } catch (t: Throwable) {
+                RovaLog.e("SessionStore: $label non-retryable failure for $sessionId", t)
+                return@withContext ExportMutationResult.Failed(t, attempt)
+            }
+        }
+        ExportMutationResult.Failed(
+            cause = lastCause ?: IllegalStateException("$label retry exhausted"),
+            attempts = attempt
+        )
+    }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Tier 1 commit point.
+     * Writes the pending-row URI and transitions exportState to MUXING
+     * in a single manifest write. Caller (Tier1Exporter) MUST invoke
+     * this BEFORE `MediaMuxer.start()` so cold-launch recovery can
+     * always find the manifest pointer that matches the inserted
+     * `MediaStore` row.
+     *
+     * Effects: `pendingUri = pendingUri`, `exportState = MUXING`. No
+     * other field touched.
+     */
+    suspend fun setExportPending(
+        sessionId: String,
+        pendingUri: String
+    ): ExportMutationResult = mutateExport("setExportPending", sessionId) { current ->
+        current.copy(pendingUri = pendingUri, exportState = ExportState.MUXING)
+    }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Tier 2/3 commit point A.
+     * Writes both the private temp-file path and the eventual public
+     * target path in a single manifest write; transitions exportState
+     * to MUXING. Both pointers are set together so recovery's case
+     * analysis (Tier 2/3 Cases A–D in ADR 0003 §Recovery routing) can
+     * disambiguate disk states without inspecting partial field
+     * combinations. Caller invokes BEFORE MediaMuxer construction.
+     *
+     * Effects: `privateTempPath = privateTempPath`,
+     * `publicTargetPath = publicTargetPath`, `exportState = MUXING`.
+     * No other field touched.
+     */
+    suspend fun setExportPrivateTarget(
+        sessionId: String,
+        privateTempPath: String,
+        publicTargetPath: String
+    ): ExportMutationResult = mutateExport("setExportPrivateTarget", sessionId) { current ->
+        current.copy(
+            privateTempPath = privateTempPath,
+            publicTargetPath = publicTargetPath,
+            exportState = ExportState.MUXING
+        )
+    }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Tier 2/3 transition.
+     * Mux succeeded; the .part copy + rename + scanFile sequence is
+     * about to begin. Pointer fields untouched — the temp file and
+     * public target persist through the copy.
+     *
+     * Effects: `exportState = COPYING`. No other field touched.
+     */
+    suspend fun setExportCopying(sessionId: String): ExportMutationResult =
+        mutateExport("setExportCopying", sessionId) { current ->
+            current.copy(exportState = ExportState.COPYING)
+        }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Tier 2/3 only.
+     * `MediaScannerConnection.scanFile` callback fired; the gallery has
+     * indexed the public artifact. Idempotent — a second call writes
+     * the same `true` value. Pointer fields untouched; the caller's
+     * subsequent [setExportFinalized] call clears `privateTempPath`
+     * after the file is unlinked from disk.
+     *
+     * Effects: `mediaScanCompleted = true`. No other field touched.
+     */
+    suspend fun setMediaScanCompleted(sessionId: String): ExportMutationResult =
+        mutateExport("setMediaScanCompleted", sessionId) { current ->
+            current.copy(mediaScanCompleted = true)
+        }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Final commit on the
+     * export pipeline's success path. Transitions exportState to
+     * FINALIZED.
+     *
+     * @param clearPrivateTempPath When `true` (Tier 2/3 happy path
+     *   with scan callback fired), also clears `privateTempPath` —
+     *   the caller MUST have already deleted the file from disk.
+     *   When `false` (Tier 1, or Tier 2/3 with scan-callback timeout),
+     *   the field is retained:
+     *   - Tier 1 never sets `privateTempPath`, so the argument is a
+     *     no-op there.
+     *   - Tier 2/3 with scan-timeout retains `privateTempPath` so
+     *     recovery's deferred-scan branch can re-fire `scanFile` on
+     *     the next cold launch.
+     *
+     * Other pointer fields (`pendingUri`, `publicTargetPath`,
+     * `mediaScanCompleted`) are retained: `pendingUri` for Tier 1
+     * forensics, `publicTargetPath` as the artifact reference for
+     * Phase 2 UI, `mediaScanCompleted` as the deferred-scan signal.
+     *
+     * Effects: `exportState = FINALIZED`; `privateTempPath = null` iff
+     * `clearPrivateTempPath`. No other field touched.
+     */
+    suspend fun setExportFinalized(
+        sessionId: String,
+        clearPrivateTempPath: Boolean
+    ): ExportMutationResult = mutateExport("setExportFinalized", sessionId) { current ->
+        if (clearPrivateTempPath) {
+            current.copy(exportState = ExportState.FINALIZED, privateTempPath = null)
+        } else {
+            current.copy(exportState = ExportState.FINALIZED)
+        }
+    }
+
+    /**
+     * Phase 1.7 (ADR 0003 §Recovery routing). Failure path. Clears
+     * every export pointer and resets `mediaScanCompleted`; transitions
+     * exportState to FAILED. Caller is responsible for any pre-write
+     * file unlinking (`ContentResolver.delete(pendingUri, ...)` on
+     * Tier 1; private temp + .part file deletion on Tier 2/3).
+     *
+     * Once FAILED the session leaves Phase 1.7's automatic
+     * responsibility set per ADR 0006 §"Ownership table" — future
+     * retry is user-driven via Phase 2 UI only, never on the next
+     * cold launch.
+     *
+     * Effects: `exportState = FAILED`, `pendingUri = null`,
+     * `privateTempPath = null`, `publicTargetPath = null`,
+     * `mediaScanCompleted = false`. No other field touched.
+     */
+    suspend fun setExportFailed(sessionId: String): ExportMutationResult =
+        mutateExport("setExportFailed", sessionId) { current ->
+            current.copy(
+                exportState = ExportState.FAILED,
+                pendingUri = null,
+                privateTempPath = null,
+                publicTargetPath = null,
+                mediaScanCompleted = false
+            )
+        }
+
+    /**
      * Phase 1.3 cooperative-stop signal. Idempotent — once true, stays true.
      * Phase 1.2 only needs the field-shape; the writer is RovaStopReceiver in
      * Phase 1.3.
@@ -455,4 +643,35 @@ sealed class MarkTerminatedResult {
         val cause: Throwable,
         val attempts: Int
     ) : MarkTerminatedResult()
+}
+
+/**
+ * Phase 1.7 commit-1 (ADR 0003 §"Recovery routing" partner). Result of
+ * an export-state mutation. Mirrors [MarkTerminatedResult] in shape but
+ * with separate variants for the two non-success cases — the Phase 1.7
+ * recovery routines need to distinguish "session disappeared" from "I/O
+ * failure" without unwrapping a `Throwable`.
+ *
+ * - [Wrote] — proceed: caller may rely on [Wrote.updated] being the new
+ *   on-disk manifest state.
+ * - [UnknownSession] — the [UnknownSession.sessionId] does not exist on
+ *   disk (deleted by the cleanup pass, never created, or out-of-band
+ *   removed). No write happened. Caller typically aborts the in-flight
+ *   export and unwinds any external side-effects (`MediaStore` row,
+ *   `.part` file, private temp file). Returning instead of throwing is
+ *   load-bearing: the foreground-service export pipeline must not
+ *   crash if Phase 1.7 cleanup discards a recovered session
+ *   concurrently.
+ * - [Failed] — `IOException` retry budget exhausted, or a non-retryable
+ *   `Throwable`. The on-disk manifest is unchanged in the common case
+ *   (atomic-rename is the only window in which partial state is
+ *   reachable). Caller surfaces the failure and defers to the next
+ *   cold-launch recovery pass.
+ */
+sealed class ExportMutationResult {
+    data class Wrote(val updated: SessionManifest) : ExportMutationResult()
+
+    data class UnknownSession(val sessionId: String) : ExportMutationResult()
+
+    data class Failed(val cause: Throwable, val attempts: Int) : ExportMutationResult()
 }
