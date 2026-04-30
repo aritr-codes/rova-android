@@ -849,6 +849,233 @@ val checkPendingFdModeIsRW = tasks.register("checkPendingFdModeIsRW") {
     }
 }
 
+/**
+ * Phase 1.7 commit-5 — `IS_PENDING` is API 29+. Any `IS_PENDING`
+ * reference inside `service/export/` must live in a file that is
+ * either annotated `@RequiresApi(Build.VERSION_CODES.Q)` (or higher)
+ * or contains a `Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q`
+ * runtime guard. Without this, a future edit could compile a
+ * non-gated `IS_PENDING` write into a code path reachable on API 24,
+ * crashing with `NoSuchFieldError` at runtime. Scope: `service/export/`
+ * only — Phase 1's pre-existing `PreviewActivity` / `RovaRecordingService`
+ * call sites are commit-7's deletion target and stay outside this lint.
+ */
+val checkExportIsPendingGuarded = tasks.register("checkExportIsPendingGuarded") {
+    group = "verification"
+    description = "IS_PENDING references in service/export/ must be SDK-gated to API 29+ (ADR 0003 Tier 1)."
+    val exportDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(exportDir).withPropertyName("exportSources")
+    doLast {
+        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
+        val pattern = Regex("""\bIS_PENDING\b""")
+        val offenders = exportDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val text = f.readText()
+                val hits = f.readLines().withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) false
+                        else pattern.containsMatchIn(line)
+                    }
+                if (hits.isEmpty()) return@mapNotNull null
+                val hasFileGuard = text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
+                    text.contains("@RequiresApi(Build.VERSION_CODES.R)") ||
+                    text.contains("@RequiresApi(android.os.Build.VERSION_CODES.Q)") ||
+                    (text.contains("Build.VERSION.SDK_INT") && text.contains("Build.VERSION_CODES.Q"))
+                if (hasFileGuard) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "IS_PENDING used without SDK gating in service/export/ — " +
+                    "the file must be annotated @RequiresApi(Build.VERSION_CODES.Q) " +
+                    "or guard the reference with `Build.VERSION.SDK_INT >= " +
+                    "Build.VERSION_CODES.Q`. Offenders:\n$report"
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.7 commit-5 — `MediaStore.setIncludePending` was deprecated
+ * in API 30 (no-op or worse on R+). It is the legitimate pending-row
+ * visibility mechanism on API 29 ONLY. Every reference inside
+ * `service/export/` must appear within a `Build.VERSION_CODES.R`
+ * SDK branch (≤30 lines from a `VERSION_CODES.R` token), forcing the
+ * call to live in the `< R` arm of an SDK comparison.
+ */
+val checkExportSetIncludePendingGuarded = tasks.register("checkExportSetIncludePendingGuarded") {
+    group = "verification"
+    description = "setIncludePending references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; deprecated/forbidden API 30+)."
+    val exportDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(exportDir).withPropertyName("exportSources")
+    doLast {
+        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
+        val pattern = Regex("""\bsetIncludePending\b""")
+        val offenders = exportDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val lines = f.readLines()
+                val hits = mutableListOf<Pair<Int, String>>()
+                for ((i, line) in lines.withIndex()) {
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
+                    if (!pattern.containsMatchIn(line)) continue
+                    val window = lines.subList(
+                        maxOf(0, i - 30),
+                        minOf(lines.size, i + 30)
+                    ).joinToString("\n")
+                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
+                        window.contains("Build.VERSION.SDK_INT")
+                    if (!hasSdkBranch) hits += i + 1 to line.trim()
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:$i: $line"
+                }
+            }
+            throw GradleException(
+                "setIncludePending used without an SDK branch against " +
+                    "Build.VERSION_CODES.R — must run only on API 29 (deprecated " +
+                    "and unreliable on API 30+). Offenders:\n$report"
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.7 commit-5 — `MediaStore.QUERY_ARG_MATCH_PENDING` does not
+ * exist below API 30. Every reference inside `service/export/` must
+ * appear near a `Build.VERSION_CODES.R` SDK branch, forcing the
+ * `>= R` arm. A reference outside an SDK guard would `NoSuchFieldError`
+ * on Android Q.
+ */
+val checkExportQueryArgMatchPendingGuarded = tasks.register("checkExportQueryArgMatchPendingGuarded") {
+    group = "verification"
+    description = "QUERY_ARG_MATCH_PENDING references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; API 30+ only)."
+    val exportDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(exportDir).withPropertyName("exportSources")
+    doLast {
+        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
+        val pattern = Regex("""\bQUERY_ARG_MATCH_PENDING\b""")
+        val offenders = exportDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val lines = f.readLines()
+                val hits = mutableListOf<Pair<Int, String>>()
+                for ((i, line) in lines.withIndex()) {
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
+                    if (!pattern.containsMatchIn(line)) continue
+                    val window = lines.subList(
+                        maxOf(0, i - 30),
+                        minOf(lines.size, i + 30)
+                    ).joinToString("\n")
+                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
+                        window.contains("Build.VERSION.SDK_INT")
+                    if (!hasSdkBranch) hits += i + 1 to line.trim()
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:$i: $line"
+                }
+            }
+            throw GradleException(
+                "QUERY_ARG_MATCH_PENDING used without an SDK branch against " +
+                    "Build.VERSION_CODES.R — must run only on API 30+ " +
+                    "(NoSuchFieldError on Q). Offenders:\n$report"
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.7 commit-5 — pending-visibility-on-query rule. Pending
+ * `MediaStore` rows are NOT visible to the standard `query(uri,
+ * projection, ...)` call by default, AND `setIncludePending` on API
+ * 29 makes pending rows VISIBLE without filtering out non-pending
+ * rows — so a query against the wrapped URI without an explicit
+ * `IS_PENDING = 1` SQL selection returns every owned video, including
+ * published ones, which the sweep would mistake for orphans (NO-GO
+ * patch).
+ *
+ * Any file in `service/export/` that calls `resolver.query(` MUST
+ * contain ALL THREE:
+ *  1. `setIncludePending` (API 29 visibility primitive),
+ *  2. `QUERY_ARG_MATCH_PENDING` (API 30+ visibility primitive),
+ *  3. an explicit `IS_PENDING = 1` SQL selection (defense in depth on
+ *     both branches — OEM MediaStore behavior on visibility flags is
+ *     not always conformant).
+ *
+ * The loose presence check is sufficient because the SDK-guard lints
+ * already constrain WHERE each visibility primitive lives, and the
+ * extracted `filterPendingOwned` test verifies the post-cursor
+ * defense pass at runtime.
+ */
+val checkExportPendingVisibilityOnQuery = tasks.register("checkExportPendingVisibilityOnQuery") {
+    group = "verification"
+    description = "Files in service/export/ that call resolver.query(...) must use BOTH visibility mechanisms AND an explicit IS_PENDING = 1 SQL selection (Tier 1; commit-5 NO-GO patch)."
+    val exportDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(exportDir).withPropertyName("exportSources")
+    doLast {
+        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
+        val queryPattern = Regex("""resolver\s*\.\s*query\s*\(""")
+        // Match `IS_PENDING = 1` (with or without `}` from string-template
+        // closure) and tolerate whitespace.
+        val isPendingFilterPattern = Regex("""IS_PENDING\}?\s*=\s*1\b""")
+        val offenders = exportDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val text = f.readText()
+                val nonCommentText = f.readLines()
+                    .filter {
+                        val t = it.trimStart()
+                        !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
+                    }
+                    .joinToString("\n")
+                if (!queryPattern.containsMatchIn(nonCommentText)) return@mapNotNull null
+                val hasIncludePending = text.contains("setIncludePending")
+                val hasMatchPending = text.contains("QUERY_ARG_MATCH_PENDING")
+                val hasIsPendingFilter = isPendingFilterPattern.containsMatchIn(nonCommentText)
+                if (hasIncludePending && hasMatchPending && hasIsPendingFilter) null
+                else f to listOfNotNull(
+                    if (!hasIncludePending) "missing setIncludePending (API 29 visibility)" else null,
+                    if (!hasMatchPending) "missing QUERY_ARG_MATCH_PENDING (API 30+ visibility)" else null,
+                    if (!hasIsPendingFilter) "missing explicit IS_PENDING = 1 SQL selection (defense in depth — visibility flags alone are not enough)" else null
+                )
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, problems) ->
+                problems.joinToString("\n") { p -> "  ${f.relativeTo(rootDir)}: $p" }
+            }
+            throw GradleException(
+                "Pending-visibility-on-query rule violated in service/export/ — " +
+                    "any file calling resolver.query(...) must wire BOTH visibility " +
+                    "mechanisms AND an explicit IS_PENDING = 1 SQL selection. The " +
+                    "visibility flags alone do not exclude non-pending rows on API 29 " +
+                    "(setIncludePending = \"include in addition\", not \"only\") and " +
+                    "OEM MediaStore behavior on MATCH_ONLY varies. " +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -865,6 +1092,10 @@ afterEvaluate {
         dependsOn(checkExportTierReadTolerant)
         dependsOn(checkScanFileBoundedWait)
         dependsOn(checkPendingFdModeIsRW)
+        dependsOn(checkExportIsPendingGuarded)
+        dependsOn(checkExportSetIncludePendingGuarded)
+        dependsOn(checkExportQueryArgMatchPendingGuarded)
+        dependsOn(checkExportPendingVisibilityOnQuery)
     }
 }
 

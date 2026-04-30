@@ -184,3 +184,45 @@ sealed class Tier1FinalizeResult {
     /** `update(...)` threw. */
     data class Failed(val cause: Throwable) : Tier1FinalizeResult()
 }
+
+/**
+ * Phase 1.7 commit-5 — result of a Tier 1 startup orphan sweep.
+ *
+ * The sweep walks every `MediaStore.Video.Media` row visible to this
+ * app whose `IS_PENDING=1` flag is set, then filters:
+ *  - rows whose owner package is not ours → retained (defensive
+ *    against `MANAGE_EXTERNAL_STORAGE`-expanded visibility).
+ *  - rows whose URI matches a manifest's `pendingUri` → retained
+ *    (per-session recovery in commit-4 owns these).
+ *  - everything else → orphan; deleted.
+ *
+ * [Swept] reports per-bucket counts so the cold-launch runner (commit
+ * 6) can log a single line of metrics. [QueryFailed] communicates
+ * "couldn't even list pending rows" (the underlying `ContentResolver`
+ * threw); the runner skips the sweep and re-tries on the next cold
+ * launch — never crashes the FGS.
+ */
+sealed class OrphanSweepResult {
+
+    /**
+     * Sweep ran end-to-end. [deleted] is the count of orphan rows the
+     * sweep removed; [retainedReferenced] counts rows kept because
+     * they appeared in `referencedPendingUris`; [retainedOtherPackage]
+     * counts rows whose owner did not match our package; [deleteFailures]
+     * counts orphans whose `delete(...)` returned `false` or threw.
+     * The four counters are disjoint.
+     */
+    data class Swept(
+        val deleted: Int,
+        val retainedReferenced: Int,
+        val retainedOtherPackage: Int,
+        val deleteFailures: Int
+    ) : OrphanSweepResult()
+
+    /**
+     * The pending-row listing call (`ContentResolver.query`) threw.
+     * No rows were inspected; nothing was deleted. Caller leaves the
+     * sweep for the next cold launch.
+     */
+    data class QueryFailed(val cause: Throwable) : OrphanSweepResult()
+}
