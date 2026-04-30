@@ -1,8 +1,8 @@
 # ADR 0003 — Tiered Storage / Public Export
 
-- **Status:** Accepted
-- **Date:** 2026-04-25
-- **Phase:** 0 (pre-implementation prerequisite)
+- **Status:** Accepted (amended 2026-04-30 — see "FD Mode Amendment (Tier 1)")
+- **Date:** 2026-04-25 (amended 2026-04-30)
+- **Phase:** 0 (pre-implementation prerequisite); FD-mode amendment lands with Phase 1.7 implementation
 - **Supersedes:** none in repo (formerly drafted as `0003-media-muxer-target.md` in v3; superseded in-flight by v5 before either was committed)
 - **Superseded by:** —
 - **Related:** ROADMAP_v6.md §1.6 (Storage Realism), §1.7 (MediaStore / Public Export — Three Tiered Paths), risks **C7**, **C16**
@@ -77,6 +77,38 @@ On every cold launch, before any cleanup pass:
 - `MediaStore.QUERY_ARG_MATCH_PENDING` at `SDK_INT < 30`. Lint enforces.
 - `MediaScannerConnection.scanFile` on Tier 1 (the row is in `MediaStore` already; scanning would race with `IS_PENDING=0`). Lint enforces.
 - `ContentResolver.query` against `MediaStore.Video.Media` in the recovery / orphan-sweep code path **without** the per-API pending-visibility flag (v6). Lint enforces with both grep and unit-test assertion.
+- `openFileDescriptor(pendingUri, "w")` for the `MediaMuxer(FileDescriptor)` constructor on Tier 1. Mode `"w"` is non-seekable on some providers; muxing must use mode `"rw"`. See "FD Mode Amendment (Tier 1)" below. Lint enforces.
+
+## FD Mode Amendment (Tier 1)
+
+**Amends:** ROADMAP_v5.md §1.7 step 4 and ROADMAP_v6.md §1.7 *(unchanged-from-v5 inheritance)*. The literal `"w"` mode in those documents is **superseded by `"rw"`** for Tier 1 pending-row muxing. ROADMAP_v5/v6 documents themselves are not edited; this ADR is the canonical record.
+
+### Decision
+
+Tier 1's `MediaMuxer(FileDescriptor)` opens the pending row's file descriptor with mode `"rw"`, **not** `"w"`:
+
+```kotlin
+val pfd = contentResolver.openFileDescriptor(pendingUri, "rw")
+val muxer = MediaMuxer(pfd!!.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+```
+
+### Why
+
+Per the Android `ContentResolver.openFileDescriptor` documentation, mode `"w"` does **not** guarantee a seekable, regular-file-backed descriptor — providers may legitimately return a wrapper backed by a pipe or socket. `MediaMuxer` rewrites the MP4 `moov` atom at `stop()`, which requires `lseek` on the underlying fd. A non-seekable `"w"` descriptor produces a corrupt MP4 (no playable moov) on those providers, with no exception at mux time — the failure surfaces only when the user tries to play the file.
+
+Mode `"rw"` carries an implicit guarantee of a regular-file-backed seekable descriptor on every implementation. `"rwt"` (truncate) is **not** required because `contentResolver.insert(...)` returns a fresh empty pending row.
+
+### Scope
+
+This amendment is Tier 1-only. Tier 2 and Tier 3 mux to a private file via `MediaMuxer(String, ...)` and never open a `MediaStore` file descriptor.
+
+### Lint enforcement
+
+A new lint task (lands with the Phase 1.7 `Tier1Exporter` commit) forbids the literal `"w"` argument to any `openFileDescriptor(pendingUri, ...)` call site in `Tier1Exporter.kt`.
+
+### Reference
+
+- Android SDK reference: `android.content.ContentResolver#openFileDescriptor(Uri, String)` — mode argument seekability semantics.
 
 ## Consequences
 

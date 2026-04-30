@@ -98,7 +98,14 @@ data class SessionManifest(
             segments = json.getJSONArray("segments").let { arr ->
                 List(arr.length()) { SegmentRecord.fromJson(arr.getJSONObject(it)) }
             },
-            exportTier = ExportTier.valueOf(json.getString("exportTier")),
+            // Phase 1.7 commit-0 (ADR 0003 §"FD Mode Amendment" lint partner):
+            // schema-2 manifests written by Phase 1.3 builds carry no
+            // `exportTier`; missing-or-malformed values fall back to the
+            // running build's tier so a downgraded read still routes
+            // recovery on a code path the running build can execute.
+            exportTier = json.optString("exportTier", "").ifEmpty { null }?.let {
+                runCatching { ExportTier.valueOf(it) }.getOrNull()
+            } ?: currentExportTier(),
             privateTempPath = json.optString("privateTempPath", "").ifEmpty { null },
             pendingUri = json.optString("pendingUri", "").ifEmpty { null },
             publicTargetPath = json.optString("publicTargetPath", "").ifEmpty { null },

@@ -688,6 +688,60 @@ val checkUserStoppedBeforeMerge = tasks.register("checkUserStoppedBeforeMerge") 
     }
 }
 
+// ============================================================
+// Phase 1.7 commit-0 lint
+// ============================================================
+
+/**
+ * Phase 1.7 commit-0 — schema-2 read-tolerance gate. ADR 0003 §"FD Mode
+ * Amendment" partner: schema-2 manifests written by Phase 1.3 builds
+ * carry no `exportTier` field; the strict `getString("exportTier")`
+ * call site that previously lived in [SessionManifest.fromJson] threw
+ * `JSONException` on those manifests, crashing the cold launch before
+ * Phase 1.5 / Phase 1.7 recovery could classify the session. The
+ * read-tolerant pattern is `optString + runCatching + currentExportTier()`
+ * fallback (mirroring the existing patterns for `audioMode`,
+ * `stopReason`, `terminated`). This lint forbids any regression to the
+ * strict `getString("exportTier")` form.
+ */
+val checkExportTierReadTolerant = tasks.register("checkExportTierReadTolerant") {
+    group = "verification"
+    description = "Forbid getString(\"exportTier\") — schema-2 manifests lack the field; use opt + runCatching + currentExportTier() fallback (ADR 0003 §FD Mode Amendment partner)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("srcAll")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
+        val pattern = Regex("""\bgetString\s*\(\s*"exportTier"\s*\)""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else pattern.containsMatchIn(line)
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "Strict getString(\"exportTier\") is forbidden — schema-2 " +
+                    "manifests lack the field and would throw JSONException. " +
+                    "Use the optString + runCatching + currentExportTier() " +
+                    "fallback pattern (ADR 0003 §FD Mode Amendment partner). " +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -701,6 +755,7 @@ afterEvaluate {
         dependsOn(checkAudioModeFgsTypeMatch)
         dependsOn(checkFGSStartGuarded)
         dependsOn(checkUserStoppedBeforeMerge)
+        dependsOn(checkExportTierReadTolerant)
     }
 }
 
