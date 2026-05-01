@@ -132,6 +132,15 @@ object VideoMerger {
     ) {
         val extractors = mutableListOf<MediaExtractor>()
         var muxerStarted = false
+        // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 2):
+        // muxer.stop() is the moov-atom rewrite step. A failure there
+        // means the on-disk artifact is corrupt — the caller MUST see
+        // it as a mux failure, not as a Success that finalizes a bad
+        // pending row / .part file. We hoist stop() into the try-block
+        // success path so its exception propagates; the finally only
+        // performs best-effort idempotent cleanup if stop() has not
+        // already run (i.e., we're already on the throwing path).
+        var muxerStopped = false
         var bytesProcessed = 0L
 
         try {
@@ -277,10 +286,29 @@ object VideoMerger {
                 onProgress(if (totalBytes > 0) bytesProcessed.toFloat() / totalBytes else (index + 1).toFloat() / totalSegments)
             }
 
+            // Phase 1.7 commit-7 (NO-GO patch): stop() runs in the
+            // success path so a moov-atom rewrite failure surfaces to
+            // the caller as an exception. Caller maps it to MuxFailed
+            // (Tier 2/3 path-mux deletes the partial output via the
+            // outer catch in mergeSegments; Tier 1 FD-mux leaves the
+            // pending row to Tier1Exporter.cleanupAndMap +
+            // safeDeleteRow).
+            if (muxerStarted) {
+                muxer.stop()
+                muxerStopped = true
+            }
             Log.d(TAG, "Merge completed successfully")
         } finally {
-            if (muxerStarted) {
-                try { muxer.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
+            if (muxerStarted && !muxerStopped) {
+                // Throwing path — do best-effort stop so the muxer
+                // releases its native resources cleanly. The original
+                // exception is what the caller will see; swallowing
+                // here keeps the finally idempotent.
+                try {
+                    muxer.stop()
+                } catch (e: Exception) {
+                    Log.w(TAG, "muxer.stop() failed (best-effort on throwing path)", e)
+                }
             }
             extractors.forEach {
                 try { it.release() } catch (_: Exception) {}

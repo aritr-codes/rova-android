@@ -323,6 +323,39 @@ class Tier1ExporterTest {
         assertNull(m.pendingUri)
     }
 
+    /**
+     * Phase 1.7 commit-7 NO-GO patch round 1, blocker 2 — Tier 1
+     * regression for `muxer.stop()` failure. The pre-NO-GO
+     * [VideoMerger.runMux] swallowed stop() exceptions in `finally`;
+     * the post-NO-GO version hoists `stop()` to the success path so
+     * its failure propagates. For Tier 1 the FD-mux contract is the
+     * same — any throw from the mux lambda must abort the publish atom
+     * (no `IS_PENDING=0` flip) and delete the pending row so the
+     * `MediaStore` is left clean. `performMerge` then sees `MuxFailed`
+     * and refrains from writing `COMPLETED`.
+     */
+    @Test
+    fun `mux throws late - regression for muxer stop failure - row deleted MuxFailed not Success`() {
+        val cause = IOException("muxer.stop() failed: track samples missing for frame")
+        val r = Recorder().apply { muxThrow = cause }
+        val exporter = newExporter(r)
+
+        val result = runBlocking { exporter.export(sessionId, emptyList()) }
+
+        assertFalse(
+            "regression: muxer.stop() failure must NOT surface as Success — got $result",
+            result is ExportResult.Success
+        )
+        assertTrue("must surface as MuxFailed, got $result", result is ExportResult.MuxFailed)
+        assertEquals(cause, (result as ExportResult.MuxFailed).cause)
+        // Pending row must be deleted; the IS_PENDING=0 finalize must NOT run.
+        assertTrue(r.events.contains("delete($testUri)"))
+        assertFalse(r.events.any { it.startsWith("finalize") })
+        val m = reload()
+        assertEquals(ExportState.FAILED, m.exportState)
+        assertNull(m.pendingUri)
+    }
+
     @Test
     fun `mux throws and setExportFailed Failed - propagates ManifestWriteFailed not MuxFailed`() {
         val muxCause = IOException("mux died")

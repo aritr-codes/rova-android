@@ -222,6 +222,115 @@ class Tier3ExporterTest {
         assertNull(m.publicTargetPath)
     }
 
+    // ─── Phase 1.7 commit-7 NO-GO patch — collision-safety regression ──
+
+    /**
+     * Round 1 NO-GO blocker 1 — pre-existing `publicTargetFile` MUST NOT
+     * be deleted by the post-failure cleanup chain. The export never
+     * owned that file (the publish atom — successful `renameTo` — never
+     * fired), so deleting it would wipe a user's prior gallery video on
+     * filename collision.
+     */
+    @Test
+    fun `mux failure with pre-existing publicTargetFile - file preserved (collision safety)`() {
+        publicTargetFile.parentFile?.mkdirs()
+        publicTargetFile.writeBytes(byteArrayOf(0x55, 0x66, 0x77))
+        val cause = IOException("mux died")
+        val exporter = newExporter(mux = { _, _ -> throw cause })
+
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertTrue("expected MuxFailed, got $result", result is ExportResult.MuxFailed)
+        assertTrue(
+            "pre-existing publicTargetFile must be preserved across mux failure",
+            publicTargetFile.exists()
+        )
+        assertEquals(3, publicTargetFile.length())
+    }
+
+    @Test
+    fun `copy failure with pre-existing publicTargetFile - file preserved (collision safety)`() {
+        publicTargetFile.parentFile?.mkdirs()
+        publicTargetFile.writeBytes(byteArrayOf(0x33))
+        val cause = IOException("disk full")
+        val exporter = newExporter(copyFile = { _, _ -> throw cause })
+
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertTrue("expected CopyFailed, got $result", result is ExportResult.CopyFailed)
+        assertTrue(
+            "pre-existing publicTargetFile must be preserved across copy failure",
+            publicTargetFile.exists()
+        )
+        assertEquals(1, publicTargetFile.length())
+    }
+
+    @Test
+    fun `rename failure with pre-existing publicTargetFile - file preserved (collision safety)`() {
+        publicTargetFile.parentFile?.mkdirs()
+        publicTargetFile.writeBytes(byteArrayOf(0x42))
+        val exporter = newExporter(renameFile = { _, _ -> false })
+
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertTrue("expected RenameFailed, got $result", result === ExportResult.RenameFailed)
+        assertTrue(
+            "pre-existing publicTargetFile must be preserved across rename failure",
+            publicTargetFile.exists()
+        )
+        assertEquals(1, publicTargetFile.length())
+    }
+
+    /**
+     * Round 1 NO-GO blocker 2 — `muxer.stop()` failure regression.
+     * The pre-NO-GO [VideoMerger.runMux] swallowed `muxer.stop()`
+     * exceptions in the `finally` block, so the merge-success log line
+     * fired and the mux lambda returned cleanly even when the moov-atom
+     * rewrite never landed. The post-NO-GO `runMux` hoists `stop()` to
+     * the success path so its failure propagates.
+     *
+     * This regression fakes the "mux wrote partial output, then `stop()`
+     * threw" scenario via the seam: the lambda creates a partial file
+     * and throws. The exporter MUST surface `MuxFailed` (not `Success`),
+     * the partial private temp MUST be cleaned up, and the manifest
+     * MUST land in `FAILED` so the next cold launch's recovery does not
+     * see a stale-success state.
+     */
+    @Test
+    fun `mux throws after partial write - regression for muxer stop failure - MuxFailed not Success`() {
+        val cause = IOException("muxer.stop() failed: missing track samples for moov rewrite")
+        val exporter = newExporter(mux = { _, output ->
+            output.parentFile?.mkdirs()
+            output.writeBytes(byteArrayOf(0x00, 0x00, 0x00, 0x18))  // partial mp4 ftyp box
+            throw cause
+        })
+
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertFalse(
+            "regression: muxer.stop() failure must NOT surface as Success — got $result",
+            result is ExportResult.Success
+        )
+        assertTrue("must surface as MuxFailed, got $result", result is ExportResult.MuxFailed)
+        assertEquals(cause, (result as ExportResult.MuxFailed).cause)
+        assertFalse(
+            "partial private temp must be cleaned up after stop() failure",
+            privateTempFile.exists()
+        )
+        val m = reload()
+        assertEquals(ExportState.FAILED, m.exportState)
+        assertNull(m.privateTempPath)
+        assertNull(m.publicTargetPath)
+    }
+
     // ─── Scan ok but private-temp delete failed ─────────────────────
 
     @Test

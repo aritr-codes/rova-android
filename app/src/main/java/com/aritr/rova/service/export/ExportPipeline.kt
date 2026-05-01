@@ -72,6 +72,11 @@ internal object ExportPipeline {
         mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
         onProgress: (Float) -> Unit
     ): ExportResult {
+        // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): include
+        // milliseconds in the timestamp so two stops within a second
+        // do not produce the same name. Tier 2/3 add a second probe-
+        // and-suffix layer in [exportPreQ]; Tier 1 relies on
+        // MediaStore's automatic " (N)" disambiguation on insert.
         val displayName = "Rova_${TIMESTAMP_FORMAT.format(Date())}.mp4"
         return when (val tier = currentExportTier()) {
             ExportTier.TIER1_API29_PLUS -> {
@@ -142,15 +147,20 @@ internal object ExportPipeline {
         tier: ExportTier,
         onProgress: (Float) -> Unit
     ): ExportResult {
-        val privateTempFile = File(sessionDir, "$displayName.private")
-        val publicTargetFile = File(
-            File(
-                @Suppress("DEPRECATION")
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-                "Rova"
-            ),
-            displayName
+        @Suppress("DEPRECATION")
+        val publicDir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+            "Rova"
         )
+        // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): probe
+        // public-target / .part / private-temp triple for collision.
+        // Suffix `_2`, `_3`, ... until all three slots are free. This
+        // is defense in depth on top of the millisecond timestamp in
+        // displayName — back-to-back exports, clock skew across recovery
+        // resumes, or a stranded .part from a prior crash all collapse
+        // to the same probe loop.
+        val (publicTargetFile, privateTempFile) =
+            allocateNonCollidingTarget(publicDir, sessionDir, displayName)
         val muxLambda: suspend (List<File>, File) -> Unit = { segs, output ->
             VideoMerger.mergeSegments(segs, output, onProgress)
         }
@@ -175,5 +185,63 @@ internal object ExportPipeline {
         }
     }
 
-    private val TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+    /**
+     * Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1) — Tier 2/3
+     * collision-avoidance probe. Returns a (publicTarget, privateTemp)
+     * pair such that NEITHER `publicTarget` NOR `<publicTarget>.part`
+     * NOR `privateTemp` exists at the time of the call. The caller's
+     * mux step lands the output in `privateTemp`; the publish atom
+     * renames `<publicTarget>.part → publicTarget`.
+     *
+     * Timestamps in [displayName] include milliseconds, so collisions
+     * here are rare — but a previous-crash leftover `.part` or a
+     * resumed/concurrent export can still occupy a slot. The probe
+     * removes the only failure mode that would silently lose user
+     * data: pre-existing `publicTarget` overwritten by `renameTo`, or
+     * pre-existing `publicTarget` deleted by the post-failure cleanup
+     * in [PreQExportCore.cleanupOnFailure].
+     *
+     * `publicDir.mkdirs()` runs unconditionally so the rename target
+     * directory exists when the publish atom fires. Suffix exhaustion
+     * ([SUFFIX_LIMIT]) is treated as `IllegalStateException` because
+     * 9999 distinct collisions in the same millisecond is a system
+     * pathology, not a recoverable export error.
+     */
+    private fun allocateNonCollidingTarget(
+        publicDir: File,
+        sessionDir: File,
+        displayName: String
+    ): Pair<File, File> {
+        publicDir.mkdirs()
+        val dot = displayName.lastIndexOf('.')
+        val stem = if (dot > 0) displayName.substring(0, dot) else displayName
+        val ext = if (dot > 0) displayName.substring(dot) else ""
+
+        var i = 1
+        while (i <= SUFFIX_LIMIT) {
+            val name = if (i == 1) displayName else "${stem}_$i$ext"
+            val publicTarget = File(publicDir, name)
+            val partFile = File(publicDir, "$name.part")
+            val privateTemp = File(sessionDir, "$name.private")
+            if (!publicTarget.exists() && !partFile.exists() && !privateTemp.exists()) {
+                return publicTarget to privateTemp
+            }
+            i++
+        }
+        throw IllegalStateException(
+            "ExportPipeline: collision-suffix space exhausted for $displayName " +
+                "in ${publicDir.absolutePath} after $SUFFIX_LIMIT attempts"
+        )
+    }
+
+    private const val SUFFIX_LIMIT = 9999
+
+    // SimpleDateFormat is NOT thread-safe across coroutines; the format
+    // call below runs synchronously inside `export()` which is invoked
+    // sequentially from `RovaRecordingService.performMerge` (single
+    // call site enforced by `checkExportPipelineSingleEntry`), so a
+    // single instance is safe for this use. Millisecond precision
+    // (`SSS`) reduces same-instant collisions; the probe loop above is
+    // defense in depth.
+    private val TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
 }

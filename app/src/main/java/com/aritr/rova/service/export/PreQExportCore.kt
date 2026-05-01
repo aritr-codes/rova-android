@@ -76,8 +76,7 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.MuxFailed(t),
                 privateTempFile = privateTempFile,
-                partFile = partFileFor(publicTargetFile),
-                publicTargetFile = publicTargetFile
+                partFile = partFileFor(publicTargetFile)
             )
         }
 
@@ -94,7 +93,7 @@ internal class PreQExportCore(
         val publicTargetPath = manifest.publicTargetPath
 
         if (privateTempPath == null || publicTargetPath == null) {
-            return abandon(sessionId, privateTempFile = null, partFile = null, publicTargetFile = null)
+            return abandon(sessionId, privateTempFile = null, partFile = null)
         }
 
         val privateTempFile = File(privateTempPath)
@@ -122,7 +121,7 @@ internal class PreQExportCore(
         }
 
         // Case D: nothing usable.
-        return abandon(sessionId, privateTempFile, partFile, publicTargetFile)
+        return abandon(sessionId, privateTempFile, partFile)
     }
 
     // ─── Shared core ────────────────────────────────────────────────
@@ -149,8 +148,7 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.CopyFailed(t),
                 privateTempFile = privateTempFile,
-                partFile = partFile,
-                publicTargetFile = publicTargetFile
+                partFile = partFile
             )
         }
 
@@ -164,8 +162,7 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.RenameFailed,
                 privateTempFile = privateTempFile,
-                partFile = partFile,
-                publicTargetFile = publicTargetFile
+                partFile = partFile
             )
         }
 
@@ -211,13 +208,24 @@ internal class PreQExportCore(
 
     // ─── Cleanup / helpers ──────────────────────────────────────────
 
+    /**
+     * Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): the cleanup
+     * deletion list deliberately EXCLUDES `publicTargetFile`. The
+     * publicTargetFile becomes "ours" only after a successful
+     * `renameTo(...)` (the publish atom); from that point on we are on
+     * the success path and never enter cleanup. Every code path that
+     * routes here either never touched `publicTargetFile` (mux failed,
+     * copy failed) or saw `renameTo` return false (we never created the
+     * file). Including it in the deletion list would risk wiping a
+     * pre-existing user video on filename collision — see
+     * [ExportPipeline.exportPreQ]'s collision-avoidance probe partner.
+     */
     private suspend fun cleanupOnFailure(
         sessionId: String,
         privateTempFile: File?,
-        partFile: File?,
-        publicTargetFile: File?
+        partFile: File?
     ): ExportMutationResult {
-        listOfNotNull(privateTempFile, partFile, publicTargetFile)
+        listOfNotNull(privateTempFile, partFile)
             .filter { it.exists() }
             .forEach { f ->
                 if (!safeDelete(f)) {
@@ -231,10 +239,9 @@ internal class PreQExportCore(
         sessionId: String,
         naturalFailure: ExportResult,
         privateTempFile: File?,
-        partFile: File?,
-        publicTargetFile: File?
+        partFile: File?
     ): ExportResult = when (
-        val r = cleanupOnFailure(sessionId, privateTempFile, partFile, publicTargetFile)
+        val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
     ) {
         is ExportMutationResult.Wrote -> naturalFailure
         is ExportMutationResult.UnknownSession -> ExportResult.UnknownSession(r.sessionId)
@@ -244,10 +251,9 @@ internal class PreQExportCore(
     private suspend fun abandon(
         sessionId: String,
         privateTempFile: File?,
-        partFile: File?,
-        publicTargetFile: File?
+        partFile: File?
     ): RecoveryResult = when (
-        val r = cleanupOnFailure(sessionId, privateTempFile, partFile, publicTargetFile)
+        val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
     ) {
         is ExportMutationResult.Wrote -> RecoveryResult.Abandoned
         is ExportMutationResult.UnknownSession -> RecoveryResult.UnknownSession(r.sessionId)
