@@ -2,21 +2,57 @@ package com.aritr.rova.ui.screens
 
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -30,7 +66,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.ui.PreviewActivity
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 private val dateGroupFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
 private val timeDisplayFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -41,15 +78,13 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
 
-    // Multi-select state
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFiles by remember { mutableStateOf(setOf<File>()) }
 
-    // Load on entry
     LaunchedEffect(Unit) {
         viewModel.refresh()
     }
-    // Clean up stale selections after a refresh
+
     LaunchedEffect(items) {
         if (isSelectionMode) {
             val existingFiles = items.map { it.file }.toSet()
@@ -63,145 +98,224 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
             dateGroupFormat.format(Date(item.file.lastModified()))
         }
     }
+    val totalSize = remember(items) { items.sumOf { it.file.length() } }
 
-    Scaffold(
-        topBar = {
-            if (isSelectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedFiles.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { isSelectionMode = false; selectedFiles = emptySet() }) {
-                            Icon(Icons.Default.Close, "Close Selection")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            val uris = ArrayList(selectedFiles.map {
-                                FileProvider.getUriForFile(context, "${context.packageName}.provider", it)
-                            })
-                            val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                                type = "video/mp4"
-                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                if (isSelectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedFiles.size} selected") },
+                        navigationIcon = {
+                            IconButton(onClick = { isSelectionMode = false; selectedFiles = emptySet() }) {
+                                Icon(Icons.Default.Close, "Close selection")
                             }
-                            context.startActivity(Intent.createChooser(intent, "Share Videos"))
-                        }) {
-                            Icon(Icons.Default.Share, "Share")
-                        }
-                        IconButton(onClick = {
-                            viewModel.deleteFiles(selectedFiles)
-                            isSelectionMode = false
-                            selectedFiles = emptySet()
-                        }) {
-                            Icon(Icons.Default.Delete, "Delete")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        },
+                        actions = {
+                            IconButton(onClick = {
+                                val uris = ArrayList(selectedFiles.map {
+                                    FileProvider.getUriForFile(context, "${context.packageName}.provider", it)
+                                })
+                                val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                    type = "video/mp4"
+                                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share videos"))
+                            }) {
+                                Icon(Icons.Default.Share, "Share")
+                            }
+                            IconButton(onClick = {
+                                viewModel.deleteFiles(selectedFiles)
+                                isSelectionMode = false
+                                selectedFiles = emptySet()
+                            }) {
+                                Icon(Icons.Default.Delete, "Delete")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     )
-                )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("Library", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "${items.size} recordings • ${formatFileSize(totalSize)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
+            }
+        ) { innerPadding ->
+            if (items.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                        tonalElevation = 4.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 30.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(82.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Videocam,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Text(
+                                "Your library is empty",
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Once you finish a recording loop, merged videos appear here with thumbnails and quick share actions.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(22.dp))
+                            FilledTonalButton(onClick = onNavigateToRecord) {
+                                Icon(Icons.Default.Add, null)
+                                Spacer(Modifier.size(8.dp))
+                                Text("Create your first session")
+                            }
+                        }
+                    }
+                }
             } else {
-                TopAppBar(
-                    title = { Text("History") },
-                    actions = {
-                        if (items.isNotEmpty()) {
-                            IconButton(onClick = { /* Sort/Filter */ }) { Icon(Icons.Default.Sort, "Sort") }
-                            IconButton(onClick = { /* Search */ }) { Icon(Icons.Default.Search, "Search") }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        HistorySummaryCard(
+                            recordingCount = items.size,
+                            totalSize = totalSize,
+                            onNavigateToRecord = onNavigateToRecord
+                        )
+                    }
+
+                    groupedItems.forEach { (date, dateItems) ->
+                        stickyHeader {
+                            Text(
+                                text = date,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(vertical = 6.dp)
+                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
+
+                        items(dateItems, key = { it.file.absolutePath }) { item ->
+                            val isSelected = selectedFiles.contains(item.file)
+                            VideoCard(
+                                item = item,
+                                isSelectionMode = isSelectionMode,
+                                isSelected = isSelected,
+                                onToggleSelection = {
+                                    if (isSelectionMode) {
+                                        selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
+                                        if (selectedFiles.isEmpty()) isSelectionMode = false
+                                    } else {
+                                        isSelectionMode = true
+                                        selectedFiles = setOf(item.file)
+                                    }
+                                },
+                                onPlay = {
+                                    if (isSelectionMode) {
+                                        selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
+                                        if (selectedFiles.isEmpty()) isSelectionMode = false
+                                    } else {
+                                        val intent = Intent(context, PreviewActivity::class.java).apply {
+                                            putExtra("VIDEO_PATH", item.file.absolutePath)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
-    ) { innerPadding ->
-        if (items.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Videocam,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "No recordings yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Your recorded videos will appear here",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    FilledTonalButton(onClick = onNavigateToRecord) {
-                        Icon(Icons.Default.Videocam, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Start Recording")
-                    }
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                groupedItems.forEach { (date, dateItems) ->
-                    stickyHeader {
-                        Text(
-                            text = date,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.background)
-                                .padding(vertical = 8.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+    }
+}
 
-                    items(dateItems, key = { it.file.absolutePath }) { item ->
-                        val isSelected = selectedFiles.contains(item.file)
-                        VideoCard(
-                            item = item,
-                            isSelectionMode = isSelectionMode,
-                            isSelected = isSelected,
-                            onToggleSelection = {
-                                if (isSelectionMode) {
-                                    selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
-                                    if (selectedFiles.isEmpty()) isSelectionMode = false
-                                } else {
-                                    isSelectionMode = true
-                                    selectedFiles = setOf(item.file)
-                                }
-                            },
-                            onPlay = {
-                                if (isSelectionMode) {
-                                    selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
-                                    if (selectedFiles.isEmpty()) isSelectionMode = false
-                                } else {
-                                    val intent = Intent(context, PreviewActivity::class.java).apply {
-                                        putExtra("VIDEO_PATH", item.file.absolutePath)
-                                    }
-                                    context.startActivity(intent)
-                                }
-                            }
-                        )
-                    }
-                }
+@Composable
+private fun HistorySummaryCard(
+    recordingCount: Int,
+    totalSize: Long,
+    onNavigateToRecord: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(30.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Session archive",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = "Review merged clips, share them, or jump straight back into capture mode.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SummaryBadge("$recordingCount recordings")
+                SummaryBadge(formatFileSize(totalSize))
+            }
+            FilledTonalButton(onClick = onNavigateToRecord) {
+                Icon(Icons.Default.Videocam, null)
+                Spacer(Modifier.size(8.dp))
+                Text("Record another session")
             }
         }
     }
@@ -224,22 +338,28 @@ fun VideoCard(
                 onLongClick = onToggleSelection
             )
             .then(
-                if (isSelected)
-                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
-                else
+                if (isSelected) {
+                    Modifier.border(
+                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                        RoundedCornerShape(26.dp)
+                    )
+                } else {
                     Modifier
+                }
             ),
+        shape = RoundedCornerShape(26.dp),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isSelected)
+            containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else
+            } else {
                 MaterialTheme.colorScheme.surface
+            }
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSelectionMode) {
@@ -247,43 +367,61 @@ fun VideoCard(
                     checked = isSelected,
                     onCheckedChange = { onToggleSelection() }
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.size(8.dp))
             }
 
-            VideoThumbnail(
-                thumbnail = item.thumbnail,
-                modifier = Modifier
-                    .size(80.dp, 60.dp)
-                    .clip(MaterialTheme.shapes.small)
-            )
+            Box {
+                VideoThumbnail(
+                    thumbnail = item.thumbnail,
+                    modifier = Modifier
+                        .size(width = 102.dp, height = 74.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color.Black.copy(alpha = 0.58f),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = item.resolution,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.size(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.file.name,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = item.file.nameWithoutExtension,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = formatFileSize(item.file.length()) + " • " + formatTime(item.file.lastModified()),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = formatTime(item.file.lastModified()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = formatFileSize(item.file.length()),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Surface(
-                    shape = MaterialTheme.shapes.extraSmall,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(
-                        text = item.resolution,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+            }
+
+            if (!isSelectionMode) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -306,8 +444,8 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
             Icon(
                 Icons.Default.PlayCircle,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier.size(24.dp)
+                tint = Color.White.copy(alpha = 0.78f),
+                modifier = Modifier.size(28.dp)
             )
         } else {
             Icon(
@@ -316,6 +454,21 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+private fun SummaryBadge(text: String) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }
 
