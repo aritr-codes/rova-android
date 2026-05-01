@@ -1084,7 +1084,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    // R1: Guard against flipping camera while a segment is actively recording
+    // R1: Guard against flipping camera while a segment is actively recording.
+    //
+    // setupCamera() short-circuits when isCameraActive == true (line ~1017),
+    // which is correct for preview-recovery callers that must be no-ops on
+    // an already-bound pipeline. But that early-return swallows selector
+    // changes — flipCamera must rebind. Route through forceReconfigureCamera
+    // so the unbind / clear / setupCamera sequence runs end-to-end with the
+    // new selector. Mirrors the rebind path already used by the recording
+    // start flow (see call sites in startPeriodicRecording).
     fun flipCamera() {
         if (_serviceState.value.isRecording) {
             RovaLog.d("flipCamera: Ignored — recording in progress")
@@ -1095,7 +1103,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
-        serviceScope.launch { setupCamera() }
+        serviceScope.launch { forceReconfigureCamera() }
     }
 
     fun setFlashMode(mode: Int) {
