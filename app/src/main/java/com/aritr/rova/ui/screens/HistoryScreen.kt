@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
@@ -21,7 +22,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -38,7 +41,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -48,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,11 +70,20 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.aritr.rova.RovaApp
+import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.ui.PreviewActivity
+import com.aritr.rova.ui.recovery.RecoveryCardKind
+import com.aritr.rova.ui.recovery.RecoveryCardList
+import com.aritr.rova.ui.recovery.RecoveryViewModel
+import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private val dateGroupFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
 private val timeDisplayFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -77,6 +93,66 @@ private val timeDisplayFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord: () -> Unit = {}) {
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
+
+    // Phase 2 Slice 2.1b — recovery cards above the library list. Pulls
+    // from RovaApp.recoveryReport (single source of truth) and routes
+    // manifest reads through SessionStore. The `videosRoot == null`
+    // branch (storage unavailable at boot) guards against the lazy
+    // sessionStore initializer error path: in that case the scan never
+    // runs anyway, so loadManifest just returns null and the card list
+    // stays empty.
+    val app = context.applicationContext as RovaApp
+    val recoveryViewModel: RecoveryViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                val loadManifest: (String) -> SessionManifest? = if (app.videosRoot != null) {
+                    { id -> app.sessionStore.loadManifest(id) }
+                } else {
+                    { _ -> null }
+                }
+                RecoveryViewModel(
+                    recoveryReport = app.recoveryReport,
+                    loadManifest = loadManifest,
+                )
+            }
+        }
+    )
+    val recoveryUiState by recoveryViewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val onRecoveryMerge: (String) -> Unit = {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar("Recovery merge arrives in a follow-up slice")
+        }
+    }
+    val onRecoveryDiscard: (String) -> Unit = {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar("Recovery discard arrives in a follow-up slice")
+        }
+    }
+    val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
+        val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
+        if (card?.kind == RecoveryCardKind.KILLED_BY_SYSTEM) {
+            {
+                OutlinedButton(
+                    onClick = {
+                        VendorGuidanceIntents.resolveForCurrent(context)?.let { intent ->
+                            try {
+                                context.startActivity(intent)
+                            } catch (_: ActivityNotFoundException) {
+                                // Component vanished between resolve and launch — rare
+                                // (firmware/component drift). Silent fail keeps the
+                                // recovery card usable; user can still tap Discard.
+                            }
+                        }
+                    }
+                ) { Text("Open device settings") }
+            }
+        } else {
+            null
+        }
+    }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFiles by remember { mutableStateOf(setOf<File>()) }
@@ -115,6 +191,7 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
     ) {
         Scaffold(
             containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 if (isSelectionMode) {
                     TopAppBar(
@@ -169,13 +246,23 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
             }
         ) { innerPadding ->
             if (items.isEmpty()) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(20.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    if (recoveryUiState.cards.isNotEmpty()) {
+                        RecoveryCardList(
+                            state = recoveryUiState,
+                            onMerge = onRecoveryMerge,
+                            onDiscard = onRecoveryDiscard,
+                            vendorHelpSlotFor = vendorHelpSlotFor,
+                        )
+                    }
                     Surface(
                         shape = RoundedCornerShape(32.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
@@ -227,6 +314,16 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    if (recoveryUiState.cards.isNotEmpty()) {
+                        item(key = "recovery-cards") {
+                            RecoveryCardList(
+                                state = recoveryUiState,
+                                onMerge = onRecoveryMerge,
+                                onDiscard = onRecoveryDiscard,
+                                vendorHelpSlotFor = vendorHelpSlotFor,
+                            )
+                        }
+                    }
                     item {
                         HistorySummaryCard(
                             recordingCount = items.size,
