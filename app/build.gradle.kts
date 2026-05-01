@@ -1348,6 +1348,167 @@ val checkCompletedWriteOnlyFromPerformMerge = tasks.register("checkCompletedWrit
     }
 }
 
+/**
+ * Phase 1.8 / C17 — bounded WakeLock acquire.
+ *
+ * ADR 0006 §"WakeLock Ownership" requires every `acquire` on a
+ * `PowerManager.WakeLock` in the recording-service code path to pass a
+ * timeout argument. The no-arg overload `acquire()` is the exact bug
+ * C17 names: a missed release becomes a battery-drain bug surviving
+ * until process death. This lint forbids `.acquire()` (empty arg list)
+ * inside [RovaRecordingService.kt] and [WakeLockPolicy.kt]. Comment
+ * lines (`//`, `*`) are skipped.
+ *
+ * Allowed forms: `.acquire(<expr>)` where `<expr>` is any non-empty
+ * argument — typically [WakeLockPolicy.ACQUIRE_TIMEOUT_MS].
+ */
+val checkWakeLockBoundedAcquire = tasks.register("checkWakeLockBoundedAcquire") {
+    group = "verification"
+    description = "Forbid no-arg WakeLock.acquire() — Phase 1.8 / C17 bounded-acquire discipline."
+    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
+    val policyFile = file("src/main/java/com/aritr/rova/service/wakelock/WakeLockPolicy.kt")
+    inputs.file(serviceFile).withPropertyName("recordingService")
+    inputs.file(policyFile).withPropertyName("wakeLockPolicy")
+    doLast {
+        val targets = listOf(serviceFile, policyFile).filter { it.exists() }
+        if (targets.isEmpty()) {
+            throw GradleException("checkWakeLockBoundedAcquire: no source files found.")
+        }
+        val unboundedAcquire = Regex("""\.acquire\s*\(\s*\)""")
+        val offenders = mutableListOf<String>()
+        targets.forEach { f ->
+            f.readLines().forEachIndexed { idx, raw ->
+                val trimmed = raw.trimStart()
+                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
+                if (unboundedAcquire.containsMatchIn(raw)) {
+                    offenders += "  ${f.relativeTo(rootDir)}:${idx + 1}: ${trimmed.take(120)}"
+                }
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "C17 violation (Phase 1.8 §WakeLock Discipline) — " +
+                    "WakeLock.acquire() must pass a timeout. Use " +
+                    "acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS):\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.8 / C17 (review round 2) — held-wakelock refresh.
+ *
+ * `acquireWakeLock()` short-circuits when `existing?.isHeld == true`.
+ * Round 1 returned without doing any work in that branch, which meant
+ * continuous sessions with inter-segment gaps below
+ * `WAKE_LOCK_RELAX_THRESHOLD_SECONDS` (= 120s) never hit the
+ * release/re-acquire path and could outlive
+ * `WakeLockPolicy.ACQUIRE_TIMEOUT_MS` (= 10 min), silently losing the
+ * wakelock. Round 2 fix: the held branch must call
+ * `existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)` to refresh the
+ * timeout — `setReferenceCounted(false)` guarantees this is a refresh
+ * rather than an accumulating acquire.
+ *
+ * This lint asserts the refresh statement exists inside the body of
+ * `acquireWakeLock()` in [RovaRecordingService.kt]. Drop it and the
+ * lint fails preBuild.
+ */
+val checkWakeLockHeldRefresh = tasks.register("checkWakeLockHeldRefresh") {
+    group = "verification"
+    description = "Require held-wakelock refresh inside acquireWakeLock — Phase 1.8 / C17 round-2 fix."
+    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
+    inputs.file(serviceFile).withPropertyName("recordingService")
+    doLast {
+        if (!serviceFile.exists()) {
+            throw GradleException("checkWakeLockHeldRefresh: source file missing: $serviceFile")
+        }
+        val lines = serviceFile.readLines()
+        val fnStart = lines.indexOfFirst { it.contains("private fun acquireWakeLock()") }
+        if (fnStart < 0) {
+            throw GradleException(
+                "checkWakeLockHeldRefresh: acquireWakeLock() declaration not found in " +
+                    serviceFile.relativeTo(rootDir)
+            )
+        }
+        // Walk forward to the first matching `}` at the function's
+        // opening-brace indent. acquireWakeLock is declared with 4-space
+        // indent, so its closing brace is `    }` exactly.
+        val fnEnd = (fnStart + 1 until lines.size).firstOrNull { lines[it] == "    }" }
+            ?: throw GradleException(
+                "checkWakeLockHeldRefresh: could not locate end of acquireWakeLock() body."
+            )
+        val body = lines.subList(fnStart, fnEnd + 1).joinToString("\n")
+        val hasHeldGuard = body.contains("existing?.isHeld == true")
+        val hasRefresh = body.contains("existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)")
+        if (!hasHeldGuard || !hasRefresh) {
+            throw GradleException(
+                "C17 round-2 violation (Phase 1.8 §WakeLock Discipline) — " +
+                    "acquireWakeLock() must refresh the bounded timeout on the " +
+                    "held branch.\n" +
+                    "Required statements inside the function body:\n" +
+                    "  - `existing?.isHeld == true` guard: ${if (hasHeldGuard) "OK" else "MISSING"}\n" +
+                    "  - `existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)`: ${if (hasRefresh) "OK" else "MISSING"}\n" +
+                    "Fix: in the `if (existing?.isHeld == true)` branch, call " +
+                    "`existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)` before " +
+                    "returning so continuous sessions cannot outlive the timeout."
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.8 / C17 (review round 3) — zero-gap loop refresh.
+ *
+ * The recording loop only enters `waitForNextSegment(...)` when
+ * `waitSeconds > 0`. When the user's interval ≤ duration the loop runs
+ * back-to-back with `waitSeconds == 0` and never reaches the
+ * `waitForNextSegment` finally block — so the round-2 per-segment
+ * refresh is bypassed and a long continuous session can outlive
+ * `WakeLockPolicy.ACQUIRE_TIMEOUT_MS`. Round 3 fix: an `else` clause
+ * on the `if (waitSeconds > 0)` block calls `acquireWakeLock()`, which
+ * routes through the held-branch refresh.
+ *
+ * This lint asserts the structure: an `} else {` clause immediately
+ * after the `waitForNextSegment` call, with `acquireWakeLock()` inside
+ * the lookahead window. Drop the else branch and preBuild fails.
+ */
+val checkWakeLockZeroGapRefresh = tasks.register("checkWakeLockZeroGapRefresh") {
+    group = "verification"
+    description = "Require WakeLock refresh on the zero-gap continuing-loop path — Phase 1.8 / C17 round-3 fix."
+    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
+    inputs.file(serviceFile).withPropertyName("recordingService")
+    doLast {
+        if (!serviceFile.exists()) {
+            throw GradleException("checkWakeLockZeroGapRefresh: source file missing: $serviceFile")
+        }
+        val lines = serviceFile.readLines()
+        val ifIdx = lines.indexOfFirst { it.contains("if (waitSeconds > 0)") }
+        if (ifIdx < 0) {
+            throw GradleException(
+                "checkWakeLockZeroGapRefresh: `if (waitSeconds > 0)` not found in " +
+                    serviceFile.relativeTo(rootDir)
+            )
+        }
+        val window = lines.subList(ifIdx, minOf(ifIdx + 20, lines.size)).joinToString("\n")
+        val hasElse = Regex("""\}\s*else\s*\{""").containsMatchIn(window)
+        val hasRefresh = window.contains("acquireWakeLock()")
+        if (!hasElse || !hasRefresh) {
+            throw GradleException(
+                "C17 round-3 violation (Phase 1.8 §WakeLock Discipline) — " +
+                    "the `if (waitSeconds > 0) { waitForNextSegment(...) }` block must " +
+                    "have an `else { acquireWakeLock() }` clause so back-to-back " +
+                    "(interval <= duration) sessions still refresh the bounded " +
+                    "WakeLock timeout.\n" +
+                    "  - `} else {` clause: ${if (hasElse) "OK" else "MISSING"}\n" +
+                    "  - `acquireWakeLock()` in window: ${if (hasRefresh) "OK" else "MISSING"}\n" +
+                    "Fix: add `} else { acquireWakeLock() }` after the " +
+                    "`waitForNextSegment` call inside the recording loop."
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1373,6 +1534,9 @@ afterEvaluate {
         dependsOn(checkExportPipelineSingleEntry)
         dependsOn(checkCompletedWriteOnlyFromPerformMerge)
         // dependsOn(checkCompletedWriteOnlyFromPerformMerge)  // bisect
+        dependsOn(checkWakeLockBoundedAcquire)
+        dependsOn(checkWakeLockHeldRefresh)
+        dependsOn(checkWakeLockZeroGapRefresh)
     }
 }
 

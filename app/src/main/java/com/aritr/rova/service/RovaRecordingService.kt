@@ -66,6 +66,7 @@ import com.aritr.rova.service.surface.HeadlessPreviewSurface
 import com.aritr.rova.service.surface.HeadlessPreviewSurfaces
 import com.aritr.rova.service.export.ExportPipeline
 import com.aritr.rova.service.export.ExportResult
+import com.aritr.rova.service.wakelock.WakeLockPolicy
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import androidx.camera.video.VideoRecordEvent
@@ -947,6 +948,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
                     if (waitSeconds > 0) {
                         waitForNextSegment(waitSeconds)
+                    } else {
+                        // Phase 1.8 / C17 (review round 3): zero-gap
+                        // continuing iteration — refresh the bounded
+                        // WakeLock timeout. waitForNextSegment's
+                        // finally block is the per-segment refresh
+                        // point only when waitSeconds > 0; back-to-back
+                        // sessions (interval <= duration) bypass it,
+                        // so ACQUIRE_TIMEOUT_MS would otherwise expire
+                        // silently on long continuous runs. The held
+                        // branch of acquireWakeLock() refreshes via
+                        // existing.acquire(ACQUIRE_TIMEOUT_MS).
+                        acquireWakeLock()
                     }
                 }
             } catch (e: CancellationException) {
@@ -2223,7 +2236,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
         } finally {
             countdownJob.cancel()
-            if (canRelax) acquireWakeLock()
+            // Phase 1.8 / C17 (review round 2): always re-call
+            // acquireWakeLock at the end of each inter-segment wait.
+            // - Relax path (canRelax == true): re-acquires a fresh
+            //   lock that was released for the long wait.
+            // - Non-relax path: refreshes the bounded timeout so
+            //   continuous short-interval sessions cannot exceed
+            //   ACQUIRE_TIMEOUT_MS without a refresh point.
+            // Both paths converge through acquireWakeLock's held-branch
+            // refresh (round-2 fix above).
+            acquireWakeLock()
         }
     }
 
@@ -2256,7 +2278,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private fun acquireWakeLock() {
         val existing = wakeLock
-        if (existing?.isHeld == true) return
+        if (existing?.isHeld == true) {
+            // Phase 1.8 / C17 (review round 2): refresh the bounded
+            // timeout on every call. With setReferenceCounted(false),
+            // a repeat acquire(timeout) on a held lock simply extends
+            // its expiry — it does not stack. Without this refresh,
+            // continuous sessions whose inter-segment gap is below
+            // WAKE_LOCK_RELAX_THRESHOLD_SECONDS would never hit the
+            // release/re-acquire branch and could outlive
+            // ACQUIRE_TIMEOUT_MS, silently losing the wakelock.
+            existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)
+            return
+        }
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
@@ -2264,18 +2297,25 @@ class RovaRecordingService : Service(), LifecycleOwner {
             "$packageName:RovaRecording"
         ).apply {
             setReferenceCounted(false)
-            acquire()
+            // Phase 1.8 / C17 — bounded acquire. Timeout rationale and
+            // refresh model live in [WakeLockPolicy.ACQUIRE_TIMEOUT_MS].
+            acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)
         }
         RovaLog.d("acquireWakeLock: Partial wakelock acquired")
     }
 
     private fun releaseWakeLock() {
-        val existing = wakeLock ?: return
-        if (existing.isHeld) {
-            existing.release()
+        val existing = wakeLock
+        // Phase 1.8 / C17 — null-first guarantees the post-state even
+        // if the underlying release throws (already swallowed below).
+        wakeLock = null
+        if (existing != null && existing.isHeld) {
+            // Phase 1.8 / C17 — exception-safe release. Android may
+            // throw RuntimeException("WakeLock under-locked"); see
+            // ADR 0006 §"WakeLock Ownership".
+            WakeLockPolicy.safeRelease { existing.release() }
             RovaLog.d("releaseWakeLock: Partial wakelock released")
         }
-        wakeLock = null
     }
 }
 
