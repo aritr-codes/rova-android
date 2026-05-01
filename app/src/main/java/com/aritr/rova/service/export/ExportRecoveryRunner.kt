@@ -210,6 +210,11 @@ class ExportRecoveryRunner(
             // lint the (USER_STOPPED, NONE) pair is forbidden — but the
             // (COMPLETED, NONE) pair is the canonical terminal write and
             // is not flagged.
+            // completed-write-opt-out: late-terminal reconciliation for
+            // FINALIZED && terminated == null (ADR 0005 row 13c) — runner
+            // owns this write per ADR 0006 §"Ownership table"; the live
+            // merge-success path in performMerge is the other COMPLETED
+            // writer.
             val r = sessionStore.markTerminated(sid, Terminated.COMPLETED, StopReason.NONE)
             lateTerminals[sid] = when (r) {
                 is MarkTerminatedResult.Wrote -> {

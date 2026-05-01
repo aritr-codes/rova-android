@@ -64,15 +64,10 @@ import com.aritr.rova.data.Terminated
 import com.aritr.rova.data.peakBudgetMultiplier
 import com.aritr.rova.service.surface.HeadlessPreviewSurface
 import com.aritr.rova.service.surface.HeadlessPreviewSurfaces
+import com.aritr.rova.service.export.ExportPipeline
+import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
-import com.aritr.rova.utils.VideoMerger
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import android.content.ContentValues
-import android.os.Environment
-import android.provider.MediaStore
 import androidx.camera.video.VideoRecordEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
@@ -407,9 +402,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
         private const val WAKE_LOCK_RELAX_THRESHOLD_SECONDS = 120
         private const val WAKE_LOCK_FINAL_COUNTDOWN_SECONDS = 10
         private const val WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS = 30
-        // C6: 64 KB chunk for post-merge MediaStore copy. Each chunk is a
-        // coroutine yield point for cancellation.
-        private const val POST_MERGE_COPY_BUFFER = 64 * 1024
 
         // C18: bounds for the finalize-await race fix.
         // FINALIZE_TIMEOUT_MS — how long the cancel/exception catch waits for
@@ -1900,33 +1892,64 @@ class RovaRecordingService : Service(), LifecycleOwner {
             _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
             updateNotification("Merging ${segments.size} segments...")
 
-            // C18: merged output lives inside the session's directory so the
-            // session is self-contained on disk. (Phase 1.7 will replace this
-            // with the per-tier export pipeline.)
-            val outputDir = currentSessionDir
-                ?: File(getExternalFilesDir("videos"), "")
-            if (!outputDir.exists()) outputDir.mkdirs()
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val outputFile = File(outputDir, "Rova_${timestamp}.mp4")
+            // Phase 1.7 commit-7 — single live entry into the tier
+            // export pipeline. ExportPipeline.export dispatches by
+            // currentExportTier(): Tier 1 publishes via MediaStore
+            // pending row + MediaMuxer(FileDescriptor); Tier 2/3 mux to
+            // a private temp + .part rename + bounded scanFile. The
+            // exporter writes manifest export-state transitions; this
+            // service only writes the terminal record (B7).
+            val sid = currentSessionId
+            val sessionDir = currentSessionDir
+            if (sid == null || sessionDir == null) {
+                RovaLog.w("performMerge: no active session; skipping export")
+                _serviceState.update { it.copy(mergeError = "No active session") }
+                return
+            }
+            if (!sessionDir.exists()) sessionDir.mkdirs()
 
-            VideoMerger.mergeSegments(segments, outputFile) { progress ->
+            val result = ExportPipeline.export(
+                context = this@RovaRecordingService,
+                sessionStore = sessionStore,
+                sessionId = sid,
+                sessionDir = sessionDir,
+                segments = segments
+            ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
                 updateNotification("Merging segments: ${(progress * 100).toInt()}%")
             }
 
-            updateNotification("Video saved: ${outputFile.name}")
-            // C6: post-merge IO must run on Dispatchers.IO with cancellation
-            // checks. copyToPublicMovies is now suspend + IO-confined. Segment
-            // deletion is moved into the same IO context.
-            copyToPublicMovies(outputFile)
-            withContext(Dispatchers.IO) {
-                segments.forEach {
-                    if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
-                    try { it.delete() } catch (_: Exception) {}
+            when (result) {
+                is ExportResult.Success -> {
+                    updateNotification("Video saved")
+                    withContext(Dispatchers.IO) {
+                        segments.forEach {
+                            if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
+                            try { it.delete() } catch (_: Exception) {}
+                        }
+                    }
+                    mergeSucceeded = true
+                    delay(1000)
+                }
+                is ExportResult.MuxFailed,
+                is ExportResult.CopyFailed,
+                is ExportResult.RenameFailed,
+                is ExportResult.PendingInsertFailed,
+                is ExportResult.FinalizeFailed,
+                is ExportResult.ManifestWriteFailed,
+                is ExportResult.UnknownSession -> {
+                    // No terminal write — manifest is in FAILED (or
+                    // intermediate) state. Cold-launch ExportRecoveryRunner
+                    // reconciles on next launch (ADR 0003 §Recovery
+                    // routing); Phase 1.5 maps the resulting state to a
+                    // discard-eligibility flag.
+                    val msg = "Export failed: ${result.javaClass.simpleName}"
+                    RovaLog.e("performMerge: $msg")
+                    _serviceState.update { it.copy(mergeError = msg) }
+                    updateNotification("Merge failed")
+                    delay(3000)
                 }
             }
-            mergeSucceeded = true
-            delay(1000)
 
         } catch (ce: CancellationException) {
             // C6: keep cancellation semantics intact — must not be converted
@@ -2010,56 +2033,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
             @Suppress("DEPRECATION")
             stopForeground(true)
             stopSelf()
-        }
-    }
-
-    // C6: confine all IO to Dispatchers.IO; chunked copy with per-chunk
-    // cancellation checks so stopAndMergeJob.cancel() can interrupt mid-flight.
-    // (Result-bearing semantics + per-tier pipeline land in C16 / Phase 1.7.)
-    private suspend fun copyToPublicMovies(file: File) = withContext(Dispatchers.IO) {
-        try {
-            val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
-                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Rova")
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                }
-            }
-            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            } else {
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            }
-            val uri = contentResolver.insert(collection, values)
-            if (uri != null) {
-                contentResolver.openOutputStream(uri)?.use { rawOut ->
-                    file.inputStream().buffered(POST_MERGE_COPY_BUFFER).use { input ->
-                        rawOut.buffered(POST_MERGE_COPY_BUFFER).use { out ->
-                            val buf = ByteArray(POST_MERGE_COPY_BUFFER)
-                            while (true) {
-                                if (!coroutineContext.isActive) {
-                                    throw CancellationException("copyToPublicMovies cancelled")
-                                }
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                out.write(buf, 0, n)
-                            }
-                            out.flush()
-                        }
-                    }
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    values.clear()
-                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                    contentResolver.update(uri, values, null, null)
-                }
-                RovaLog.d("copyToPublicMovies: Saved to gallery: $uri")
-            }
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (e: Exception) {
-            RovaLog.e("copyToPublicMovies: Failed to save to gallery", e)
         }
     }
 

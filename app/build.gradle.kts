@@ -1145,6 +1145,209 @@ val checkExportCleanupPredicate = tasks.register("checkExportCleanupPredicate") 
     }
 }
 
+/**
+ * Phase 1.7 commit-7 — `copyToPublicMovies` was the pre-Phase-1.7
+ * merge-then-publish helper in `RovaRecordingService`. Commit 7 deletes
+ * it; the tier-dispatching `ExportPipeline` is the single live publish
+ * path. Resurrecting `copyToPublicMovies` would re-introduce the
+ * merge-then-publish anti-pattern that splits artifact authority
+ * between the merger and the exporter. Lock the symbol out.
+ */
+val checkExportNoCopyToPublicMovies = tasks.register("checkExportNoCopyToPublicMovies") {
+    group = "verification"
+    description = "Forbid copyToPublicMovies symbol (Phase 1.7 commit-7)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("srcAll")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else line.contains("copyToPublicMovies")
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "copyToPublicMovies symbol is forbidden (Phase 1.7 commit-7). Offenders:\n$report"
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.7 commit-7 — single-entry rule for the live tier export
+ * pipeline. Two complementary invariants:
+ *  1. `ExportPipeline.export(` may appear EXACTLY once across all
+ *     production sources, in `RovaRecordingService.kt`.
+ *  2. `VideoMerger.mergeSegments(` and `VideoMerger.mergeSegmentsToFd(`
+ *     callers must all live under `service/export/`. This internalizes
+ *     the public mux surface so a future edit cannot bypass the tier
+ *     pipeline by directly invoking the mux helper.
+ */
+val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEntry") {
+    group = "verification"
+    description = "ExportPipeline.export single call site in RovaRecordingService.kt; VideoMerger mux callers restricted to service/export/ (Phase 1.7 commit-7)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+    val videoMergerPath = "src/main/java/com/aritr/rova/utils/VideoMerger.kt"
+    val exportPathFragment = "service/export/"
+    inputs.dir(srcDir).withPropertyName("srcAll")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
+        val recordingServiceFile = file(recordingServicePath).canonicalFile
+        val videoMergerFile = file(videoMergerPath).canonicalFile
+
+        // Invariant 1 — exactly one ExportPipeline.export( call site,
+        // and it must live in RovaRecordingService.kt.
+        val pipelineCalls = mutableListOf<Pair<File, Int>>()
+        srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { f ->
+                f.readLines().forEachIndexed { i, line ->
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
+                    if (line.contains("ExportPipeline.export(")) {
+                        pipelineCalls += f to (i + 1)
+                    }
+                }
+            }
+        val problems = mutableListOf<String>()
+        when (pipelineCalls.size) {
+            0 -> problems += "ExportPipeline.export(...) not called anywhere — performMerge must dispatch to the pipeline."
+            1 -> {
+                val (f, line) = pipelineCalls.single()
+                if (f.canonicalFile != recordingServiceFile) {
+                    problems += "${f.relativeTo(rootDir)}:$line — only RovaRecordingService.performMerge may call ExportPipeline.export."
+                }
+            }
+            else -> pipelineCalls.forEach { (f, line) ->
+                problems += "${f.relativeTo(rootDir)}:$line — ExportPipeline.export has more than one call site."
+            }
+        }
+
+        // Invariant 2 — VideoMerger mux callers restricted to
+        // service/export/ + the definition file.
+        val muxPattern = Regex("""\bVideoMerger\s*\.\s*(mergeSegments|mergeSegmentsToFd)\s*\(""")
+        srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.canonicalFile != videoMergerFile }
+            .forEach { f ->
+                val hits = f.readLines().withIndex().filter { (_, line) ->
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                    else muxPattern.containsMatchIn(line)
+                }
+                if (hits.isEmpty()) return@forEach
+                val pathStr = f.relativeTo(rootDir).path.replace('\\', '/')
+                if (pathStr.contains(exportPathFragment)) return@forEach
+                hits.forEach { (i, line) ->
+                    problems += "${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()} — VideoMerger mux callers must live under service/export/"
+                }
+            }
+
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "Single-entry rule violated for the tier export pipeline (Phase 1.7 commit-7):\n" +
+                    problems.joinToString("\n") { "  $it" } +
+                    "\nFix: live publish goes through ExportPipeline.export from " +
+                    "RovaRecordingService.performMerge ONLY. VideoMerger mux helpers " +
+                    "are pipeline internals; consumers must live under service/export/."
+            )
+        }
+    }
+}
+
+/**
+ * Phase 1.7 commit-7 — ADR 0006 §"Terminal-Write Ordering" B7
+ * tightening. `markTerminated(...,Terminated.COMPLETED,...)` writes
+ * are owned by `RovaRecordingService.performMerge` (live merge-success
+ * commit point). The single legitimate exception is the cold-launch
+ * late-terminal reconciliation pass owned by `ExportRecoveryRunner`
+ * (ADR 0005 row 13c). That site MUST advertise the carve-out via a
+ * file-scoped `// completed-write-opt-out: <reason>` marker.
+ *
+ * Detection: any non-comment line containing `markTerminated(` whose
+ * 3-line forward window contains `Terminated.COMPLETED` literal. The
+ * `performMerge` body uses a variable-bound `reason` so the literal
+ * never appears within 3 lines of `markTerminated(` — the lint passes
+ * vacuously for that idiom (mirrors `checkUserStoppedBeforeMerge`).
+ */
+val checkCompletedWriteOnlyFromPerformMerge = tasks.register("checkCompletedWriteOnlyFromPerformMerge") {
+    group = "verification"
+    description = "markTerminated(...,Terminated.COMPLETED,...) writes outside performMerge require an explicit completed-write-opt-out file marker (ADR 0006 B7)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+    inputs.dir(srcDir).withPropertyName("srcAll")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
+        val recordingServiceFile = file(recordingServicePath).canonicalFile
+        val offenders = mutableListOf<Pair<File, String>>()
+        srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { f ->
+                val lines = f.readLines()
+                val hasOptOut = lines.any { it.contains("completed-write-opt-out:") }
+                val isRecordingService = f.canonicalFile == recordingServiceFile
+                if (hasOptOut && !isRecordingService) return@forEach
+
+                lines.forEachIndexed { i, raw ->
+                    val trimmed = raw.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
+                    if (!raw.contains("markTerminated(")) return@forEachIndexed
+                    val window = (i..minOf(i + 3, lines.lastIndex))
+                        .joinToString("\n") { lines[it] }
+                    if (!window.contains("Terminated.COMPLETED")) return@forEachIndexed
+                    if (isRecordingService) {
+                        // Must lie inside performMerge body.
+                        val perfMergeStart = lines.indexOfFirst { line ->
+                            line.contains("private suspend fun performMerge(")
+                        }
+                        if (perfMergeStart < 0) {
+                            offenders += f to "line ${i + 1}: COMPLETED write but performMerge declaration missing"
+                            return@forEachIndexed
+                        }
+                        val fnDeclPattern = Regex("""^    (private suspend fun|private fun|suspend fun|fun) \w+""")
+                        var nextFnAbs = lines.size
+                        for (j in (perfMergeStart + 1) until lines.size) {
+                            if (fnDeclPattern.containsMatchIn(lines[j])) {
+                                nextFnAbs = j
+                                break
+                            }
+                        }
+                        if (i in (perfMergeStart + 1)..(nextFnAbs - 1)) return@forEachIndexed
+                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) outside performMerge body"
+                    } else {
+                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) — only performMerge may write COMPLETED. Add `// completed-write-opt-out: <reason>` for late-terminal reconciliation."
+                    }
+                }
+            }
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, msg) ->
+                "  ${f.relativeTo(rootDir)}: $msg"
+            }
+            throw GradleException(
+                "B7 violation (ADR 0006 §Terminal-Write Ordering) — " +
+                    "Terminated.COMPLETED writes restricted to performMerge:\n$report\n" +
+                    "Fix: write COMPLETED only from RovaRecordingService.performMerge. " +
+                    "Late-terminal reconciliation (ExportRecoveryRunner) must carry " +
+                    "`// completed-write-opt-out: <reason>` marker."
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1166,6 +1369,10 @@ afterEvaluate {
         dependsOn(checkExportQueryArgMatchPendingGuarded)
         dependsOn(checkExportPendingVisibilityOnQuery)
         dependsOn(checkExportCleanupPredicate)
+        dependsOn(checkExportNoCopyToPublicMovies)
+        dependsOn(checkExportPipelineSingleEntry)
+        dependsOn(checkCompletedWriteOnlyFromPerformMerge)
+        // dependsOn(checkCompletedWriteOnlyFromPerformMerge)  // bisect
     }
 }
 

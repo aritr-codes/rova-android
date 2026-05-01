@@ -5,14 +5,30 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileDescriptor
 import java.nio.ByteBuffer
 import kotlin.coroutines.coroutineContext
 
+/**
+ * Phase 1.7 commit-7 — segment-to-MP4 mux primitives consumed by
+ * [com.aritr.rova.service.export.ExportPipeline]. Tier 2/3 use the
+ * file-path entry [mergeSegments]; Tier 1 uses the FD entry
+ * [mergeSegmentsToFd] so `MediaMuxer.stop()` can rewrite the moov atom
+ * against the pending-row PFD opened by
+ * [com.aritr.rova.service.export.Tier1AndroidOps.withPendingFd] (mode
+ * `"rw"` per ADR 0003 §FD Mode Amendment).
+ *
+ * Single-entry rule: callers other than `service/export/` are forbidden
+ * by `checkExportPipelineSingleEntry` — the tier pipeline cannot be
+ * bypassed by a direct mux call.
+ */
 object VideoMerger {
 
     private const val TAG = "VideoMerger"
@@ -30,34 +46,70 @@ object VideoMerger {
     )
 
     /**
-     * Merges multiple video files into a single output file using MediaMuxer.
-     * 
-     * @param segments List of video files to merge
-     * @param outputFile Destination file
-     * @param onProgress Callback for progress (0.0 to 1.0)
+     * Merges multiple video files into a single output file via
+     * `MediaMuxer(String, ...)`. Used by Tier 2/3's private-temp mux
+     * step.
      */
     suspend fun mergeSegments(
         segments: List<File>,
         outputFile: File,
         onProgress: (Float) -> Unit
     ) = withContext(Dispatchers.IO) {
+        val (validSegments, rotation, totalBytes) = preflight(segments)
+        Log.d(TAG, "Starting merge of ${validSegments.size} segments to ${outputFile.name}")
+        onProgress(0f)
+
+        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        try {
+            muxer.setOrientationHint(rotation)
+            runMux(muxer, validSegments, totalBytes, onProgress)
+        } catch (e: Exception) {
+            Log.e(TAG, "Merge failed", e)
+            outputFile.delete()
+            throw e
+        } finally {
+            try { muxer.release() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Tier 1 entry. Caller (`Tier1AndroidOps.withPendingFd`) owns the
+     * underlying `ParcelFileDescriptor` and closes it on block exit;
+     * `MediaMuxer(FileDescriptor)` does NOT take ownership.
+     * `MediaMuxer.stop()` rewrites the moov atom which requires a
+     * seekable FD — the caller's `"rw"` mode satisfies that
+     * (ADR 0003 §FD Mode Amendment).
+     */
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun mergeSegmentsToFd(
+        segments: List<File>,
+        fd: FileDescriptor,
+        onProgress: (Float) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val (validSegments, rotation, totalBytes) = preflight(segments)
+        Log.d(TAG, "Starting Tier 1 merge of ${validSegments.size} segments to FD")
+        onProgress(0f)
+
+        val muxer = MediaMuxer(fd, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        try {
+            muxer.setOrientationHint(rotation)
+            runMux(muxer, validSegments, totalBytes, onProgress)
+        } finally {
+            try { muxer.release() } catch (_: Exception) {}
+        }
+    }
+
+    private data class Preflight(val segments: List<File>, val rotation: Int, val totalBytes: Long)
+
+    private fun preflight(segments: List<File>): Preflight {
         if (segments.isEmpty()) {
             throw IllegalArgumentException("No segments to merge")
         }
-
         val validSegments = segments.filter { it.exists() && it.length() > 0 }
         if (validSegments.isEmpty()) {
             throw IllegalArgumentException("No valid segments found")
         }
-
-        Log.d(TAG, "Starting merge of ${validSegments.size} segments to ${outputFile.name}")
-        onProgress(0f)
-
-        // P3: Pre-compute total bytes for byte-weighted progress
         val totalBytes = validSegments.sumOf { it.length() }
-        var bytesProcessed = 0L
-
-        // 0. Extract Rotation from first segment
         var rotation = 0
         try {
             val retriever = MediaMetadataRetriever()
@@ -69,14 +121,20 @@ object VideoMerger {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to extract rotation", e)
         }
+        return Preflight(validSegments, rotation, totalBytes)
+    }
 
+    private suspend fun runMux(
+        muxer: MediaMuxer,
+        validSegments: List<File>,
+        totalBytes: Long,
+        onProgress: (Float) -> Unit
+    ) {
         val extractors = mutableListOf<MediaExtractor>()
         var muxerStarted = false
-        var muxer: MediaMuxer? = null
+        var bytesProcessed = 0L
 
         try {
-            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            muxer.setOrientationHint(rotation)
             // 1. Setup Extractors
             validSegments.forEach { file ->
                 val extractor = MediaExtractor()
@@ -89,7 +147,6 @@ object VideoMerger {
             val expectedTracks = mutableMapOf<TrackKind, TrackDescriptor>()
             val kindToMuxerIndex = mutableMapOf<TrackKind, Int>()
             var bufferSize = 0
-            val mux = muxer // smart-cast to non-null
 
             extractors.forEach { extractor ->
                 val tracksByKind = linkedMapOf<TrackKind, Pair<MediaFormat, TrackDescriptor>>()
@@ -113,7 +170,7 @@ object VideoMerger {
                     if (expected == null) {
                         expectedTracks[kind] = descriptor
                         if (kind !in kindToMuxerIndex) {
-                            val newIndex = mux.addTrack(format)
+                            val newIndex = muxer.addTrack(format)
                             kindToMuxerIndex[kind] = newIndex
                         }
                     } else if (expected != descriptor) {
@@ -135,7 +192,7 @@ object VideoMerger {
 
             if (bufferSize <= 0) bufferSize = BUFFER_SIZE
 
-            mux.start()
+            muxer.start()
             muxerStarted = true
 
             // 3. Write Data
@@ -143,9 +200,8 @@ object VideoMerger {
             val bufferInfo = MediaCodec.BufferInfo()
             var timelineOffsetUs = 0L
             val totalSegments = extractors.size
-            
+
             extractors.forEachIndexed { index, extractor ->
-                // Check for cancellation
                 if (!coroutineContext.isActive) {
                     throw kotlinx.coroutines.CancellationException("Merge cancelled")
                 }
@@ -175,7 +231,7 @@ object VideoMerger {
                         extractor.advance()
                         continue
                     }
-                    
+
                     val presentationTimeUs = extractor.sampleTime
                     if (presentationTimeUs < 0) {
                         extractor.advance()
@@ -190,7 +246,7 @@ object VideoMerger {
                     } else {
                         timelineOffsetUs + normalizedTimeUs
                     }
-                    
+
                     bufferInfo.offset = 0
                     bufferInfo.size = sampleSize
                     // C1: MediaExtractor.SAMPLE_FLAG_* and MediaCodec.BUFFER_FLAG_* are
@@ -202,7 +258,7 @@ object VideoMerger {
                     else 0
                     bufferInfo.presentationTimeUs = outputTimeUs
 
-                    mux.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
                     wroteSamples = true
                     lastWrittenTimeUs[muxerTrackIndex] = outputTimeUs
 
@@ -214,29 +270,18 @@ object VideoMerger {
                 }
 
                 if (wroteSamples) {
-                    // Advance the whole muxer timeline together so missing audio/video
-                    // tracks still leave the right gap instead of collapsing sync.
                     timelineOffsetUs = segmentEndUs + 1000L
                 }
-                
-                // P3: Byte-weighted progress — large segments take proportionally more time
+
                 bytesProcessed += validSegments[index].length()
                 onProgress(if (totalBytes > 0) bytesProcessed.toFloat() / totalBytes else (index + 1).toFloat() / totalSegments)
             }
-            
-            Log.d(TAG, "Merge completed successfully")
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Merge failed", e)
-            outputFile.delete() // Cleanup partial file
-            throw e
+            Log.d(TAG, "Merge completed successfully")
         } finally {
             if (muxerStarted) {
-                try { muxer?.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
+                try { muxer.stop() } catch (e: Exception) { Log.w(TAG, "muxer.stop() failed", e) }
             }
-            muxer?.release()
-
-            // Ensure all extractors are released
             extractors.forEach {
                 try { it.release() } catch (_: Exception) {}
             }
