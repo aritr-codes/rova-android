@@ -1385,8 +1385,24 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // permission check. The gate guarantees that VIDEO_AUDIO
             // sessions still have RECORD_AUDIO; if mic was revoked,
             // the gate already terminated the session above.
+            //
+            // Lint-gate restoration: the gate-then-config window is not
+            // atomic — RECORD_AUDIO can be revoked between the gate
+            // pass and CameraX's audio enable. The FGS-type bitfield
+            // is immutable mid-session (B18), so we cannot fall back
+            // to video-only; route the race to the same
+            // PERMISSION_REVOKED termination path the gate uses.
             if (currentAudioMode == com.aritr.rova.data.AudioMode.VIDEO_AUDIO) {
-                pendingRecording = pendingRecording.withAudioEnabled()
+                try {
+                    pendingRecording = pendingRecording.withAudioEnabled()
+                } catch (se: SecurityException) {
+                    RovaLog.w(
+                        "recordSegment: RECORD_AUDIO revoked between gate and CameraX config — terminating",
+                        se
+                    )
+                    currentStopReason = com.aritr.rova.data.StopReason.PERMISSION_REVOKED
+                    return SegmentResult.Terminated
+                }
             }
 
             // R2: Fresh deferred for this segment's finalize event

@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
+    <!-- Camera is functionally required, but declared optional so the app
+         can still install on Chrome OS / non-camera form factors and fail
+         gracefully at runtime. Pairs with the CAMERA permission above and
+         clears the PermissionImpliesUnsupportedChromeOsHardware lint. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- NEW BACKGROUND RECORDING PERMISSIONS -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
