@@ -2081,9 +2081,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    // Q3: Short beep on recording start/stop using rova_beep.mp3, respects enableBeeps setting
+    // Q3: short beep on recording start/stop using rova_beep.mp3.
+    // Beta-smoke fix: also suppressed for VIDEO_AUDIO sessions so the
+    // speaker tail does not bleed into the active recorder. See
+    // com.aritr.rova.service.audio.shouldPlayBeep for the policy.
     private fun beep() {
-        if (!RovaSettings(this).enableBeeps) return
+        if (!com.aritr.rova.service.audio.shouldPlayBeep(
+                enableBeeps = RovaSettings(this).enableBeeps,
+                audioMode = currentAudioMode
+            )
+        ) return
         try {
             val mp = MediaPlayer.create(this, R.raw.rova_beep) ?: return
             mp.setOnCompletionListener { it.release() }
