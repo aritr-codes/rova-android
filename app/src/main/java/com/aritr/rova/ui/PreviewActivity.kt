@@ -1,6 +1,7 @@
 package com.aritr.rova.ui
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
 import android.media.MediaPlayer
@@ -55,8 +56,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
+import com.aritr.rova.ui.share.safeShareUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -68,12 +69,17 @@ class PreviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val videoPath = intent.getStringExtra("VIDEO_PATH") ?: return
+        // Stringly-typed across the Intent boundary; HistoryScreen
+        // serializes Uri.toString(). Absent for legacy app-private
+        // entries, in which case shareVideoLocal falls back to
+        // FileProvider via the shared safeShareUri helper.
+        val shareUri = intent.getStringExtra("SHARE_URI")?.let(Uri::parse)
         setContent {
             PreviewScreen(
                 videoPath = videoPath,
                 onBack = { finish() },
                 onSave = { saveVideoLocal(it) },
-                onShare = { shareVideoLocal(it) }
+                onShare = { shareVideoLocal(it, shareUri) }
             )
         }
     }
@@ -128,23 +134,28 @@ class PreviewActivity : ComponentActivity() {
         }
     }
 
-    private fun shareVideoLocal(videoPath: String) {
+    private fun shareVideoLocal(videoPath: String, shareUri: Uri?) {
+        // Reuses the same safeShareUri helper as HistoryScreen so the
+        // two surfaces cannot diverge. shareUri is non-null for
+        // MediaStore-backed exports (every Phase 1.7 finalized
+        // recording); FileProvider is the legacy app-private fallback
+        // and is wrapped against IllegalArgumentException inside the
+        // helper because Movies/Rova/... is outside any declared
+        // FileProvider root.
+        val uri = safeShareUri(this, File(videoPath), shareUri)
+        if (uri == null) {
+            Toast.makeText(this, "Recording not ready to share yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "video/mp4"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         try {
-            val file = File(videoPath)
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.provider",
-                file
-            )
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "video/mp4"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
             startActivity(Intent.createChooser(intent, "Share Rova Video"))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "❌ Share failed", Toast.LENGTH_SHORT).show()
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No app available to share videos", Toast.LENGTH_SHORT).show()
         }
     }
 }

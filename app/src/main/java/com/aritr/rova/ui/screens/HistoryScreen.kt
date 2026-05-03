@@ -1,7 +1,6 @@
 package com.aritr.rova.ui.screens
 
 import android.content.ActivityNotFoundException
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -69,7 +68,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -81,6 +79,7 @@ import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
+import com.aritr.rova.ui.share.safeShareUri
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -210,7 +209,7 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                                 var anyMissing = false
                                 selectedFiles.forEach { file ->
                                     val item = itemsByFile[file]
-                                    val uri = item?.let { safeShareUri(context, it) }
+                                    val uri = item?.let { safeShareUri(context, it.file, it.shareUri) }
                                     if (uri != null) uris.add(uri) else anyMissing = true
                                 }
                                 if (uris.isEmpty()) {
@@ -391,6 +390,11 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                                     } else {
                                         val intent = Intent(context, PreviewActivity::class.java).apply {
                                             putExtra("VIDEO_PATH", item.file.absolutePath)
+                                            // Plumb the safe share URI through so PreviewActivity
+                                            // can avoid FileProvider on Movies/Rova paths. Stringly
+                                            // typed across the Intent boundary to dodge Parcelable
+                                            // schema drift between process versions.
+                                            item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
                                         }
                                         context.startActivity(intent)
                                     }
@@ -590,28 +594,6 @@ private fun SummaryBadge(text: String) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
-    }
-}
-
-/**
- * Resolves a share-safe URI for a History item. Prefers the
- * MediaStore content URI plumbed via [VideoItem.shareUri] (the canonical
- * form for files under public Movies on every export tier). Falls back
- * to [FileProvider] for legacy app-private artifacts whose path is
- * covered by `res/xml/file_paths.xml`.
- *
- * The FileProvider call is wrapped in `try/catch IllegalArgumentException`
- * because Phase 1.7 finalized exports live under `Movies/Rova/...` —
- * outside any declared FileProvider root. A missing-or-not-yet-indexed
- * MediaStore row would otherwise crash the share button. Callers must
- * treat `null` as "not ready to share."
- */
-private fun safeShareUri(context: Context, item: VideoItem): Uri? {
-    item.shareUri?.let { return it }
-    return try {
-        FileProvider.getUriForFile(context, "${context.packageName}.provider", item.file)
-    } catch (_: IllegalArgumentException) {
-        null
     }
 }
 
