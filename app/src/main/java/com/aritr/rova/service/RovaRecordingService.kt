@@ -816,51 +816,50 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     RovaLog.w("startPeriodicRecording: SurfaceProvider timeout — proceeding headlessly")
                 }
 
-                // Re-setup camera only if resolution changed or camera isn't active
-                if (configuredResolution != resolutionStr || !_serviceState.value.isCameraActive) {
-                    RovaLog.d("startPeriodicRecording: Reconfiguring camera (configured=$configuredResolution, requested=$resolutionStr)")
-                    forceReconfigureCamera()
-                } else {
-                    RovaLog.d("startPeriodicRecording: Camera already configured for $resolutionStr, reusing")
-                }
+                // Beta-smoke fix: unconditional rebind on every record-start.
+                // Pre-fix the path skipped reconfigure when configuredResolution
+                // matched and isCameraActive was true, then relied on a
+                // boundToDummy-conditional follow-up rebind to recover the
+                // cold-launch race where the first setupCamera bound the DUMMY
+                // surface before the UI's SurfaceProvider had committed. That
+                // follow-up only fired when boundToDummy was true; on devices
+                // where the DUMMY→UI hot-swap left PreviewView black without
+                // updating boundToDummy, the user saw a black preview through
+                // the entire first session.
+                //
+                // Record-start is the deterministic point at which the UI is
+                // on screen and the user expects fresh frames — make every
+                // start go through forceReconfigureCamera so the live binding
+                // is guaranteed to be a fresh Preview attached to the current
+                // SurfaceProvider (UI when present, DUMMY for headless). The
+                // ~1 s reconfigure cost is absorbed by the existing 2.5 s
+                // post-stabilize delay below.
+                //
+                // Headless / background launches still work: setupCamera reads
+                // currentSurfaceProvider == null, falls back to the DUMMY
+                // surface, and the recording loop proceeds. flipCamera is
+                // unaffected — it owns its own forceReconfigureCamera path.
+                RovaLog.d(
+                    "startPeriodicRecording: forcing camera reconfigure on start" +
+                        " (configured=$configuredResolution, requested=$resolutionStr," +
+                        " surface=${if (currentSurfaceProvider != null) "UI" else "DUMMY"})"
+                )
+                forceReconfigureCamera()
 
-                // Wait for camera to be fully active before recording
+                // Wait for camera to be fully active before recording.
+                // ADR 0006 row 7 (B-fix-1) — post-manifest camera-bind /
+                // camera-ready failure: manifest exists. MUST write
+                // USER_STOPPED + INIT_FAILED.
                 val cameraReady = withTimeoutOrNull(5000) {
                     while (!_serviceState.value.isCameraActive) {
                         delay(100)
                     }
                 }
                 if (cameraReady == null) {
-                    // ADR 0006 row 7 (B-fix-1) — post-manifest camera-bind /
-                    // camera-ready failure: manifest exists. MUST write
-                    // USER_STOPPED + INIT_FAILED.
                     RovaLog.e("startPeriodicRecording: Camera failed to activate within 5s — aborting")
                     updateNotification("Camera failed to start. Please restart recording.")
                     markInitFailedAndStop(manifest.sessionId, "camera-ready-timeout")
                     return@launch
-                }
-
-                // Smoke-test fix: if the live binding is DUMMY but a UI
-                // SurfaceProvider has since arrived (grace window in
-                // startCameraPreview expired before the UI attached, or
-                // the user tapped START before the swap could re-cycle a
-                // SurfaceRequest), force a fresh rebind here. This runs
-                // BEFORE recordSegment, so VideoCapture is never torn down
-                // mid-segment. Headless launches (currentSurfaceProvider
-                // still null after the 3 s surfaceProviderReady await)
-                // skip this branch and proceed with DUMMY.
-                if (boundToDummy && currentSurfaceProvider != null) {
-                    RovaLog.d("startPeriodicRecording: live binding=DUMMY but UI provider available; rebinding for first-frame readiness")
-                    forceReconfigureCamera()
-                    val rebindReady = withTimeoutOrNull(5000) {
-                        while (!_serviceState.value.isCameraActive) { delay(100) }
-                    }
-                    if (rebindReady == null) {
-                        RovaLog.e("startPeriodicRecording: rebind to UI surface timed out — aborting")
-                        updateNotification("Camera failed to start. Please restart recording.")
-                        markInitFailedAndStop(manifest.sessionId, "ui-rebind-timeout")
-                        return@launch
-                    }
                 }
 
                 // Let CameraX pipeline fully stabilize (encoder init, frame production)
