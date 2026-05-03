@@ -199,7 +199,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
                                 leadingContent = { androidx.compose.material3.Icon(Icons.Default.PrivacyTip, null) },
                                 modifier = Modifier.clickable {
                                     context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://aritr.com/rova/privacy"))
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://aritr-codes.github.io/rova-privacy/"))
                                     )
                                 }
                             )
