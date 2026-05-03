@@ -431,6 +431,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         private const val WAKE_DRIFT_BUDGET_MS = 60_000L
         private const val WAKE_REARM_OFFSET_MS = 5_000L
 
+        // beepStart playback await + acoustic tail margin. See beepStart()
+        // KDoc for rationale.
+        private const val BEEP_PLAYBACK_TIMEOUT_MS = 1_500L
+        private const val BEEP_TAIL_MARGIN_MS = 150L
+
         /**
          * Phase 1.4 (ADR 0006 B6/B12). Per-segment storage-gate headroom
          * above the segment-bytes estimate. Covers MediaMuxer trailer
@@ -880,9 +885,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     var lastResult: SegmentResult = SegmentResult.RetryableFailure
                     retry@ for (attempt in 1..3) {
                         _serviceState.update { it.copy(isRecording = true, recordingError = null) }
-                        beep() // Q3: beep on recording start
+                        beepStart(mMinutes.toInt()) // Q3: beep on recording start
                         lastResult = recordSegment()
-                        beep() // Q3: beep on recording stop
+                        beepEnd(mMinutes.toInt()) // Q3: beep on recording stop
                         _serviceState.update { it.copy(isRecording = false) }
 
                         when (lastResult) {
@@ -2082,21 +2087,66 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     // Q3: short beep on recording start/stop using rova_beep.mp3.
-    // Beta-smoke fix: also suppressed for VIDEO_AUDIO sessions so the
-    // speaker tail does not bleed into the active recorder. See
-    // com.aritr.rova.service.audio.shouldPlayBeep for the policy.
-    private fun beep() {
+    //
+    // Beta-smoke fix v2: bleed-prevention is now timing, not blanket
+    // suppression. `beepStart` suspends until the speaker has fully
+    // decayed before returning, so the next call (recordSegment) does
+    // not open the mic on top of a still-radiating tone. `beepEnd` is
+    // fire-and-forget — the mic is OFF when it runs, so no capture
+    // path exists. For interval == 0 (continuous), the policy
+    // suppresses both ends entirely because there is no natural gap
+    // to hide a synchronous-await playback inside.
+    //
+    // Constants:
+    // - BEEP_PLAYBACK_TIMEOUT_MS: defensive ceiling on the await.
+    //   `rova_beep.mp3` is ~300 ms; any device that exceeds 1.5 s is
+    //   broken in a way no amount of waiting will fix.
+    // - BEEP_TAIL_MARGIN_MS: acoustic decay buffer past
+    //   onCompletion. CameraX recorder.start() is the next thing to
+    //   run; this margin keeps mic-open strictly after speaker-quiet.
+    private suspend fun beepStart(intervalMinutes: Int) {
         if (!com.aritr.rova.service.audio.shouldPlayBeep(
                 enableBeeps = RovaSettings(this).enableBeeps,
-                audioMode = currentAudioMode
+                audioMode = currentAudioMode,
+                intervalMinutes = intervalMinutes
+            )
+        ) return
+        val mp = try {
+            MediaPlayer.create(this, R.raw.rova_beep) ?: return
+        } catch (e: Exception) {
+            RovaLog.w("beepStart: create failed", e)
+            return
+        }
+        val done = CompletableDeferred<Unit>()
+        mp.setOnCompletionListener {
+            try { it.release() } catch (_: Throwable) {}
+            done.complete(Unit)
+        }
+        try {
+            mp.start()
+            withTimeoutOrNull(BEEP_PLAYBACK_TIMEOUT_MS) { done.await() }
+            delay(BEEP_TAIL_MARGIN_MS)
+        } catch (e: Exception) {
+            RovaLog.w("beepStart: playback failed", e)
+            try { mp.release() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun beepEnd(intervalMinutes: Int) {
+        if (!com.aritr.rova.service.audio.shouldPlayBeep(
+                enableBeeps = RovaSettings(this).enableBeeps,
+                audioMode = currentAudioMode,
+                intervalMinutes = intervalMinutes
             )
         ) return
         try {
             val mp = MediaPlayer.create(this, R.raw.rova_beep) ?: return
-            mp.setOnCompletionListener { it.release() }
+            mp.setOnCompletionListener {
+                try { it.release() } catch (_: Throwable) {}
+            }
             mp.start()
         } catch (e: Exception) {
-            RovaLog.w("beep: Failed to play sound", e)
+            RovaLog.w("beepEnd: failed", e)
         }
     }
 
