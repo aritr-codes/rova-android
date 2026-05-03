@@ -1,8 +1,10 @@
 package com.aritr.rova.ui.screens
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -203,15 +205,37 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                         },
                         actions = {
                             IconButton(onClick = {
-                                val uris = ArrayList(selectedFiles.map {
-                                    FileProvider.getUriForFile(context, "${context.packageName}.provider", it)
-                                })
+                                val itemsByFile = items.associateBy { it.file }
+                                val uris = ArrayList<Uri>(selectedFiles.size)
+                                var anyMissing = false
+                                selectedFiles.forEach { file ->
+                                    val item = itemsByFile[file]
+                                    val uri = item?.let { safeShareUri(context, it) }
+                                    if (uri != null) uris.add(uri) else anyMissing = true
+                                }
+                                if (uris.isEmpty()) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Recording not ready to share yet")
+                                    }
+                                    return@IconButton
+                                }
+                                if (anyMissing) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Recording not ready to share yet")
+                                    }
+                                }
                                 val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                                     type = "video/mp4"
                                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Share videos"))
+                                try {
+                                    context.startActivity(Intent.createChooser(intent, "Share videos"))
+                                } catch (_: ActivityNotFoundException) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("No app available to share videos")
+                                    }
+                                }
                             }) {
                                 Icon(Icons.Default.Share, "Share")
                             }
@@ -566,6 +590,28 @@ private fun SummaryBadge(text: String) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
+    }
+}
+
+/**
+ * Resolves a share-safe URI for a History item. Prefers the
+ * MediaStore content URI plumbed via [VideoItem.shareUri] (the canonical
+ * form for files under public Movies on every export tier). Falls back
+ * to [FileProvider] for legacy app-private artifacts whose path is
+ * covered by `res/xml/file_paths.xml`.
+ *
+ * The FileProvider call is wrapped in `try/catch IllegalArgumentException`
+ * because Phase 1.7 finalized exports live under `Movies/Rova/...` —
+ * outside any declared FileProvider root. A missing-or-not-yet-indexed
+ * MediaStore row would otherwise crash the share button. Callers must
+ * treat `null` as "not ready to share."
+ */
+private fun safeShareUri(context: Context, item: VideoItem): Uri? {
+    item.shareUri?.let { return it }
+    return try {
+        FileProvider.getUriForFile(context, "${context.packageName}.provider", item.file)
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 

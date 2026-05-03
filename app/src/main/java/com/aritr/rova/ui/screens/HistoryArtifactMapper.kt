@@ -63,4 +63,23 @@ internal object HistoryArtifactMapper {
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
             manifest.publicTargetPath?.let { File(it) }
     }
+
+    /**
+     * Tier dispatch for the share URI surfaced via Android's share sheet.
+     * Tier 1 always carries a canonical `MediaStore` content URI in
+     * `manifest.pendingUri` — that is the safe form for sharing because
+     * the file lives under `Movies/Rova/...` (not the FileProvider root)
+     * and `FileProvider.getUriForFile` would throw
+     * `IllegalArgumentException`.
+     *
+     * Tier 2/3 manifests do not persist a content URI — only a public
+     * file path (`Movies/Rova/<displayName>.mp4`). The caller resolves
+     * a content URI by querying `MediaStore` for the row whose `_DATA`
+     * column matches that path; that lookup needs a `ContentResolver`,
+     * which keeps it out of this pure transformer.
+     */
+    fun resolveShareUri(manifest: SessionManifest): String? = when (manifest.exportTier) {
+        ExportTier.TIER1_API29_PLUS -> manifest.pendingUri
+        ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> null
+    }
 }

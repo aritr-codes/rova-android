@@ -2,6 +2,7 @@ package com.aritr.rova.ui.screens
 
 import android.app.Application
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
@@ -21,7 +22,20 @@ import java.io.File
 data class VideoItem(
     val file: File,
     val thumbnail: Bitmap?,
-    val resolution: String
+    val resolution: String,
+    /**
+     * Canonical share URI for this artifact. Non-null for files surfaced
+     * via `MediaStore` (Tier 1: from `manifest.pendingUri`; Tier 2/3:
+     * looked up by `_DATA` path). Null for legacy app-private files
+     * still carried by [legacyFileSystemScan] — those share via
+     * [androidx.core.content.FileProvider] using the
+     * `external-files-path` root declared in `res/xml/file_paths.xml`.
+     *
+     * The History share button MUST prefer this URI when present and
+     * MUST guard the FileProvider fallback against
+     * `IllegalArgumentException` (see [HistoryScreen]).
+     */
+    val shareUri: Uri? = null
 )
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,53 +75,81 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val legacyArtifacts = legacyFileSystemScan(app)
+                .map { ResolvedRecording(file = it, shareUri = null) }
 
             // Union manifest-driven + legacy, de-dupe by absolute path,
-            // sort newest-first by mtime.
+            // sort newest-first by mtime. Manifest-driven entries come
+            // first so a duplicate path keeps the URI-bearing record
+            // rather than the legacy null-URI one.
             val seen = HashSet<String>()
-            val files = (manifestArtifacts + legacyArtifacts)
-                .filter { seen.add(it.absolutePath) }
-                .sortedByDescending { it.lastModified() }
+            val recordings = (manifestArtifacts + legacyArtifacts)
+                .filter { seen.add(it.file.absolutePath) }
+                .sortedByDescending { it.file.lastModified() }
 
-            val newItems = files.map { file ->
-                val path = file.absolutePath
+            val newItems = recordings.map { rec ->
+                val path = rec.file.absolutePath
                 val cached = metadataCache[path]
                 if (cached != null) {
-                    VideoItem(file = file, thumbnail = cached.first, resolution = cached.second)
+                    VideoItem(
+                        file = rec.file,
+                        thumbnail = cached.first,
+                        resolution = cached.second,
+                        shareUri = rec.shareUri
+                    )
                 } else {
                     val thumb = VideoMetadataUtils.getThumbnail(path)
                     val res = VideoMetadataUtils.getResolutionLabel(path)
                     metadataCache[path] = Pair(thumb, res)
-                    VideoItem(file = file, thumbnail = thumb, resolution = res)
+                    VideoItem(
+                        file = rec.file,
+                        thumbnail = thumb,
+                        resolution = res,
+                        shareUri = rec.shareUri
+                    )
                 }
             }
 
             // Clean stale entries for deleted files
-            val currentPaths = files.map { it.absolutePath }.toSet()
+            val currentPaths = recordings.map { it.file.absolutePath }.toSet()
             metadataCache.keys.retainAll(currentPaths)
 
             _items.value = newItems
         }
     }
 
+    private data class ResolvedRecording(val file: File, val shareUri: Uri?)
+
     private fun manifestDrivenArtifacts(
         sessionStore: SessionStore,
         resolver: ContentResolver
-    ): List<File> {
+    ): List<ResolvedRecording> {
         val manifests: List<SessionManifest> = sessionStore.listSessionIds()
             .mapNotNull { sid ->
                 runCatching { sessionStore.loadManifest(sid) }.getOrNull()
             }
         return HistoryArtifactMapper.finalizedManifests(manifests)
             .mapNotNull { m ->
-                HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
+                val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
                     resolveMediaStoreUriToFile(resolver, uri)
-                }
+                } ?: return@mapNotNull null
+                // Tier 1 ships the canonical content URI in the manifest;
+                // Tier 2/3 only persist the path, so look the URI up by
+                // `_DATA` against MediaStore. A null result means the
+                // scan never registered (rare — recording not yet
+                // indexed); the share path then falls back to
+                // FileProvider, which the UI guards against
+                // IllegalArgumentException.
+                val shareUriString = HistoryArtifactMapper.resolveShareUri(m)
+                    ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
+                ResolvedRecording(
+                    file = file,
+                    shareUri = shareUriString?.let(Uri::parse)
+                )
             }
-            .filter { f ->
+            .filter { rec ->
                 // Drop entries whose artifact is no longer on disk —
                 // user may have deleted the gallery entry externally.
-                runCatching { f.exists() && f.length() > 0L }.getOrDefault(false)
+                runCatching { rec.file.exists() && rec.file.length() > 0L }.getOrDefault(false)
             }
     }
 
@@ -134,6 +176,46 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 else -> emptyList()
             }
         } ?: emptyList()
+    }
+
+    /**
+     * Reverse of [resolveMediaStoreUriToFile]. Looks up a `MediaStore`
+     * content URI for a file the app finalized to public Movies, by
+     * matching its on-disk path against the deprecated `_DATA` column.
+     * Used by Tier 2/3 (manifest carries only `publicTargetPath`, not
+     * a content URI) to surface a safe share URI.
+     *
+     * `_DATA` is deprecated for writes on API 29+ but reads remain
+     * functional for entries owned by this app, which is what the
+     * post-merge `MediaScannerConnection` registers. Returns `null`
+     * if the row is absent (scan not yet completed, gallery entry
+     * deleted) or the column read fails — the caller treats `null`
+     * as "no MediaStore URI; fall back to FileProvider."
+     */
+    private fun queryMediaStoreUriByPath(resolver: ContentResolver, path: String): String? {
+        return try {
+            @Suppress("DEPRECATION")
+            resolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Video.Media._ID),
+                "${MediaStore.Video.Media.DATA} = ?",
+                arrayOf(path),
+                null
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    val id = c.getLong(0)
+                    ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    ).toString()
+                } else {
+                    null
+                }
+            }
+        } catch (t: Throwable) {
+            RovaLog.w("HistoryViewModel: MediaStore _DATA-by-path lookup failed for $path", t)
+            null
+        }
     }
 
     /**

@@ -163,6 +163,44 @@ class HistoryArtifactMapperTest {
         assertNull(resolved)
     }
 
+    // ─── resolveShareUri ───────────────────────────────────────────
+
+    @Test
+    fun `Tier 1 share URI passes through pendingUri`() {
+        val m = manifest(
+            "t1s", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS,
+            pendingUri = "content://media/external/video/media/77"
+        )
+        assertEquals("content://media/external/video/media/77", HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    @Test
+    fun `Tier 1 share URI is null when pendingUri is null`() {
+        val m = manifest("t1sn", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS, pendingUri = null)
+        assertNull(HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    @Test
+    fun `Tier 2 share URI is null at mapper layer`() {
+        // Tier 2/3 manifests persist only `publicTargetPath`; the share
+        // URI must be looked up by `_DATA` against MediaStore, which is
+        // a ContentResolver concern and lives in the ViewModel.
+        val m = manifest(
+            "t2s", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
+            publicTargetPath = "/storage/Movies/Rova/Rova_t2s.mp4"
+        )
+        assertNull(HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    @Test
+    fun `Tier 3 share URI is null at mapper layer`() {
+        val m = manifest(
+            "t3s", ExportState.FINALIZED, ExportTier.TIER3_API24_25,
+            publicTargetPath = "/storage/Movies/Rova/Rova_t3s.mp4"
+        )
+        assertNull(HistoryArtifactMapper.resolveShareUri(m))
+    }
+
     // ─── End-to-end (filter + tier dispatch) ───────────────────────
 
     @Test
