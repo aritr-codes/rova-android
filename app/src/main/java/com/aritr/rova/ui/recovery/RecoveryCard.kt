@@ -12,7 +12,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -21,22 +20,23 @@ import androidx.compose.ui.unit.dp
  * Phase 2 Slice 2.1a — Compose surface for a single recovery card.
  *
  * Pure-presentation: takes a [RecoveryCardState] (built by
- * [RecoveryUiStateMapper]) plus pass-in callbacks. No `RovaApp`
- * reference, no `SessionStore` coupling, no real Merge/Discard
- * behavior — wiring is the consumer's responsibility (Slice 2.1b
- * once the `MainScreen.kt` worktree drift is reconciled).
+ * [RecoveryUiStateMapper]) plus a Discard callback. No `RovaApp`
+ * reference, no `SessionStore` coupling.
+ *
+ * Internal beta correction (smoke 2026-05-03): the Merge button is
+ * removed for beta — no service-side merge API exists yet and the
+ * placeholder snackbar made the UI feel incomplete. Discard is wired
+ * for real via the wiring layer. The card now exposes only the
+ * Discard affordance.
  *
  * `vendorHelpSlot` is rendered only when the underlying state has
  * `showVendorHelpSlot == true` (currently only
  * [RecoveryCardKind.KILLED_BY_SYSTEM]) AND the consumer supplies a
- * non-null slot. Slice 2.2 will fill the slot with the vendor-intent
- * helper; until then, `null` is the correct default and the card
- * silently omits the slot.
+ * non-null slot.
  */
 @Composable
 fun RecoveryCard(
     state: RecoveryCardState,
-    onMerge: () -> Unit,
     onDiscard: () -> Unit,
     modifier: Modifier = Modifier,
     vendorHelpSlot: (@Composable () -> Unit)? = null
@@ -85,15 +85,8 @@ fun RecoveryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = onDiscard) {
+                OutlinedButton(onClick = onDiscard) {
                     Text(state.discardLabel)
-                }
-                Spacer(Modifier.height(0.dp))
-                OutlinedButton(
-                    onClick = onMerge,
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
-                    Text(state.mergeLabel)
                 }
             }
         }
@@ -101,34 +94,43 @@ fun RecoveryCard(
 }
 
 /**
- * Renders every card in [state] as a vertical column. Empty
- * [RecoveryUiState.cards] renders nothing — the consumer can place
- * this composable unconditionally.
+ * Renders the (at most one) recovery card from [state] plus a small
+ * footer line when [RecoveryUiState.hiddenCount] > 0 so the user
+ * sees that older interrupted sessions exist without a stacking red
+ * wall. Empty [RecoveryUiState.cards] renders nothing — the consumer
+ * can place this composable unconditionally.
  *
- * `onMerge` / `onDiscard` receive the `sessionId` so the wiring
- * layer can route to the per-session merge or discard path.
+ * `onDiscard` receives the visible card's `sessionId` so the wiring
+ * layer can route to `RecoveryViewModel.dismiss(sessionId)`.
  *
- * `vendorHelpSlotFor` is invoked per card with the card's
- * `sessionId`; consumers that don't have a vendor helper yet can
- * pass `{ _ -> null }` (or omit; the default is `null`).
+ * `vendorHelpSlotFor` is invoked with the visible card's `sessionId`;
+ * consumers without a vendor helper pass `{ _ -> null }` (or omit;
+ * the default is `null`).
  */
 @Composable
 fun RecoveryCardList(
     state: RecoveryUiState,
-    onMerge: (sessionId: String) -> Unit,
     onDiscard: (sessionId: String) -> Unit,
     modifier: Modifier = Modifier,
     vendorHelpSlotFor: (sessionId: String) -> (@Composable () -> Unit)? = { null }
 ) {
-    if (state.cards.isEmpty()) return
+    if (state.cards.isEmpty() && state.hiddenCount == 0) return
     Column(modifier = modifier.fillMaxWidth()) {
         state.cards.forEachIndexed { index, card ->
             if (index > 0) Spacer(Modifier.height(12.dp))
             RecoveryCard(
                 state = card,
-                onMerge = { onMerge(card.sessionId) },
                 onDiscard = { onDiscard(card.sessionId) },
                 vendorHelpSlot = vendorHelpSlotFor(card.sessionId)
+            )
+        }
+        if (state.hiddenCount > 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "+${state.hiddenCount} older interrupted sessions",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }

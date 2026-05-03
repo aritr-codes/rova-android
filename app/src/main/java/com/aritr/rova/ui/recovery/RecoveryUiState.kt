@@ -8,22 +8,22 @@ import com.aritr.rova.service.recovery.SessionClassification
 
 /**
  * Phase 2 Slice 2.0.5 — pure data view of the Phase 1.5 recovery report,
- * shaped for the four-state recovery UI specified in ROADMAP_v3
- * §"C19 — Recovery UI distinguishes terminator states" and carried
- * unchanged through v4/v5/v6.
+ * shaped for the recovery UI specified in ROADMAP_v3 §"C19 — Recovery UI
+ * distinguishes terminator states" and carried unchanged through
+ * v4/v5/v6.
+ *
+ * Internal beta correction (smoke 2026-05-03): the History screen used
+ * to render every eligible card stacked in a vertical column, with
+ * placeholder Merge / Discard affordances. Beta accumulated red walls
+ * of cards. The mapper now emits at most one card — the newest by
+ * `manifest.terminatedAt` (fallback `startedAt`) — and exposes a
+ * `hiddenCount` so the UI can render a small footer for the rest. The
+ * Merge label is removed entirely; the only real action wired for beta
+ * is Discard, which is grounded in
+ * [com.aritr.rova.data.SessionStore.discardSession].
  *
  * This module is callback-free, Compose-free, and has zero `RovaApp`
- * or `Context` dependencies. The 2.1 wiring layer adds the Compose
- * surface and the Merge/Discard handlers. The 2.2 slice fills the
- * `showVendorHelpSlot` rendering with the vendor-intent helper.
- *
- * Why the input is `(SessionManifest, SessionClassification)` and not
- * `RecoveryReport` alone: the scanner-side
- * [com.aritr.rova.service.recovery.TerminalAction] collapses
- * [Terminated.KILLED_BY_SYSTEM] (RovaTickReceiver-owned) into
- * `ALREADY_TERMINAL`, so it cannot drive the four-state branching.
- * The persisted manifest's [Terminated] value is the only authoritative
- * source.
+ * or `Context` dependencies.
  */
 
 /**
@@ -45,35 +45,39 @@ enum class RecoveryCardKind {
 }
 
 /**
- * Per-session recovery card. Strings are presentation copy; the 2.1
- * wiring layer reads them as-is.
+ * Per-session recovery card. Strings are presentation copy; the wiring
+ * layer reads them as-is. Beta exposes only the Discard action — the
+ * Merge label is removed because no service-side merge API exists yet.
  *
  * `showVendorHelpSlot` is true only for [RecoveryCardKind.KILLED_BY_SYSTEM];
- * the wiring layer renders the vendor-guidance link in that slot once
- * Slice 2.2 lands. The flag is exposed here (rather than derived in the
- * UI) so the mapping stays the single source of truth for which cards
- * carry vendor guidance.
+ * the wiring layer renders the vendor-guidance link in that slot.
  */
 data class RecoveryCardState(
     val sessionId: String,
     val kind: RecoveryCardKind,
     val title: String,
     val body: String,
-    val mergeLabel: String,
     val discardLabel: String,
     val showVendorHelpSlot: Boolean,
     val survivingArtifacts: List<String>
 )
 
 /**
- * Aggregate UI state. Card order matches input order so the wiring
- * layer can pin Compose keys by `sessionId` without reordering.
+ * Aggregate UI state.
+ *
+ * `cards` is bounded to at most one entry — the newest interrupted
+ * session. Older eligible interrupted sessions are counted in
+ * [hiddenCount] so the UI can surface a single footer line ("+N older
+ * interrupted sessions") instead of stacking unbounded red cards.
+ * After the user discards the visible card, the next-newest takes
+ * its place on the next state emission.
  */
 data class RecoveryUiState(
-    val cards: List<RecoveryCardState>
+    val cards: List<RecoveryCardState>,
+    val hiddenCount: Int = 0
 ) {
     companion object {
-        val Empty = RecoveryUiState(cards = emptyList())
+        val Empty = RecoveryUiState(cards = emptyList(), hiddenCount = 0)
     }
 }
 
@@ -90,16 +94,47 @@ data class RecoveryUiState(
  *  - `eligibility == AUTO_DISCARD_ELIGIBLE` — Phase 1.7 cleanup
  *    territory; not surfaced as user recovery in 2.0.5 scope.
  *
- * Render rule (card emitted):
+ * Render rule:
  *  - `eligibility == OFFER_DISCARD` AND
  *    `manifest.terminated ∈ {USER_STOPPED, KILLED_BY_SYSTEM, KILLED_FORCE_STOP}`.
+ *
+ * Among renderable views the mapper sorts newest-first by
+ * `manifest.terminatedAt` (fallback `manifest.startedAt`) and emits
+ * the single freshest card; the rest are counted in
+ * [RecoveryUiState.hiddenCount].
  */
 object RecoveryUiStateMapper {
 
     fun map(views: List<RecoverySessionView>): RecoveryUiState {
-        val cards = views.mapNotNull { toCard(it) }
-        return RecoveryUiState(cards = cards)
+        val eligible = views.filter { isEligible(it) }
+        if (eligible.isEmpty()) return RecoveryUiState.Empty
+        val sorted = eligible.sortedByDescending { recencyKey(it) }
+        val visible = sorted.firstOrNull()?.let { toCard(it) }
+            ?: return RecoveryUiState.Empty
+        return RecoveryUiState(
+            cards = listOf(visible),
+            hiddenCount = sorted.size - 1
+        )
     }
+
+    private fun isEligible(view: RecoverySessionView): Boolean {
+        val terminated = view.manifest.terminated ?: return false
+        if (terminated == Terminated.COMPLETED) return false
+        if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return false
+        return true
+    }
+
+    /**
+     * Recency anchor for the newest-first sort.
+     * `terminatedAt` is the canonical signal — written by `markTerminated`
+     * the moment the session ended. `startedAt` is the documented
+     * fallback for the rare cross-process race where a manifest exists
+     * with a non-null `terminated` but no `terminatedAt` (legacy schema
+     * pre-Phase 1.4). Stable enough for ordering; ties resolve via
+     * `sortedByDescending` (TimSort) stability.
+     */
+    private fun recencyKey(view: RecoverySessionView): Long =
+        view.manifest.terminatedAt ?: view.manifest.startedAt
 
     private fun toCard(view: RecoverySessionView): RecoveryCardState? {
         val terminated = view.manifest.terminated ?: return null
@@ -118,7 +153,6 @@ object RecoveryUiStateMapper {
             kind = kind,
             title = titleFor(kind),
             body = bodyFor(kind),
-            mergeLabel = MERGE_LABEL,
             discardLabel = DISCARD_LABEL,
             showVendorHelpSlot = (kind == RecoveryCardKind.KILLED_BY_SYSTEM),
             survivingArtifacts = summarize(view.classification)
@@ -134,13 +168,13 @@ object RecoveryUiStateMapper {
     private fun bodyFor(kind: RecoveryCardKind): String = when (kind) {
         RecoveryCardKind.USER_STOPPED ->
             "Your last session ended before merging. " +
-                "Choose to merge what was recorded or discard."
+                "Discard to remove the recovered files."
         RecoveryCardKind.KILLED_BY_SYSTEM ->
             "Your device's battery management stopped the recording before it could merge. " +
-                "Choose to merge what was recorded or discard."
+                "Discard to remove the recovered files."
         RecoveryCardKind.KILLED_FORCE_STOP ->
             "The app was force-stopped before the last session could merge. " +
-                "Choose to merge what was recorded or discard."
+                "Discard to remove the recovered files."
     }
 
     private fun summarize(c: SessionClassification): List<String> {
@@ -169,6 +203,5 @@ object RecoveryUiStateMapper {
         return out
     }
 
-    private const val MERGE_LABEL = "Merge what was recorded"
     private const val DISCARD_LABEL = "Discard"
 }

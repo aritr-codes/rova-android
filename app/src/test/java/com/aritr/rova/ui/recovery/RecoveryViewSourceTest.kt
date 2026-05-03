@@ -18,16 +18,26 @@ import org.junit.Test
  * RecoveryUiState adapter. No Compose, no Android, no SessionStore —
  * the `loadManifest` lookup is a function parameter so the adapter is
  * fully unit-testable on the JVM.
+ *
+ * Internal beta correction: the adapter now takes an optional
+ * `dismissedIds` set so the [RecoveryViewModel] can hide a discarded
+ * card immediately without waiting for the next disk scan.
  */
 class RecoveryViewSourceTest {
 
-    private fun manifest(sessionId: String, terminated: Terminated?) = SessionManifest(
+    private fun manifest(
+        sessionId: String,
+        terminated: Terminated?,
+        terminatedAt: Long? = null,
+        startedAt: Long = 0L
+    ) = SessionManifest(
         sessionId = sessionId,
-        startedAt = 0L,
+        startedAt = startedAt,
         config = SessionConfig(30, 5, "FHD", 4),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
-        terminated = terminated
+        terminated = terminated,
+        terminatedAt = terminatedAt
     )
 
     private fun classification(
@@ -74,33 +84,36 @@ class RecoveryViewSourceTest {
             report = report(classification("missing"))
         ) { _ -> null }
         assertTrue(ui.cards.isEmpty())
+        assertEquals(0, ui.hiddenCount)
     }
 
     @Test
-    fun `manifest present routes through the 2_0_5 mapper`() {
+    fun `manifest present routes through the mapper`() {
         val sid = "s-user"
         val ui = RecoveryViewSource.buildUiState(
             report = report(classification(sid))
         ) { id ->
-            if (id == sid) manifest(sid, Terminated.USER_STOPPED) else null
+            if (id == sid) manifest(sid, Terminated.USER_STOPPED, terminatedAt = 100L) else null
         }
         assertEquals(1, ui.cards.size)
         assertEquals(sid, ui.cards.single().sessionId)
         assertEquals(RecoveryCardKind.USER_STOPPED, ui.cards.single().kind)
+        assertEquals(0, ui.hiddenCount)
     }
 
     @Test
-    fun `mixed manifests - missing dropped while present render`() {
+    fun `mixed manifests - newest renders, missing dropped`() {
         val present = "s-present"
         val missing = "s-missing"
         val ui = RecoveryViewSource.buildUiState(
             report = report(classification(present), classification(missing))
         ) { id ->
-            if (id == present) manifest(present, Terminated.KILLED_BY_SYSTEM) else null
+            if (id == present) manifest(present, Terminated.KILLED_BY_SYSTEM, terminatedAt = 100L) else null
         }
         assertEquals(listOf(present), ui.cards.map { it.sessionId })
         assertEquals(RecoveryCardKind.KILLED_BY_SYSTEM, ui.cards.single().kind)
         assertTrue(ui.cards.single().showVendorHelpSlot)
+        assertEquals(0, ui.hiddenCount)
     }
 
     @Test
@@ -128,7 +141,7 @@ class RecoveryViewSourceTest {
     @Test
     fun `COMPLETED terminator hides even when classification offers discard`() {
         // Stale OFFER_DISCARD on a finalized session must never raise
-        // a recovery card — the 2.0.5 mapper enforces this and the
+        // a recovery card — the mapper enforces this and the
         // adapter must propagate it unchanged.
         val sid = "s-done"
         val ui = RecoveryViewSource.buildUiState(
@@ -140,7 +153,7 @@ class RecoveryViewSourceTest {
     }
 
     @Test
-    fun `iteration order follows classifications map order`() {
+    fun `newest by terminatedAt wins regardless of classification map order`() {
         val ui = RecoveryViewSource.buildUiState(
             report = report(
                 classification("first"),
@@ -149,13 +162,66 @@ class RecoveryViewSourceTest {
             )
         ) { id ->
             when (id) {
-                "first" -> manifest(id, Terminated.USER_STOPPED)
-                "second" -> manifest(id, Terminated.KILLED_BY_SYSTEM)
-                "third" -> manifest(id, Terminated.KILLED_FORCE_STOP)
+                "first" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                "second" -> manifest(id, Terminated.KILLED_BY_SYSTEM, terminatedAt = 300L)
+                "third" -> manifest(id, Terminated.KILLED_FORCE_STOP, terminatedAt = 200L)
                 else -> null
             }
         }
-        assertEquals(listOf("first", "second", "third"), ui.cards.map { it.sessionId })
+        assertEquals(listOf("second"), ui.cards.map { it.sessionId })
+        assertEquals(2, ui.hiddenCount)
+    }
+
+    // ─── dismissedIds ─────────────────────────────────────────────
+
+    @Test
+    fun `dismissedIds excludes matching sessions before manifest lookup`() {
+        var loadCount = 0
+        val ui = RecoveryViewSource.buildUiState(
+            report = report(classification("a"), classification("b")),
+            dismissedIds = setOf("a")
+        ) { id ->
+            loadCount++
+            when (id) {
+                "b" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                else -> null
+            }
+        }
+        assertEquals(listOf("b"), ui.cards.map { it.sessionId })
+        assertEquals(0, ui.hiddenCount)
+        // Only "b" was looked up; "a" was filtered before manifest IO.
+        assertEquals(1, loadCount)
+    }
+
+    @Test
+    fun `dismissedIds filtering can collapse to Empty`() {
+        val ui = RecoveryViewSource.buildUiState(
+            report = report(classification("a")),
+            dismissedIds = setOf("a")
+        ) { _ -> manifest("a", Terminated.USER_STOPPED, terminatedAt = 100L) }
+        assertTrue(ui.cards.isEmpty())
+        assertEquals(0, ui.hiddenCount)
+    }
+
+    @Test
+    fun `dismissedIds reduces hiddenCount when newest is hidden`() {
+        val ui = RecoveryViewSource.buildUiState(
+            report = report(
+                classification("newest"),
+                classification("middle"),
+                classification("oldest")
+            ),
+            dismissedIds = setOf("newest")
+        ) { id ->
+            when (id) {
+                "middle" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 200L)
+                "oldest" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                else -> null
+            }
+        }
+        // newest is dismissed; middle is the new visible card.
+        assertEquals(listOf("middle"), ui.cards.map { it.sessionId })
+        assertEquals(1, ui.hiddenCount)
     }
 
     // ─── buildViews ────────────────────────────────────────────────
@@ -201,7 +267,7 @@ class RecoveryViewSourceTest {
         // Phase 1.5 BLOCKED branch — but an inconsistent state where
         // classification says OFFER_DISCARD while the manifest says
         // terminated=null can happen across a scan/load race.
-        // The 2.0.5 mapper hides on terminated=null and we must
+        // The mapper hides on terminated=null and we must
         // preserve that even via the adapter.
         val sid = "s-race"
         val ui = RecoveryViewSource.buildUiState(
@@ -213,7 +279,7 @@ class RecoveryViewSourceTest {
     }
 
     @Test
-    fun `regression - vendor slot only true for KILLED_BY_SYSTEM`() {
+    fun `regression - vendor slot only true for KILLED_BY_SYSTEM visible card`() {
         val ids = listOf(
             Terminated.USER_STOPPED to false,
             Terminated.KILLED_BY_SYSTEM to true,
@@ -223,7 +289,7 @@ class RecoveryViewSourceTest {
             val sid = "s-${t.name}"
             val ui = RecoveryViewSource.buildUiState(
                 report = report(classification(sid))
-            ) { id -> if (id == sid) manifest(sid, t) else null }
+            ) { id -> if (id == sid) manifest(sid, t, terminatedAt = 100L) else null }
             val card = ui.cards.single()
             assertEquals("kind for $t", t.name, card.kind.name)
             if (expectVendor) {

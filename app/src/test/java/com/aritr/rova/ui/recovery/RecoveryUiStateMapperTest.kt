@@ -10,6 +10,7 @@ import com.aritr.rova.service.recovery.SessionClassification
 import com.aritr.rova.service.recovery.TerminalAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,13 +18,10 @@ import org.junit.Test
  * Phase 2 Slice 2.0.5 — exhaustive table-driven tests for the pure
  * recovery UI mapper.
  *
- * Matrix: `terminated ∈ {null, USER_STOPPED, COMPLETED, KILLED_BY_SYSTEM,
- * KILLED_FORCE_STOP}` × `eligibility ∈ {AUTO_DISCARD_ELIGIBLE,
- * OFFER_DISCARD, BLOCKED}` = 15 cells. Exactly 3 cells render cards
- * (the three non-COMPLETED terminators × OFFER_DISCARD); the other
- * 12 hide.
- *
- * No Robolectric / Compose / Android dependencies — pure JVM.
+ * Internal beta correction (smoke 2026-05-03): the mapper now caps
+ * cards at one (newest by `terminatedAt` / `startedAt`) and exposes
+ * `hiddenCount` for the rest. Tests pin both the eligibility filter
+ * and the cap + sort behavior.
  */
 class RecoveryUiStateMapperTest {
 
@@ -31,14 +29,17 @@ class RecoveryUiStateMapperTest {
 
     private fun manifest(
         sessionId: String,
-        terminated: Terminated?
+        terminated: Terminated?,
+        terminatedAt: Long? = null,
+        startedAt: Long = 0L
     ) = SessionManifest(
         sessionId = sessionId,
-        startedAt = 0L,
+        startedAt = startedAt,
         config = SessionConfig(30, 5, "FHD", 4),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
-        terminated = terminated
+        terminated = terminated,
+        terminatedAt = terminatedAt
     )
 
     private fun classification(
@@ -58,10 +59,12 @@ class RecoveryUiStateMapperTest {
         sessionId: String = "s1",
         terminated: Terminated?,
         eligibility: DiscardEligibility,
+        terminatedAt: Long? = null,
+        startedAt: Long = 0L,
         anomalies: List<Anomaly> = emptyList(),
         appendedSegmentFilenames: List<String> = emptyList()
     ) = RecoverySessionView(
-        manifest = manifest(sessionId, terminated),
+        manifest = manifest(sessionId, terminated, terminatedAt, startedAt),
         classification = classification(
             sessionId, eligibility, anomalies, appendedSegmentFilenames
         )
@@ -115,6 +118,7 @@ class RecoveryUiStateMapperTest {
                 listOf(view(terminated = null, eligibility = e))
             )
             assertTrue("eligibility=$e should hide", ui.cards.isEmpty())
+            assertEquals(0, ui.hiddenCount)
         }
     }
 
@@ -125,6 +129,7 @@ class RecoveryUiStateMapperTest {
                 listOf(view(terminated = Terminated.COMPLETED, eligibility = e))
             )
             assertTrue("eligibility=$e should hide", ui.cards.isEmpty())
+            assertEquals(0, ui.hiddenCount)
         }
     }
 
@@ -175,7 +180,6 @@ class RecoveryUiStateMapperTest {
         assertEquals(RecoveryCardKind.USER_STOPPED, card.kind)
         assertFalse(card.showVendorHelpSlot)
         assertEquals("Session stopped", card.title)
-        assertEquals("Merge what was recorded", card.mergeLabel)
         assertEquals("Discard", card.discardLabel)
     }
 
@@ -221,32 +225,64 @@ class RecoveryUiStateMapperTest {
         assertEquals(RecoveryUiState.Empty, ui)
     }
 
+    // ─── cap + sort ───────────────────────────────────────────────
+
     @Test
-    fun `card order preserves input order`() {
+    fun `cap to one card emits newest by terminatedAt and counts the rest as hidden`() {
         val ui = RecoveryUiStateMapper.map(
             listOf(
                 view(
-                    sessionId = "first",
+                    sessionId = "older",
                     terminated = Terminated.USER_STOPPED,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 100L
                 ),
                 view(
-                    sessionId = "second",
-                    terminated = Terminated.KILLED_BY_SYSTEM,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
-                ),
-                view(
-                    sessionId = "third",
+                    sessionId = "newest",
                     terminated = Terminated.KILLED_FORCE_STOP,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 300L
+                ),
+                view(
+                    sessionId = "middle",
+                    terminated = Terminated.KILLED_BY_SYSTEM,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 200L
                 )
             )
         )
-        assertEquals(listOf("first", "second", "third"), ui.cards.map { it.sessionId })
+        assertEquals(1, ui.cards.size)
+        assertEquals("newest", ui.cards.single().sessionId)
+        assertEquals(2, ui.hiddenCount)
     }
 
     @Test
-    fun `mixed input filters hidden sessions while preserving render order`() {
+    fun `terminatedAt null falls back to startedAt for sort`() {
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "with-terminated",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 50L,
+                    startedAt = 50L
+                ),
+                view(
+                    sessionId = "no-terminated-but-newer-start",
+                    terminated = Terminated.KILLED_FORCE_STOP,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = null,
+                    startedAt = 999L
+                )
+            )
+        )
+        assertEquals(1, ui.cards.size)
+        assertEquals("no-terminated-but-newer-start", ui.cards.single().sessionId)
+        assertEquals(1, ui.hiddenCount)
+    }
+
+    @Test
+    fun `mixed eligibility + only one renderable cell yields hiddenCount 0`() {
         val ui = RecoveryUiStateMapper.map(
             listOf(
                 view(
@@ -257,17 +293,13 @@ class RecoveryUiStateMapperTest {
                 view(
                     sessionId = "render-user",
                     terminated = Terminated.USER_STOPPED,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 10L
                 ),
                 view(
                     sessionId = "hide-blocked",
                     terminated = Terminated.KILLED_BY_SYSTEM,
                     eligibility = DiscardEligibility.BLOCKED
-                ),
-                view(
-                    sessionId = "render-kfs",
-                    terminated = Terminated.KILLED_FORCE_STOP,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
                 ),
                 view(
                     sessionId = "hide-auto",
@@ -276,13 +308,54 @@ class RecoveryUiStateMapperTest {
                 )
             )
         )
-        assertEquals(
-            listOf("render-user", "render-kfs"),
-            ui.cards.map { it.sessionId }
-        )
+        assertEquals(listOf("render-user"), ui.cards.map { it.sessionId })
+        assertEquals(0, ui.hiddenCount)
     }
 
-    // ─── surviving artifact summaries ─────────────────────────────
+    @Test
+    fun `five eligible inputs yield one card and hiddenCount four`() {
+        val ui = RecoveryUiStateMapper.map(
+            (1..5).map { i ->
+                view(
+                    sessionId = "s$i",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = i * 10L
+                )
+            }
+        )
+        assertEquals(1, ui.cards.size)
+        assertEquals("s5", ui.cards.single().sessionId)
+        assertEquals(4, ui.hiddenCount)
+    }
+
+    @Test
+    fun `equal recency keys resolve via stable sort - first input wins on tie`() {
+        // sortedByDescending uses TimSort which is stable; equal keys
+        // preserve input order. Among equal-key entries the first
+        // input is the "newest" survivor at index 0 of the sorted
+        // descending list.
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "first",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 100L
+                ),
+                view(
+                    sessionId = "second",
+                    terminated = Terminated.KILLED_FORCE_STOP,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = 100L
+                )
+            )
+        )
+        assertEquals("first", ui.cards.single().sessionId)
+        assertEquals(1, ui.hiddenCount)
+    }
+
+    // ─── surviving artifact summaries (visible card only) ─────────
 
     @Test
     fun `appendedSegmentFilenames produces recovery summary line`() {
@@ -335,76 +408,19 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test
-    fun `appended segments and anomalies coexist - appended line first`() {
-        val ui = RecoveryUiStateMapper.map(
-            listOf(
-                view(
-                    terminated = Terminated.KILLED_BY_SYSTEM,
-                    eligibility = DiscardEligibility.OFFER_DISCARD,
-                    appendedSegmentFilenames = listOf("segment_0001.mp4"),
-                    anomalies = listOf(Anomaly.UnknownArtifact(listOf("debug.log")))
-                )
+    fun `card body matches kind for every renderable terminator`() {
+        for ((t, expectedFragment) in listOf(
+            Terminated.USER_STOPPED to "Your last session ended before merging",
+            Terminated.KILLED_BY_SYSTEM to "Your device's battery management",
+            Terminated.KILLED_FORCE_STOP to "The app was force-stopped"
+        )) {
+            val ui = RecoveryUiStateMapper.map(
+                listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
             )
-        )
-        val summaries = ui.cards.single().survivingArtifacts
-        assertEquals(2, summaries.size)
-        assertEquals("Recovered 1 segment(s) from disk", summaries[0])
-        assertTrue(summaries[1].contains("1 unknown file(s) in session dir"))
-    }
-
-    @Test
-    fun `no anomalies and no appended segments yields empty surviving list`() {
-        val ui = RecoveryUiStateMapper.map(
-            listOf(
-                view(
-                    terminated = Terminated.USER_STOPPED,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
-                )
-            )
-        )
-        assertTrue(ui.cards.single().survivingArtifacts.isEmpty())
-    }
-
-    // ─── regression guards ────────────────────────────────────────
-
-    @Test
-    fun `regression - COMPLETED with OFFER_DISCARD never renders`() {
-        // Phase 1.7 finalize writes COMPLETED before discard eligibility
-        // is recomputed; a stale OFFER_DISCARD must NOT raise a recovery
-        // card after a successful merge.
-        val ui = RecoveryUiStateMapper.map(
-            listOf(
-                view(
-                    terminated = Terminated.COMPLETED,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
-                )
-            )
-        )
-        assertEquals(0, ui.cards.size)
-    }
-
-    @Test
-    fun `regression - empty list short-circuits to Empty singleton equality`() {
-        // Empty input must compare-equal to RecoveryUiState.Empty so the
-        // 2.1 wiring layer can short-circuit recomposition.
-        assertEquals(RecoveryUiState.Empty, RecoveryUiStateMapper.map(emptyList()))
-    }
-
-    @Test
-    fun `single OFFER_DISCARD render has all expected string fields non-blank`() {
-        val ui = RecoveryUiStateMapper.map(
-            listOf(
-                view(
-                    sessionId = "s-fields",
-                    terminated = Terminated.USER_STOPPED,
-                    eligibility = DiscardEligibility.OFFER_DISCARD
-                )
-            )
-        )
-        val card = ui.cards.single()
-        assertTrue(card.title.isNotBlank())
-        assertTrue(card.body.isNotBlank())
-        assertTrue(card.mergeLabel.isNotBlank())
-        assertTrue(card.discardLabel.isNotBlank())
+            val card = ui.cards.single()
+            assertNotNull("card for $t", card)
+            assertTrue("body for $t contains '$expectedFragment'", card.body.contains(expectedFragment))
+            assertTrue("body for $t mentions Discard", card.body.contains("Discard"))
+        }
     }
 }

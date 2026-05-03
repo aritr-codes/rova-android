@@ -106,14 +106,27 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
     val recoveryViewModel: RecoveryViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                val loadManifest: (String) -> SessionManifest? = if (app.videosRoot != null) {
+                // `videosRoot == null` (storage unavailable at boot)
+                // disables both load AND discard — the scan never ran,
+                // so there is nothing to load, and discardSession on a
+                // missing dir is a no-op anyway. Guarding the discard
+                // lambda the same way avoids a hot-path NullPointer if
+                // sessionStore initialization throws.
+                val sessionStoreAvailable = app.videosRoot != null
+                val loadManifest: (String) -> SessionManifest? = if (sessionStoreAvailable) {
                     { id -> app.sessionStore.loadManifest(id) }
                 } else {
                     { _ -> null }
                 }
+                val discardSession: suspend (String) -> Unit = if (sessionStoreAvailable) {
+                    { id -> app.sessionStore.discardSession(id) }
+                } else {
+                    { _ -> }
+                }
                 RecoveryViewModel(
                     recoveryReport = app.recoveryReport,
                     loadManifest = loadManifest,
+                    discardSession = discardSession,
                 )
             }
         }
@@ -122,15 +135,8 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    val onRecoveryMerge: (String) -> Unit = {
-        coroutineScope.launch {
-            snackbarHostState.showSnackbar("Recovery merge arrives in a follow-up slice")
-        }
-    }
-    val onRecoveryDiscard: (String) -> Unit = {
-        coroutineScope.launch {
-            snackbarHostState.showSnackbar("Recovery discard arrives in a follow-up slice")
-        }
+    val onRecoveryDiscard: (String) -> Unit = { sessionId ->
+        recoveryViewModel.dismiss(sessionId)
     }
     val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
         val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
@@ -278,10 +284,9 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (recoveryUiState.cards.isNotEmpty()) {
+                    if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
                         RecoveryCardList(
                             state = recoveryUiState,
-                            onMerge = onRecoveryMerge,
                             onDiscard = onRecoveryDiscard,
                             vendorHelpSlotFor = vendorHelpSlotFor,
                         )
@@ -337,11 +342,10 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (recoveryUiState.cards.isNotEmpty()) {
+                    if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
                         item(key = "recovery-cards") {
                             RecoveryCardList(
                                 state = recoveryUiState,
-                                onMerge = onRecoveryMerge,
                                 onDiscard = onRecoveryDiscard,
                                 vendorHelpSlotFor = vendorHelpSlotFor,
                             )
