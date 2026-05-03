@@ -943,8 +943,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         break@outer
                     }
 
-                    val intervalSeconds = (mMinutes * 60).toInt()
-                    val waitSeconds = (intervalSeconds - nSeconds.toInt()).coerceAtLeast(0)
+                    // Beta-smoke fix: interval is the wait BETWEEN
+                    // recordings (end-to-start). A 10 s duration with
+                    // a 1 m interval records for 10 s, then waits a
+                    // full 60 s before the next recording starts.
+                    // Pre-fix this subtracted `nSeconds` from the
+                    // interval (start-to-start scheduling per the
+                    // legacy ROADMAP.md §"Loop"); the user-facing
+                    // "Interval Between Loops" copy reads end-to-start
+                    // and that is the contract going forward.
+                    val waitSeconds = (mMinutes * 60).toInt().coerceAtLeast(0)
 
                     if (waitSeconds > 0) {
                         waitForNextSegment(waitSeconds)
@@ -953,9 +961,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         // continuing iteration — refresh the bounded
                         // WakeLock timeout. waitForNextSegment's
                         // finally block is the per-segment refresh
-                        // point only when waitSeconds > 0; back-to-back
-                        // sessions (interval <= duration) bypass it,
-                        // so ACQUIRE_TIMEOUT_MS would otherwise expire
+                        // point only when waitSeconds > 0; continuous
+                        // mode (interval == 0) bypasses it, so
+                        // ACQUIRE_TIMEOUT_MS would otherwise expire
                         // silently on long continuous runs. The held
                         // branch of acquireWakeLock() refreshes via
                         // existing.acquire(ACQUIRE_TIMEOUT_MS).
