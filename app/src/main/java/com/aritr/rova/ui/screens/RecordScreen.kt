@@ -45,6 +45,7 @@ import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -172,6 +173,27 @@ fun RecordScreen(
 
     val isUiLocked = serviceState.isPeriodicActive || serviceState.isMerging
     val isCameraActive = serviceState.isCameraActive
+
+    // Beta-smoke fix: cover CameraX preview warm-up with the existing
+    // loading overlay. The service flips `isCameraActive` true the
+    // moment `bindToLifecycle` returns, but PreviewView's TextureView
+    // does not receive its first frame until ~500-1500 ms later
+    // (especially after the unconditional `forceReconfigureCamera` at
+    // record-start in commit e79f225). Without this grace, the user
+    // sees an unexplained black gap before the first frame. Setting
+    // `cameraWarmingUp = true` for 1500 ms after the false→true
+    // transition keeps the "Initializing Camera..." overlay on screen
+    // through that window. Idle preview (no transition) is unaffected.
+    var cameraWarmingUp by remember { mutableStateOf(false) }
+    LaunchedEffect(isCameraActive) {
+        if (isCameraActive) {
+            cameraWarmingUp = true
+            delay(1500)
+            cameraWarmingUp = false
+        } else {
+            cameraWarmingUp = false
+        }
+    }
 
     // Camera Disconnected Alert
     if (serviceState.isRecording && !isCameraActive) {
@@ -416,8 +438,10 @@ fun RecordScreen(
                     )
                 }
 
-                // Loading Overlay
-                if (!isCameraActive && !serviceState.isMerging) {
+                // Loading Overlay — also held during the 1500 ms
+                // CameraX warm-up window so the user does not see an
+                // unexplained black gap between bind and first frame.
+                if ((!isCameraActive || cameraWarmingUp) && !serviceState.isMerging) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
