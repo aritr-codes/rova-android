@@ -156,7 +156,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             .sortedByDescending { it.file.lastModified() }
 
         val initial = recordings.map { rec -> buildItem(rec) }
-        val anyMissing = recordings.any { it.file.absolutePath !in metadataCache }
+        // Explicit containsKey: ConcurrentHashMap.contains resolves to
+        // containsValue under Kotlin's Map operator overloads, which is
+        // not what we want here (KT-18053).
+        val anyMissing = recordings.any { !metadataCache.containsKey(it.file.absolutePath) }
         if (emitPartial && anyMissing) {
             // First-paint emit: rows show up with placeholder thumb +
             // "—" resolution while metadata loads in parallel.

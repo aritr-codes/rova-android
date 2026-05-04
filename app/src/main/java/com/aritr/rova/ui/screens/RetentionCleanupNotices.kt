@@ -12,7 +12,7 @@ package com.aritr.rova.ui.screens
  * is dropped at the emit site so a refresh that finds the library
  * already trimmed (the common case) does not spam a snackbar.
  */
-internal data class RetentionCleanupNotice(
+data class RetentionCleanupNotice(
     val deleted: Int,
     val failed: Int
 )
@@ -31,7 +31,7 @@ internal data class RetentionCleanupNotice(
  * string concat with no inflection branching, which keeps the test
  * matrix small and matches the wording the product spec asked for.
  */
-internal object RetentionCleanupNotices {
+object RetentionCleanupNotices {
 
     fun message(notice: RetentionCleanupNotice): String? {
         val deleted = notice.deleted
