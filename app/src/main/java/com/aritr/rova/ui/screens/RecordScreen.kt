@@ -305,7 +305,10 @@ fun RecordScreen(
                                 RovaPreset("Vlog", 60, 0, -1, "HD"),
                             )
                             items(defaultPresets) { p ->
-                                val isSelected = duration == p.duration && interval == p.interval
+                                val isSelected = duration == p.duration &&
+                                    interval == p.interval &&
+                                    loopCount == p.loopCount &&
+                                    resolution == p.resolution
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = {
@@ -322,7 +325,10 @@ fun RecordScreen(
                                 )
                             }
                             items(customPresets) { p ->
-                                val isSelected = duration == p.duration && interval == p.interval
+                                val isSelected = duration == p.duration &&
+                                    interval == p.interval &&
+                                    loopCount == p.loopCount &&
+                                    resolution == p.resolution
                                 InputChip(
                                     selected = isSelected,
                                     onClick = {
@@ -418,6 +424,36 @@ fun RecordScreen(
                                 label = { Text("∞ Continuous") },
                                 enabled = !isUiLocked
                             )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        // Beta-smoke fix: backend already supports
+                        // RovaSettings.resolution + the service-side
+                        // QualitySelector mapping; the UI just never
+                        // exposed a direct selector. Presets silently
+                        // mutated it, which made it look like quality
+                        // wasn't user-controllable. Single chip row
+                        // bound to viewModel.resolution closes the gap.
+                        Text(
+                            "Video Quality",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        ) {
+                            listOf("SD", "HD", "FHD", "4K").forEach { option ->
+                                FilterChip(
+                                    selected = resolution == option,
+                                    onClick = {
+                                        if (!isUiLocked) viewModel.resolution.value = option
+                                    },
+                                    enabled = !isUiLocked,
+                                    label = { Text(option) }
+                                )
+                            }
                         }
                         Spacer(Modifier.height(80.dp))
                     }
