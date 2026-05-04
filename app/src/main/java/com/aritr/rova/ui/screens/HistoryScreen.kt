@@ -168,6 +168,18 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
         viewModel.refresh()
     }
 
+    // Slice 13B — surface auto-retention cleanup outcomes. Emits only
+    // when the cleanup deleted or failed at least one recording, so a
+    // refresh that no-ops (library already inside the keep-latest
+    // window) shows nothing.
+    LaunchedEffect(viewModel) {
+        viewModel.retentionNotices.collect { notice ->
+            RetentionCleanupNotices.message(notice)?.let { msg ->
+                snackbarHostState.showSnackbar(msg)
+            }
+        }
+    }
+
     LaunchedEffect(items) {
         if (isSelectionMode) {
             val existingFiles = items.map { it.file }.toSet()

@@ -14,8 +14,12 @@ import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +61,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
     private val _items = MutableStateFlow<List<VideoItem>>(emptyList())
     val items: StateFlow<List<VideoItem>> = _items.asStateFlow()
+
+    /**
+     * Slice 13B — one-shot retention cleanup notices. Replay = 0 so a
+     * screen recreated after the emit does not surface a stale
+     * snackbar; `extraBufferCapacity = 1` + `DROP_OLDEST` collapses
+     * rapid successive cleanups to a single visible notice. Emitted
+     * ONLY when the cleanup actually deleted or failed something —
+     * [RecordingRetentionCleaner.Result.NoOp] is dropped here.
+     */
+    private val _retentionNotices = MutableSharedFlow<RetentionCleanupNotice>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val retentionNotices: SharedFlow<RetentionCleanupNotice> = _retentionNotices.asSharedFlow()
 
     // Cache thumbnails and resolution to avoid re-extracting on every refresh()
     private val metadataCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Bitmap?, String>>()
@@ -219,6 +238,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             RovaLog.d(
                 "HistoryViewModel.retention: deleted ${result.deleted} surplus" +
                     " recording(s); ${result.failed} failure(s)"
+            )
+        }
+        // Slice 13B — surface a single concise snackbar when cleanup
+        // did real work or failed. NoOp passes are silent so the
+        // common case (refresh on a library already inside the
+        // keep-latest window) does not spam.
+        if (result.deleted > 0 || result.failed > 0) {
+            _retentionNotices.tryEmit(
+                RetentionCleanupNotice(deleted = result.deleted, failed = result.failed)
             )
         }
         return result
