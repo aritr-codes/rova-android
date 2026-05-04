@@ -8,7 +8,7 @@ contents change.
 
 | Field | Value |
 |---|---|
-| Commit | `a5f3e6a fix(history): discard session metadata after deleting recording` |
+| Commit | `e05f5fc chore(release): prepare beta distribution metadata` |
 | `versionCode` | `2` |
 | `versionName` | `0.3.0` |
 | Signed APK | `app/build/outputs/apk/release/app-release.apk` |
