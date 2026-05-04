@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.utils.RovaLog
@@ -77,60 +78,131 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            val app = getApplication<Application>()
-            val rovaApp = app as? RovaApp
-            val sessionStore = rovaApp?.let { runCatching { it.sessionStore }.getOrNull() }
-            val resolver: ContentResolver = app.contentResolver
-
-            val manifestArtifacts = if (sessionStore != null) {
-                manifestDrivenArtifacts(sessionStore, resolver)
-            } else {
-                emptyList()
+            var newItems = loadItemsList()
+            // Apply the "keep latest N finalized recordings" retention
+            // policy at most once per refresh pass. The cleaner is
+            // idempotent on already-trimmed state — a subsequent
+            // refresh sees finalized.size <= keepLatest and no-ops —
+            // so we can safely re-run loadItemsList only when the
+            // cleaner actually deleted something. This avoids the
+            // self-triggering refresh loop.
+            val cleanupResult = applyRetentionCleanupIfEnabled(newItems)
+            if (cleanupResult.deleted > 0) {
+                newItems = loadItemsList()
             }
-
-            val legacyArtifacts = legacyFileSystemScan(app)
-                .map { ResolvedRecording(file = it, shareUri = null, sessionId = null) }
-
-            // Union manifest-driven + legacy, de-dupe by absolute path,
-            // sort newest-first by mtime. Manifest-driven entries come
-            // first so a duplicate path keeps the URI-bearing record
-            // rather than the legacy null-URI one.
-            val seen = HashSet<String>()
-            val recordings = (manifestArtifacts + legacyArtifacts)
-                .filter { seen.add(it.file.absolutePath) }
-                .sortedByDescending { it.file.lastModified() }
-
-            val newItems = recordings.map { rec ->
-                val path = rec.file.absolutePath
-                val cached = metadataCache[path]
-                if (cached != null) {
-                    VideoItem(
-                        file = rec.file,
-                        thumbnail = cached.first,
-                        resolution = cached.second,
-                        shareUri = rec.shareUri,
-                        sessionId = rec.sessionId
-                    )
-                } else {
-                    val thumb = VideoMetadataUtils.getThumbnail(path)
-                    val res = VideoMetadataUtils.getResolutionLabel(path)
-                    metadataCache[path] = Pair(thumb, res)
-                    VideoItem(
-                        file = rec.file,
-                        thumbnail = thumb,
-                        resolution = res,
-                        shareUri = rec.shareUri,
-                        sessionId = rec.sessionId
-                    )
-                }
-            }
-
-            // Clean stale entries for deleted files
-            val currentPaths = recordings.map { it.file.absolutePath }.toSet()
-            metadataCache.keys.retainAll(currentPaths)
-
             _items.value = newItems
         }
+    }
+
+    /**
+     * Builds the History list snapshot used by [refresh]. Extracted so
+     * the retention pass can re-run the same load after deleting
+     * surplus recordings without duplicating the manifest + legacy
+     * union, the de-dup, the newest-first sort, the metadata cache
+     * lookup, or the cache-eviction step.
+     */
+    private suspend fun loadItemsList(): List<VideoItem> = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val rovaApp = app as? RovaApp
+        val sessionStore = rovaApp?.let { runCatching { it.sessionStore }.getOrNull() }
+        val resolver: ContentResolver = app.contentResolver
+
+        val manifestArtifacts = if (sessionStore != null) {
+            manifestDrivenArtifacts(sessionStore, resolver)
+        } else {
+            emptyList()
+        }
+
+        val legacyArtifacts = legacyFileSystemScan(app)
+            .map { ResolvedRecording(file = it, shareUri = null, sessionId = null) }
+
+        // Union manifest-driven + legacy, de-dupe by absolute path,
+        // sort newest-first by mtime. Manifest-driven entries come
+        // first so a duplicate path keeps the URI-bearing record
+        // rather than the legacy null-URI one.
+        val seen = HashSet<String>()
+        val recordings = (manifestArtifacts + legacyArtifacts)
+            .filter { seen.add(it.file.absolutePath) }
+            .sortedByDescending { it.file.lastModified() }
+
+        val newItems = recordings.map { rec ->
+            val path = rec.file.absolutePath
+            val cached = metadataCache[path]
+            if (cached != null) {
+                VideoItem(
+                    file = rec.file,
+                    thumbnail = cached.first,
+                    resolution = cached.second,
+                    shareUri = rec.shareUri,
+                    sessionId = rec.sessionId
+                )
+            } else {
+                val thumb = VideoMetadataUtils.getThumbnail(path)
+                val res = VideoMetadataUtils.getResolutionLabel(path)
+                metadataCache[path] = Pair(thumb, res)
+                VideoItem(
+                    file = rec.file,
+                    thumbnail = thumb,
+                    resolution = res,
+                    shareUri = rec.shareUri,
+                    sessionId = rec.sessionId
+                )
+            }
+        }
+
+        // Clean stale entries for deleted files
+        val currentPaths = recordings.map { it.file.absolutePath }.toSet()
+        metadataCache.keys.retainAll(currentPaths)
+
+        newItems
+    }
+
+    /**
+     * Applies the user's retention policy to the current snapshot if
+     * the toggle is on. Routes each surplus delete through the same
+     * [HistoryDeleter]-orchestrated artifact-then-discard pipeline as
+     * manual History delete, so a retention-driven cleanup is
+     * indistinguishable from the user tapping Delete on the same
+     * entries — gallery row goes via `MediaStore`, then
+     * `SessionStore.discardSession` removes the per-session
+     * directory. Failures are logged via [RovaLog]; they do not
+     * propagate to the UI snackbar because retention cleanup is a
+     * background-y maintenance step the user did not request
+     * synchronously.
+     */
+    private fun applyRetentionCleanupIfEnabled(
+        items: List<VideoItem>
+    ): RecordingRetentionCleaner.Result {
+        val app = getApplication<Application>()
+        val settings = RovaSettings(app)
+        if (!settings.autoDeleteEnabled) return RecordingRetentionCleaner.Result.NoOp
+        val resolver = app.contentResolver
+        val sessionStore = (app as? RovaApp)?.let {
+            runCatching { it.sessionStore }.getOrNull()
+        }
+        val deleter = HistoryDeleter(
+            deleteArtifact = { item -> deleteOne(resolver, item) },
+            discardSession = { sid -> sessionStore?.discardSession(sid) },
+            onDiscardError = { sid, t ->
+                RovaLog.w(
+                    "HistoryViewModel.retention: discardSession failed for $sid",
+                    t
+                )
+            }
+        )
+        val cleaner = RecordingRetentionCleaner(deleteItem = { deleter.delete(it) })
+        val result = cleaner.clean(
+            enabled = true,
+            keepLatest = settings.autoDeleteKeepLatest,
+            items = items
+        )
+        if (result.deleted > 0) {
+            RovaLog.d(
+                "HistoryViewModel.retention: deleted ${result.deleted} surplus" +
+                    " recording(s); ${result.failed} failure(s)"
+            )
+        }
+        return result
     }
 
     private data class ResolvedRecording(

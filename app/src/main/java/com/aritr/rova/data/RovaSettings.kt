@@ -38,6 +38,17 @@ class RovaSettings(context: Context) {
     var customPresetsJson: String
         get() = prefs.getString("custom_presets", "[]") ?: "[]"
         set(value) = prefs.edit { putString("custom_presets", value) }
+
+    // Storage retention — Keep latest N finalized recordings.
+    // Default OFF so the existing manual-delete-only behavior is
+    // unchanged; the user opts in via Settings.
+    var autoDeleteEnabled: Boolean
+        get() = prefs.getBoolean("auto_delete_enabled", false)
+        set(value) = prefs.edit { putBoolean("auto_delete_enabled", value) }
+
+    var autoDeleteKeepLatest: Int
+        get() = prefs.getInt("auto_delete_keep_latest", 10)
+        set(value) = prefs.edit { putInt("auto_delete_keep_latest", value) }
 }
 
 data class RovaPreset(

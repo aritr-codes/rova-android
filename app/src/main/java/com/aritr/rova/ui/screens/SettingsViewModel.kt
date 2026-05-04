@@ -25,10 +25,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val enableBeeps = MutableStateFlow(settings.enableBeeps)
     val vibrateAlerts = MutableStateFlow(settings.vibrateAlerts)
     val keepScreenOn = MutableStateFlow(settings.keepScreenOn)
+    val autoDeleteEnabled = MutableStateFlow(settings.autoDeleteEnabled)
+    val autoDeleteKeepLatest = MutableStateFlow(settings.autoDeleteKeepLatest)
 
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
         viewModelScope.launch { keepScreenOn.collect { settings.keepScreenOn = it } }
+        viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
+        viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
     }
 }

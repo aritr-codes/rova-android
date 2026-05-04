@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Info
@@ -58,6 +57,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
+    val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
+    val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
 
     Box(
         modifier = Modifier
@@ -143,13 +144,44 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                                 headlineContent = { Text("Auto-delete old recordings") },
-                                supportingContent = { Text("Not configured yet") },
+                                supportingContent = {
+                                    Text(
+                                        if (autoDeleteEnabled) {
+                                            "Keeping the latest $autoDeleteKeepLatest finalized recordings."
+                                        } else {
+                                            "Off — every recording stays until you delete it."
+                                        }
+                                    )
+                                },
                                 leadingContent = { androidx.compose.material3.Icon(Icons.Default.DeleteSweep, null) },
-                                trailingContent = { androidx.compose.material3.Icon(Icons.Default.ChevronRight, null) },
+                                trailingContent = {
+                                    androidx.compose.material3.Switch(
+                                        checked = autoDeleteEnabled,
+                                        onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
+                                    )
+                                },
                                 modifier = Modifier.clickable {
-                                    Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show()
+                                    settingsViewModel.autoDeleteEnabled.value = !autoDeleteEnabled
                                 }
                             )
+                            if (autoDeleteEnabled) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(5, 10, 25, 50).forEach { option ->
+                                        androidx.compose.material3.FilterChip(
+                                            selected = autoDeleteKeepLatest == option,
+                                            onClick = {
+                                                settingsViewModel.autoDeleteKeepLatest.value = option
+                                            },
+                                            label = { Text("$option") }
+                                        )
+                                    }
+                                }
+                            }
                             ListItem(
                                 colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                                 headlineContent = { Text("Clear cache") },
