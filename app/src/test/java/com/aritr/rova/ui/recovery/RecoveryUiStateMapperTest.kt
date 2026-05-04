@@ -180,7 +180,8 @@ class RecoveryUiStateMapperTest {
         assertEquals(RecoveryCardKind.USER_STOPPED, card.kind)
         assertFalse(card.showVendorHelpSlot)
         assertEquals("Session stopped", card.title)
-        assertEquals("Discard", card.discardLabel)
+        // Slice 13C — explicit destructive label.
+        assertEquals("Discard recording", card.discardLabel)
     }
 
     @Test
@@ -409,8 +410,13 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `card body matches kind for every renderable terminator`() {
+        // Slice 13C — body copy now states three things in order:
+        // cause (per kind), status ("recovered segments stay on your
+        // device"), and consequence ("This action is permanent").
+        // The fragments below pin the cause sentence per kind; the
+        // status and consequence are pinned in dedicated tests below.
         for ((t, expectedFragment) in listOf(
-            Terminated.USER_STOPPED to "Your last session ended before merging",
+            Terminated.USER_STOPPED to "Your last session ended before the segments could merge",
             Terminated.KILLED_BY_SYSTEM to "Your device's battery management",
             Terminated.KILLED_FORCE_STOP to "The app was force-stopped"
         )) {
@@ -421,6 +427,48 @@ class RecoveryUiStateMapperTest {
             assertNotNull("card for $t", card)
             assertTrue("body for $t contains '$expectedFragment'", card.body.contains(expectedFragment))
             assertTrue("body for $t mentions Discard", card.body.contains("Discard"))
+        }
+    }
+
+    @Test
+    fun `every renderable body explains that recovered segments stay until discarded`() {
+        // Slice 13C — beta testers asked what happens to recovered
+        // files when they don't tap Discard. The body now says it
+        // explicitly so the question doesn't have to surface.
+        for (t in listOf(
+            Terminated.USER_STOPPED,
+            Terminated.KILLED_BY_SYSTEM,
+            Terminated.KILLED_FORCE_STOP
+        )) {
+            val ui = RecoveryUiStateMapper.map(
+                listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
+            )
+            val body = ui.cards.single().body
+            assertTrue(
+                "body for $t should describe segments staying until discard, was: $body",
+                body.contains("stay on your device")
+            )
+        }
+    }
+
+    @Test
+    fun `every renderable body warns the discard action is permanent`() {
+        // Slice 13C — destructive cue. Users should not tap Discard
+        // recording without knowing the segments cannot be recovered
+        // afterward; the body must call that out in plain words.
+        for (t in listOf(
+            Terminated.USER_STOPPED,
+            Terminated.KILLED_BY_SYSTEM,
+            Terminated.KILLED_FORCE_STOP
+        )) {
+            val ui = RecoveryUiStateMapper.map(
+                listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
+            )
+            val body = ui.cards.single().body
+            assertTrue(
+                "body for $t should mark Discard as permanent, was: $body",
+                body.contains("permanent")
+            )
         }
     }
 }

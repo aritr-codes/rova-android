@@ -167,14 +167,17 @@ object RecoveryUiStateMapper {
 
     private fun bodyFor(kind: RecoveryCardKind): String = when (kind) {
         RecoveryCardKind.USER_STOPPED ->
-            "Your last session ended before merging. " +
-                "Discard to remove the recovered files."
+            "Your last session ended before the segments could merge. " +
+                "The recovered segments stay on your device until you choose Discard recording. " +
+                "This action is permanent."
         RecoveryCardKind.KILLED_BY_SYSTEM ->
-            "Your device's battery management stopped the recording before it could merge. " +
-                "Discard to remove the recovered files."
+            "Your device's battery management stopped the recording before the segments could merge. " +
+                "The recovered segments stay on your device until you choose Discard recording. " +
+                "This action is permanent."
         RecoveryCardKind.KILLED_FORCE_STOP ->
-            "The app was force-stopped before the last session could merge. " +
-                "Discard to remove the recovered files."
+            "The app was force-stopped before the last session's segments could merge. " +
+                "The recovered segments stay on your device until you choose Discard recording. " +
+                "This action is permanent."
     }
 
     private fun summarize(c: SessionClassification): List<String> {
@@ -203,5 +206,9 @@ object RecoveryUiStateMapper {
         return out
     }
 
-    private const val DISCARD_LABEL = "Discard"
+    // Slice 13C — explicit destructive label. The bare "Discard"
+    // verb left users uncertain about scope; "Discard recording"
+    // names what the action removes, matching the body copy that
+    // also calls out the action by full name.
+    private const val DISCARD_LABEL = "Discard recording"
 }
