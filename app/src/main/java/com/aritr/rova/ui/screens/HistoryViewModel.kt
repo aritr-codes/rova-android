@@ -78,7 +78,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            var newItems = loadItemsList()
+            var newItems = loadItemsList(emitPartial = true)
             // Apply the "keep latest N finalized recordings" retention
             // policy at most once per refresh pass. The cleaner is
             // idempotent on already-trimmed state — a subsequent
@@ -88,7 +88,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             // self-triggering refresh loop.
             val cleanupResult = applyRetentionCleanupIfEnabled(newItems)
             if (cleanupResult.deleted > 0) {
-                newItems = loadItemsList()
+                newItems = loadItemsList(emitPartial = true)
             }
             _items.value = newItems
         }
@@ -100,8 +100,19 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * surplus recordings without duplicating the manifest + legacy
      * union, the de-dup, the newest-first sort, the metadata cache
      * lookup, or the cache-eviction step.
+     *
+     * Slice 13A — two-stage emit. The first pass builds rows from the
+     * metadata cache (placeholder for misses) and pushes them to
+     * [_items] immediately when [emitPartial] is true and at least one
+     * row is uncached, so the History list paints with all rows
+     * visible while [HistoryMetadataLoader] fans out the actual
+     * `MediaMetadataRetriever` work in parallel on `Dispatchers.IO`.
+     * After fan-out completes the rows are rebuilt from the now-warm
+     * cache and returned. A hot cache (every refresh after the first,
+     * including retention re-loads) emits exactly once because no
+     * placeholders are produced.
      */
-    private suspend fun loadItemsList(): List<VideoItem> = withContext(Dispatchers.IO) {
+    private suspend fun loadItemsList(emitPartial: Boolean): List<VideoItem> = withContext(Dispatchers.IO) {
         val app = getApplication<Application>()
         val rovaApp = app as? RovaApp
         val sessionStore = rovaApp?.let { runCatching { it.sessionStore }.getOrNull() }
@@ -125,36 +136,44 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             .filter { seen.add(it.file.absolutePath) }
             .sortedByDescending { it.file.lastModified() }
 
-        val newItems = recordings.map { rec ->
-            val path = rec.file.absolutePath
-            val cached = metadataCache[path]
-            if (cached != null) {
-                VideoItem(
-                    file = rec.file,
-                    thumbnail = cached.first,
-                    resolution = cached.second,
-                    shareUri = rec.shareUri,
-                    sessionId = rec.sessionId
-                )
-            } else {
-                val thumb = VideoMetadataUtils.getThumbnail(path)
-                val res = VideoMetadataUtils.getResolutionLabel(path)
-                metadataCache[path] = Pair(thumb, res)
-                VideoItem(
-                    file = rec.file,
-                    thumbnail = thumb,
-                    resolution = res,
-                    shareUri = rec.shareUri,
-                    sessionId = rec.sessionId
-                )
-            }
+        val initial = recordings.map { rec -> buildItem(rec) }
+        val anyMissing = recordings.any { it.file.absolutePath !in metadataCache }
+        if (emitPartial && anyMissing) {
+            // First-paint emit: rows show up with placeholder thumb +
+            // "—" resolution while metadata loads in parallel.
+            _items.value = initial
+        }
+
+        if (anyMissing) {
+            HistoryMetadataLoader.fillMissing(
+                paths = recordings.map { it.file.absolutePath },
+                cache = metadataCache,
+                extract = { path -> VideoMetadataUtils.extractMetadata(path) }
+            )
+        }
+
+        val finalItems = if (anyMissing) {
+            recordings.map { rec -> buildItem(rec) }
+        } else {
+            initial
         }
 
         // Clean stale entries for deleted files
         val currentPaths = recordings.map { it.file.absolutePath }.toSet()
         metadataCache.keys.retainAll(currentPaths)
 
-        newItems
+        finalItems
+    }
+
+    private fun buildItem(rec: ResolvedRecording): VideoItem {
+        val cached = metadataCache[rec.file.absolutePath]
+        return VideoItem(
+            file = rec.file,
+            thumbnail = cached?.first,
+            resolution = cached?.second ?: VideoMetadataUtils.UNKNOWN_RESOLUTION,
+            shareUri = rec.shareUri,
+            sessionId = rec.sessionId
+        )
     }
 
     /**
