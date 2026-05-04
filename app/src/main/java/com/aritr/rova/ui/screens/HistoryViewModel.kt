@@ -36,7 +36,20 @@ data class VideoItem(
      * MUST guard the FileProvider fallback against
      * `IllegalArgumentException` (see [HistoryScreen]).
      */
-    val shareUri: Uri? = null
+    val shareUri: Uri? = null,
+    /**
+     * Session id this artifact belongs to. Non-null for finalized
+     * manifest-backed recordings (every Phase 1.7+ export). Null for
+     * legacy file-only entries that the fallback file-system scan
+     * still surfaces for upgrade continuity.
+     *
+     * The History delete path uses this to call
+     * [com.aritr.rova.data.SessionStore.discardSession] AFTER a
+     * successful artifact delete, so the per-session manifest +
+     * `videos/<sessionId>/` directory do not linger as invisible
+     * disk waste once the gallery row is gone.
+     */
+    val sessionId: String? = null
 )
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -76,7 +89,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val legacyArtifacts = legacyFileSystemScan(app)
-                .map { ResolvedRecording(file = it, shareUri = null) }
+                .map { ResolvedRecording(file = it, shareUri = null, sessionId = null) }
 
             // Union manifest-driven + legacy, de-dupe by absolute path,
             // sort newest-first by mtime. Manifest-driven entries come
@@ -95,7 +108,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                         file = rec.file,
                         thumbnail = cached.first,
                         resolution = cached.second,
-                        shareUri = rec.shareUri
+                        shareUri = rec.shareUri,
+                        sessionId = rec.sessionId
                     )
                 } else {
                     val thumb = VideoMetadataUtils.getThumbnail(path)
@@ -105,7 +119,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                         file = rec.file,
                         thumbnail = thumb,
                         resolution = res,
-                        shareUri = rec.shareUri
+                        shareUri = rec.shareUri,
+                        sessionId = rec.sessionId
                     )
                 }
             }
@@ -118,7 +133,11 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private data class ResolvedRecording(val file: File, val shareUri: Uri?)
+    private data class ResolvedRecording(
+        val file: File,
+        val shareUri: Uri?,
+        val sessionId: String?
+    )
 
     private fun manifestDrivenArtifacts(
         sessionStore: SessionStore,
@@ -144,7 +163,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                     ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
                 ResolvedRecording(
                     file = file,
-                    shareUri = shareUriString?.let(Uri::parse)
+                    shareUri = shareUriString?.let(Uri::parse),
+                    sessionId = m.sessionId
                 )
             }
             .filter { rec ->
@@ -276,11 +296,31 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult =
         withContext(Dispatchers.IO) {
             if (items.isEmpty()) return@withContext DeleteResult(0, 0)
-            val resolver = getApplication<Application>().contentResolver
+            val app = getApplication<Application>()
+            val resolver = app.contentResolver
+            // Same access pattern as `refresh()`: read sessionStore via
+            // the lazy RovaApp accessor and tolerate the storage-
+            // unavailable branch by passing a discard-noop seam. Avoids
+            // making SessionStore global or static.
+            val sessionStore = (app as? RovaApp)?.let {
+                runCatching { it.sessionStore }.getOrNull()
+            }
+            val deleter = HistoryDeleter(
+                deleteArtifact = { item -> deleteOne(resolver, item) },
+                discardSession = { sid ->
+                    sessionStore?.discardSession(sid)
+                },
+                onDiscardError = { sid, t ->
+                    RovaLog.w(
+                        "HistoryViewModel.deleteItems: discardSession failed for $sid",
+                        t
+                    )
+                }
+            )
             var deleted = 0
             var failed = 0
             items.forEach { item ->
-                if (deleteOne(resolver, item)) deleted++ else failed++
+                if (deleter.delete(item)) deleted++ else failed++
             }
             refresh()
             DeleteResult(deleted = deleted, failed = failed)
