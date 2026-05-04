@@ -15,7 +15,7 @@ class RovaSettings(context: Context) {
         set(value) = prefs.edit { putInt("interval", value) }
 
     var resolution: String
-        get() = prefs.getString("resolution", "FHD") ?: "FHD"
+        get() = prefs.getString("resolution", QualityPresets.DEFAULT) ?: QualityPresets.DEFAULT
         set(value) = prefs.edit { putString("resolution", value) }
 
     var loopCount: Int

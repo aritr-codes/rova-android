@@ -38,6 +38,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.components.*
@@ -301,8 +302,8 @@ fun RecordScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             val defaultPresets = listOf(
-                                RovaPreset("Drill", 10, 1, 10, "FHD"),
-                                RovaPreset("Vlog", 60, 0, -1, "HD"),
+                                RovaPreset("Drill", 10, 1, 10, QualityPresets.FHD),
+                                RovaPreset("Vlog", 60, 0, -1, QualityPresets.HD),
                             )
                             items(defaultPresets) { p ->
                                 val isSelected = duration == p.duration &&
@@ -444,7 +445,7 @@ fun RecordScreen(
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
                         ) {
-                            listOf("SD", "HD", "FHD", "4K").forEach { option ->
+                            QualityPresets.PICKER_ORDER.forEach { option ->
                                 FilterChip(
                                     selected = resolution == option,
                                     onClick = {

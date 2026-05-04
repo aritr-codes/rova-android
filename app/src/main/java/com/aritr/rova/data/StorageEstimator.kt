@@ -40,13 +40,14 @@ object StorageEstimator {
      * upper bounds from ROADMAP §C7. Used by both preflight and the
      * per-segment gate.
      */
-    fun bytesPerSecondForResolution(res: String): Long = when (res.uppercase()) {
-        "4K", "UHD", "2160P" -> 10L * 1024 * 1024  // 10 MB/s — 4K HEVC upper bound
-        "FHD", "1080P" -> 2L * 1024 * 1024         // 2 MB/s
-        "HD", "720P" -> 1L * 1024 * 1024           // 1 MB/s
-        "SD", "480P" -> 512L * 1024                // 0.5 MB/s
-        else -> 2L * 1024 * 1024                   // default FHD
-    }
+    fun bytesPerSecondForResolution(res: String): Long =
+        when (QualityPresets.canonicalizeOrDefault(res)) {
+            QualityPresets.UHD -> 10L * 1024 * 1024  // 10 MB/s — 4K HEVC upper bound
+            QualityPresets.FHD -> 2L * 1024 * 1024   // 2 MB/s
+            QualityPresets.HD -> 1L * 1024 * 1024    // 1 MB/s
+            QualityPresets.SD -> 512L * 1024         // 0.5 MB/s
+            else -> 2L * 1024 * 1024                 // default FHD (unreachable: canonicalizeOrDefault returns one of the four)
+        }
 
     /**
      * Phase 1.6 peak-budget estimate. Returns the total disk bytes a session

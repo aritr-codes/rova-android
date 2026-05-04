@@ -34,10 +34,13 @@ package com.aritr.rova.data
  */
 internal object QualityLabels {
 
-    const val SD = "SD"
-    const val HD = "HD"
-    const val FHD = "FHD"
-    const val UHD = "4K"
+    // Slice 12 — labels live in [QualityPresets]. These re-exports
+    // keep the History/picker vocabulary in lockstep without a second
+    // string table to drift.
+    const val SD = QualityPresets.SD
+    const val HD = QualityPresets.HD
+    const val FHD = QualityPresets.FHD
+    const val UHD = QualityPresets.UHD
 
     fun forDimensions(widthPx: Int, heightPx: Int): String? {
         if (widthPx <= 0 || heightPx <= 0) return null

@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
+import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SegmentRecord
 import com.aritr.rova.data.SessionConfig
@@ -291,7 +292,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var nSeconds = 10L
     private var mMinutes = 10L
     private var limitLoops = -1 // -1 for continuous
-    private var resolutionStr = "FHD"
+    private var resolutionStr = QualityPresets.DEFAULT
     private var configuredResolution: String? = null // Track what resolution the camera is currently configured for
 
     /**
@@ -457,7 +458,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
          * pattern is API-safe on pre-31 runtimes: the class symbol is only
          * resolved when the SDK gate passes.
          */
-        fun start(context: Context, nSeconds: Float, mMinutes: Float, limitLoops: Int = -1, resolution: String = "FHD"): StartResult {
+        fun start(context: Context, nSeconds: Float, mMinutes: Float, limitLoops: Int = -1, resolution: String = QualityPresets.DEFAULT): StartResult {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !isAppVisible(context)) {
                 RovaLog.w("start: refusing to launch camera recording while app is backgrounded")
                 return StartResult.Blocked(StartBlocked.APP_NOT_VISIBLE)
@@ -569,7 +570,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         nSeconds = intent.getFloatExtra("N_SECONDS", 10f).toLong()
         mMinutes = intent.getFloatExtra("M_MINUTES", 10f).toLong()
         limitLoops = intent.getIntExtra("LIMIT_LOOPS", -1)
-        resolutionStr = intent.getStringExtra("RESOLUTION") ?: "FHD"
+        resolutionStr = intent.getStringExtra("RESOLUTION") ?: QualityPresets.DEFAULT
         segmentCount = 0
         stopRequested = false
         userStopRequested = false
@@ -1048,11 +1049,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             RovaLog.d("setupCamera: Initializing UseCases (Preview + VideoCapture)")
 
+            // Strict match against QualityPresets canonical labels:
+            // any non-canonical resolutionStr falls through to Quality.FHD
+            // exactly as before — we deliberately do NOT route through
+            // QualityPresets.canonicalize here, since that would widen
+            // the contract to honor "1080p" / "UHD" aliases the picker
+            // never produces and the manifest never persists.
             val quality = when (resolutionStr) {
-                "4K" -> Quality.UHD
-                "FHD" -> Quality.FHD
-                "HD" -> Quality.HD
-                "SD" -> Quality.SD
+                QualityPresets.UHD -> Quality.UHD
+                QualityPresets.FHD -> Quality.FHD
+                QualityPresets.HD -> Quality.HD
+                QualityPresets.SD -> Quality.SD
                 else -> Quality.FHD
             }
 
@@ -1130,7 +1137,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    fun getSupportedResolutions(): List<String> = listOf("4K", "FHD", "HD", "SD")
+    fun getSupportedResolutions(): List<String> = QualityPresets.PICKER_ORDER.reversed()
 
     /**
      * Returns a headless `Preview.SurfaceProvider` so CameraX's pipeline
