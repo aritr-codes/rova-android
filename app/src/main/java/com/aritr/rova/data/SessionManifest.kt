@@ -126,6 +126,26 @@ data class SessionManifest(
     }
 }
 
+/**
+ * Persisted session configuration. All four fields capture the user's
+ * REQUESTED settings at session start; none of them are updated to
+ * reflect what the device actually delivered.
+ *
+ * Specifically, [resolution] is the picker label the user chose
+ * (`"SD" / "HD" / "FHD" / "4K"`) and is the input passed to
+ * `QualitySelector.fromOrderedList(...)` with a fallback chain in
+ * [com.aritr.rova.service.RovaRecordingService]. The CameraX recorder
+ * may honor a lower quality on devices where the requested one is
+ * unsupported — the manifest does NOT track that downgrade.
+ *
+ * The actual-output quality is derived on read from the produced
+ * media file's real dimensions via
+ * [com.aritr.rova.ui.screens.VideoMetadataUtils.getResolutionLabel],
+ * which routes through [QualityLabels] so the History row label
+ * matches the picker vocabulary. A divergence between the
+ * Settings/Record picker (requested) and the History row (actual)
+ * is the user-visible signal that a fallback occurred.
+ */
 data class SessionConfig(
     val durationSeconds: Int,
     val intervalMinutes: Int,

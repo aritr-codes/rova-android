@@ -2,6 +2,7 @@ package com.aritr.rova.ui.screens
 
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import com.aritr.rova.data.QualityLabels
 
 object VideoMetadataUtils {
 
@@ -23,9 +24,19 @@ object VideoMetadataUtils {
     }
 
     /**
-     * Returns a human-readable resolution label ("1080p", "720p", "4K", etc.) for the
-     * video at [path]. Falls back to "WxH" if the height doesn't match a known tier,
-     * or "—" on error.
+     * Returns the canonical actual-output quality label
+     * (`"SD" / "HD" / "FHD" / "4K"`) for the recording at [path],
+     * derived from the file's real video dimensions via
+     * `MediaMetadataRetriever`. Falls back to `"—"` when the file
+     * is unreadable or has no decodable dimensions.
+     *
+     * The label intentionally matches the picker vocabulary so a
+     * CameraX QualitySelector fallback (e.g. `"FHD"` requested but
+     * the device only honored `"HD"`) is visible to the user as a
+     * mismatch between Settings/Record (requested) and History
+     * (actual). The classification rule lives in [QualityLabels];
+     * this function is just the I/O boundary.
+     *
      * Must be called off the main thread.
      */
     fun getResolutionLabel(path: String): String {
@@ -34,14 +45,7 @@ object VideoMetadataUtils {
             retriever.setDataSource(path)
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-            when {
-                height >= 2160 -> "4K"
-                height >= 1080 -> "1080p"
-                height >= 720  -> "720p"
-                height >= 480  -> "480p"
-                width > 0 && height > 0 -> "${width}×${height}"
-                else -> "—"
-            }
+            QualityLabels.forDimensions(width, height) ?: "—"
         } catch (e: Exception) {
             "—"
         } finally {
