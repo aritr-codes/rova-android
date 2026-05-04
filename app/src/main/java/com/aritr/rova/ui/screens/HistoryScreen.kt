@@ -245,9 +245,23 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                                 Icon(Icons.Default.Share, "Share")
                             }
                             IconButton(onClick = {
-                                viewModel.deleteFiles(selectedFiles)
+                                // Resolve selected files to VideoItem so deleteItems
+                                // can access each entry's shareUri (the only delete
+                                // path that removes public-gallery rows on API 29+).
+                                val itemsByFile = items.associateBy { it.file }
+                                val toDelete = selectedFiles.mapNotNull { itemsByFile[it] }
                                 isSelectionMode = false
                                 selectedFiles = emptySet()
+                                if (toDelete.isEmpty()) return@IconButton
+                                coroutineScope.launch {
+                                    val result = viewModel.deleteItems(toDelete)
+                                    if (result.failed > 0) {
+                                        val plural = if (result.failed == 1) "recording" else "recordings"
+                                        snackbarHostState.showSnackbar(
+                                            "Could not delete ${result.failed} $plural"
+                                        )
+                                    }
+                                }
                             }) {
                                 Icon(Icons.Default.Delete, "Delete")
                             }

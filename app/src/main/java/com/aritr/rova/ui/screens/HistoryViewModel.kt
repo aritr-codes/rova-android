@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 data class VideoItem(
@@ -245,12 +246,88 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Deletes the given files on a background thread, then refreshes the list.
+     * Per-batch delete result. `deleted` counts rows the user
+     * successfully removed; `failed` counts rows that could not be
+     * deleted (security exception, missing MediaStore row paired with
+     * a stale legacy file path, etc.). The History screen surfaces
+     * `failed` as a snackbar so the user is not left wondering why a
+     * "deleted" item still appears in the gallery.
      */
-    fun deleteFiles(files: Set<File>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            files.forEach { it.delete() }
+    data class DeleteResult(val deleted: Int, val failed: Int)
+
+    /**
+     * Deletes the given recordings on `Dispatchers.IO`, prefers the
+     * `MediaStore` content URI (the only delete path that removes
+     * public-gallery rows on Android 10+ scoped storage), and falls
+     * back to `File.delete()` only for legacy app-private artifacts
+     * outside `MediaStore`. After the batch completes it triggers a
+     * `refresh()`; the caller observes the `items` StateFlow for the
+     * UI update and reads the returned [DeleteResult] to surface
+     * partial-failure messaging.
+     *
+     * Pre-fix the History screen called `File.delete()` on every
+     * selected entry. On API 29+ that does not actually remove the
+     * row from `Movies/Rova/...` because `MediaStore` owns it — the
+     * file would re-materialize on the next scan and the gallery
+     * entry persisted regardless. Routing through `ContentResolver.delete`
+     * with the canonical `shareUri` (already plumbed by the share
+     * fixes) closes that gap.
+     */
+    suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult =
+        withContext(Dispatchers.IO) {
+            if (items.isEmpty()) return@withContext DeleteResult(0, 0)
+            val resolver = getApplication<Application>().contentResolver
+            var deleted = 0
+            var failed = 0
+            items.forEach { item ->
+                if (deleteOne(resolver, item)) deleted++ else failed++
+            }
             refresh()
+            DeleteResult(deleted = deleted, failed = failed)
+        }
+
+    /**
+     * Single-item delete with the MediaStore-first fallback ladder.
+     * Returns `true` only when the row is gone after this call —
+     * either the `ContentResolver.delete` reported >0 affected rows
+     * OR the legacy `File.delete()` succeeded. A `SecurityException`
+     * (covers `RecoverableSecurityException` on API 29+ for rows the
+     * app does not own) is logged and counted as failure; we cannot
+     * launch the recovery `IntentSender` from a non-Activity context
+     * without restructuring the screen, and Rova-owned rows are the
+     * only artifacts the History list surfaces in the first place,
+     * so this path should only fire on cross-app drift.
+     */
+    private fun deleteOne(resolver: ContentResolver, item: VideoItem): Boolean {
+        return try {
+            val uri: Uri? = item.shareUri
+                ?: queryMediaStoreUriByPath(resolver, item.file.absolutePath)?.let(Uri::parse)
+            if (uri != null) {
+                val rows = resolver.delete(uri, null, null)
+                if (rows > 0) {
+                    runCatching { item.file.delete() }
+                    true
+                } else {
+                    // Row already gone (deleted out-of-band by the
+                    // gallery app, or never registered). Treat the
+                    // file-system entry as the source of truth.
+                    item.file.delete() || !item.file.exists()
+                }
+            } else {
+                item.file.delete() || !item.file.exists()
+            }
+        } catch (e: SecurityException) {
+            RovaLog.w(
+                "HistoryViewModel.deleteOne: SecurityException for ${item.file.absolutePath}",
+                e
+            )
+            false
+        } catch (e: Exception) {
+            RovaLog.w(
+                "HistoryViewModel.deleteOne: failed for ${item.file.absolutePath}",
+                e
+            )
+            false
         }
     }
 
