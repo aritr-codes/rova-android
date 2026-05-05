@@ -1137,8 +1137,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    fun getSupportedResolutions(): List<String> = QualityPresets.PICKER_ORDER.reversed()
-
     /**
      * Returns a headless `Preview.SurfaceProvider` so CameraX's pipeline
      * produces frames when no UI preview is bound. Required on Samsung devices

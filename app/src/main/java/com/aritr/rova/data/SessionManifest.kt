@@ -140,7 +140,7 @@ data class SessionManifest(
  *
  * The actual-output quality is derived on read from the produced
  * media file's real dimensions via
- * [com.aritr.rova.ui.screens.VideoMetadataUtils.getResolutionLabel],
+ * [com.aritr.rova.ui.screens.VideoMetadataUtils.extractMetadata],
  * which routes through [QualityLabels] so the History row label
  * matches the picker vocabulary. A divergence between the
  * Settings/Record picker (requested) and the History row (actual)

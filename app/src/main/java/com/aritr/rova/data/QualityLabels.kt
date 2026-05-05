@@ -5,14 +5,15 @@ package com.aritr.rova.data
  * surfaces in its picker, manifest config, and History display:
  * `"SD" / "HD" / "FHD" / "4K"`.
  *
- * Until this slice the History row label was derived ad-hoc by
- * [com.aritr.rova.ui.screens.VideoMetadataUtils.getResolutionLabel]
- * with a separate vocabulary (`"480p" / "720p" / "1080p" / "4K"`),
- * so a CameraX QualitySelector fallback would still appear under
- * the same label the user originally picked. Routing both the
- * requested-side picker and the actual-output read through this
- * helper keeps a fallback visible: a session requested as `"FHD"`
- * that recorded as 1280×720 will display as `"HD"` in History.
+ * Pre-Slice-11 the History row label was derived ad-hoc with a
+ * separate vocabulary (`"480p" / "720p" / "1080p" / "4K"`), so a
+ * CameraX QualitySelector fallback would still appear under the
+ * same label the user originally picked. Routing both the
+ * requested-side picker and the actual-output read
+ * ([com.aritr.rova.ui.screens.VideoMetadataUtils.extractMetadata])
+ * through this helper keeps a fallback visible: a session
+ * requested as `"FHD"` that recorded as 1280×720 displays as
+ * `"HD"` in History.
  *
  * The bucket is decided by orienting the frame so the longer
  * axis is the "width" and the shorter is the "height", then
