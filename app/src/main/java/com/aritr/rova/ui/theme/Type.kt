@@ -6,6 +6,41 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+/**
+ * Slice 3 — large monospace numeric style for the active HUD session
+ * timer. Add-only: does not displace any field in [Typography]; lives
+ * alongside it as a top-level [TextStyle] so call sites that need
+ * stable tabular digits at large size opt in explicitly.
+ *
+ * Tabular figures (`fontFeatureSettings = "tnum"`) keep digit advance
+ * widths fixed so the timer does not jiggle as digits rotate (a common
+ * 1-vs-0 width gap on proportional fonts). Letter spacing is held at
+ * `0.sp` — `tnum` already delivers stable widths; tightening tracking
+ * on top of that risks digit collisions at high font scales without
+ * solving a problem the platform has not actually shown.
+ */
+val NumericMonoLarge: TextStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Medium,
+    fontSize = 64.sp,
+    lineHeight = 64.sp,
+    letterSpacing = 0.sp,
+    fontFeatureSettings = "tnum"
+)
+
+/**
+ * Slice 3 — medium monospace numeric style for the waiting-state
+ * countdown. Same tabular figures as [NumericMonoLarge] at 32 sp.
+ */
+val NumericMonoMedium: TextStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Medium,
+    fontSize = 32.sp,
+    lineHeight = 36.sp,
+    letterSpacing = 0.sp,
+    fontFeatureSettings = "tnum"
+)
+
 val Typography = Typography(
     displayMedium = TextStyle(
         fontFamily = FontFamily.Serif,

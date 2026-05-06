@@ -21,12 +21,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -44,7 +45,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
-import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
+import com.aritr.rova.ui.components.RecordHudFormatters
+import com.aritr.rova.ui.components.RecordHudState
+import com.aritr.rova.ui.components.RecordStatusStrip
+import com.aritr.rova.ui.components.SessionTimer
+import com.aritr.rova.ui.components.ClipProgressBand
+import com.aritr.rova.ui.components.WaitingCountdown
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -206,6 +212,86 @@ fun RecordScreen(
 
     val isUiLocked = serviceState.isPeriodicActive || serviceState.isMerging
     val isCameraActive = serviceState.isCameraActive
+
+    // Slice 3 — wall-clock derived presentation timers for the active
+    // HUD. Anchors live on the VM (set on rising edge of the matching
+    // service flag); the composable ticks 1 Hz against those anchors
+    // and re-publishes the elapsed seconds as Compose state. When the
+    // anchor is null (idle / between rising edges) elapsed is 0 and
+    // the producer suspends until the next anchor change.
+    val sessionAnchorMillis by viewModel.sessionAnchorMillis.collectAsStateWithLifecycle()
+    val clipAnchorMillis by viewModel.clipAnchorMillis.collectAsStateWithLifecycle()
+    val sessionElapsedSeconds by produceState(
+        initialValue = 0L,
+        key1 = sessionAnchorMillis
+    ) {
+        val anchor = sessionAnchorMillis
+        if (anchor == null) {
+            value = 0L
+            return@produceState
+        }
+        while (true) {
+            val now = System.currentTimeMillis()
+            value = ((now - anchor) / 1000L).coerceAtLeast(0L)
+            delay(1000L)
+        }
+    }
+    val clipElapsedSeconds by produceState(
+        initialValue = 0,
+        key1 = clipAnchorMillis
+    ) {
+        val anchor = clipAnchorMillis
+        if (anchor == null) {
+            value = 0
+            return@produceState
+        }
+        while (true) {
+            val now = System.currentTimeMillis()
+            value = ((now - anchor) / 1000L).toInt().coerceAtLeast(0)
+            delay(1000L)
+        }
+    }
+    // Round the live-region announcement down to the nearest minute
+    // so TalkBack speaks the timer at most once per 60 s (per
+    // UI_ROADMAP §"Slice 3 special requirements" — no per-second
+    // accessibility chatter).
+    val sessionAnnouncementSeconds = sessionElapsedSeconds - (sessionElapsedSeconds % 60L)
+    val hudState = RecordHudState.from(
+        isPeriodicActive = serviceState.isPeriodicActive,
+        isRecording = serviceState.isRecording
+    )
+
+    // Slice 3 review fix — local-tick countdown for the Waiting body.
+    // The service decrements `nextRecordingCountdown` in 30-second
+    // chunks during the alarm-driven wait path
+    // (RovaRecordingService — alarm tick coalescing), so reading the
+    // service value directly produces a HUD that holds 01:00 for ~30 s
+    // then jumps to 00:30. We anchor on each service emission and
+    // tick down 1 Hz locally between emissions, so the user sees a
+    // smooth `MM:SS` countdown. Service emissions act as correction
+    // anchors: when the next 30 s chunk lands, the producer keys flip
+    // and the countdown re-anchors to whatever the service reports —
+    // even if that means jumping forward to correct local drift.
+    val serviceCountdownSeconds = serviceState.nextRecordingCountdown
+    val displayedCountdownSeconds by produceState(
+        initialValue = serviceCountdownSeconds,
+        key1 = serviceCountdownSeconds,
+        key2 = hudState
+    ) {
+        // Outside the Waiting body, surface the service value
+        // verbatim — there is no local tick to maintain.
+        if (hudState != RecordHudState.Waiting) {
+            value = serviceCountdownSeconds
+            return@produceState
+        }
+        var remaining = serviceCountdownSeconds.coerceAtLeast(0L)
+        value = remaining
+        while (remaining > 0L) {
+            delay(1000L)
+            remaining = (remaining - 1L).coerceAtLeast(0L)
+            value = remaining
+        }
+    }
 
     // Beta-smoke fix: cover CameraX preview warm-up with the existing
     // loading overlay. The service flips `isCameraActive` true the
@@ -377,40 +463,30 @@ fun RecordScreen(
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, "Settings", tint = Color.White)
                         }
-                        if (serviceState.isRecording && isCameraActive) {
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = Color.Black.copy(alpha = 0.35f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(12.dp)
-                                            .background(Color.Red, CircleShape)
-                                            .alpha(pulsingOpacity())
-                                    )
-                                    Spacer(Modifier.width(8.dp))
+                        // Slice 3 — when a periodic session is active, the
+                        // new RecordStatusStrip below carries the REC/WAIT
+                        // badge + loop + total elapsed, so the old centered
+                        // REC pill / "Rova" branding is suppressed.
+                        when {
+                            serviceState.isPeriodicActive -> {
+                                Spacer(Modifier.weight(1f, fill = true))
+                            }
+                            serviceState.isRecording && !isCameraActive -> {
+                                Text(
+                                    "INITIALIZING...",
+                                    color = Color.Yellow,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            else -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
                                     Text(
-                                        "REC",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.labelLarge
+                                        "Hands-free loop recorder",
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        style = MaterialTheme.typography.labelSmall
                                     )
                                 }
-                            }
-                        } else if (serviceState.isRecording && !isCameraActive) {
-                            Text("INITIALIZING...", color = Color.Yellow, fontWeight = FontWeight.Bold)
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Hands-free loop recorder",
-                                    color = Color.White.copy(alpha = 0.72f),
-                                    style = MaterialTheme.typography.labelSmall
-                                )
                             }
                         }
                         Row {
@@ -464,46 +540,100 @@ fun RecordScreen(
                             )
                         }
                     }
-                } // Column: top bar + battery banner + recovery echo
+                    // Slice 3 — persistent active-HUD status strip.
+                    // Idle hides it; warm-up frame is OK to render
+                    // through (the strip just shows current state).
+                    if (serviceState.isPeriodicActive) {
+                        Spacer(Modifier.height(8.dp))
+                        RecordStatusStrip(
+                            isRecording = hudState == RecordHudState.Recording,
+                            currentLoop = serviceState.currentLoop,
+                            totalLoops = serviceState.totalLoops,
+                            totalElapsedSeconds = sessionElapsedSeconds
+                        )
+                    }
+                } // Column: top bar + battery banner + recovery echo + status strip
 
                 // ------------------------------------------------------
                 // Bottom area: idle dock OR active overlay + Stop FAB.
                 // ------------------------------------------------------
                 if (serviceState.isPeriodicActive) {
-                    // Active mode is owned by Slice 3. Slice 2 preserves
-                    // the existing active UI verbatim.
-                    SessionStatusCard(
-                        isRecording = serviceState.isRecording,
-                        nextRecordingIn = serviceState.nextRecordingCountdown,
-                        currentLoop = serviceState.currentLoop,
-                        totalLoops = serviceState.totalLoops,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 140.dp)
-                            .padding(horizontal = 16.dp)
-                    )
-                    // Stop FAB
+                    // Slice 3 — Active HUD. Three vertical bands:
+                    //   - Center: large session-elapsed timer + meta.
+                    //   - Above stop: mutually-exclusive body
+                    //     (ClipProgressBand or WaitingCountdown,
+                    //     selected by `hudState`).
+                    //   - Bottom: full-width Stop button (72 dp tall),
+                    //     a sibling of the body — never an absolute
+                    //     overlay that could collide with the
+                    //     protected NavigationBar at any font scale.
+                    val timerSubtitle = when (hudState) {
+                        RecordHudState.Recording -> RecordHudFormatters.formatRecordingMeta(
+                            quality = resolution,
+                            flashLabel = RecordHudFormatters.formatFlashLabel(flashMode)
+                        )
+                        RecordHudState.Waiting -> RecordHudFormatters.formatNextClipDurationLabel(duration)
+                        RecordHudState.Idle -> null
+                    }
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 16.dp)
+                            .align(Alignment.Center)
+                            .padding(top = 96.dp)
                     ) {
-                        ExtendedFloatingActionButton(
-                            onClick = { viewModel.stopRecording() },
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                            expanded = true,
-                            icon = { Icon(Icons.Default.Stop, null) },
-                            text = {
-                                Text(
-                                    text = "STOP RECORDING",
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth(0.9f)
-                                .height(72.dp)
+                        SessionTimer(
+                            elapsedSeconds = sessionElapsedSeconds,
+                            announcementSeconds = sessionAnnouncementSeconds,
+                            label = "Session elapsed",
+                            subtitle = timerSubtitle
                         )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Mutually-exclusive body. The sealed
+                        // `RecordHudState` makes both-at-once
+                        // structurally impossible; the `when` is
+                        // exhaustive on the sealed hierarchy.
+                        when (hudState) {
+                            RecordHudState.Recording -> ClipProgressBand(
+                                elapsedSeconds = clipElapsedSeconds,
+                                clipSeconds = duration
+                            )
+                            RecordHudState.Waiting -> WaitingCountdown(
+                                nextClipInSeconds = displayedCountdownSeconds,
+                                currentLoop = serviceState.currentLoop,
+                                totalLoops = serviceState.totalLoops
+                            )
+                            RecordHudState.Idle -> Unit
+                        }
+                        Button(
+                            onClick = { viewModel.stopRecording() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp)
+                                .height(72.dp)
+                                .semantics {
+                                    contentDescription =
+                                        "Stop recording. Ends the session and saves the clips."
+                                }
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "Stop recording",
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                 } else {
                     // Idle: Slice 2 dock anchored at the bottom of the

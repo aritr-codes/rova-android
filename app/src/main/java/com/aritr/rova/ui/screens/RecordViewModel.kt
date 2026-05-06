@@ -95,6 +95,29 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         _editingField.value = null
     }
 
+    // --- Slice 3: presentation-only timer anchors for the active HUD.
+    //
+    // The recording service does not publish a "session start time"
+    // because the data layer measures time in clip indices and
+    // countdown ticks rather than wall-clock duration. The active HUD
+    // wants a wall-clock session-elapsed timer, so the VM observes
+    // the rising/falling edges of the service flags and stamps an
+    // anchor on each transition. The composable derives elapsed
+    // seconds from `System.currentTimeMillis() - anchor` while
+    // ticking 1 Hz; the VM never holds a per-second timer of its
+    // own.
+    //
+    // Persistence: anchors live in process memory only. Process
+    // death mid-session re-anchors at re-attach time — the elapsed
+    // timer under-counts by the off-process gap, which is acceptable
+    // for a v1 presentation timer and avoids widening the service
+    // contract or manifest schema.
+    private val _sessionAnchorMillis = MutableStateFlow<Long?>(null)
+    val sessionAnchorMillis: StateFlow<Long?> = _sessionAnchorMillis.asStateFlow()
+
+    private val _clipAnchorMillis = MutableStateFlow<Long?>(null)
+    val clipAnchorMillis: StateFlow<Long?> = _clipAnchorMillis.asStateFlow()
+
     init {
         // A2: Bind to the service. BIND_AUTO_CREATE starts the service process if needed
         // but does NOT call onStartCommand — recording only starts when start() is called.
@@ -106,6 +129,33 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { interval.collect { settings.intervalMinutes = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
+
+        // Slice 3 — anchor wall-clock timestamps for the HUD timers.
+        // Sets on the rising edge of each flag, clears on the falling
+        // edge. The first observation also sets the anchor if a
+        // session is already live at re-attach (process recreation).
+        viewModelScope.launch {
+            _serviceState.collect { state ->
+                if (state.isPeriodicActive) {
+                    if (_sessionAnchorMillis.value == null) {
+                        _sessionAnchorMillis.value = System.currentTimeMillis()
+                    }
+                } else {
+                    if (_sessionAnchorMillis.value != null) {
+                        _sessionAnchorMillis.value = null
+                    }
+                }
+                if (state.isRecording) {
+                    if (_clipAnchorMillis.value == null) {
+                        _clipAnchorMillis.value = System.currentTimeMillis()
+                    }
+                } else {
+                    if (_clipAnchorMillis.value != null) {
+                        _clipAnchorMillis.value = null
+                    }
+                }
+            }
+        }
     }
 
     override fun onCleared() {
