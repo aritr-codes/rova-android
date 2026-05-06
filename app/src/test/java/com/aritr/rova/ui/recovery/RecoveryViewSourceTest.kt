@@ -278,6 +278,91 @@ class RecoveryViewSourceTest {
         assertTrue(ui.cards.isEmpty())
     }
 
+    // ─── eligibleSessionCount ─────────────────────────────────────
+
+    @Test
+    fun `eligibleSessionCount returns 0 for null report`() {
+        val n = RecoveryViewSource.eligibleSessionCount(report = null) { _ -> null }
+        assertEquals(0, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount returns 0 when classifications are empty`() {
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = RecoveryReport(
+                classifications = emptyMap(),
+                scanStartMillis = 0L,
+                scanCompletedMillis = 0L
+            )
+        ) { _ -> null }
+        assertEquals(0, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount counts only OFFER_DISCARD with eligible terminator`() {
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = report(
+                classification("user", DiscardEligibility.OFFER_DISCARD),
+                classification("blocked", DiscardEligibility.BLOCKED),
+                classification("auto", DiscardEligibility.AUTO_DISCARD_ELIGIBLE),
+                classification("done", DiscardEligibility.OFFER_DISCARD)
+            )
+        ) { id ->
+            when (id) {
+                "user" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                "blocked" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                "auto" -> manifest(id, Terminated.KILLED_FORCE_STOP, terminatedAt = 100L)
+                "done" -> manifest(id, Terminated.COMPLETED, terminatedAt = 100L)
+                else -> null
+            }
+        }
+        // Only "user" survives the same filter History applies.
+        assertEquals(1, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount equals visible plus hidden count`() {
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = report(
+                classification("a"),
+                classification("b"),
+                classification("c")
+            )
+        ) { id ->
+            when (id) {
+                "a" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                "b" -> manifest(id, Terminated.KILLED_BY_SYSTEM, terminatedAt = 200L)
+                "c" -> manifest(id, Terminated.KILLED_FORCE_STOP, terminatedAt = 300L)
+                else -> null
+            }
+        }
+        // Mapper would emit 1 visible + 2 hidden = 3.
+        assertEquals(3, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount honors dismissedIds`() {
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = report(classification("a"), classification("b")),
+            dismissedIds = setOf("a")
+        ) { id ->
+            when (id) {
+                "a" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 100L)
+                "b" -> manifest(id, Terminated.USER_STOPPED, terminatedAt = 200L)
+                else -> null
+            }
+        }
+        assertEquals(1, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount drops manifest miss`() {
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = report(classification("missing"))
+        ) { _ -> null }
+        assertEquals(0, n)
+    }
+
     @Test
     fun `regression - vendor slot only true for KILLED_BY_SYSTEM visible card`() {
         val ids = listOf(

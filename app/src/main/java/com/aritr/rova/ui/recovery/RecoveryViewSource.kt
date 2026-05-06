@@ -62,4 +62,24 @@ object RecoveryViewSource {
             val manifest = loadManifest(classification.sessionId) ?: return@mapNotNull null
             RecoverySessionView(manifest = manifest, classification = classification)
         }
+
+    /**
+     * Slice 2 review fix — count of recovery sessions that the History
+     * surface would actually render (visible card + hidden footer
+     * count). Read-only consumers (e.g. the Record idle screen echo
+     * banner) call this so their gating mirrors `RecoveryUiStateMapper`
+     * exactly. The result is `0` whenever [buildUiState] would emit
+     * [RecoveryUiState.Empty]; otherwise it is the number of *sessions*
+     * (not segments) that survived the same eligibility filter the
+     * History card uses (`OFFER_DISCARD` + non-null, non-`COMPLETED`
+     * `Terminated`).
+     */
+    fun eligibleSessionCount(
+        report: RecoveryReport?,
+        dismissedIds: Set<String> = emptySet(),
+        loadManifest: (String) -> SessionManifest?
+    ): Int {
+        val ui = buildUiState(report, dismissedIds, loadManifest)
+        return ui.cards.size + ui.hiddenCount
+    }
 }

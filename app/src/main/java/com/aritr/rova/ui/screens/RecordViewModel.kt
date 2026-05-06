@@ -80,6 +80,21 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
     val customPresets: StateFlow<List<RovaPreset>> = _customPresets.asStateFlow()
 
+    // --- Slice 2: which idle-dock cell currently has its focused edit
+    // sheet mounted. null = no sheet open. Lives on the VM so the sheet
+    // visibility survives configuration changes. Single-cell mode by
+    // construction — only one sheet can be open at a time.
+    private val _editingField = MutableStateFlow<SheetTarget?>(null)
+    val editingField: StateFlow<SheetTarget?> = _editingField.asStateFlow()
+
+    fun openSheet(target: SheetTarget) {
+        _editingField.value = target
+    }
+
+    fun closeSheet() {
+        _editingField.value = null
+    }
+
     init {
         // A2: Bind to the service. BIND_AUTO_CREATE starts the service process if needed
         // but does NOT call onStartCommand — recording only starts when start() is called.

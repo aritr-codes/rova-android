@@ -8,8 +8,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,9 +36,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.aritr.rova.data.QualityPresets
-import com.aritr.rova.data.RovaPreset
+import com.aritr.rova.RovaApp
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.service.recovery.RecoveryReport
+import com.aritr.rova.ui.recovery.RecoveryViewSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
 import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -53,6 +55,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecordScreen(
     onMergeFinished: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
     viewModel: RecordViewModel = viewModel(),
     settingsViewModel: SettingsViewModel
 ) {
@@ -67,6 +70,51 @@ fun RecordScreen(
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
+    val editingField by viewModel.editingField.collectAsStateWithLifecycle()
+
+    // Slice 2 — read-only echo of the existing app-level recovery
+    // report. No new RecoveryViewModel ownership; the History tab
+    // remains the sole owner of Discard. RovaApp.instance is set in
+    // onCreate; under previews / tests it may be null, in which case
+    // the banner stays hidden.
+    val rovaApp = remember { context.applicationContext as? RovaApp }
+    val emptyRecoveryFlow = remember { MutableStateFlow<RecoveryReport?>(null) }
+    val recoveryReport by (rovaApp?.recoveryReport ?: emptyRecoveryFlow)
+        .collectAsStateWithLifecycle()
+    // Slice 2 review fix — count must mirror the eligibility filter
+    // History applies (RecoveryUiStateMapper). Raw classifications.size
+    // would expose BLOCKED / AUTO_DISCARD_ELIGIBLE / COMPLETED rows
+    // that History never renders, so the echo could light up while
+    // History had nothing to show.
+    //
+    // The eligibility check pays the same per-session loadManifest
+    // disk read RecoveryViewModel pays (exists / length / readText /
+    // JSON parse — see SessionStore.loadManifest). It MUST run off the
+    // main thread; doing it inside `remember { ... }` would block the
+    // Compose composition pass each time the recovery report flips.
+    // produceState carries the IO into a coroutine pinned to
+    // Dispatchers.IO and republishes the result as Compose state.
+    // The producer is keyed on `recoveryReport` and `rovaApp` so the
+    // load only re-runs when the source flow emits a new report
+    // (typically once per process lifetime, on cold-start scan).
+    val interruptedSessionCount by produceState(
+        initialValue = 0,
+        key1 = recoveryReport,
+        key2 = rovaApp
+    ) {
+        val store = rovaApp?.takeIf { it.videosRoot != null }?.sessionStore
+        if (store == null) {
+            value = 0
+            return@produceState
+        }
+        value = withContext(Dispatchers.IO) {
+            RecoveryViewSource.eligibleSessionCount(
+                report = recoveryReport,
+                dismissedIds = emptySet(),
+                loadManifest = store::loadManifest
+            )
+        }
+    }
 
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
@@ -122,21 +170,12 @@ fun RecordScreen(
 
     // UI State
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberStandardBottomSheetState(
-            initialValue = SheetValue.PartiallyExpanded,
-            skipHiddenState = true,
-        )
-    )
     var showSavePresetDialog by remember { mutableStateOf(false) }
     var presetNameInput by remember { mutableStateOf("") }
 
     // Tutorial State
     var showTutorial by remember { mutableStateOf(false) }
     var tutorialStep by remember { mutableIntStateOf(0) }
-
-    // Bottom sheet expanded controls scroll state (hoisted to avoid recreation)
-    val expandedScrollState = rememberScrollState()
 
     // Battery optimization banner — dismissed flag survives rotation; resets on next app launch
     var batteryBannerDismissed by rememberSaveable { mutableStateOf(false) }
@@ -148,13 +187,6 @@ fun RecordScreen(
         serviceState.recordingError?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearRecordingError()
-        }
-    }
-
-    // Auto-collapse sheet on recording start
-    LaunchedEffect(serviceState.isPeriodicActive) {
-        if (serviceState.isPeriodicActive) {
-            scaffoldState.bottomSheetState.partialExpand()
         }
     }
 
@@ -214,6 +246,36 @@ fun RecordScreen(
         )
     }
 
+    // ----------------------------------------------------------------
+    // Start handler — used by the idle dock Start button. Surfaces the
+    // existing StartResult.Blocked snackbar paths verbatim.
+    // ----------------------------------------------------------------
+    val onStart: () -> Unit = handler@{
+        if (!hasCapturePermissions) {
+            permissionsState.launchMultiplePermissionRequest()
+            return@handler
+        }
+        // Phase 1.4 (ADR 0006 B11) — caller-side FGS guard.
+        val result = RovaRecordingService.start(
+            context,
+            viewModel.duration.value.toFloat(),
+            viewModel.interval.value.toFloat(),
+            viewModel.loopCount.value,
+            viewModel.resolution.value
+        )
+        if (result is com.aritr.rova.service.StartResult.Blocked) {
+            val msg = when (result.reason) {
+                com.aritr.rova.service.StartBlocked.APP_NOT_VISIBLE ->
+                    "Open Rova on screen before starting. Android blocks camera launches from the background."
+                com.aritr.rova.service.StartBlocked.FGS_RESTRICTED ->
+                    "Cannot start recording — Android requires the app to be in the foreground."
+                com.aritr.rova.service.StartBlocked.UNKNOWN_ISE ->
+                    "Recording could not start. Please try again."
+            }
+            scope.launch { snackbarHostState.showSnackbar(msg) }
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = !serviceState.isRecording,
@@ -226,6 +288,8 @@ fun RecordScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Drawer "Quick settings" panel preserved per Slice 2
+                    // contract; Slice 5 owns drawer cleanup.
                     Surface(
                         shape = RoundedCornerShape(28.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
@@ -261,205 +325,9 @@ fun RecordScreen(
             }
         }
     ) {
-        BottomSheetScaffold(
-            scaffoldState = scaffoldState,
+        Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            sheetPeekHeight = 130.dp,
-            sheetSwipeEnabled = !isUiLocked,
-            sheetContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-            sheetContent = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .alpha(if (isUiLocked) 0.5f else 1f),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    // PEEK Area
-                    Column {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Quick Presets",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            if (scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded) {
-                                OutlinedButton(
-                                    onClick = { presetNameInput = ""; showSavePresetDialog = true },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                ) {
-                                    Text("Save Current", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            val defaultPresets = listOf(
-                                RovaPreset("Drill", 10, 1, 10, QualityPresets.FHD),
-                                RovaPreset("Vlog", 60, 0, -1, QualityPresets.HD),
-                            )
-                            items(defaultPresets) { p ->
-                                val isSelected = duration == p.duration &&
-                                    interval == p.interval &&
-                                    loopCount == p.loopCount &&
-                                    resolution == p.resolution
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (!isUiLocked) {
-                                            viewModel.duration.value = p.duration
-                                            viewModel.interval.value = p.interval
-                                            viewModel.loopCount.value = p.loopCount
-                                            viewModel.resolution.value = p.resolution
-                                        }
-                                    },
-                                    enabled = !isUiLocked,
-                                    label = { Text(p.name) },
-                                    leadingIcon = { if (isSelected) Icon(Icons.Default.Check, null) }
-                                )
-                            }
-                            items(customPresets) { p ->
-                                val isSelected = duration == p.duration &&
-                                    interval == p.interval &&
-                                    loopCount == p.loopCount &&
-                                    resolution == p.resolution
-                                InputChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (!isUiLocked) {
-                                            viewModel.duration.value = p.duration
-                                            viewModel.interval.value = p.interval
-                                            viewModel.loopCount.value = p.loopCount
-                                            viewModel.resolution.value = p.resolution
-                                        }
-                                    },
-                                    enabled = !isUiLocked,
-                                    label = { Text(p.name) },
-                                    trailingIcon = {
-                                        if (!isUiLocked) Icon(
-                                            Icons.Default.Close, "Delete",
-                                            Modifier
-                                                .size(16.dp)
-                                                .clickable { viewModel.deletePreset(p) }
-                                        )
-                                    },
-                                    avatar = if (isSelected) { { Icon(Icons.Default.Check, null) } } else null
-                                )
-                            }
-                        }
-
-                        // Summary (Visible in Peek)
-                        if (scaffoldState.bottomSheetState.currentValue == SheetValue.PartiallyExpanded) {
-                            Spacer(Modifier.height(12.dp))
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                item { RecordStatChip("Duration ${formatDuration(duration)}") }
-                                item { RecordStatChip("Interval ${formatInterval(interval)}") }
-                                item { RecordStatChip("Loops ${if (loopCount == -1) "∞" else loopCount}") }
-                                item { RecordStatChip(resolution) }
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-                    // EXPANDED Controls
-                    Column(modifier = Modifier.verticalScroll(expandedScrollState)) {
-                        Text(
-                            "Record Duration",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        StepperControl(
-                            value = duration,
-                            onValueChange = { viewModel.duration.value = it.coerceIn(1, 300) },
-                            range = 1..300,
-                            step = if (duration < 60) 5 else 15,
-                            unit = "s",
-                            modifier = Modifier.padding(top = 8.dp),
-                            enabled = !isUiLocked
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Interval Between Loops",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        StepperControl(
-                            value = interval,
-                            onValueChange = { viewModel.interval.value = it.coerceIn(0, 1440) },
-                            range = 0..1440,
-                            step = 1,
-                            unit = "m",
-                            modifier = Modifier.padding(top = 8.dp),
-                            enabled = !isUiLocked
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Loop Count",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            StepperControl(
-                                value = if (loopCount == -1) 0 else loopCount,
-                                onValueChange = { viewModel.loopCount.value = it.coerceIn(1, 999) },
-                                range = 1..999,
-                                step = 1,
-                                unit = "",
-                                modifier = Modifier.weight(1f),
-                                enabled = !isUiLocked
-                            )
-                            FilterChip(
-                                selected = loopCount == -1,
-                                onClick = { viewModel.loopCount.value = if (loopCount == -1) 10 else -1 },
-                                label = { Text("∞ Continuous") },
-                                enabled = !isUiLocked
-                            )
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        // Beta-smoke fix: backend already supports
-                        // RovaSettings.resolution + the service-side
-                        // QualitySelector mapping; the UI just never
-                        // exposed a direct selector. Presets silently
-                        // mutated it, which made it look like quality
-                        // wasn't user-controllable. Single chip row
-                        // bound to viewModel.resolution closes the gap.
-                        Text(
-                            "Video Quality",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        ) {
-                            QualityPresets.PICKER_ORDER.forEach { option ->
-                                FilterChip(
-                                    selected = resolution == option,
-                                    onClick = {
-                                        if (!isUiLocked) viewModel.resolution.value = option
-                                    },
-                                    enabled = !isUiLocked,
-                                    label = { Text(option) }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(80.dp))
-                    }
-                }
-            }
+            containerColor = Color.Black
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -493,103 +361,117 @@ fun RecordScreen(
                     }
                 }
 
-                // Top Bar + Battery Optimization Banner
+                // Top Bar + Battery Optimization Banner + Recovery Echo
                 Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(listOf(Color.Black.copy(0.6f), Color.Transparent))
-                        )
-                        .padding(16.dp)
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Default.Menu, "Settings", tint = Color.White)
-                    }
-                    if (serviceState.isRecording && isCameraActive) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.Black.copy(alpha = 0.35f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(listOf(Color.Black.copy(0.6f), Color.Transparent))
+                            )
+                            .padding(16.dp)
+                            .padding(top = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, "Settings", tint = Color.White)
+                        }
+                        if (serviceState.isRecording && isCameraActive) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color.Black.copy(alpha = 0.35f)
                             ) {
-                                Box(
-                                    Modifier
-                                        .size(12.dp)
-                                        .background(Color.Red, CircleShape)
-                                        .alpha(pulsingOpacity())
-                                )
-                                Spacer(Modifier.width(8.dp))
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(12.dp)
+                                            .background(Color.Red, CircleShape)
+                                            .alpha(pulsingOpacity())
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "REC",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
+                        } else if (serviceState.isRecording && !isCameraActive) {
+                            Text("INITIALIZING...", color = Color.Yellow, fontWeight = FontWeight.Bold)
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
                                 Text(
-                                    "REC",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelLarge
+                                    "Hands-free loop recorder",
+                                    color = Color.White.copy(alpha = 0.72f),
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             }
                         }
-                    } else if (serviceState.isRecording && !isCameraActive) {
-                        Text("INITIALIZING...", color = Color.Yellow, fontWeight = FontWeight.Bold)
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
-                            Text(
-                                "Hands-free loop recorder",
-                                color = Color.White.copy(alpha = 0.72f),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                    Row {
-                        val iconTint = if (isUiLocked) Color.Gray else Color.White
-                        IconButton(
-                            onClick = {
-                                if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3)
-                            },
-                            enabled = !isUiLocked
-                        ) {
-                            val icon = when (flashMode) {
-                                RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn
-                                RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto
-                                else -> Icons.Default.FlashOff
+                        Row {
+                            val iconTint = if (isUiLocked) Color.Gray else Color.White
+                            IconButton(
+                                onClick = {
+                                    if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3)
+                                },
+                                enabled = !isUiLocked
+                            ) {
+                                val icon = when (flashMode) {
+                                    RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn
+                                    RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto
+                                    else -> Icons.Default.FlashOff
+                                }
+                                Icon(
+                                    icon, "Flash",
+                                    tint = if (flashMode == RovaRecordingService.FLASH_MODE_ON) Color.Yellow else iconTint
+                                )
                             }
-                            Icon(
-                                icon, "Flash",
-                                tint = if (flashMode == RovaRecordingService.FLASH_MODE_ON) Color.Yellow else iconTint
-                            )
-                        }
-                        IconButton(
-                            onClick = { if (!isUiLocked) viewModel.flipCamera() },
-                            enabled = !isUiLocked
-                        ) {
-                            Icon(Icons.Default.FlipCameraIos, "Flip", tint = iconTint)
-                        }
-                        IconButton(
-                            onClick = { showTutorial = true; tutorialStep = 0 },
-                            enabled = !isUiLocked
-                        ) {
-                            Icon(Icons.Outlined.Info, "Help", tint = iconTint)
+                            IconButton(
+                                onClick = { if (!isUiLocked) viewModel.flipCamera() },
+                                enabled = !isUiLocked
+                            ) {
+                                Icon(Icons.Default.FlipCameraIos, "Flip", tint = iconTint)
+                            }
+                            IconButton(
+                                onClick = { showTutorial = true; tutorialStep = 0 },
+                                enabled = !isUiLocked
+                            ) {
+                                Icon(Icons.Outlined.Info, "Help", tint = iconTint)
+                            }
                         }
                     }
-                }
-                if (showBatteryBanner) {
-                    BatteryOptimizationBanner(
-                        onAction = {
-                            val intent = BatteryOptimizationHelper.buildRequestIntent(context.packageName)
-                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
-                        },
-                        onDismiss = { batteryBannerDismissed = true }
-                    )
-                }
-                } // Column: top bar + battery banner
+                    if (showBatteryBanner) {
+                        BatteryOptimizationBanner(
+                            onAction = {
+                                val intent = BatteryOptimizationHelper.buildRequestIntent(context.packageName)
+                                try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+                            },
+                            onDismiss = { batteryBannerDismissed = true }
+                        )
+                    }
+                    // Slice 2 — read-only recovery echo. Idle only;
+                    // hidden when no interrupted sessions are tracked.
+                    if (!serviceState.isPeriodicActive && interruptedSessionCount > 0) {
+                        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            RecoveryEchoBanner(
+                                interruptedCount = interruptedSessionCount,
+                                onReviewInHistory = onNavigateToHistory
+                            )
+                        }
+                    }
+                } // Column: top bar + battery banner + recovery echo
 
-                // Bottom Overlay
+                // ------------------------------------------------------
+                // Bottom area: idle dock OR active overlay + Stop FAB.
+                // ------------------------------------------------------
                 if (serviceState.isPeriodicActive) {
+                    // Active mode is owned by Slice 3. Slice 2 preserves
+                    // the existing active UI verbatim.
                     SessionStatusCard(
                         isRecording = serviceState.isRecording,
                         nextRecordingIn = serviceState.nextRecordingCountdown,
@@ -600,90 +482,51 @@ fun RecordScreen(
                             .padding(bottom = 140.dp)
                             .padding(horizontal = 16.dp)
                     )
-                }
-
-                // Config summary (visible when idle)
-                if (!serviceState.isPeriodicActive) {
-                    Surface(
+                    // Stop FAB
+                    Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 90.dp),
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.Black.copy(alpha = 0.56f)
+                            .padding(bottom = 16.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            RecordDarkChip(formatDuration(duration))
-                            RecordDarkChip("${if (loopCount == -1) "∞" else loopCount} loops")
-                            RecordDarkChip(formatInterval(interval))
-                            RecordDarkChip(resolution)
-                        }
-                    }
-                }
-
-                // FAB (Anchored above Peek)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp)
-                ) {
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            if (serviceState.isPeriodicActive) {
-                                viewModel.stopRecording()
-                            } else {
-                                if (hasCapturePermissions) {
-                                    // Phase 1.4 (ADR 0006 B11) — caller-side
-                                    // FGS guard. RovaRecordingService.start now
-                                    // returns StartResult; surface each Blocked
-                                    // reason with the right message.
-                                    val result = RovaRecordingService.start(
-                                        context,
-                                        viewModel.duration.value.toFloat(),
-                                        viewModel.interval.value.toFloat(),
-                                        viewModel.loopCount.value,
-                                        viewModel.resolution.value
-                                    )
-                                    if (result is com.aritr.rova.service.StartResult.Blocked) {
-                                        val msg = when (result.reason) {
-                                            com.aritr.rova.service.StartBlocked.APP_NOT_VISIBLE ->
-                                                "Open Rova on screen before starting. Android blocks camera launches from the background."
-                                            com.aritr.rova.service.StartBlocked.FGS_RESTRICTED ->
-                                                "Cannot start recording — Android requires the app to be in the foreground."
-                                            com.aritr.rova.service.StartBlocked.UNKNOWN_ISE ->
-                                                "Recording could not start. Please try again."
-                                        }
-                                        scope.launch { snackbarHostState.showSnackbar(msg) }
-                                    }
-                                } else {
-                                    permissionsState.launchMultiplePermissionRequest()
-                                }
-                            }
-                        },
-                        containerColor = if (serviceState.isPeriodicActive)
-                            MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        contentColor = if (serviceState.isPeriodicActive)
-                            MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
-                        expanded = true,
-                        icon = {
-                            Icon(
-                                if (serviceState.isPeriodicActive) Icons.Default.Stop else Icons.Default.Videocam,
-                                null
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = if (serviceState.isPeriodicActive) "STOP RECORDING" else "START RECORDING",
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        modifier = if (serviceState.isPeriodicActive)
-                            Modifier
+                        ExtendedFloatingActionButton(
+                            onClick = { viewModel.stopRecording() },
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                            expanded = true,
+                            icon = { Icon(Icons.Default.Stop, null) },
+                            text = {
+                                Text(
+                                    text = "STOP RECORDING",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            modifier = Modifier
                                 .fillMaxWidth(0.9f)
                                 .height(72.dp)
-                        else Modifier
+                        )
+                    }
+                } else {
+                    // Idle: Slice 2 dock anchored at the bottom of the
+                    // overlay box. Sibling of the bottom nav, never an
+                    // absolute overlay.
+                    RecordIdleDock(
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        customPresets = customPresets,
+                        onCellTap = { viewModel.openSheet(it) },
+                        onPresetSelected = { p ->
+                            viewModel.duration.value = p.duration
+                            viewModel.interval.value = p.interval
+                            viewModel.loopCount.value = p.loopCount
+                            viewModel.resolution.value = p.resolution
+                        },
+                        onPresetDeleted = { viewModel.deletePreset(it) },
+                        onSavePreset = { presetNameInput = ""; showSavePresetDialog = true },
+                        onStart = onStart,
+                        startEnabled = !isUiLocked,
+                        modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
 
@@ -708,7 +551,7 @@ fun RecordScreen(
                                     Spacer(Modifier.height(16.dp))
                                     Text("Customize Your Recording", style = MaterialTheme.typography.titleLarge, color = Color.White)
                                     Text(
-                                        "Use the bottom sheet to set Duration, Interval, and Loop Count.",
+                                        "Tap any of the four cells to set Clip length, Repeats, Wait, or Quality.",
                                         color = Color.White.copy(0.8f),
                                         textAlign = TextAlign.Center
                                     )
@@ -752,6 +595,35 @@ fun RecordScreen(
                 }
             }
         }
+    }
+
+    // --------------------------------------------------------------
+    // Edit sheets — single-target router driven by editingField. The
+    // sheet lives outside the drawer/scaffold so the ModalBottomSheet
+    // overlays the entire screen including the drawer scrim.
+    // --------------------------------------------------------------
+    when (editingField) {
+        SheetTarget.ClipLength -> ClipLengthEditSheet(
+            initialSeconds = duration,
+            onCommit = { viewModel.duration.value = it.coerceIn(1, 300) },
+            onCancel = { viewModel.closeSheet() }
+        )
+        SheetTarget.Repeats -> RepeatsEditSheet(
+            initialLoopCount = loopCount,
+            onCommit = { viewModel.loopCount.value = it },
+            onCancel = { viewModel.closeSheet() }
+        )
+        SheetTarget.Wait -> WaitEditSheet(
+            initialMinutes = interval,
+            onCommit = { viewModel.interval.value = it.coerceAtLeast(0) },
+            onCancel = { viewModel.closeSheet() }
+        )
+        SheetTarget.Quality -> QualityEditSheet(
+            initialQuality = resolution,
+            onCommit = { viewModel.resolution.value = it },
+            onCancel = { viewModel.closeSheet() }
+        )
+        null -> Unit
     }
 
     // Merge Overlay
@@ -820,41 +692,11 @@ fun RecordScreen(
     }
 }
 
-// Formatting Helpers
+// Formatting Helpers — retained for any consumers outside RecordScreen.
 fun formatDuration(seconds: Int): String {
     return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
 }
 
 fun formatInterval(minutes: Int): String {
     return if (minutes == 0) "No wait" else "${minutes}m"
-}
-
-@Composable
-private fun RecordStatChip(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-private fun RecordDarkChip(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = Color.White.copy(alpha = 0.14f)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White
-        )
-    }
 }

@@ -111,13 +111,15 @@ fun MainScreen() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("record") {
+                val toHistory: () -> Unit = {
+                    navController.navigate("history") {
+                        popUpTo(navController.graph.startDestinationId)
+                        launchSingleTop = true
+                    }
+                }
                 RecordScreen(
-                    onMergeFinished = {
-                        navController.navigate("history") {
-                            popUpTo(navController.graph.startDestinationId)
-                            launchSingleTop = true
-                        }
-                    },
+                    onMergeFinished = toHistory,
+                    onNavigateToHistory = toHistory,
                     settingsViewModel = settingsViewModel
                 )
             }
