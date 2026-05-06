@@ -4,11 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,16 +25,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -65,14 +61,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.recovery.RecoveryCardKind
@@ -81,13 +82,7 @@ import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import com.aritr.rova.ui.share.safeShareUri
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.launch
-
-private val dateGroupFormat = SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault())
-private val timeDisplayFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -188,12 +183,24 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
         }
     }
 
-    val groupedItems = remember(items) {
+    // Slice 4 — group rows by the human-friendly sticky-header label
+    // (Today / Yesterday / "May 1, 2026"). The header text is computed
+    // once per items snapshot from the row formatter; downstream the
+    // map preserves insertion order so newest groups stay on top.
+    val nowMillis = remember(items) { System.currentTimeMillis() }
+    val groupedItems = remember(items, nowMillis) {
         items.groupBy { item ->
-            dateGroupFormat.format(Date(item.file.lastModified()))
+            HistoryRowFormatters.formatGroupHeader(item.file.lastModified(), nowMillis)
         }
     }
     val totalSize = remember(items) { items.sumOf { it.file.length() } }
+    val retentionPill = remember(items, context) {
+        val settings = RovaSettings(context)
+        HistoryRowFormatters.formatRetentionPill(
+            autoDeleteEnabled = settings.autoDeleteEnabled,
+            keepLatest = settings.autoDeleteKeepLatest
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -289,10 +296,30 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                             Column {
                                 Text("Library", style = MaterialTheme.typography.titleLarge)
                                 Text(
-                                    "${items.size} recordings • ${formatFileSize(totalSize)}",
+                                    text = HistoryRowFormatters.formatLibrarySummary(
+                                        recordingCount = items.size,
+                                        totalBytes = totalSize
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (retentionPill != null) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = retentionPill,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(
+                                                horizontal = 10.dp,
+                                                vertical = 4.dp
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -377,13 +404,6 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                             )
                         }
                     }
-                    item {
-                        HistorySummaryCard(
-                            recordingCount = items.size,
-                            totalSize = totalSize,
-                            onNavigateToRecord = onNavigateToRecord
-                        )
-                    }
 
                     groupedItems.forEach { (date, dateItems) ->
                         stickyHeader {
@@ -400,8 +420,9 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
 
                         items(dateItems, key = { it.file.absolutePath }) { item ->
                             val isSelected = selectedFiles.contains(item.file)
-                            VideoCard(
+                            LibraryRow(
                                 item = item,
+                                nowMillis = nowMillis,
                                 isSelectionMode = isSelectionMode,
                                 isSelected = isSelected,
                                 onToggleSelection = {
@@ -438,83 +459,76 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
     }
 }
 
-@Composable
-private fun HistorySummaryCard(
-    recordingCount: Int,
-    totalSize: Long,
-    onNavigateToRecord: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(30.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = "Session archive",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                text = "Review merged clips, share them, or jump straight back into capture mode.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryBadge("$recordingCount recordings")
-                SummaryBadge(formatFileSize(totalSize))
-            }
-            FilledTonalButton(onClick = onNavigateToRecord) {
-                Icon(Icons.Default.Videocam, null)
-                Spacer(Modifier.size(8.dp))
-                Text("Record another session")
-            }
-        }
-    }
-}
-
+/**
+ * Slice 4 — list-row redesign for the Library. Replaces the
+ * decorative `ElevatedCard` rows with a soft Surface row whose
+ * primary text is the human date · time pulled from
+ * [HistoryRowFormatters.formatPrimaryDateTime]; the filename
+ * survives as a small monospace caption so users debugging an
+ * artifact can still locate it.
+ *
+ * Selection contract is unchanged from the prior `VideoCard`:
+ *   - tap     → play (or toggle selection in selection mode)
+ *   - long-press → enter selection / toggle this row
+ *   - per-row 48 dp `MoreVert` overflow → enters selection mode for
+ *     this row, surfacing the existing top-app-bar Share / Delete
+ *     actions without introducing a new sheet route.
+ *
+ * The whole row's `combinedClickable` carries a single
+ * `contentDescription` so TalkBack reads `"Recording May 4 · 2:22 PM,
+ * quality FHD, size 82.4 MB"` on focus, not the filename string. The
+ * overflow icon button has its own `contentDescription` describing
+ * its scope (`"More actions for May 4 · 2:22 PM recording"`).
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun VideoCard(
+fun LibraryRow(
     item: VideoItem,
+    nowMillis: Long,
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onToggleSelection: () -> Unit,
     onPlay: () -> Unit
 ) {
-    ElevatedCard(
+    val primary = remember(item.file, nowMillis) {
+        HistoryRowFormatters.formatPrimaryDateTime(item.file.lastModified())
+    }
+    val time24 = remember(item.file) {
+        HistoryRowFormatters.formatTime24(item.file.lastModified())
+    }
+    val sizeText = remember(item.file) {
+        HistoryRowFormatters.formatSize(item.file.length())
+    }
+    val rowA11y = remember(primary, item.file, item.resolution) {
+        HistoryRowFormatters.formatRowAccessibility(
+            primaryDateTime = primary,
+            sizeBytes = item.file.length(),
+            quality = item.resolution
+        )
+    }
+    val moreA11y = remember(primary) {
+        HistoryRowFormatters.formatMoreActionsLabel(primary)
+    }
+    val rowBackground = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+        Color.Transparent
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = rowBackground,
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onPlay,
                 onLongClick = onToggleSelection
             )
-            .then(
-                if (isSelected) {
-                    Modifier.border(
-                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-                        RoundedCornerShape(26.dp)
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
+            .semantics { contentDescription = rowA11y }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSelectionMode) {
@@ -522,65 +536,89 @@ fun VideoCard(
                     checked = isSelected,
                     onCheckedChange = { onToggleSelection() }
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(4.dp))
             }
-
             Box {
                 VideoThumbnail(
                     thumbnail = item.thumbnail,
                     modifier = Modifier
-                        .size(width = 102.dp, height = 74.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(width = 96.dp, height = 64.dp)
+                        .clip(RoundedCornerShape(10.dp))
                 )
                 Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = Color.Black.copy(alpha = 0.58f),
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.7f),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(8.dp)
+                        .padding(4.dp)
                 ) {
                     Text(
                         text = item.resolution,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.size(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
+            Spacer(modifier = Modifier.size(12.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp)
+            ) {
                 Text(
-                    text = item.file.nameWithoutExtension,
+                    text = primary,
                     style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Bold
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
+                Row {
+                    Text(
+                        text = time24,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = " · ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = sizeText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = formatTime(item.file.lastModified()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Text(
-                    text = formatFileSize(item.file.length()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = item.file.name,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
+                    ),
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-
-            if (!isSelectionMode) {
+            // Slice 4 — explicit per-row overflow trigger. 48 dp
+            // touch target via the M3 IconButton default.
+            // Long-press still works as a fast keyboard-free entry
+            // path; this button is the discoverable one.
+            IconButton(onClick = onToggleSelection) {
                 Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Open",
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = moreA11y,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
+
 
 @Composable
 private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
@@ -612,27 +650,3 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun SummaryBadge(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    }
-}
-
-private fun formatFileSize(size: Long): String {
-    val kb = size / 1024.0
-    val mb = kb / 1024.0
-    return if (mb > 1) String.format("%.1f MB", mb) else String.format("%.0f KB", kb)
-}
-
-private fun formatTime(millis: Long): String {
-    return timeDisplayFormat.format(Date(millis))
-}
