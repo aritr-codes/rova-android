@@ -1,9 +1,9 @@
 package com.aritr.rova.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,315 +14,610 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.aritr.rova.ui.components.SwitchRow
+import com.aritr.rova.BuildConfig
+import com.aritr.rova.ui.theme.RovaTokens
+import com.aritr.rova.ui.theme.RovaWarnings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * Phase 2.1B — App Settings re-skin matching mockups/new_uiux/06-app-settings.html.
+ *
+ * The screen is intentionally quiet: flat rows on the page background,
+ * eyebrow-styled section labels, hairline dividers between rows. The
+ * mockup's `backdrop-filter: blur` is replaced by `MaterialTheme.colorScheme`
+ * surface roles + low alpha — see docs/UI_DESIGN_TOKENS.md §2.5 for why
+ * real blur is NO-GO on minSdk 24.
+ *
+ * Behavior preserved (no recording-pipeline change):
+ *  - keepScreenOn / enableBeeps / vibrateAlerts toggles unchanged
+ *  - autoDeleteEnabled + autoDeleteKeepLatest chips ([5,10,25,50]) unchanged
+ *  - Battery optimization CTA still routes through BatteryOptimizationHelper
+ *  - Privacy + version row unchanged in destination
+ *
+ * exportFolderName surfaces here as a UI/persistence-only row. No
+ * ExportPipeline / MediaStore consumer reads it yet; Phase 5 wires that.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(settingsViewModel: SettingsViewModel) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
+    val exportFolderName by settingsViewModel.exportFolderName.collectAsStateWithLifecycle()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        MaterialTheme.colorScheme.background
+    // Re-read battery-exempt state on resume so returning from the system
+    // settings screen flips the badge without forcing a manual refresh.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var batteryExempt by remember {
+        mutableStateOf(BatteryOptimizationHelper.isIgnoring(context))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                batteryExempt = BatteryOptimizationHelper.isIgnoring(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    var showBatteryDialog by remember { mutableStateOf(false) }
+    var showFolderDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.88f)
                     )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
                 )
             )
-    ) {
-        Scaffold(
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text("Settings", style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                "Shape how Rova behaves during unattended sessions",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 28.dp)
+        ) {
+            SettingsSection(label = "Recording behavior") {
+                SettingsRow(
+                    icon = Icons.Default.Smartphone,
+                    label = "Keep screen on",
+                    supporting = "Stops the screen from dimming while you frame a shot.",
+                    onClick = {
+                        settingsViewModel.keepScreenOn.value = !keepScreenOn
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                    trailing = {
+                        Switch(
+                            checked = keepScreenOn,
+                            onCheckedChange = { settingsViewModel.keepScreenOn.value = it }
+                        )
+                    }
                 )
             }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                SettingsHeroCard(
-                    enableBeeps = enableBeeps,
-                    vibrateAlerts = vibrateAlerts,
-                    keepScreenOn = keepScreenOn
+
+            SettingsSection(label = "Alerts") {
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    label = "Sound cues",
+                    supporting = "Play short beeps so you can hear when capture starts and stops.",
+                    onClick = {
+                        settingsViewModel.enableBeeps.value = !enableBeeps
+                    },
+                    trailing = {
+                        Switch(
+                            checked = enableBeeps,
+                            onCheckedChange = { settingsViewModel.enableBeeps.value = it }
+                        )
+                    }
                 )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Vibration,
+                    label = "Vibrate alerts",
+                    supporting = "Use a short vibration to confirm starts and stops.",
+                    onClick = {
+                        settingsViewModel.vibrateAlerts.value = !vibrateAlerts
+                    },
+                    trailing = {
+                        Switch(
+                            checked = vibrateAlerts,
+                            onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
+                        )
+                    }
+                )
+            }
 
-                SettingsSection(
-                    title = "Capture behavior",
-                    subtitle = "Toggles that affect how the recorder feels while you are filming."
-                ) {
-                    SwitchRow(
-                        Icons.Default.Smartphone,
-                        "Keep screen on",
-                        "Prevent the display from timing out while you frame a shot.",
-                        keepScreenOn
-                    ) { settingsViewModel.keepScreenOn.value = it }
-
-                    SwitchRow(
-                        Icons.AutoMirrored.Filled.VolumeUp,
-                        "Sound cues",
-                        "Play start and stop beeps so you can confirm capture hands-free.",
-                        enableBeeps
-                    ) { settingsViewModel.enableBeeps.value = it }
-
-                    SwitchRow(
-                        Icons.Default.Vibration,
-                        "Haptic feedback",
-                        "Reserve vibration for confirmation and future alerts.",
-                        vibrateAlerts
-                    ) { settingsViewModel.vibrateAlerts.value = it }
+            SettingsSection(label = "Storage") {
+                SettingsRow(
+                    icon = Icons.Default.DeleteSweep,
+                    label = "Auto-delete old recordings",
+                    supporting = if (autoDeleteEnabled) {
+                        "Keeping the latest $autoDeleteKeepLatest finished recordings."
+                    } else {
+                        "Off. Recordings stay until you delete them yourself."
+                    },
+                    onClick = {
+                        settingsViewModel.autoDeleteEnabled.value = !autoDeleteEnabled
+                    },
+                    trailing = {
+                        Switch(
+                            checked = autoDeleteEnabled,
+                            onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
+                        )
+                    }
+                )
+                if (autoDeleteEnabled) {
+                    KeepLatestChips(
+                        selected = autoDeleteKeepLatest,
+                        options = KEEP_LATEST_OPTIONS,
+                        onSelect = { settingsViewModel.autoDeleteKeepLatest.value = it }
+                    )
                 }
-
-                SettingsSection(
-                    title = "Storage",
-                    subtitle = "Tools for keeping long recording sessions manageable."
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp
-                    ) {
-                        Column {
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                                headlineContent = { Text("Auto-delete old recordings") },
-                                supportingContent = {
-                                    Text(
-                                        if (autoDeleteEnabled) {
-                                            "Keeping the latest $autoDeleteKeepLatest finalized recordings."
-                                        } else {
-                                            "Off — every recording stays until you delete it."
-                                        }
-                                    )
-                                },
-                                leadingContent = { androidx.compose.material3.Icon(Icons.Default.DeleteSweep, null) },
-                                trailingContent = {
-                                    androidx.compose.material3.Switch(
-                                        checked = autoDeleteEnabled,
-                                        onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
-                                    )
-                                },
-                                modifier = Modifier.clickable {
-                                    settingsViewModel.autoDeleteEnabled.value = !autoDeleteEnabled
-                                }
-                            )
-                            if (autoDeleteEnabled) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    listOf(5, 10, 25, 50).forEach { option ->
-                                        androidx.compose.material3.FilterChip(
-                                            selected = autoDeleteKeepLatest == option,
-                                            onClick = {
-                                                settingsViewModel.autoDeleteKeepLatest.value = option
-                                            },
-                                            label = { Text("$option") }
-                                        )
-                                    }
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Folder,
+                    label = "Export folder name",
+                    supporting = "Where finished videos appear inside your gallery.",
+                    value = exportFolderName.ifBlank { "Default folder" },
+                    onClick = { showFolderDialog = true },
+                    trailing = { ChevronTrailing() }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.CleaningServices,
+                    label = "Clear cache",
+                    supporting = "Removes preview thumbnails and temporary files.",
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            val cacheDir = context.cacheDir
+                            // Phase 2.1B review-fix — capture length BEFORE
+                            // delete; File.length() on a deleted inode returns
+                            // 0 on most filesystems, which silently undercounted
+                            // the toast.
+                            val deleted = cacheDir.walkBottomUp().sumOf { file ->
+                                if (file == cacheDir) {
+                                    0L
+                                } else {
+                                    val size = file.length()
+                                    if (file.delete()) size else 0L
                                 }
                             }
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                                headlineContent = { Text("Clear cache") },
-                                supportingContent = { Text("Removes generated preview and temporary app files.") },
-                                leadingContent = { androidx.compose.material3.Icon(Icons.Default.CleaningServices, null) },
-                                modifier = Modifier.clickable {
-                                    scope.launch(Dispatchers.IO) {
-                                        val cacheDir = context.cacheDir
-                                        val deleted = cacheDir.walkBottomUp().sumOf { file ->
-                                            if (file != cacheDir && file.delete()) file.length() else 0L
-                                        }
-                                        val mb = deleted / 1024.0 / 1024.0
-                                        launch(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                if (mb > 0.1) "Cleared %.1f MB".format(mb) else "Cache is empty",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                }
-                            )
+                            val mb = deleted / 1024.0 / 1024.0
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    if (mb > 0.1) "Cleared %.1f MB".format(mb) else "Cache is empty",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
-                    }
-                }
+                    },
+                    trailing = { ChevronTrailing() }
+                )
+            }
 
-                SettingsSection(
-                    title = "About",
-                    subtitle = "Version info and policy links."
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp
-                    ) {
-                        Column {
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                                headlineContent = { Text("Version") },
-                                supportingContent = { Text(com.aritr.rova.BuildConfig.VERSION_NAME) },
-                                leadingContent = { androidx.compose.material3.Icon(Icons.Default.Info, null) }
+            SettingsSection(label = "Reliability") {
+                SettingsRow(
+                    icon = Icons.Default.BatteryAlert,
+                    label = "Battery optimization",
+                    supporting = "Required so recordings keep going in the background.",
+                    onClick = { showBatteryDialog = true },
+                    trailing = { BatteryStatusBadge(exempt = batteryExempt) }
+                )
+            }
+
+            SettingsSection(label = "About") {
+                SettingsRow(
+                    icon = Icons.Default.Info,
+                    label = "Version",
+                    value = BuildConfig.VERSION_NAME,
+                    onClick = null,
+                    trailing = null
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.PrivacyTip,
+                    label = "Privacy policy",
+                    supporting = "Open the policy in your browser.",
+                    onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://aritr-codes.github.io/rova-privacy/")
+                                )
                             )
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                                headlineContent = { Text("Privacy policy") },
-                                supportingContent = { Text("Open the hosted policy in your browser.") },
-                                leadingContent = { androidx.compose.material3.Icon(Icons.Default.PrivacyTip, null) },
-                                modifier = Modifier.clickable {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://aritr-codes.github.io/rova-privacy/"))
-                                    )
-                                }
-                            )
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(
+                                context,
+                                "No browser available",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                    }
-                }
+                    },
+                    trailing = { ChevronTrailing() }
+                )
             }
         }
     }
-}
 
-@Composable
-private fun SettingsHeroCard(
-    enableBeeps: Boolean,
-    vibrateAlerts: Boolean,
-    keepScreenOn: Boolean
-) {
-    Surface(
-        shape = RoundedCornerShape(30.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = "Recorder profile",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-                text = "Make Rova feel predictable before you walk away from the phone.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PreferenceBadge("Screen ${if (keepScreenOn) "awake" else "managed"}")
-                PreferenceBadge("Beeps ${if (enableBeeps) "on" else "off"}")
-                PreferenceBadge("Haptics ${if (vibrateAlerts) "on" else "off"}")
-            }
-        }
-    }
-}
-
-@Composable
-fun SettingsSection(
-    title: String,
-    subtitle: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-            tonalElevation = 2.dp,
-            shadowElevation = 2.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                content = content
-            )
-        }
-    }
-}
-
-@Composable
-private fun PreferenceBadge(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+    if (showBatteryDialog) {
+        BatteryOptimizationDialog(
+            exempt = batteryExempt,
+            onConfirm = {
+                showBatteryDialog = false
+                val intent = BatteryOptimizationHelper.buildRequestIntent(context.packageName)
+                try {
+                    context.startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(
+                        context,
+                        "Battery settings not available on this device",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onDismiss = { showBatteryDialog = false }
         )
     }
+
+    if (showFolderDialog) {
+        ExportFolderDialog(
+            initial = exportFolderName,
+            onSave = { newValue ->
+                settingsViewModel.exportFolderName.value = newValue
+                showFolderDialog = false
+            },
+            onDismiss = { showFolderDialog = false }
+        )
+    }
+}
+
+private val KEEP_LATEST_OPTIONS = listOf(5, 10, 25, 50)
+
+/**
+ * Phase 2.1B review-fix — defensive sanitizer for the export folder name
+ * persisted via [RovaSettings.exportFolderName].
+ *
+ * Phase 5 will be the first export-pipeline consumer of this value, but
+ * Phase 2.1B must not create bad persisted state in the meantime. Contract:
+ *  - trim leading/trailing whitespace
+ *  - cap at 32 characters (matches mockup's `maxlength="32"`)
+ *  - single folder segment — strip path separators (`/`, `\`)
+ *  - strip platform-invalid filename chars (`: * ? " < > |`)
+ *  - strip ASCII control chars (`< 0x20`, `0x7F`)
+ *  - reserved `.` / `..` resolve to the empty string
+ *  - empty result means "use the existing default folder" — exactly the
+ *    semantic [RovaSettings.exportFolderName] documents for `""`
+ *
+ * `internal` so the unit test in `SettingsExportFolderTest` can call it
+ * directly without Compose / Android infra.
+ */
+internal fun sanitizeExportFolderName(input: String): String {
+    val invalidChars = setOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
+    val filtered = input.filter { ch ->
+        ch.code >= 0x20 && ch.code != 0x7F && ch !in invalidChars
+    }
+    val trimmed = filtered.trim().take(32).trim()
+    return when (trimmed) {
+        "", ".", ".." -> ""
+        else -> trimmed
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    label: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label.uppercase(),
+            style = RovaTokens.eyebrow,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.padding(
+                start = RovaTokens.screenEdgeMargin,
+                end = RovaTokens.screenEdgeMargin,
+                top = 20.dp,
+                bottom = 8.dp
+            )
+        )
+        content()
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    icon: ImageVector,
+    label: String,
+    supporting: String? = null,
+    value: String? = null,
+    onClick: (() -> Unit)?,
+    trailing: (@Composable () -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base }
+            .heightIn(min = RovaTokens.minHitTarget)
+            .padding(
+                horizontal = RovaTokens.screenEdgeMargin,
+                vertical = RovaTokens.settingsRowVerticalPadding
+            ),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(9.dp),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+            modifier = Modifier.size(RovaTokens.camControlSize)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+            )
+            if (!supporting.isNullOrEmpty()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                )
+            }
+            if (!value.isNullOrEmpty()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                )
+            }
+        }
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun ChevronTrailing() {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+        modifier = Modifier.size(20.dp)
+    )
+}
+
+@Composable
+private fun BatteryStatusBadge(exempt: Boolean) {
+    if (exempt) {
+        // Quiet "Exempt" label — surface-variant tone keeps focus on the
+        // soft warning when the user is NOT exempt. No green token exists
+        // in RovaWarnings (4 severities locked per UI_DESIGN_TOKENS §2.10).
+        Text(
+            text = "Exempt",
+            style = RovaTokens.statusPillLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(end = 4.dp)
+        )
+    } else {
+        Surface(
+            shape = RoundedCornerShape(5.dp),
+            color = RovaWarnings.soft.copy(alpha = 0.12f)
+        ) {
+            Text(
+                text = "Not exempt",
+                style = RovaTokens.statusPillLabel,
+                color = RovaWarnings.soft.copy(alpha = 0.9f),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeepLatestChips(
+    selected: Int,
+    options: List<Int>,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = RovaTokens.screenEdgeMargin + RovaTokens.camControlSize + 11.dp,
+                end = RovaTokens.screenEdgeMargin,
+                bottom = 10.dp
+            ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                label = {
+                    Text(
+                        text = "$option",
+                        style = RovaTokens.cellValue
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(
+            start = RovaTokens.screenEdgeMargin + RovaTokens.camControlSize + 11.dp,
+            end = RovaTokens.screenEdgeMargin
+        ),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.onSurface.copy(
+            alpha = RovaTokens.settingsRowDividerAlpha
+        )
+    )
+}
+
+@Composable
+private fun BatteryOptimizationDialog(
+    exempt: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.BatteryAlert,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = { Text(text = "Battery optimization") },
+        text = {
+            Text(
+                text = if (exempt) {
+                    "Rova is already exempt from battery optimization. Recordings will keep going in the background. Open battery settings to review or change this."
+                } else {
+                    "Rova needs to be exempt from battery optimization so recordings keep going in the background. Without this, your device may stop the recording mid-session."
+                },
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = "Open battery settings")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Not now")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ExportFolderDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember { mutableStateOf(initial) }
+    // Sanitize live so the preview reflects what would actually persist
+    // — typing "foo/bar" shows "foobar". Save persists the same value.
+    val sanitized = sanitizeExportFolderName(value)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Export folder name") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { input -> value = input.take(32) },
+                    singleLine = true,
+                    label = { Text(text = "Folder name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = if (sanitized.isEmpty()) {
+                        "Videos will be saved to your default folder."
+                    } else {
+                        "Videos will be saved to Movies / $sanitized"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(sanitized) }) {
+                Text(text = "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel")
+            }
+        }
+    )
 }

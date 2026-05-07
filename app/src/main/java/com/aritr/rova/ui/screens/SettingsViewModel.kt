@@ -27,6 +27,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val keepScreenOn = MutableStateFlow(settings.keepScreenOn)
     val autoDeleteEnabled = MutableStateFlow(settings.autoDeleteEnabled)
     val autoDeleteKeepLatest = MutableStateFlow(settings.autoDeleteKeepLatest)
+    // Phase 2.1B — UI/persistence-only surface for the Phase 0 key. No
+    // export-pipeline consumer reads this yet; Phase 5 will wire the
+    // gating consumer. Empty string = use the existing default folder.
+    val exportFolderName = MutableStateFlow(settings.exportFolderName)
 
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
@@ -34,5 +38,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { keepScreenOn.collect { settings.keepScreenOn = it } }
         viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
         viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
+        viewModelScope.launch { exportFolderName.collect { settings.exportFolderName = it } }
     }
 }
