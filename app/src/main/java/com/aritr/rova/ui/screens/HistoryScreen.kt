@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -74,6 +76,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.recovery.RecoveryCardKind
@@ -158,6 +161,30 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFiles by remember { mutableStateOf(setOf<File>()) }
+
+    // Phase 2.2 — Library "View Settings" popup state. `viewSettingsConfig` is the
+    // resolved config for the dialog body; null hides the dialog. The 3-dot menu
+    // opens on per-row state (see LibraryRow). On legacy file-only rows (no
+    // sessionId) or storage-unavailable boots, loadSessionConfig returns null and
+    // the snackbar fires instead of opening an empty dialog.
+    var viewSettingsConfig by remember { mutableStateOf<SessionConfig?>(null) }
+    val onOpenViewSettings: (VideoItem) -> Unit = { item ->
+        coroutineScope.launch {
+            val cfg = viewModel.loadSessionConfig(item.sessionId)
+            if (cfg != null) {
+                viewSettingsConfig = cfg
+            } else {
+                snackbarHostState.showSnackbar(
+                    "Settings not available for this recording"
+                )
+            }
+        }
+    }
+    val onEditPlaceholder: () -> Unit = {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar("Editor coming in a future release")
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -420,6 +447,17 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
 
                         items(dateItems, key = { it.file.absolutePath }) { item ->
                             val isSelected = selectedFiles.contains(item.file)
+                            val playItem: () -> Unit = {
+                                val intent = Intent(context, PreviewActivity::class.java).apply {
+                                    putExtra("VIDEO_PATH", item.file.absolutePath)
+                                    // Plumb the safe share URI through so PreviewActivity
+                                    // can avoid FileProvider on Movies/Rova paths. Stringly
+                                    // typed across the Intent boundary to dodge Parcelable
+                                    // schema drift between process versions.
+                                    item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                                }
+                                context.startActivity(intent)
+                            }
                             LibraryRow(
                                 item = item,
                                 nowMillis = nowMillis,
@@ -439,23 +477,25 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                                         selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
                                         if (selectedFiles.isEmpty()) isSelectionMode = false
                                     } else {
-                                        val intent = Intent(context, PreviewActivity::class.java).apply {
-                                            putExtra("VIDEO_PATH", item.file.absolutePath)
-                                            // Plumb the safe share URI through so PreviewActivity
-                                            // can avoid FileProvider on Movies/Rova paths. Stringly
-                                            // typed across the Intent boundary to dodge Parcelable
-                                            // schema drift between process versions.
-                                            item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
-                                        }
-                                        context.startActivity(intent)
+                                        playItem()
                                     }
-                                }
+                                },
+                                onMenuOpen = playItem,
+                                onMenuEdit = onEditPlaceholder,
+                                onMenuViewSettings = { onOpenViewSettings(item) }
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    viewSettingsConfig?.let { cfg ->
+        LibrarySessionConfigDialog(
+            config = cfg,
+            onDismiss = { viewSettingsConfig = null }
+        )
     }
 }
 
@@ -467,18 +507,22 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
  * survives as a small monospace caption so users debugging an
  * artifact can still locate it.
  *
- * Selection contract is unchanged from the prior `VideoCard`:
- *   - tap     → play (or toggle selection in selection mode)
- *   - long-press → enter selection / toggle this row
- *   - per-row 48 dp `MoreVert` overflow → enters selection mode for
- *     this row, surfacing the existing top-app-bar Share / Delete
- *     actions without introducing a new sheet route.
+ * Interaction contract:
+ *   - row tap → opens playback (`onPlay`) unless selection mode is
+ *     active, in which case it toggles this row's selection.
+ *   - row long-press → enters or toggles multi-select (`onToggleSelection`).
+ *   - per-row 48 dp `MoreVert` overflow → opens the Phase 2.2 row
+ *     menu with Open / Edit / View Settings when selection mode is
+ *     NOT active. While selection mode is active, the overflow
+ *     falls back to toggling this row's selection and must not open
+ *     the menu (so the multi-select gesture is never shadowed).
+ *   - the overflow remains a 48 dp `IconButton` with its own
+ *     `contentDescription` describing its scope (`"More actions for
+ *     May 4 · 2:22 PM recording"`).
  *
  * The whole row's `combinedClickable` carries a single
  * `contentDescription` so TalkBack reads `"Recording May 4 · 2:22 PM,
- * quality FHD, size 82.4 MB"` on focus, not the filename string. The
- * overflow icon button has its own `contentDescription` describing
- * its scope (`"More actions for May 4 · 2:22 PM recording"`).
+ * quality FHD, size 82.4 MB"` on focus, not the filename string.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -488,7 +532,10 @@ fun LibraryRow(
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onToggleSelection: () -> Unit,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onMenuOpen: () -> Unit = {},
+    onMenuEdit: () -> Unit = {},
+    onMenuViewSettings: () -> Unit = {}
 ) {
     val primary = remember(item.file, nowMillis) {
         HistoryRowFormatters.formatPrimaryDateTime(item.file.lastModified())
@@ -605,15 +652,51 @@ fun LibraryRow(
                 )
             }
             // Slice 4 — explicit per-row overflow trigger. 48 dp
-            // touch target via the M3 IconButton default.
-            // Long-press still works as a fast keyboard-free entry
-            // path; this button is the discoverable one.
-            IconButton(onClick = onToggleSelection) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = moreA11y,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // touch target via the M3 IconButton default. Long-press
+            // on the row still enters multi-select; the overflow icon
+            // now opens the Phase 2.2 dropdown menu (Open / Edit /
+            // View Settings). In selection mode the icon falls back
+            // to the legacy "tap to toggle" so the menu cannot
+            // shadow the multi-select gesture.
+            Box {
+                var menuExpanded by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = {
+                        if (isSelectionMode) onToggleSelection() else menuExpanded = true
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = moreA11y,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Open") },
+                        onClick = {
+                            menuExpanded = false
+                            onMenuOpen()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            menuExpanded = false
+                            onMenuEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("View Settings") },
+                        onClick = {
+                            menuExpanded = false
+                            onMenuViewSettings()
+                        }
+                    )
+                }
             }
         }
     }

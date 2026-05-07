@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.utils.RovaLog
@@ -490,6 +491,34 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 e
             )
             false
+        }
+    }
+
+    /**
+     * Phase 2.2 — read-only adapter for the Library "View Settings"
+     * popup. Resolves a History row's [VideoItem.sessionId] back to
+     * the [SessionConfig] persisted at session start so the dialog can
+     * surface the original clip / repeats / wait / quality picks.
+     *
+     * Returns `null` when:
+     * - [sessionId] is `null` (legacy file-only entry — pre-Phase-1.7
+     *   builds did not write a manifest);
+     * - the [SessionStore] is not available (storage missing at boot);
+     * - the manifest cannot be loaded or parsed.
+     *
+     * The dialog treats `null` as the "settings unavailable" branch
+     * and surfaces a snackbar rather than crashing. Runs on
+     * [Dispatchers.IO] because [SessionStore.loadManifest] does
+     * synchronous filesystem I/O.
+     */
+    suspend fun loadSessionConfig(sessionId: String?): SessionConfig? {
+        if (sessionId == null) return null
+        return withContext(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val sessionStore = (app as? RovaApp)?.let {
+                runCatching { it.sessionStore }.getOrNull()
+            } ?: return@withContext null
+            runCatching { sessionStore.loadManifest(sessionId)?.config }.getOrNull()
         }
     }
 
