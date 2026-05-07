@@ -1,0 +1,97 @@
+package com.aritr.rova.ui.theme
+
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/**
+ * Phase 2.1A — screen-local design tokens extracted from
+ * `docs/UI_DESIGN_TOKENS.md` §2.3 / §2.4 / §2.2.
+ *
+ * Theme-level tokens (color slots, typography slots, shape globals)
+ * live in [Color], [Type], and [Theme]. Tokens here are values that
+ * a *specific* layout consumes by name — putting them on
+ * [androidx.compose.material3.MaterialTheme] would invite over-application
+ * (e.g. nothing else in the app should pick up `recordCardBottomInset`).
+ *
+ * ALL-CAPS labels (`eyebrow`, `cellKey`) are upper-cased at the call
+ * site via `.uppercase()`; the [TextStyle] only carries the
+ * font / weight / spacing.
+ */
+object RovaTokens {
+    // Shape — only the canonical pill is here. Card / popup / sheet shapes
+    // stay as inline `RoundedCornerShape(...)` per docs/UI_DESIGN_TOKENS.md
+    // §2.3 ("do not override `MaterialTheme.shapes` globally").
+    val pill = RoundedCornerShape(999.dp)
+
+    // Sizing / spacing — see docs/UI_DESIGN_TOKENS.md §2.4.
+    val minHitTarget = 48.dp
+    val screenEdgeMargin = 16.dp
+    val recordCardBottomInset = 110.dp
+    val camControlGap = 7.dp
+    val camControlSize = 30.dp
+    val stepperButtonSize = 27.dp
+    val statusDotSize = 6.dp
+    val settingsRowVerticalPadding = 13.dp
+    val settingsRowDividerAlpha = 0.046f
+    val primaryActionSize = 64.dp
+    val stopActionSize = 72.dp
+
+    // Typography — see docs/UI_DESIGN_TOKENS.md §2.2 ("screen-local"
+    // typography tokens, separate from the M3 Typography slots).
+    // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2 + §5.5).
+    val eyebrow: TextStyle = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 9.sp,
+        letterSpacing = 2.sp
+    )
+
+    val statusPillLabel: TextStyle = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        fontFeatureSettings = "tnum"
+    )
+
+    val cellValue: TextStyle = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        fontFeatureSettings = "tnum"
+    )
+
+    val cellKey: TextStyle = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 8.sp,
+        letterSpacing = 0.8.sp
+    )
+}
+
+/**
+ * Phase 2.1A — warning severity tokens consumed by Phase 4
+ * `WarningCenter` composables. See `docs/UI_DESIGN_TOKENS.md` §2.10
+ * + `docs/WarningCenterContract.md` §3.
+ *
+ * Severities are **domain tokens**, not Material 3 ColorScheme slots:
+ * mapping a custom severity onto a M3 slot would over-apply (e.g.
+ * tinting buttons that are not warnings). [hard] re-uses the same
+ * hex as `colorScheme.error`; [advisory] re-uses `colorScheme.primary`.
+ * They are duplicated here intentionally so the warning render path
+ * never needs to know about M3 surface roles.
+ *
+ * Tints are applied at **12% alpha for fills** and **85% alpha for
+ * foregrounds** at the call site (mockup pattern
+ * `rgba(R,G,B,0.12)` / `rgba(R,G,B,0.85)`).
+ */
+object RovaWarnings {
+    val hard: Color = Color(0xFFEF4444)
+    val soft: Color = Color(0xFFFBBF24)
+    val advisory: Color = Color(0xFF5B7FFF)
+    val escalating: Color = Color(0xFFF97316)
+}

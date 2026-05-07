@@ -12,9 +12,16 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+// Phase 2.1A — dark scheme aligned with docs/UI_DESIGN_TOKENS.md §2.1.
+// `primary` flips Harbor90 → InfraBlue (#5B7FFF) and `error` flips
+// RecordingRed → SignalRed (#EF4444); the surface stack picks up the
+// new Midnight / MidnightSurface / MidnightSurfaceAlt hex values from
+// Color.kt. Container slots (primaryContainer, errorContainer, etc.)
+// and on* tints stay as-shipped — only color values landed here, no
+// slot-mapping changes.
 private val DarkColorScheme = darkColorScheme(
-    primary = Harbor90,
-    onPrimary = Ink95,
+    primary = InfraBlue,
+    onPrimary = Color.White,
     primaryContainer = Harbor40,
     onPrimaryContainer = Ink10,
     secondary = Copper90,
@@ -25,7 +32,7 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary = Ink95,
     tertiaryContainer = Sage40,
     onTertiaryContainer = Sand10,
-    error = RecordingRed,
+    error = SignalRed,
     errorContainer = OnRecordingRedContainer,
     onError = Color.White,
     onErrorContainer = RecordingRedContainer,
@@ -67,7 +74,10 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant = Ink80,
     outline = Sand90,
     outlineVariant = Sand60,
-    inverseSurface = MidnightSurface,
+    // Phase 2.1A — pinned to the pre-2.1A MidnightSurface hex (#18212B) so
+    // the light scheme is byte-identical with shipped Slices 1-4 even after
+    // the dark MidnightSurface moved to #0E1216.
+    inverseSurface = LightInverseSurface,
     inverseOnSurface = Sand10,
     inversePrimary = Harbor90
 )

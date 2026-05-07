@@ -26,7 +26,30 @@ val RecordingRed = Color(0xFFC64133)
 val RecordingRedContainer = Color(0xFFFFDAD4)
 val OnRecordingRedContainer = Color(0xFF410704)
 
-val Midnight = Color(0xFF111922)
-val MidnightSurface = Color(0xFF18212B)
-val MidnightSurfaceAlt = Color(0xFF202B36)
+// Phase 2.1A — dark-scheme palette aligned with docs/UI_DESIGN_TOKENS.md §2.1.
+// Replaces the previous near-black stack with the mockup-source page background
+// (#06090f), a surface family derived from the frosted sheet color
+// (rgba(9,13,20,0.97) over #06090f ≈ #0E1216), and a slightly lighter
+// surfaceVariant (#161B23) for the frosted-pill / divider stack.
+//
+// MidnightSurface is now dark-only — the light scheme `inverseSurface` slot
+// references the separate `LightInverseSurface` constant below so its hex
+// stays byte-identical with shipped Slices 1-4.
+val Midnight = Color(0xFF06090F)
+val MidnightSurface = Color(0xFF0E1216)
+val MidnightSurfaceAlt = Color(0xFF161B23)
 val MidnightOutline = Color(0xFF627181)
+
+// Phase 2.1A — dark-scheme accents from docs/UI_DESIGN_TOKENS.md §2.1.
+// InfraBlue replaces Harbor90 as `colorScheme.primary` in dark only;
+// SignalRed replaces RecordingRed as `colorScheme.error` in dark only.
+// Light scheme keeps Harbor40 / RecordingRed (legibility on light surfaces).
+val InfraBlue = Color(0xFF5B7FFF)
+val SignalRed = Color(0xFFEF4444)
+
+// Phase 2.1A — pinned to the pre-2.1A MidnightSurface hex so the light
+// scheme `inverseSurface` slot is byte-identical with shipped Slices 1-4.
+// MidnightSurface itself moved to #0E1216 for the dark surface family;
+// the light scheme inverse keeps the older near-black so light-on-dark
+// inverse callouts (snackbars, banners) do not visually drift.
+val LightInverseSurface = Color(0xFF18212B)

@@ -43,21 +43,26 @@ val NumericMonoMedium: TextStyle = TextStyle(
 
 val Typography = Typography(
     displayMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2). Roboto via
+        // FontFamily.SansSerif is metrically close enough for v1.0 and avoids the
+        // license + asset scope this docs-foundation phase is not chartered for.
+        fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
         fontSize = 40.sp,
         lineHeight = 44.sp,
         letterSpacing = (-0.5).sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2).
+        fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 31.sp,
         letterSpacing = (-0.2).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
+        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2).
+        fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp
