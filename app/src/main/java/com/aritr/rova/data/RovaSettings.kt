@@ -49,6 +49,23 @@ class RovaSettings(context: Context) {
     var autoDeleteKeepLatest: Int
         get() = prefs.getInt("auto_delete_keep_latest", 10)
         set(value) = prefs.edit { putInt("auto_delete_keep_latest", value) }
+
+    // Phase 0 UI-pending keys — persisted only; no UI/service consumer yet.
+    // First-run onboarding completion flag.
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean("onboarding_completed", false)
+        set(value) = prefs.edit { putBoolean("onboarding_completed", value) }
+
+    // Default ON: preserves existing behavior where finalized recordings
+    // publish to MediaStore. Phase 5 will introduce the gating consumer.
+    var autoExportEnabled: Boolean
+        get() = prefs.getBoolean("auto_export_enabled", true)
+        set(value) = prefs.edit { putBoolean("auto_export_enabled", value) }
+
+    // Preferred MediaStore relative folder name; empty = caller default.
+    var exportFolderName: String
+        get() = prefs.getString("export_folder_name", "") ?: ""
+        set(value) = prefs.edit { putString("export_folder_name", value) }
 }
 
 data class RovaPreset(
