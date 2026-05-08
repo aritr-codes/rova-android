@@ -2232,9 +2232,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * 1. Allocate a fresh seq.
      * 2. Arm a WAKE alarm at `now + waitSeconds*1000` (per ADR 0001 the
      *    scheduler chooses exact-vs-inexact at the call site).
-     * 3. Suspend on [tickSignals.receive] inside [withTimeoutOrNull] with a
+     * 3. Start an in-process delay that posts the same seq into
+     *    [tickSignals] when the service is still alive. This is the normal
+     *    foreground/live-process path.
+     * 4. Suspend on [tickSignals.receive] inside [withTimeoutOrNull] with a
      *    drift envelope of `triggerAt + WAKE_DRIFT_BUDGET_MS`.
-     * 4. On drift-budget timeout the alarm was OEM-suppressed — re-arm once
+     * 5. On drift-budget timeout the alarm was OEM-suppressed — re-arm once
      *    and wait another budget. On a SECOND timeout we give up the wait
      *    and fall through; the outer loop continues to the next segment.
      *
@@ -2244,11 +2247,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * indefinitely while the FGS holds the camera — worse than continuing
      * with drift.
      *
-     * Process-death case: if the process is killed during the wait, this
-     * coroutine is gone with it. The next process / cold launch sees the
-     * pending WAKE alarm fire and the receiver writes KILLED_BY_SYSTEM via
-     * the empty-controller branch. The WATCHDOG kind covers the *recording*
-     * window in [recordSegment].
+     * Why both local delay and alarm: the live service must not depend on
+     * broadcast delivery to progress to the next clip. The local delay is
+     * cheap and precise while the process is alive. The WAKE alarm remains
+     * the cross-process recovery path: if the process is killed during the
+     * wait, the local delay dies with it, the pending WAKE alarm fires later,
+     * and the receiver writes KILLED_BY_SYSTEM via the empty-controller
+     * branch. The WATCHDOG kind covers the *recording* window in
+     * [recordSegment].
      *
      * Wakelock is released for waits long enough to benefit; alarms use
      * RTC_WAKEUP. Notification countdown runs as a best-effort child job.
@@ -2265,6 +2271,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val seq = nextTickSeq++
         val triggerAt = System.currentTimeMillis() + waitSeconds * 1000L
         AlarmScheduler.arm(this, sessionId, seq, triggerAt, TickKind.WAKE)
+
+        val liveDelayJob = serviceScope.launch {
+            delay(waitSeconds * 1000L)
+            val ok = tickSignals.trySend(seq).isSuccess
+            if (ok) {
+                RovaLog.d("waitForNextSegment: live delay delivered seq=$seq after ${waitSeconds}s")
+            } else {
+                RovaLog.w("waitForNextSegment: live delay could not deliver seq=$seq; channel closed")
+            }
+        }
 
         val canRelax = shouldRelaxWakeLock(waitSeconds)
         if (canRelax) {
@@ -2328,6 +2344,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
             }
         } finally {
+            liveDelayJob.cancel()
+            try {
+                AlarmScheduler.cancel(this, sessionId, TickKind.WAKE)
+            } catch (e: Exception) {
+                RovaLog.w("waitForNextSegment: wake cancel failed for $sessionId", e)
+            }
             countdownJob.cancel()
             // Phase 1.8 / C17 (review round 2): always re-call
             // acquireWakeLock at the end of each inter-segment wait.
