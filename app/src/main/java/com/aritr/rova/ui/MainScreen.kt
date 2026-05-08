@@ -60,7 +60,14 @@ fun MainScreen() {
     val recordViewModel: RecordViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
     val recordServiceState by recordViewModel.serviceState.collectAsStateWithLifecycle()
-    val sessionLocked = recordServiceState.isPeriodicActive
+    // Phase 2.4 — lock the bottom nav for both the active periodic
+    // session AND the post-stop merge. `RecordScreen` already uses
+    // the same predicate via its `isUiLocked` field; without the
+    // `isMerging` term here, History / Settings / Record tabs stay
+    // tappable during the merge HUD because the service flips
+    // `isPeriodicActive` off before `isMerging` falls.
+    val sessionLocked = recordServiceState.isPeriodicActive ||
+        recordServiceState.isMerging
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val destinations = listOf(
@@ -73,9 +80,10 @@ fun MainScreen() {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Slice 3 — "Locked while recording" hint pill above
-                // the nav. Visible only while a periodic session is
-                // active. Carried in the bottomBar slot so it never
+                // Slice 3 / Phase 2.4 — "Locked during recording"
+                // hint pill above the nav. Visible while a periodic
+                // session is active OR a post-stop merge is in
+                // flight. Carried in the bottomBar slot so it never
                 // overlaps the nav itself at any font scale.
                 if (sessionLocked) {
                     Box(
@@ -94,11 +102,11 @@ fun MainScreen() {
                             ),
                             modifier = Modifier.semantics {
                                 contentDescription =
-                                    "Navigation locked while recording"
+                                    "Navigation locked during recording"
                             }
                         ) {
                             Text(
-                                text = "Locked while recording",
+                                text = "Locked during recording",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(
