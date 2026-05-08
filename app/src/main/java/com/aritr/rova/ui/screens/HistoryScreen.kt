@@ -2,8 +2,10 @@ package com.aritr.rova.ui.screens
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -32,11 +34,11 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +70,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -84,6 +87,7 @@ import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import com.aritr.rova.ui.share.safeShareUri
+import com.aritr.rova.ui.theme.RovaTheme
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -371,48 +375,7 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
                             vendorHelpSlotFor = vendorHelpSlotFor,
                         )
                     }
-                    Surface(
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-                        tonalElevation = 4.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 30.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(24.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(82.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Videocam,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(18.dp))
-                            Text(
-                                "Your library is empty",
-                                style = MaterialTheme.typography.headlineSmall
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Once you finish a recording loop, merged videos appear here with thumbnails and quick share actions.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(22.dp))
-                            FilledTonalButton(onClick = onNavigateToRecord) {
-                                Icon(Icons.Default.Add, null)
-                                Spacer(Modifier.size(8.dp))
-                                Text("Create your first session")
-                            }
-                        }
-                    }
+                    LibraryEmptyState(onStartRecording = onNavigateToRecord)
                 }
             } else {
                 LazyColumn(
@@ -729,6 +692,162 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
                 contentDescription = "Play",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+/**
+ * Phase 2.3 — Library "No Recordings Yet" empty state.
+ *
+ * Renders when `HistoryViewModel.items` is empty. The decorative
+ * illustration is drawn in Compose via [Canvas] (concentric primary-tint
+ * rings) with a centered Material `Videocam` glyph; this avoids adding a
+ * new VectorDrawable XML resource that would bake mockup-specific hex
+ * values into `res/drawable/`. All ring colors derive from
+ * `MaterialTheme.colorScheme.primary` so light/dark themes share one
+ * source of truth.
+ *
+ * Layout matches `mockups/new_uiux/03-history-library.html` Phone 4
+ * (Empty State) — illustration + title + body + filled primary CTA.
+ * The composable is callable from inside the `if (items.isEmpty())`
+ * branch in both the recovery-card-stacked and standalone cases per
+ * `docs/UI_NAV_GRAPH.md` §4.3 (Phase 2.3 owner).
+ *
+ * The illustration carries `contentDescription = null` (decorative); the
+ * title, body, and CTA each announce themselves to TalkBack so the empty
+ * state reads as one logical unit followed by an actionable button.
+ */
+@Composable
+private fun LibraryEmptyState(
+    onStartRecording: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(32.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 28.dp, vertical = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(96.dp)
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val r = size.minDimension / 2f
+                    drawCircle(color = primary.copy(alpha = 0.06f), radius = r)
+                    drawCircle(color = primary.copy(alpha = 0.10f), radius = r * 0.74f)
+                }
+                Icon(
+                    Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = primary.copy(alpha = 0.85f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                "No Recordings Yet",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Your merged sessions will appear here once you complete a recording.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(22.dp))
+            Button(onClick = onStartRecording) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text("Start Recording")
+            }
+        }
+    }
+}
+
+@Preview(
+    name = "Library · Empty · Dark",
+    uiMode = Configuration.UI_MODE_NIGHT_YES
+)
+@Preview(
+    name = "Library · Empty · Light",
+    uiMode = Configuration.UI_MODE_NIGHT_NO
+)
+@Composable
+private fun LibraryEmptyStatePreview() {
+    // Phase 2.3 review-fix — backdrop comes from
+    // `MaterialTheme.colorScheme.background` inside `RovaTheme` so the
+    // dark/light variants stay theme-driven. No raw screen-level hex at
+    // the call site, per Phase 1 token contract.
+    RovaTheme {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                LibraryEmptyState(onStartRecording = {})
+            }
+        }
+    }
+}
+
+@Preview(
+    name = "Library · Empty + Recovery placeholder · Dark",
+    uiMode = Configuration.UI_MODE_NIGHT_YES
+)
+@Composable
+private fun LibraryEmptyStateWithRecoveryPreview() {
+    // Phase 2.3 — preview-only fake recovery placeholder (a Surface
+    // pretending to be a recovery card). Uses no RecoveryViewModel /
+    // RecoveryCardList wiring; only proves the empty state composes
+    // cleanly below an arbitrary card-shaped block at the same width.
+    // Phase 2.3 review-fix — backdrop is theme-driven via
+    // `MaterialTheme.colorScheme.background` (no raw hex).
+    RovaTheme {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Recovery card placeholder",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            "Stacked above the empty state in the real screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                LibraryEmptyState(onStartRecording = {})
+            }
         }
     }
 }
