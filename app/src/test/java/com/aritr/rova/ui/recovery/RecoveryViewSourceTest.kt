@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.recovery
 
+import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
@@ -29,7 +30,8 @@ class RecoveryViewSourceTest {
         sessionId: String,
         terminated: Terminated?,
         terminatedAt: Long? = null,
-        startedAt: Long = 0L
+        startedAt: Long = 0L,
+        exportState: ExportState = ExportState.NOT_STARTED
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = startedAt,
@@ -37,7 +39,8 @@ class RecoveryViewSourceTest {
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
         terminated = terminated,
-        terminatedAt = terminatedAt
+        terminatedAt = terminatedAt,
+        exportState = exportState
     )
 
     private fun classification(
@@ -361,6 +364,37 @@ class RecoveryViewSourceTest {
             report = report(classification("missing"))
         ) { _ -> null }
         assertEquals(0, n)
+    }
+
+    @Test
+    fun `eligibleSessionCount excludes finalized sessions`() {
+        // Hotfix 2026-05-08 — the Record-side recovery echo banner
+        // gates on this count. It must mirror the History card filter
+        // exactly; a stop-during-wait that finished export must not
+        // pin the echo banner open.
+        val n = RecoveryViewSource.eligibleSessionCount(
+            report = report(
+                classification("finalized", DiscardEligibility.OFFER_DISCARD),
+                classification("pending", DiscardEligibility.OFFER_DISCARD)
+            )
+        ) { id ->
+            when (id) {
+                "finalized" -> manifest(
+                    id,
+                    Terminated.USER_STOPPED,
+                    terminatedAt = 100L,
+                    exportState = ExportState.FINALIZED
+                )
+                "pending" -> manifest(
+                    id,
+                    Terminated.USER_STOPPED,
+                    terminatedAt = 200L,
+                    exportState = ExportState.NOT_STARTED
+                )
+                else -> null
+            }
+        }
+        assertEquals(1, n)
     }
 
     @Test

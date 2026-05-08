@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.recovery
 
+import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.recovery.Anomaly
@@ -89,6 +90,17 @@ data class RecoveryUiState(
  *    (BLOCKED). Wait for next scan.
  *  - `manifest.terminated == COMPLETED` — finalize already wrote the
  *    terminal; nothing to recover.
+ *  - `manifest.exportState == FINALIZED` — the post-stop hotfix smoke
+ *    on 2026-05-08 surfaced sessions where the user stopped during
+ *    the inter-clip wait, the service still flushed pending segments,
+ *    and the export pipeline ran to completion. The terminator is
+ *    `USER_STOPPED` (orthogonal to `ExportState` per
+ *    `SessionManifest.kt` §"Terminated") and the disk-side session dir
+ *    still has manifest segments, which the recovery scanner sees as
+ *    `OFFER_DISCARD`. The finalized recording is already in the
+ *    gallery, so a "Discard recording" card is misleading: it does
+ *    NOT remove the gallery copy, only the private session residue.
+ *    Skip the card entirely once `exportState == FINALIZED`.
  *  - `eligibility == BLOCKED` — live-owned / age-filtered / pending
  *    export. Wait for next scan.
  *  - `eligibility == AUTO_DISCARD_ELIGIBLE` — Phase 1.7 cleanup
@@ -96,7 +108,8 @@ data class RecoveryUiState(
  *
  * Render rule:
  *  - `eligibility == OFFER_DISCARD` AND
- *    `manifest.terminated ∈ {USER_STOPPED, KILLED_BY_SYSTEM, KILLED_FORCE_STOP}`.
+ *    `manifest.terminated ∈ {USER_STOPPED, KILLED_BY_SYSTEM, KILLED_FORCE_STOP}`
+ *    AND `manifest.exportState != FINALIZED`.
  *
  * Among renderable views the mapper sorts newest-first by
  * `manifest.terminatedAt` (fallback `manifest.startedAt`) and emits
@@ -121,6 +134,9 @@ object RecoveryUiStateMapper {
         val terminated = view.manifest.terminated ?: return false
         if (terminated == Terminated.COMPLETED) return false
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return false
+        // Hotfix 2026-05-08 — finalized exports never surface as
+        // recovery cards. See KDoc above.
+        if (view.manifest.exportState == ExportState.FINALIZED) return false
         return true
     }
 
@@ -140,6 +156,7 @@ object RecoveryUiStateMapper {
         val terminated = view.manifest.terminated ?: return null
         if (terminated == Terminated.COMPLETED) return null
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return null
+        if (view.manifest.exportState == ExportState.FINALIZED) return null
 
         val kind = when (terminated) {
             Terminated.USER_STOPPED -> RecoveryCardKind.USER_STOPPED

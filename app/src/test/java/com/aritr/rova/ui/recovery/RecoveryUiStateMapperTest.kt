@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.recovery
 
+import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
@@ -31,7 +32,8 @@ class RecoveryUiStateMapperTest {
         sessionId: String,
         terminated: Terminated?,
         terminatedAt: Long? = null,
-        startedAt: Long = 0L
+        startedAt: Long = 0L,
+        exportState: ExportState = ExportState.NOT_STARTED
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = startedAt,
@@ -39,7 +41,8 @@ class RecoveryUiStateMapperTest {
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
         terminated = terminated,
-        terminatedAt = terminatedAt
+        terminatedAt = terminatedAt,
+        exportState = exportState
     )
 
     private fun classification(
@@ -62,9 +65,10 @@ class RecoveryUiStateMapperTest {
         terminatedAt: Long? = null,
         startedAt: Long = 0L,
         anomalies: List<Anomaly> = emptyList(),
-        appendedSegmentFilenames: List<String> = emptyList()
+        appendedSegmentFilenames: List<String> = emptyList(),
+        exportState: ExportState = ExportState.NOT_STARTED
     ) = RecoverySessionView(
-        manifest = manifest(sessionId, terminated, terminatedAt, startedAt),
+        manifest = manifest(sessionId, terminated, terminatedAt, startedAt, exportState),
         classification = classification(
             sessionId, eligibility, anomalies, appendedSegmentFilenames
         )
@@ -156,6 +160,109 @@ class RecoveryUiStateMapperTest {
             )
             assertTrue(
                 "terminator=$t should hide on AUTO_DISCARD_ELIGIBLE",
+                ui.cards.isEmpty()
+            )
+        }
+    }
+
+    // ─── exportState gate (hotfix 2026-05-08) ─────────────────────
+
+    @Test
+    fun `USER_STOPPED + OFFER_DISCARD + FINALIZED hides`() {
+        // Hotfix 2026-05-08 — stop-during-wait can finish merge/export
+        // while terminated stays USER_STOPPED. The finalized recording
+        // is in the gallery; surfacing a "Discard recording" card would
+        // mislead the user (Discard wipes the private session dir, not
+        // the gallery copy).
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "s-finalized",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    exportState = ExportState.FINALIZED
+                )
+            )
+        )
+        assertEquals(RecoveryUiState.Empty, ui)
+    }
+
+    @Test
+    fun `KILLED_FORCE_STOP + OFFER_DISCARD + non-finalized still surfaces`() {
+        // Force-stop case (smoke d): export pipeline never ran.
+        // The card must still surface so the user can clean up the
+        // unmerged session residue.
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "s-forced",
+                    terminated = Terminated.KILLED_FORCE_STOP,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    exportState = ExportState.NOT_STARTED
+                )
+            )
+        )
+        assertEquals(1, ui.cards.size)
+        assertEquals(RecoveryCardKind.KILLED_FORCE_STOP, ui.cards.single().kind)
+    }
+
+    @Test
+    fun `KILLED_BY_SYSTEM + OFFER_DISCARD + non-finalized still surfaces`() {
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "s-killed",
+                    terminated = Terminated.KILLED_BY_SYSTEM,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    exportState = ExportState.MUXING
+                )
+            )
+        )
+        assertEquals(1, ui.cards.size)
+        assertEquals(RecoveryCardKind.KILLED_BY_SYSTEM, ui.cards.single().kind)
+    }
+
+    @Test
+    fun `USER_STOPPED + OFFER_DISCARD + FAILED export still surfaces`() {
+        // ADR 0006 §B9: USER_STOPPED + exportState = FAILED is the
+        // "Merge failed" recovery path. The user has unmerged segments
+        // and no gallery copy; the card must continue to surface.
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "s-failed",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    exportState = ExportState.FAILED
+                )
+            )
+        )
+        assertEquals(1, ui.cards.size)
+        assertEquals(RecoveryCardKind.USER_STOPPED, ui.cards.single().kind)
+    }
+
+    @Test
+    fun `FINALIZED + OFFER_DISCARD hides regardless of terminator`() {
+        // Defense-in-depth: any other interrupted-style terminator that
+        // somehow arrives with FINALIZED exportState (unexpected today,
+        // but the mapper must not surface a discard CTA against a
+        // gallery-resident recording).
+        for (t in listOf(
+            Terminated.USER_STOPPED,
+            Terminated.KILLED_BY_SYSTEM,
+            Terminated.KILLED_FORCE_STOP
+        )) {
+            val ui = RecoveryUiStateMapper.map(
+                listOf(
+                    view(
+                        terminated = t,
+                        eligibility = DiscardEligibility.OFFER_DISCARD,
+                        exportState = ExportState.FINALIZED
+                    )
+                )
+            )
+            assertTrue(
+                "terminator=$t with FINALIZED should hide",
                 ui.cards.isEmpty()
             )
         }
