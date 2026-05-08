@@ -51,6 +51,8 @@ import com.aritr.rova.ui.components.RecordStatusStrip
 import com.aritr.rova.ui.components.SessionTimer
 import com.aritr.rova.ui.components.ClipProgressBand
 import com.aritr.rova.ui.components.WaitingCountdown
+import com.aritr.rova.ui.components.MergingProgressBand
+import com.aritr.rova.ui.components.MergeCompleteCard
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -256,10 +258,29 @@ fun RecordScreen(
     // UI_ROADMAP §"Slice 3 special requirements" — no per-second
     // accessibility chatter).
     val sessionAnnouncementSeconds = sessionElapsedSeconds - (sessionElapsedSeconds % 60L)
+    // Phase 2.4 — fold the merge axis into the HUD state. The
+    // resolution priority in `RecordHudState.from` makes `Merging`
+    // win over `Idle` for the brief window where the service has
+    // flipped `isPeriodicActive` off but `isMerging` is still true,
+    // so the HUD does not flash an "Idle" frame between the last
+    // clip and the merge card.
     val hudState = RecordHudState.from(
         isPeriodicActive = serviceState.isPeriodicActive,
-        isRecording = serviceState.isRecording
+        isRecording = serviceState.isRecording,
+        isMerging = serviceState.isMerging,
+        mergeProgress = serviceState.mergeProgress,
+        segmentCount = serviceState.segmentCount
     )
+
+    // Phase 2.4 — merge transition state. Declared up here (rather
+    // than next to the LaunchedEffect that drives them) because the
+    // bottom-area Column references `showCompleteCard` and
+    // `lastCompleteClipCount` to suppress the idle dock during the
+    // post-merge grace window. The LaunchedEffect sits later in the
+    // composable body and still picks up these vars by closure.
+    var wasMerging by remember { mutableStateOf(false) }
+    var showCompleteCard by remember { mutableStateOf(false) }
+    var lastCompleteClipCount by remember { mutableStateOf(0) }
 
     // Slice 3 review fix — local-tick countdown for the Waiting body.
     // The service decrements `nextRecordingCountdown` in 30-second
@@ -463,12 +484,12 @@ fun RecordScreen(
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, "Settings", tint = Color.White)
                         }
-                        // Slice 3 — when a periodic session is active, the
-                        // new RecordStatusStrip below carries the REC/WAIT
-                        // badge + loop + total elapsed, so the old centered
+                        // Slice 3 / Phase 2.4 — when a periodic session is
+                        // active OR a merge is in flight, the active HUD
+                        // bands below carry the state, so the old centered
                         // REC pill / "Rova" branding is suppressed.
                         when {
-                            serviceState.isPeriodicActive -> {
+                            hudState != RecordHudState.Idle -> {
                                 Spacer(Modifier.weight(1f, fill = true))
                             }
                             serviceState.isRecording && !isCameraActive -> {
@@ -530,9 +551,11 @@ fun RecordScreen(
                             onDismiss = { batteryBannerDismissed = true }
                         )
                     }
-                    // Slice 2 — read-only recovery echo. Idle only;
-                    // hidden when no interrupted sessions are tracked.
-                    if (!serviceState.isPeriodicActive && interruptedSessionCount > 0) {
+                    // Slice 2 / Phase 2.4 — read-only recovery echo.
+                    // Idle only; hidden during Recording, Waiting, or
+                    // Merging so the merge HUD owns the user's
+                    // attention end-to-end.
+                    if (hudState == RecordHudState.Idle && interruptedSessionCount > 0) {
                         Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                             RecoveryEchoBanner(
                                 interruptedCount = interruptedSessionCount,
@@ -540,10 +563,13 @@ fun RecordScreen(
                             )
                         }
                     }
-                    // Slice 3 — persistent active-HUD status strip.
-                    // Idle hides it; warm-up frame is OK to render
-                    // through (the strip just shows current state).
-                    if (serviceState.isPeriodicActive) {
+                    // Slice 3 / Phase 2.4 — persistent active-HUD
+                    // status strip. Mounted only for Recording or
+                    // Waiting; the merge body is self-contained and
+                    // does not reuse the REC/WAIT badge layout.
+                    if (hudState == RecordHudState.Recording ||
+                        hudState == RecordHudState.Waiting
+                    ) {
                         Spacer(Modifier.height(8.dp))
                         RecordStatusStrip(
                             isRecording = hudState == RecordHudState.Recording,
@@ -555,25 +581,23 @@ fun RecordScreen(
                 } // Column: top bar + battery banner + recovery echo + status strip
 
                 // ------------------------------------------------------
-                // Bottom area: idle dock OR active overlay + Stop FAB.
+                // Bottom area:
+                //   Recording / Waiting → Slice 3 active HUD with
+                //                         SessionTimer + body + Stop.
+                //   Merging              → Phase 2.4 merge body only;
+                //                         no SessionTimer, no Stop.
+                //   Idle                 → Slice 2 idle dock.
                 // ------------------------------------------------------
-                if (serviceState.isPeriodicActive) {
-                    // Slice 3 — Active HUD. Three vertical bands:
-                    //   - Center: large session-elapsed timer + meta.
-                    //   - Above stop: mutually-exclusive body
-                    //     (ClipProgressBand or WaitingCountdown,
-                    //     selected by `hudState`).
-                    //   - Bottom: full-width Stop button (72 dp tall),
-                    //     a sibling of the body — never an absolute
-                    //     overlay that could collide with the
-                    //     protected NavigationBar at any font scale.
+                if (hudState is RecordHudState.Recording ||
+                    hudState is RecordHudState.Waiting
+                ) {
                     val timerSubtitle = when (hudState) {
                         RecordHudState.Recording -> RecordHudFormatters.formatRecordingMeta(
                             quality = resolution,
                             flashLabel = RecordHudFormatters.formatFlashLabel(flashMode)
                         )
                         RecordHudState.Waiting -> RecordHudFormatters.formatNextClipDurationLabel(duration)
-                        RecordHudState.Idle -> null
+                        else -> null
                     }
                     Box(
                         modifier = Modifier
@@ -594,10 +618,6 @@ fun RecordScreen(
                             .padding(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Mutually-exclusive body. The sealed
-                        // `RecordHudState` makes both-at-once
-                        // structurally impossible; the `when` is
-                        // exhaustive on the sealed hierarchy.
                         when (hudState) {
                             RecordHudState.Recording -> ClipProgressBand(
                                 elapsedSeconds = clipElapsedSeconds,
@@ -608,7 +628,7 @@ fun RecordScreen(
                                 currentLoop = serviceState.currentLoop,
                                 totalLoops = serviceState.totalLoops
                             )
-                            RecordHudState.Idle -> Unit
+                            else -> Unit
                         }
                         Button(
                             onClick = { viewModel.stopRecording() },
@@ -635,10 +655,32 @@ fun RecordScreen(
                             )
                         }
                     }
-                } else {
+                } else if (hudState is RecordHudState.Merging) {
+                    // Phase 2.4 — merge body anchored to the bottom of
+                    // the screen. No SessionTimer, no Stop button: the
+                    // merge runs `NonCancellable` for terminal-write
+                    // atomicity (ADR 0006), so a Stop affordance would
+                    // be a visual lie.
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(bottom = 32.dp)
+                    ) {
+                        MergingProgressBand(
+                            progress = hudState.progress,
+                            currentSegment = hudState.currentSegment,
+                            totalSegments = hudState.totalSegments
+                        )
+                    }
+                } else if (!showCompleteCard) {
                     // Idle: Slice 2 dock anchored at the bottom of the
                     // overlay box. Sibling of the bottom nav, never an
                     // absolute overlay.
+                    //
+                    // Phase 2.4 — suppressed during the brief
+                    // post-merge grace window so a rapid Start tap
+                    // cannot race the impending nav to Library.
                     RecordIdleDock(
                         durationSeconds = duration,
                         loopCount = loopCount,
@@ -658,6 +700,23 @@ fun RecordScreen(
                         startEnabled = !isUiLocked,
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
+                }
+
+                // Phase 2.4 — Merge Complete card. Brief overlay
+                // shown for ~900 ms between merge success and the
+                // existing auto-navigation to Library, so the success
+                // state registers before the screen swap. The grace
+                // is owned by `LaunchedEffect(isMerging, mergeError)`
+                // above — this block only renders.
+                if (showCompleteCard) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        MergeCompleteCard(clipCount = lastCompleteClipCount)
+                    }
                 }
 
                 // Tutorial Overlay
@@ -756,39 +815,46 @@ fun RecordScreen(
         null -> Unit
     }
 
-    // Merge Overlay
-    if (serviceState.isMerging) {
-        AlertDialog(
-            onDismissRequest = { /* Prevent dismiss */ },
-            title = { Text("Merging Video...") },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    LinearProgressIndicator(
-                        progress = { serviceState.mergeProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text("${(serviceState.mergeProgress * 100).toInt()}%")
-                }
-            },
-            confirmButton = {},
-            properties = androidx.compose.ui.window.DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            )
-        )
-    }
-
-    // Handle Navigation on Merge Complete
-    var wasMerging by remember { mutableStateOf(false) }
+    // Phase 2.4 — Merge HUD progression.
+    //
+    // The legacy `AlertDialog` overlay is gone. Merging now renders
+    // inside the active HUD column as a [MergingProgressBand] body
+    // (see the `hudState is RecordHudState.Merging` branch below),
+    // so it shares the same locked-chrome contract as Recording /
+    // Waiting and never duplicates focus with the camera surface.
+    //
+    // On the falling edge of `isMerging`:
+    //   - mergeError == null → show the brief [MergeCompleteCard]
+    //     overlay, then call the existing `onMergeFinished` to
+    //     navigate to Library. The grace window (about 900 ms) lets
+    //     the success state register before the screen swap.
+    //   - mergeError != null → show a single-shot snackbar so the
+    //     user has a breadcrumb. Per Phase 2.4 scope, we add no
+    //     recover/merge actions here — the Library recovery card
+    //     surfaces on next launch via the existing Phase 1.5 path.
     LaunchedEffect(serviceState.isMerging, serviceState.mergeError) {
         if (serviceState.isMerging) {
             wasMerging = true
-        } else {
-            if (wasMerging && serviceState.mergeError == null) {
-                onMergeFinished()
+            // Stash the running clip count so the post-merge card
+            // can still describe the session after the service has
+            // flipped its counters back to zero.
+            if (serviceState.segmentCount > 0) {
+                lastCompleteClipCount = serviceState.segmentCount
             }
+        } else if (wasMerging) {
             wasMerging = false
+            if (serviceState.mergeError == null) {
+                showCompleteCard = true
+                delay(900L)
+                showCompleteCard = false
+                onMergeFinished()
+            } else {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        "Merge failed. Open Library to recover."
+                    )
+                }
+            }
         }
     }
 

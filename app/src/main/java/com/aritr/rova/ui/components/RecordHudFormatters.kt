@@ -128,4 +128,66 @@ object RecordHudFormatters {
     private const val FLASH_MODE_OFF = 0
     private const val FLASH_MODE_ON = 1
     private const val FLASH_MODE_AUTO = 2
+
+    // ─── Phase 2.4 — merge HUD copy ───────────────────────────────
+
+    /**
+     * Numerator/denominator for the in-HUD merge band, e.g. "3 of 6".
+     * `currentSegment` is clamped into `[0, totalSegments]` to absorb
+     * the brief overshoot when the export pipeline emits a 1.0
+     * progress tick before the segment count snapshot has been
+     * trimmed.
+     */
+    fun formatMergeProgressNumbers(currentSegment: Int, totalSegments: Int): String {
+        val total = totalSegments.coerceAtLeast(0)
+        val current = currentSegment.coerceIn(0, total)
+        return "$current of $total"
+    }
+
+    /**
+     * Sub-line copy for the merge band. Returns `null` when there is
+     * nothing useful to say — the band hides the line in that case
+     * rather than rendering a hollow placeholder.
+     *
+     * The mockup shows "About 20 seconds remaining" mid-merge; the
+     * service exposes only fractional progress, not a wall-clock
+     * estimate, so we render coarse phases instead of fabricating an
+     * ETA.
+     */
+    fun formatMergeRemaining(progress: Float): String? {
+        val p = progress.coerceIn(0f, 1f)
+        return when {
+            p < 0.05f -> "Starting merge…"
+            p >= 0.85f -> "Almost done…"
+            else -> null
+        }
+    }
+
+    /**
+     * TalkBack-friendly content description for the merge band. The
+     * caller publishes this as a static `contentDescription` (not a
+     * live region) so screen readers do not chant on every fractional
+     * progress tick — the description still updates whenever the
+     * `currentSegment` rolls forward, which is the meaningful
+     * accessibility boundary.
+     */
+    fun formatMergeAnnouncement(currentSegment: Int, totalSegments: Int): String {
+        val total = totalSegments.coerceAtLeast(0)
+        val current = currentSegment.coerceIn(0, total)
+        if (total <= 0) return "Preparing to merge"
+        if (current <= 0) return "Preparing to merge $total clips"
+        return "Merging clip $current of $total"
+    }
+
+    /**
+     * Summary line for the brief Merge Complete card shown before
+     * the auto-navigation to Library. Singular vs plural copy is
+     * pinned in tests so future refactors do not silently degrade
+     * accessibility output.
+     */
+    fun formatMergeCompleteSummary(clipCount: Int): String {
+        val n = clipCount.coerceAtLeast(0)
+        val noun = if (n == 1) "clip" else "clips"
+        return "$n $noun · saved to Library"
+    }
 }

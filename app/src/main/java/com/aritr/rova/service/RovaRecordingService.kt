@@ -574,7 +574,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
         segmentCount = 0
         stopRequested = false
         userStopRequested = false
-        _serviceState.update { it.copy(totalLoops = limitLoops, currentLoop = 0) }
+        // Phase 2.4 — publish `segmentCount` into `_serviceState` so
+        // the new in-HUD merge band (`MergingProgressBand`) and the
+        // `MergeCompleteCard` can read the live finalized-segment
+        // count. Reset is bundled with the existing session-start
+        // update so the UI never sees a stale count from a prior
+        // session.
+        _serviceState.update {
+            it.copy(totalLoops = limitLoops, currentLoop = 0, segmentCount = 0)
+        }
 
         // ============================================================
         // ADR 0006 §"Init-window write order" (B15 + B19) — TWO-PHASE PREFLIGHT
@@ -942,6 +950,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
 
                     segmentCount++
+                    // Phase 2.4 — publish the new finalized-segment
+                    // count so the merge HUD reads the real count
+                    // when the service eventually flips
+                    // `isMerging = true`. The private field is the
+                    // canonical sequence index (manifest filenames
+                    // are derived from it); this update only mirrors
+                    // it onto the StateFlow.
+                    _serviceState.update { it.copy(segmentCount = segmentCount) }
 
                     if (limitLoops != -1 && segmentCount >= limitLoops) {
                         stopPeriodicRecordingAndMerge()

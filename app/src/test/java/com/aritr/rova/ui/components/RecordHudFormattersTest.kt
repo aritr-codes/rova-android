@@ -243,4 +243,119 @@ class RecordHudFormattersTest {
     fun `computeClipProgress saturates at 1`() {
         assertEquals(1f, RecordHudFormatters.computeClipProgress(45, 30), 0.0001f)
     }
+
+    // ─── Phase 2.4 — formatMergeProgressNumbers ───────────────────
+
+    @Test
+    fun `formatMergeProgressNumbers renders mockup example`() {
+        assertEquals("3 of 6", RecordHudFormatters.formatMergeProgressNumbers(3, 6))
+    }
+
+    @Test
+    fun `formatMergeProgressNumbers handles boundary values`() {
+        assertEquals("0 of 6", RecordHudFormatters.formatMergeProgressNumbers(0, 6))
+        assertEquals("6 of 6", RecordHudFormatters.formatMergeProgressNumbers(6, 6))
+    }
+
+    @Test
+    fun `formatMergeProgressNumbers clamps overshoot to total`() {
+        // The export pipeline emits a 1.0 progress tick before the
+        // segment count snapshot has been trimmed; the digits must
+        // not race past the denominator.
+        assertEquals("6 of 6", RecordHudFormatters.formatMergeProgressNumbers(7, 6))
+    }
+
+    @Test
+    fun `formatMergeProgressNumbers coerces negatives to zero`() {
+        assertEquals("0 of 4", RecordHudFormatters.formatMergeProgressNumbers(-2, 4))
+        assertEquals("0 of 0", RecordHudFormatters.formatMergeProgressNumbers(2, -3))
+    }
+
+    // ─── Phase 2.4 — formatMergeRemaining ─────────────────────────
+
+    @Test
+    fun `formatMergeRemaining renders starting copy at zero progress`() {
+        assertEquals("Starting merge…", RecordHudFormatters.formatMergeRemaining(0f))
+    }
+
+    @Test
+    fun `formatMergeRemaining hides sub-line at mid-progress`() {
+        // Mid-merge, the service emits only fractional progress
+        // and no wall-clock estimate; rather than fabricating an
+        // ETA, the helper returns null so the band hides the
+        // sub-line.
+        assertEquals(null, RecordHudFormatters.formatMergeRemaining(0.5f))
+    }
+
+    @Test
+    fun `formatMergeRemaining renders almost-done copy near completion`() {
+        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(0.85f))
+        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(1f))
+    }
+
+    @Test
+    fun `formatMergeRemaining clamps progress before mapping`() {
+        assertEquals("Starting merge…", RecordHudFormatters.formatMergeRemaining(-0.5f))
+        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(2f))
+    }
+
+    // ─── Phase 2.4 — formatMergeAnnouncement ──────────────────────
+
+    @Test
+    fun `formatMergeAnnouncement renders mockup example`() {
+        assertEquals(
+            "Merging clip 3 of 6",
+            RecordHudFormatters.formatMergeAnnouncement(3, 6)
+        )
+    }
+
+    @Test
+    fun `formatMergeAnnouncement renders preparing copy at zero progress`() {
+        assertEquals(
+            "Preparing to merge 6 clips",
+            RecordHudFormatters.formatMergeAnnouncement(0, 6)
+        )
+    }
+
+    @Test
+    fun `formatMergeAnnouncement collapses to preparing for empty total`() {
+        assertEquals(
+            "Preparing to merge",
+            RecordHudFormatters.formatMergeAnnouncement(0, 0)
+        )
+    }
+
+    @Test
+    fun `formatMergeAnnouncement clamps overshoot`() {
+        assertEquals(
+            "Merging clip 6 of 6",
+            RecordHudFormatters.formatMergeAnnouncement(7, 6)
+        )
+    }
+
+    // ─── Phase 2.4 — formatMergeCompleteSummary ───────────────────
+
+    @Test
+    fun `formatMergeCompleteSummary renders plural`() {
+        assertEquals(
+            "6 clips · saved to Library",
+            RecordHudFormatters.formatMergeCompleteSummary(6)
+        )
+    }
+
+    @Test
+    fun `formatMergeCompleteSummary renders singular`() {
+        assertEquals(
+            "1 clip · saved to Library",
+            RecordHudFormatters.formatMergeCompleteSummary(1)
+        )
+    }
+
+    @Test
+    fun `formatMergeCompleteSummary coerces negative to zero plural`() {
+        assertEquals(
+            "0 clips · saved to Library",
+            RecordHudFormatters.formatMergeCompleteSummary(-3)
+        )
+    }
 }
