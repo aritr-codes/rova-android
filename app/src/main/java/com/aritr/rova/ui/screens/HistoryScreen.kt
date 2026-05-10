@@ -93,7 +93,11 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord: () -> Unit = {}) {
+fun HistoryScreen(
+    viewModel: HistoryViewModel = viewModel(),
+    onNavigateToRecord: () -> Unit = {},
+    onOpenPlayer: (sessionId: String) -> Unit = {}
+) {
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
 
@@ -410,16 +414,26 @@ fun HistoryScreen(viewModel: HistoryViewModel = viewModel(), onNavigateToRecord:
 
                         items(dateItems, key = { it.file.absolutePath }) { item ->
                             val isSelected = selectedFiles.contains(item.file)
-                            val playItem: () -> Unit = {
-                                val intent = Intent(context, PreviewActivity::class.java).apply {
-                                    putExtra("VIDEO_PATH", item.file.absolutePath)
-                                    // Plumb the safe share URI through so PreviewActivity
-                                    // can avoid FileProvider on Movies/Rova paths. Stringly
-                                    // typed across the Intent boundary to dodge Parcelable
-                                    // schema drift between process versions.
-                                    item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                            // Phase 2.5 — manifest-backed rows route
+                            // through the new in-app `player/{sessionId}`
+                            // composable. Legacy file-only rows (no
+                            // sessionId — pre-Phase-1.7 builds did not
+                            // write a manifest) keep the original
+                            // PreviewActivity path so users upgrading
+                            // do not lose the ability to preview those
+                            // artifacts. PreviewActivity removal is
+                            // tracked for a follow-up slice once the
+                            // upgrade-window concern fades.
+                            val playItem: () -> Unit = if (item.sessionId != null) {
+                                { onOpenPlayer(item.sessionId) }
+                            } else {
+                                {
+                                    val intent = Intent(context, PreviewActivity::class.java).apply {
+                                        putExtra("VIDEO_PATH", item.file.absolutePath)
+                                        item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                                    }
+                                    context.startActivity(intent)
                                 }
-                                context.startActivity(intent)
                             }
                             LibraryRow(
                                 item = item,

@@ -23,8 +23,8 @@ android {
         applicationId = "com.aritr.rova"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.3.0"
+        versionCode = 3
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -1594,6 +1594,17 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.concurrent.futures.ktx)
+    // Phase 2.5 — In-app player. media3-exoplayer drives playback over
+    // the merged MP4; media3-ui provides PlayerView (the Compose wrapper
+    // is mounted via AndroidView in PlayerScreen). Pinned to 1.4.1 — the
+    // last 1.4.x stable that has been smoke-tested against AGP 8.13 +
+    // Kotlin 2.0 + minSdk 24, and avoids the 1.5.x line which bumps a
+    // few transitive constraints we have not audited. media3-session,
+    // -hls, -dash, and -transformer are intentionally NOT pulled in:
+    // playback is local mp4 only, no MediaSession integration in scope,
+    // and the editor / transformer pipeline is NO-GO for v1.0.
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     testImplementation(libs.junit)
     // Phase 1.5 — JVM unit tests need a real org.json impl. The android.jar
     // shipped to JVM tests stubs JSONObject/JSONArray to throw at runtime;

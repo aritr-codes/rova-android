@@ -30,21 +30,38 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.aritr.rova.ui.screens.HistoryScreen
 import com.aritr.rova.ui.screens.RecordScreen
 import com.aritr.rova.ui.screens.RecordViewModel
 import com.aritr.rova.ui.screens.SettingsScreen
 import com.aritr.rova.ui.screens.SettingsViewModel
+import com.aritr.rova.ui.screens.player.PlayerScreen
 
 private data class MainDestination(
     val route: String,
     val label: String,
     val icon: ImageVector
 )
+
+/**
+ * Phase 2.5 — top-level routes that own the floating bottom-nav pill.
+ * Drill-down / fullscreen routes (currently only `player/{sessionId}`,
+ * later `onboarding`) are intentionally absent so the Option-A guard
+ * in the [Scaffold]'s `bottomBar` slot collapses the nav surface to
+ * empty when the user is on those routes.
+ *
+ * UI_NAV_GRAPH §5.1 designates this slice (the first new route to
+ * need a hidden nav) as the owner of the shell decision; Phase 2.6
+ * (onboarding) MUST reuse this same set rather than introducing a
+ * second pattern.
+ */
+private val TOP_LEVEL_ROUTES = setOf("record", "history", "settings")
 
 @Composable
 fun MainScreen() {
@@ -76,9 +93,17 @@ fun MainScreen() {
         MainDestination("settings", "Settings", Icons.Default.Settings)
     )
 
+    val showBottomNav = currentRoute in TOP_LEVEL_ROUTES
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
+            // Phase 2.5 — Option-A guard. Drill-down routes
+            // (`player/{sessionId}` today, `onboarding` in Phase 2.6)
+            // suppress the nav by short-circuiting here. The Scaffold
+            // slot still runs and consumes 0 dp of inset on this
+            // branch, so top-level tabs render with their existing
+            // padding contract. UI_NAV_GRAPH §5.1.
+            if (!showBottomNav) return@Scaffold
             Column(modifier = Modifier.fillMaxWidth()) {
                 // Slice 3 / Phase 2.4 — "Locked during recording"
                 // hint pill above the nav. Visible while a periodic
@@ -207,12 +232,34 @@ fun MainScreen() {
                 )
             }
             composable("history") {
-                HistoryScreen(onNavigateToRecord = {
-                    navController.navigate("record") {
-                        popUpTo(navController.graph.startDestinationId)
-                        launchSingleTop = true
+                HistoryScreen(
+                    onNavigateToRecord = {
+                        navController.navigate("record") {
+                            popUpTo(navController.graph.startDestinationId)
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenPlayer = { sessionId ->
+                        // Phase 2.5 — argumented routes do NOT use
+                        // launchSingleTop because each (route, args)
+                        // pair is its own back-stack entry; reusing
+                        // the same NavBackStackEntry across different
+                        // sessionIds would re-bind the existing
+                        // PlayerViewModel to a fresh manifest, which
+                        // would re-create ExoPlayer mid-composition.
+                        navController.navigate("player/$sessionId")
                     }
-                })
+                )
+            }
+            composable(
+                route = "player/{sessionId}",
+                arguments = listOf(navArgument("sessionId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+                PlayerScreen(
+                    sessionId = sessionId,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel) }
         }
