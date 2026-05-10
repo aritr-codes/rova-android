@@ -22,6 +22,7 @@ import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
+import com.aritr.rova.ui.signals.PowerSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
@@ -129,6 +130,20 @@ class RovaApp : Application() {
      */
     val thermalStatusSignal: ThermalStatusSignal by lazy {
         ThermalStatusSignal.forContext(this)
+    }
+
+    /**
+     * Phase 3.3 (NEW_UI_BACKEND_REPLAN §5 row 3.3) — PowerSignal exposed
+     * lazily so cold-start receiver paths pay no cost; first access from
+     * a foreground host initializes. Refresh contract lives on the signal
+     * itself (host Activity ON_RESUME). CAPACITY + isPowerSaveMode gate
+     * at API 21; STATUS gates at API 26 and uses an inner SDK guard inside
+     * forContext (24/25 → false-charging fallback, legacy sticky-broadcast
+     * path out of scope). minSdk = 24. Consumer is the Phase 4 WarningCenterViewModel;
+     * this slice ships the signal only.
+     */
+    val powerSignal: PowerSignal by lazy {
+        PowerSignal.forContext(this)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
