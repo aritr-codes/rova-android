@@ -21,6 +21,7 @@ import com.aritr.rova.service.export.Tier2Exporter
 import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
+import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import java.io.File
@@ -96,6 +97,23 @@ class RovaApp : Application() {
                 "Caller must check RovaApp.videosRoot before accessing sessionStore."
         )
         SessionStore(root)
+    }
+
+    /**
+     * Phase 3.2 (NEW_UI_BACKEND_REPLAN §5 row 3.2). Process-wide
+     * StateFlow of the current `POST_NOTIFICATIONS` grant state.
+     * Pre-API-33 the flow is a constant `true` (OS does not gate
+     * notifications below TIRAMISU). Lazy-initialized to mirror the
+     * [sessionStore] precedent.
+     *
+     * Refresh contract lives on the signal itself: callers re-call
+     * [NotificationPermissionSignal.refresh] from the host Activity's
+     * `ON_RESUME` because Android does not broadcast permission grants.
+     * The Phase 4 WarningCenterViewModel is the consumer; this slice
+     * ships the signal only.
+     */
+    val notificationPermissionSignal: NotificationPermissionSignal by lazy {
+        NotificationPermissionSignal.forContext(this)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
