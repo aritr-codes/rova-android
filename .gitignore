@@ -32,3 +32,20 @@ keystore.properties
 
 # Profiling
 *.hprof
+
+# Dev-only artifacts
+screenshots/
+mockups/
+.codegraph/
+.playwright-mcp/
+*_verify*.log
+slice*.log
+phase0_verify.log
+.pr-body-*.md
+lat.md/
+
+# Roadmap drafts (v6 is committed + authoritative — DO NOT add it here)
+ROADMAP.md
+ROADMAP_REVIEW.md
+ROADMAP_v[1-5].md
+UI_ROADMAP.md
