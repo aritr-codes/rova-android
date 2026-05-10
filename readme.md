@@ -7,7 +7,7 @@ Set a duration, interval, and loop count — Rova records in the background, the
 | | |
 |---|---|
 | Package | `com.aritr.rova` |
-| Version | `0.3.0` |
+| Version | `0.5.0` |
 | `minSdk` | 24 (Android 7.0) |
 | `targetSdk` | 36 |
 | UI | Jetpack Compose (Material 3) |
@@ -40,7 +40,8 @@ Videos are saved to `Android/data/com.aritr.rova/files/videos/`.
 - **Periodic loop recording** — record N seconds, wait M minutes, repeat K times (or continuous).
 - **Background recording** — continues with screen off via a foreground service typed for camera + microphone.
 - **Auto-merge** — segments stitched into a single MP4 when the loop ends.
-- **Video library** — real thumbnails, resolution badges, multi-select share/delete, in-app playback.
+- **Video library** — real thumbnails, resolution badges, multi-select share/delete.
+- **In-app player** (Phase 2.5) — manifest-driven Media3 surface routed from the Library list via `player/{sessionId}`. Tier 1 plays the `MediaStore` content URI; Tier 2/3 play a `file://` URI. Segmented timeline shows clip boundaries; play/pause + ±10s seek + auto-pause on background. Trim/Edit are placeholders (editor scope deferred per `NEW_UI_BACKEND_REPLAN.md` §6.2). Mockup: [`mockups/new_uiux/04-video-player.html`](mockups/new_uiux/04-video-player.html).
 - **Quick presets** — one-tap configs (Drill, Vlog) plus custom user-saved presets.
 - **Resolution selection** — SD / HD / FHD / 4K with `QualitySelector` fallback.
 - **Tiered public export** — finalized merges land in the public Movies directory using the right API for the device (Tier 1 API 29+ MediaStore, Tier 2 API 26–28, Tier 3 API 24–25).
@@ -61,6 +62,7 @@ graph TB
         HS[HistoryScreen]
         SS[SettingsScreen]
         RC[RecoveryCard]
+        PL[PlayerScreen<br/>player/{sessionId}]
     end
 
     subgraph VM["ViewModels"]
@@ -68,6 +70,7 @@ graph TB
         HVM[HistoryViewModel]
         SVM[SettingsViewModel]
         RecVM[RecoveryViewModel]
+        PVM[PlayerViewModel<br/>ExoPlayer + manifest]
     end
 
     subgraph APP["Process singleton"]
@@ -93,12 +96,15 @@ graph TB
         T3[Tier3Exporter · 24-25]
     end
 
-    MS --> RS & HS & SS
+    MS --> RS & HS & SS & PL
     HS --> RC
+    HS --> PL
     RS --> RVM
     HS --> HVM
     SS --> SVM
     HS --> RecVM
+    PL --> PVM
+    PVM --> STORE
     RVM --> REC
     RecVM --> APPK
     APPK -- triggerRecoveryScanIfNeeded --> SCAN
@@ -188,6 +194,7 @@ and `BLOCKED`.
 | State | `ViewModel` + `MutableStateFlow` |
 | Video Merge | `MediaMuxer` + `MediaExtractor` |
 | Public Export | `MediaStore` (Tier 1) / scoped temp + `MediaScannerConnection` (Tier 2) / direct path (Tier 3) |
+| Playback | AndroidX Media3 (ExoPlayer + PlayerView) — pinned to 1.4.1 |
 | Min SDK | 24 (Android 7.0) |
 | Target SDK | 36 |
 
@@ -246,6 +253,13 @@ app/src/main/java/com/aritr/rova/
 │   │   ├── RecoveryViewSource.kt    # Adapter
 │   │   ├── RecoveryViewModel.kt
 │   │   └── VendorGuidanceIntents.kt # OEM auto-start screen resolver
+│   ├── screens/player/              # Phase 2.5 in-app player
+│   │   ├── PlayerScreen.kt          # Compose surface + segmented timeline
+│   │   ├── PlayerViewModel.kt       # ExoPlayer + 250ms position poll
+│   │   ├── PlayerUriResolver.kt     # Pure manifest → URI dispatch
+│   │   ├── PlayerUiState.kt         # Loading | Ready | Unavailable
+│   │   ├── SegmentedTimeline.kt     # Strip composable
+│   │   └── SegmentedTimelineMath.kt # Pure boundary math
 │   └── components/                  # Shared cards + controls (refreshed palette)
 └── utils/
     ├── VideoMerger.kt               # MediaMuxer concat
