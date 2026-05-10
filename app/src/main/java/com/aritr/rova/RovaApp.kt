@@ -22,6 +22,7 @@ import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
+import com.aritr.rova.ui.signals.ThermalStatusSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import java.io.File
@@ -114,6 +115,20 @@ class RovaApp : Application() {
      */
     val notificationPermissionSignal: NotificationPermissionSignal by lazy {
         NotificationPermissionSignal.forContext(this)
+    }
+
+    /**
+     * Phase 3.4 (NEW_UI_BACKEND_REPLAN §5 row 3.4) — ThermalStatusSignal
+     * exposed lazily so cold-start receiver paths pay no cost; first
+     * access from a foreground host initializes. Refresh contract lives
+     * on the signal itself (host Activity ON_RESUME). Pre-API-29 the
+     * flow is a constant [com.aritr.rova.ui.signals.ThermalStatus.NONE]
+     * (PowerManager.getCurrentThermalStatus does not exist below Q).
+     * Consumer is the Phase 4 WarningCenterViewModel; this slice ships
+     * the signal only.
+     */
+    val thermalStatusSignal: ThermalStatusSignal by lazy {
+        ThermalStatusSignal.forContext(this)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
