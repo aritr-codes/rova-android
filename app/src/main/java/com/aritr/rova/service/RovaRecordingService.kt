@@ -33,6 +33,8 @@ import androidx.lifecycle.LifecycleRegistry
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.NotificationState
+import com.aritr.rova.service.notification.toCopy
 import com.aritr.rova.service.scheduler.AlarmScheduler
 import android.os.Binder
 import kotlinx.coroutines.CompletableDeferred
@@ -399,6 +401,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
     companion object {
         const val CHANNEL_ID = "RovaRecordingChannel"
         const val NOTIFICATION_ID = 1
+        // Phase 3.1 — title used for the legacy free-form
+        // updateNotification(contentText) post-sites (init / error /
+        // transient strings). Preserved bytecode-exact so behavior
+        // parity holds at every legacy call site. The typed
+        // updateNotification(NotificationState) overload derives
+        // its own title per the mockup.
+        private const val LEGACY_NOTIFICATION_TITLE = "🎥 Rova Recording Active"
         // Phase 1.3 — legacy ACTION_STOP service-intent constant removed.
         // Stop arrives via RovaStopReceiver.ACTION_STOP (broadcast).
         private const val WAKE_LOCK_RELAX_THRESHOLD_SECONDS = 120
@@ -631,7 +640,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // FGS-deadline) AND SecurityException (Android 14+ FGS-type vs
         // permission mismatch). Pre-manifest init window — no manifest to
         // roll back. Row 4b cleanup.
-        val notification = createNotification("Initializing background recording...")
+        val notification = createNotification(LEGACY_NOTIFICATION_TITLE, "Initializing background recording...")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, fgsType)
@@ -883,7 +892,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
 
                     _serviceState.update { it.copy(currentLoop = segmentCount + 1) }
-                    updateNotification("Recording segment ${segmentCount + 1}...")
+                    updateNotification(NotificationState.ClipRecording(segmentCount + 1, limitLoops.takeIf { it != -1 }))
 
                     // ADR 0006 B-fix-4: retry loop now branches on
                     // SegmentResult. RetryableFailure → reconfigure +
@@ -1695,13 +1704,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * before the user could meaningfully tap STOP — matching the no-action
      * notification.
      */
-    private fun createNotification(contentText: String, sessionId: String? = null): Notification {
+    private fun createNotification(title: String, contentText: String, sessionId: String? = null): Notification {
         val openPendingIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🎥 Rova Recording Active")
+            .setContentTitle(title)
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setContentIntent(openPendingIntent)
@@ -1740,7 +1749,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // the FGS deadline; the initial startForeground is sticky.
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
-            createNotification(contentText, currentSessionId)
+            createNotification(LEGACY_NOTIFICATION_TITLE, contentText, currentSessionId)
+        )
+    }
+
+    // Phase 3.1 — typed overload for the 4 mockup happy-path states.
+    private fun updateNotification(state: NotificationState) {
+        val copy = state.toCopy()
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIFICATION_ID,
+            createNotification(copy.title, copy.body, currentSessionId)
         )
     }
 
@@ -1960,7 +1978,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var mergeSucceeded = false
         try {
             _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
-            updateNotification("Merging ${segments.size} segments...")
+            updateNotification(NotificationState.Merging(done = 0, total = segments.size))
 
             // Phase 1.7 commit-7 — single live entry into the tier
             // export pipeline. ExportPipeline.export dispatches by
@@ -1986,12 +2004,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 segments = segments
             ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
-                updateNotification("Merging segments: ${(progress * 100).toInt()}%")
+                updateNotification(NotificationState.Merging((progress * segments.size).toInt(), segments.size))
             }
 
             when (result) {
                 is ExportResult.Success -> {
-                    updateNotification("Video saved")
+                    updateNotification(NotificationState.MergeComplete(clipCount = segments.size))
                     withContext(Dispatchers.IO) {
                         segments.forEach {
                             if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
@@ -2311,7 +2329,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             while (remaining > 0 && kotlinx.coroutines.currentCoroutineContext().isActive) {
                 val step = minOf(remaining, WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS)
                 _serviceState.update { it.copy(nextRecordingCountdown = remaining.toLong()) }
-                updateNotification("Next recording in ${formatCountdownSeconds(remaining)} | Segments: $segmentCount")
+                updateNotification(NotificationState.GapWaiting(segmentCount + 1, formatCountdownSeconds(remaining), limitLoops.takeIf { it != -1 }))
                 delay(step * 1000L)
                 remaining -= step
             }
@@ -2384,7 +2402,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         acquireWakeLock()
         for (i in waitSeconds downTo 1) {
             if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
-            updateNotification("Next recording in ${i}s | Segments: $segmentCount")
+            updateNotification(NotificationState.GapWaiting(segmentCount + 1, "${i}s", limitLoops.takeIf { it != -1 }))
             _serviceState.update { it.copy(nextRecordingCountdown = i.toLong()) }
             delay(1000)
         }
