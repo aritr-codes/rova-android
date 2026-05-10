@@ -21,9 +21,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -36,11 +38,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.ui.screens.HistoryScreen
 import com.aritr.rova.ui.screens.RecordScreen
 import com.aritr.rova.ui.screens.RecordViewModel
 import com.aritr.rova.ui.screens.SettingsScreen
 import com.aritr.rova.ui.screens.SettingsViewModel
+import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
 
 private data class MainDestination(
@@ -66,6 +70,20 @@ private val TOP_LEVEL_ROUTES = setOf("record", "history", "settings")
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    // Phase 2.6 — onboarding gate. The first-launch flag drives the
+    // NavHost start destination: a fresh install routes to the
+    // walkthrough + permission flow; once `onboardingCompleted` flips
+    // true (via OnboardingViewModel.advance past the last step or
+    // OnboardingViewModel.complete) the gate snaps to `record` for the
+    // remainder of the install. The flag is read ONCE per Activity
+    // composition via `remember` so a mid-flow flip does not interrupt
+    // the active flow's NavHost (the flow itself navigates on
+    // completion). UI_NAV_GRAPH §4.1.
+    val context = LocalContext.current
+    val initialOnboardingCompleted = remember(context) {
+        RovaSettings(context).onboardingCompleted
+    }
+    val startDestination = if (initialOnboardingCompleted) "record" else "onboarding"
     // Slice 3 — RecordViewModel hoisted to MainScreen scope so the
     // bottom NavigationBar can read `serviceState.isPeriodicActive`
     // and gate tab switches without coupling MainScreen directly to
@@ -214,9 +232,23 @@ fun MainScreen() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "record",
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // Phase 2.6 — onboarding gate. Completion (and Skip)
+            // navigates to `record` and pops the onboarding entry off
+            // the back-stack so a system-back from `record` does not
+            // re-enter the flow. UI_NAV_GRAPH §5 back-stack table.
+            composable("onboarding") {
+                OnboardingScreen(
+                    onCompleted = {
+                        navController.navigate("record") {
+                            popUpTo("onboarding") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
             composable("record") {
                 val toHistory: () -> Unit = {
                     navController.navigate("history") {
