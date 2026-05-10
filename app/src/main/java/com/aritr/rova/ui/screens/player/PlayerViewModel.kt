@@ -103,12 +103,23 @@ class PlayerViewModel(
             // recomposition fires after `_uiState` becomes Ready but
             // before `exoPlayer` is assigned, `update` binds a `null`
             // player on the PlayerView and the surface stays blank
-            // until the next position-poll tick recomposes. Reversing
-            // the two writes closes that window deterministically.
-            if (resolved is PlayerUiState.Ready) {
-                attachExoPlayer(resolved.mediaUri)
+            // until the next position-poll tick recomposes. Routing
+            // through [PlayerStateEmitter] preserves this ordering
+            // (the helper invokes `attach` synchronously and only
+            // returns the Ready value after it completes — the single
+            // `_uiState.value = …` write therefore still fires *after*
+            // the side effect).
+            //
+            // Audit F#R1 — `attachExoPlayer` can throw (ExoPlayer init
+            // failure, surface error, malformed `MediaItem`, OOM).
+            // Without the catch inside the emitter, uiState wedges on
+            // Loading forever and the user stares at an unresolvable
+            // spinner. The emitter coerces any thrown attach into
+            // [PlayerUiState.Unavailable] so the standard
+            // Unavailable-screen path takes over.
+            _uiState.value = PlayerStateEmitter.emit(resolved) { uri ->
+                attachExoPlayer(uri)
             }
-            _uiState.value = resolved
         }
     }
 
