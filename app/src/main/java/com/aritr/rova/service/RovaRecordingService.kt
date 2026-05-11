@@ -16,6 +16,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
@@ -30,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
@@ -124,6 +126,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var preview: Preview? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var camera: androidx.camera.core.Camera? = null
+    // Phase 3.5 — observer on `camera`'s cameraState LiveData; re-made on bind, nulled on unbind.
+    private var cameraStateObserver: Observer<CameraState>? = null
     private var currentSurfaceProvider: Preview.SurfaceProvider? = null
 
     // Smoke-test fix: tracks whether the live Preview is bound to the DUMMY
@@ -355,6 +359,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
         RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
+        markCameraUnbound()  // Phase 3.5
         releaseDummySurface()
         preview = null
         videoCapture = null
@@ -1036,6 +1041,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         setupMutex.withLock {
             RovaLog.d("forceReconfigureCamera: Unbinding for fresh setup")
             try { cameraProvider?.unbindAll() } catch (e: Exception) {}
+            markCameraUnbound()  // Phase 3.5
             preview = null
             videoCapture = null
             camera = null
@@ -1062,6 +1068,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
                 RovaLog.d("setupCamera: Unbinding existing provider for clean setup")
                 try { cameraProvider?.unbindAll() } catch (e: Exception) {}
+                markCameraUnbound()  // Phase 3.5
                 _serviceState.update { it.copy(isCameraActive = false) }
             } else {
                 val provider = withContext(Dispatchers.IO) {
@@ -1115,6 +1122,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     preview,
                     videoCapture
                 )
+                // Phase 3.5 — observe POST-bind runtime camera errors (additive to ADR 0006).
+                camera?.let { observeCameraState(it) }
                 configuredResolution = resolutionStr
                 boundToDummy = useDummy
                 _serviceState.update { it.copy(isCameraActive = true) }
@@ -1126,6 +1135,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
+    }
+
+    // Phase 3.5 — attach a fresh cameraState observer after each bind. Each
+    // bindToLifecycle yields a new Camera/LiveData; removeObserver here is a
+    // harmless no-op vs. the old camera's LiveData. The observer is
+    // lifecycle-bound to the service → auto-detaches on destroy.
+    private fun observeCameraState(cam: androidx.camera.core.Camera) {
+        val liveData = cam.cameraInfo.cameraState
+        cameraStateObserver?.let { liveData.removeObserver(it) }
+        val obs = Observer<CameraState> { camState ->
+            (application as RovaApp).cameraStateSignal.onCameraState(camState.error?.code)
+        }
+        cameraStateObserver = obs
+        liveData.observe(this, obs)
+    }
+
+    // Phase 3.5 — every unbindAll/teardown site routes here (no live camera).
+    private fun markCameraUnbound() {
+        (application as RovaApp).cameraStateSignal.onCameraUnbound()
+        cameraStateObserver = null
     }
 
     // R1: Guard against flipping camera while a segment is actively recording.
@@ -1787,6 +1816,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         try { currentRecording?.stop() } catch (e: Exception) {}
         currentRecording = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
+        markCameraUnbound()  // Phase 3.5 — service teardown
         releaseDummySurface()
         releaseWakeLock()
         // Phase 1.2: belt-and-braces. Stop paths already call this; here it
