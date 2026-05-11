@@ -25,6 +25,7 @@ import com.aritr.rova.service.export.Tier2Exporter
 import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
+import com.aritr.rova.ui.signals.CameraStateSignal
 import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
@@ -168,6 +169,20 @@ class RovaApp : Application() {
     val exactAlarmSignal: ExactAlarmSignal by lazy {
         ExactAlarmSignal.forContext(this)
     }
+
+    /**
+     * Phase 3.5 (NEW_UI_BACKEND_REPLAN §5 row 3.5) — CameraStateSignal,
+     * the app-scoped owner of the runtime camera-health StateFlow.
+     * Unlike the other signals there is no `forContext` / SDK gate:
+     * the signal is purely fed by [com.aritr.rova.service.RovaRecordingService],
+     * which observes `Camera.cameraInfo.cameraState` after each
+     * `bindToLifecycle` and calls `onCameraState` / `onCameraUnbound`.
+     * No broadcast receiver — camera-state has no system broadcast, so
+     * (unlike [exactAlarmSignal]) [onCreate] adds nothing for it. Lazy
+     * so cold-start receiver paths pay no cost. Consumer is the Phase 4
+     * WarningCenterViewModel ("Camera in use" banner).
+     */
+    val cameraStateSignal: CameraStateSignal by lazy { CameraStateSignal() }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
