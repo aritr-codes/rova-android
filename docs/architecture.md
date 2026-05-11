@@ -35,8 +35,7 @@ app/src/main/java/com/aritr/rova/
 │   │   ├── RovaCardComponents.kt   # SwitchRow and other shared UI components
 │   │   ├── RovaComponents.kt       # StepperControl
 │   │   ├── RovaDialogs.kt          # Shared dialog components
-│   │   ├── BackgroundRecordingBanner.kt
-│   │   └── BatteryOptimizationBanner.kt
+│   │   └── BackgroundRecordingBanner.kt
 │   ├── screens/
 │   │   ├── RecordScreen.kt         # Camera preview + recording controls
 │   │   ├── RecordViewModel.kt      # ViewModel: service binding, recording settings, presets
