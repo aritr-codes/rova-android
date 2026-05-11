@@ -123,6 +123,23 @@ fun RecordScreen(
         }
     }
 
+    // Phase 4.1b — hard-block Start-gate. CAMERA_PERMISSION_DENIED (#1) or
+    // STORAGE_INSUFFICIENT (#3) disable the Start button; the inline
+    // WarningCenter banner shows the actionable detail. Read the leaf
+    // signals directly — NOT off the WarningCenter's resolved warning,
+    // which can be a higher-priority non-gating warning (e.g. exact-alarm)
+    // while storage is also insufficient. When this is not a RovaApp
+    // (preview / odd contexts) the gate is open.
+    val cameraPermissionFlow = remember(rovaApp) {
+        rovaApp?.cameraPermissionSignal?.state ?: MutableStateFlow(true)
+    }
+    val storageInsufficientFlow = remember(rovaApp) {
+        rovaApp?.storageSignal?.insufficientToStart ?: MutableStateFlow(false)
+    }
+    val cameraPermissionGranted by cameraPermissionFlow.collectAsStateWithLifecycle()
+    val storageInsufficient by storageInsufficientFlow.collectAsStateWithLifecycle()
+    val startBlocked = !cameraPermissionGranted || storageInsufficient
+
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
 
@@ -193,10 +210,27 @@ fun RecordScreen(
         }
     }
 
+    // Phase 4.1b — keep the camera/mic permission signals current when an
+    // in-app grant doesn't pause the Activity (Accompanist refreshes its
+    // own permission state on ON_RESUME; mirror that into our signals).
+    LaunchedEffect(permissionsState.permissions.map { it.status }) {
+        rovaApp?.let {
+            it.cameraPermissionSignal.refresh()
+            it.microphonePermissionSignal.refresh()
+        }
+    }
+    // Phase 4.1b — recompute the storage estimate whenever the clip
+    // settings change (covers preset-select and every edit sheet) and on
+    // first composition.
+    LaunchedEffect(duration, loopCount, resolution) {
+        rovaApp?.storageSignal?.recompute(duration, loopCount, resolution)
+    }
+
     // Release camera when app goes to background (unless recording); on
     // resume, re-poll the WarningCenter signals that have no broadcast
     // (Phase 4.1 — exactAlarmSignal self-refreshes via RovaApp's receiver;
-    // cameraStateSignal is fed by the recording service).
+    // cameraStateSignal is fed by the recording service;
+    // Phase 4.1b adds camera/mic permission + storage).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -208,6 +242,13 @@ fun RecordScreen(
                     it.thermalStatusSignal.refresh()
                     it.powerSignal.refresh()
                     it.batteryOptimizationSignal.refresh()
+                    it.cameraPermissionSignal.refresh()
+                    it.microphonePermissionSignal.refresh()
+                    it.storageSignal.recompute(
+                        viewModel.duration.value,
+                        viewModel.loopCount.value,
+                        viewModel.resolution.value
+                    )
                 }
                 else -> {}
             }
@@ -697,7 +738,7 @@ fun RecordScreen(
                         onPresetDeleted = { viewModel.deletePreset(it) },
                         onSavePreset = { presetNameInput = ""; showSavePresetDialog = true },
                         onStart = onStart,
-                        startEnabled = !isUiLocked,
+                        startEnabled = !isUiLocked && !startBlocked,
                         modifier = Modifier.align(Alignment.BottomCenter)
                     )
                 }
