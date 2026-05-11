@@ -29,6 +29,7 @@ import com.aritr.rova.ui.signals.BatteryOptimizationSignal
 import com.aritr.rova.ui.signals.CameraPermissionSignal
 import com.aritr.rova.ui.signals.CameraStateSignal
 import com.aritr.rova.ui.signals.ExactAlarmSignal
+import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
@@ -208,6 +209,16 @@ class RovaApp : Application() {
      */
     val cameraPermissionSignal: CameraPermissionSignal by lazy {
         CameraPermissionSignal.forContext(this)
+    }
+
+    /**
+     * Phase 4.1b (NEW_UI_BACKEND_REPLAN row 12) — RECORD_AUDIO permission
+     * grant as a [StateFlow], consumed by the WarningCenterViewModel (the
+     * `MICROPHONE_DENIED` advisory banner). Lazy. Refresh contract on the
+     * signal (host Activity ON_RESUME + on permission-state change).
+     */
+    val microphonePermissionSignal: MicrophonePermissionSignal by lazy {
+        MicrophonePermissionSignal.forContext(this)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
