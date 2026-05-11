@@ -25,6 +25,7 @@ import com.aritr.rova.service.export.Tier2Exporter
 import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
+import com.aritr.rova.ui.signals.BatteryOptimizationSignal
 import com.aritr.rova.ui.signals.CameraStateSignal
 import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
@@ -183,6 +184,19 @@ class RovaApp : Application() {
      * WarningCenterViewModel ("Camera in use" banner).
      */
     val cameraStateSignal: CameraStateSignal by lazy { CameraStateSignal() }
+
+    /**
+     * Phase 4.1 (NEW_UI_BACKEND_REPLAN §5 row 13) — battery-optimization
+     * exemption signal, consumed by the Phase 4 WarningCenterViewModel
+     * (the `BATTERY_OPTIMIZATION_ON` banner). Lazy so cold-start receiver
+     * paths pay no cost. Refresh contract lives on the signal itself (host
+     * Activity ON_RESUME — grant changes don't broadcast). Replaces the
+     * standalone `BatteryOptimizationBanner` polling that RecordScreen did
+     * inline.
+     */
+    val batteryOptimizationSignal: BatteryOptimizationSignal by lazy {
+        BatteryOptimizationSignal.forContext(this)
+    }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
