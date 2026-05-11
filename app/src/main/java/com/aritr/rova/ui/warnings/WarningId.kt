@@ -6,18 +6,26 @@ package com.aritr.rova.ui.warnings
  * returns the first active one, and `WarningIdOrderTest` pins the
  * ordinals so a reorder cannot slip through review.
  *
- * Order mirrors NEW_UI_BACKEND_REPLAN.md §"Phase 4" "Banner precedence"
- * table (owner-signed 2026-05-11), rows 1..16. Rows 1 (camera-perm),
- * 3 (storage-to-start) and 12 (mic/video-only) are present here but NOT
- * yet reachable from [WarningPrecedence.resolve] — their producers land
- * in Phase 4.1b. They exist now so this enum and `bannerContent` are
- * complete and 4.1b is purely additive.
+ * Order mirrors NEW_UI_BACKEND_REPLAN.md the "Phase 4" "Banner precedence"
+ * table (owner-signed 2026-05-11), rows 1..16. As of Phase 4.1b all 16
+ * rows are reachable from [WarningPrecedence.resolve].
+ *
+ * [gatesStart] = this warning, while active, disables the Record screen's
+ * Start button (Phase 4.1b). Only `CAMERA_PERMISSION_DENIED` and
+ * `STORAGE_INSUFFICIENT` do — `EXACT_ALARM_DENIED` is `HARD_BLOCK`-tier
+ * (chrome) but does NOT gate Start (recording still runs, on inexact
+ * alarms). `gatesStart` and `tier` are orthogonal: `tier` is banner
+ * chrome, `gatesStart` is behavior. The Record screen does NOT read
+ * `gatesStart` off the *resolved* warning (a higher-priority non-gating
+ * warning can be showing while a gating one is also active); it reads the
+ * underlying signals directly. `gatesStart` is documentation here and a
+ * pin in `WarningIdOrderTest`.
  */
-enum class WarningId(val tier: WarningTier) {
+enum class WarningId(val tier: WarningTier, val gatesStart: Boolean = false) {
     // Hard block — recording can't start / must abort
-    CAMERA_PERMISSION_DENIED(WarningTier.HARD_BLOCK),   // #1  — DEFERRED to 4.1b
-    EXACT_ALARM_DENIED(WarningTier.HARD_BLOCK),         // #2
-    STORAGE_INSUFFICIENT(WarningTier.HARD_BLOCK),       // #3  — DEFERRED to 4.1b
+    CAMERA_PERMISSION_DENIED(WarningTier.HARD_BLOCK, gatesStart = true),   // #1
+    EXACT_ALARM_DENIED(WarningTier.HARD_BLOCK),                            // #2
+    STORAGE_INSUFFICIENT(WarningTier.HARD_BLOCK, gatesStart = true),       // #3
     // Critical — active session at risk
     THERMAL_SHUTDOWN(WarningTier.CRITICAL),             // #4
     THERMAL_EMERGENCY(WarningTier.CRITICAL),            // #5
@@ -28,7 +36,7 @@ enum class WarningId(val tier: WarningTier) {
     // Advisory — degraded but functional
     BATTERY_LOW(WarningTier.ADVISORY),                  // #10
     THERMAL_SEVERE(WarningTier.ADVISORY),               // #11
-    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #12 — DEFERRED to 4.1b
+    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #12
     BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #13
     POWER_SAVE_MODE(WarningTier.ADVISORY),              // #14
     THERMAL_MODERATE(WarningTier.ADVISORY),             // #15
