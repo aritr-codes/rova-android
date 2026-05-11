@@ -1,7 +1,6 @@
 package com.aritr.rova.ui.screens
 
 import android.Manifest
-import android.content.ActivityNotFoundException
 import android.os.Build
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +51,7 @@ import com.aritr.rova.ui.components.ClipProgressBand
 import com.aritr.rova.ui.components.WaitingCountdown
 import com.aritr.rova.ui.components.MergingProgressBand
 import com.aritr.rova.ui.components.MergeCompleteCard
+import com.aritr.rova.ui.warnings.WarningCenter
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -185,10 +184,6 @@ fun RecordScreen(
     var showTutorial by remember { mutableStateOf(false) }
     var tutorialStep by remember { mutableIntStateOf(0) }
 
-    // Battery optimization banner — dismissed flag survives rotation; resets on next app launch
-    var batteryBannerDismissed by rememberSaveable { mutableStateOf(false) }
-    val showBatteryBanner = !batteryBannerDismissed && !BatteryOptimizationHelper.isIgnoring(context)
-
     // Recording error snackbar
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(serviceState.recordingError) {
@@ -198,13 +193,22 @@ fun RecordScreen(
         }
     }
 
-    // Release camera when app goes to background (unless recording)
+    // Release camera when app goes to background (unless recording); on
+    // resume, re-poll the WarningCenter signals that have no broadcast
+    // (Phase 4.1 — exactAlarmSignal self-refreshes via RovaApp's receiver;
+    // cameraStateSignal is fed by the recording service).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> viewModel.stopCameraPreview()
                 Lifecycle.Event.ON_START -> viewModel.startCameraPreview()
+                Lifecycle.Event.ON_RESUME -> rovaApp?.let {
+                    it.notificationPermissionSignal.refresh()
+                    it.thermalStatusSignal.refresh()
+                    it.powerSignal.refresh()
+                    it.batteryOptimizationSignal.refresh()
+                }
                 else -> {}
             }
         }
@@ -542,15 +546,11 @@ fun RecordScreen(
                             }
                         }
                     }
-                    if (showBatteryBanner) {
-                        BatteryOptimizationBanner(
-                            onAction = {
-                                val intent = BatteryOptimizationHelper.buildRequestIntent(context.packageName)
-                                try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
-                            },
-                            onDismiss = { batteryBannerDismissed = true }
-                        )
-                    }
+                    // Phase 4.1 — unified WarningCenter banner. Shows the single
+                    // highest-priority active warning (or nothing). Absorbs the old
+                    // standalone battery-optimization banner. Always visible when a
+                    // warning is active — independent of hudState.
+                    WarningCenter()
                     // Slice 2 / Phase 2.4 — read-only recovery echo.
                     // Idle only; hidden during Recording, Waiting, or
                     // Merging so the merge HUD owns the user's
