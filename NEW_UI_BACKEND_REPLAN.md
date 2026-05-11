@@ -367,6 +367,8 @@ The roadmap below replaces the existing UI_ROADMAP.md trajectory beyond Slice 4.
 
 ### Phase 3 — Backend signal slices (parallel-safe with Phase 2 except 3.X feeds 4.X)
 
+**Status: CLOSED (owner-closed 2026-05-11).** All six sub-slices on master, each review-gated: 3.1 notification copy split (PR #8), 3.2 NotificationPermissionSignal (PR #5), 3.3 PowerSignal (PR #7), 3.4 ThermalStatusSignal (PR #6), 3.5 CameraStateSignal (PR #10), 3.6 ExactAlarmSignal (PR #9). The columns below are retained as the as-built record.
+
 | # | Slice | Files likely touched | Backend deps | Test gates | Smoke | NO-GO |
 |---|---|---|---|---|---|---|
 | 3.1 | **Notification copy split** | `service/RovaRecordingService.kt`, `service/notification/*.kt` (or wherever the FGS notification builder lives — needs a quick hunt) | none | unit tests for state-to-text mapping | record full loop, confirm 4 distinct notification copies | changing the FGS type per state |
@@ -408,10 +410,15 @@ The roadmap below replaces the existing UI_ROADMAP.md trajectory beyond Slice 4.
 **Banner precedence (input spec for 4.1).** When two or more warnings
 could surface at once, the WarningCenter surfaces exactly **one
 Record-screen banner at a time**, by the precedence below (highest
-first). Lower-priority signals are **queued, not dropped** — when a
-higher-priority signal clears, the next-highest in the queue surfaces.
-`WarningCenterViewModel` owns the queue; the leaf signals (Phase 3)
-remain independent state holders and do not know about each other.
+first). `WarningCenterViewModel` re-derives the set of active warnings
+on every signal change and emits the single highest-priority one per the
+table — **no separate queue is maintained**. The leaf signals (Phase 3)
+remain independent state holders, are the source of truth for whether
+their warning is active, and the banner follows them directly. When the
+top warning's condition clears, the next-highest active one is
+re-evaluated from the current signal states (in steady state this is
+behaviourally identical to a queue — but with no stale-queue failure
+mode, and the VM is just a `combine(...)` over the five signal flows).
 
 Recovery cards (Killed-by-system / Force-stopped / Merge-failed /
 Can't-merge-3-way) are a **separate surface** (Library, not the
@@ -442,23 +449,27 @@ banner — it routes to the generic recovery card on the Library
 (it largely overlaps the existing INIT_FAILED path). `CameraSignalState.UNKNOWN`
 (no active session) raises nothing.
 
-*Open questions for the owner before Phase 4 dispatch:*
-- Hard-block order 1 vs 2: camera-permission above exact-alarm? (Both
-  block; camera-perm is more fundamental — recording is impossible vs
-  scheduling is impossible.)
-- Is Camera IN_USE critical-tier (8) or should it abort the session
-  (hard-block-tier)? Current placement = critical (mid-session, the
-  recording already started; the existing INIT_FAILED path handles the
-  fatal-bind case separately).
-- Mic-denied at 12 — above battery-optimization (13)? It affects the
-  actual output; battery-optimization is a future-risk. Reasonable as
-  drafted, confirm.
-- Notifications-denied dead last (16) — agreed? (Lowest stakes: you
-  just don't get progress UI; recording itself is unaffected.)
-- Do you want the queued (not-dropped) semantics, or "show the top one,
-  silently suppress the rest until re-evaluated"? Queued = more
-  faithful to the mockup's implied behavior; suppress-and-re-eval =
-  simpler VM. Drafted as queued.
+*Precedence finalized — owner sign-off 2026-05-11.* The table above is
+the locked input spec for 4.1. Decisions:
+
+1. **Hard-block #1 = camera-permission, #2 = exact-alarm.** Camera-perm
+   is the more fundamental block (no capture at all vs. periodic-loop
+   timing degrades per ADR 0001 but clips still record); when both are
+   denied, the camera-perm banner suppresses the exact-alarm one.
+2. **Camera `IN_USE` stays critical-tier (#8), banner-only.** The signal
+   does not gate or abort recording — replan §5 row 3.5 NO-GO column
+   ("banners only"). The existing ADR 0006 exception path / camera-ready
+   timeout keeps owning any session-abort decision. *(Aborting the
+   session on `IN_USE` would be a separate ADR 0006 amendment +
+   service-layer slice if ever wanted — parked, explicitly not Phase 4.)*
+3. **Mic-denied (#12) above battery-optimization (#13).** Mic-denied
+   degrades the artifact being recorded *now* (video-only fallback per
+   ADR 0006 B18); battery-opt is a contingent future risk.
+4. **Notifications-denied (#16) dead last.** Recording is fully
+   unaffected — only the progress shade + STOP button are hidden.
+5. **Re-evaluate semantics, not a materialized queue** — see the
+   `WarningCenterViewModel` note above; behaviourally identical in
+   steady state, simpler VM, no stale-queue failure mode.
 
 - 4.1 — `ui/warnings/WarningCenterViewModel.kt` (aggregator) + `ui/warnings/WarningCenter.kt` (presentational) + the 18 banners as composable templates (group by category).
 - 4.2 — Routing: where each warning shows up (Record overlay vs Library inline vs full-screen sheet vs in-line History card). Pulled from the doc in 1.D.
