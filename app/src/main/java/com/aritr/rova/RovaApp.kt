@@ -32,6 +32,7 @@ import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
+import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
@@ -220,6 +221,15 @@ class RovaApp : Application() {
     val microphonePermissionSignal: MicrophonePermissionSignal by lazy {
         MicrophonePermissionSignal.forContext(this)
     }
+
+    /**
+     * Phase 4.1b (NEW_UI_BACKEND_REPLAN row 3) — "not enough storage to
+     * start" as a [StateFlow], consumed by the WarningCenterViewModel (the
+     * `STORAGE_INSUFFICIENT` hard-block banner) and by RecordScreen's
+     * Start-gate. Lazy; initial value `false` until the host screen first
+     * calls [StorageSignal.recompute] with the current clip settings.
+     */
+    val storageSignal: StorageSignal by lazy { StorageSignal.forContext(this) }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
