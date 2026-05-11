@@ -1,7 +1,11 @@
 package com.aritr.rova
 
+import android.app.AlarmManager
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import androidx.annotation.RequiresApi
 import com.aritr.rova.data.ExportTier
@@ -21,6 +25,7 @@ import com.aritr.rova.service.export.Tier2Exporter
 import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
+import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
@@ -146,6 +151,24 @@ class RovaApp : Application() {
         PowerSignal.forContext(this)
     }
 
+    /**
+     * Phase 3.6 (NEW_UI_BACKEND_REPLAN §5 row 3.6) — ExactAlarmSignal
+     * exposed lazily so cold-start receiver paths pay no cost; first
+     * access from a foreground host initializes. Pre-API-31 the flow
+     * is a constant `true` (the OS has no concept of exact-alarm
+     * revocation below S). On API 31+ the receiver registered in
+     * [onCreate] invokes [ExactAlarmSignal.refresh] on every
+     * [AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED]
+     * broadcast — the ON_RESUME poll used by other signals is not
+     * needed because the OS broadcasts grant changes for this
+     * permission. ADR 0001 governs the degradation path in the
+     * scheduler tree; this slice ships the signal only. Consumer is
+     * the Phase 4 WarningCenterViewModel.
+     */
+    val exactAlarmSignal: ExactAlarmSignal by lazy {
+        ExactAlarmSignal.forContext(this)
+    }
+
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
@@ -180,6 +203,38 @@ class RovaApp : Application() {
         instance = this
         // RovaCrashReporter.setBackend(FirebaseCrashlyticsBackend()) — wired Phase 4.
         // NOTE: Phase 1.5 recovery is NOT triggered here. See class KDoc.
+        registerExactAlarmStateReceiverIfSupported()
+    }
+
+    /**
+     * Phase 3.6. Process-lifetime registration of the
+     * [AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED]
+     * receiver. No unregister: this is the Application class and the
+     * receiver lives until process death. API 31+ only — the broadcast
+     * action constant and the OS path that emits it both gate at S.
+     * The 3-arg `registerReceiver` overload that takes a flags int is
+     * required on API 33+ for dynamic receivers; below 33 the 2-arg
+     * overload is used.
+     */
+    private fun registerExactAlarmStateReceiverIfSupported() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val filter = IntentFilter(
+            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED
+        )
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action ==
+                    AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED) {
+                    exactAlarmSignal.refresh()
+                }
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(receiver, filter)
+        }
     }
 
     /**
