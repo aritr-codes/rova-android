@@ -63,10 +63,13 @@ fun WarningCenter(modifier: Modifier = Modifier) {
         factory = viewModelFactory {
             initializer {
                 WarningCenterViewModel(
+                    cameraPermissionGranted = app.cameraPermissionSignal.state,
                     exactAlarmGranted = app.exactAlarmSignal.state,
+                    storageInsufficient = app.storageSignal.insufficientToStart,
                     thermal = app.thermalStatusSignal.state,
                     power = app.powerSignal.state,
                     camera = app.cameraStateSignal.state,
+                    microphonePermissionGranted = app.microphonePermissionSignal.state,
                     notificationsGranted = app.notificationPermissionSignal.state,
                     batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt
                 )
@@ -143,9 +146,8 @@ private enum class ActionTarget {
 }
 
 /**
- * The 16-arm content map. All 16 rows present even though #1/#3/#12 are
- * not yet reachable from [WarningPrecedence.resolve] (Phase 4.1b wires
- * their producers). Icons are sensible Material defaults — for
+ * The 16-arm content map — all 16 rows are now reachable from [WarningPrecedence.resolve] (Phase 4.1b wired #1/#3/#12).
+ * Icons are sensible Material defaults — for
  * [WarningId.BATTERY_OPTIMIZATION_ON] the icon mirrors the
  * battery-themed icon the old `BatteryOptimizationBanner` carried.
  */

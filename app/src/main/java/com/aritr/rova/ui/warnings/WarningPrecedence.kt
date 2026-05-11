@@ -16,51 +16,59 @@ import com.aritr.rova.ui.signals.ThermalStatus
  * decision #5): there is no queue — the active warning follows the
  * signals directly, every recomputation.
  *
- * Rows #1 (camera-perm), #3 (storage-to-start), #12 (mic/video-only)
- * have no parameter here yet — their producers land in Phase 4.1b. Until
- * then this function never returns those three [WarningId] values.
+ * As of Phase 4.1b all 16 rows are reachable (#1 camera-permission, #3
+ * storage-to-start and #12 mic/video-only got their parameters here).
  *
  * Battery semantics: a low / critical battery warning fires only when the
  * percent is KNOWN (non-null) AND below the threshold AND not charging.
- * Unknown percent → no battery warning ([com.aritr.rova.ui.signals.PowerSignal]
+ * Unknown percent => no battery warning ([com.aritr.rova.ui.signals.PowerSignal]
  * returns a null percent on emulators / hardware quirks — never raise a
  * false alarm). `charging` is best-effort on API 24/25 (see PowerSignal
- * KDoc) — that is acceptable: a missed "low battery" nag pre-Oreo beats
- * a spurious one.
+ * KDoc) — acceptable: a missed "low battery" nag pre-Oreo beats a
+ * spurious one.
  *
- * Camera: only IN_USE / DISABLED raise a banner. OK / UNKNOWN / OTHER_ERROR
- * raise nothing here — OTHER_ERROR routes to the Library recovery card
- * per the replan, not a Record-screen banner.
+ * Camera state: only IN_USE / DISABLED raise a banner. OK / UNKNOWN /
+ * OTHER_ERROR raise nothing here — OTHER_ERROR routes to the Library
+ * recovery card per the replan, not a Record-screen banner.
+ *
+ * Storage: [storageInsufficient] is the recording service's start-time
+ * preflight, surfaced early ([com.aritr.rova.ui.signals.StorageSignal]).
  */
 internal object WarningPrecedence {
     fun resolve(
+        cameraPermissionGranted: Boolean,
         exactAlarmGranted: Boolean,
+        storageInsufficient: Boolean,
         thermal: ThermalStatus,
         power: PowerState,
         camera: CameraSignalState,
+        microphonePermissionGranted: Boolean,
         notificationsGranted: Boolean,
         batteryOptimizationExempt: Boolean
     ): WarningId? {
-        if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                       // #2
-        when (thermal) {                                                                  // #4 / #5 / #6
+        if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
+        if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
+        if (storageInsufficient) return WarningId.STORAGE_INSUFFICIENT                      // #3
+        when (thermal) {                                                                   // #4 / #5 / #6
             ThermalStatus.SHUTDOWN -> return WarningId.THERMAL_SHUTDOWN
             ThermalStatus.EMERGENCY -> return WarningId.THERMAL_EMERGENCY
             ThermalStatus.CRITICAL -> return WarningId.THERMAL_CRITICAL
             else -> Unit
         }
         val pct = power.percent
-        if (pct != null && pct < 5 && !power.charging) return WarningId.BATTERY_CRITICAL  // #7
-        when (camera) {                                                                   // #8 / #9
+        if (pct != null && pct < 5 && !power.charging) return WarningId.BATTERY_CRITICAL   // #7
+        when (camera) {                                                                    // #8 / #9
             CameraSignalState.IN_USE -> return WarningId.CAMERA_IN_USE
             CameraSignalState.DISABLED -> return WarningId.CAMERA_DISABLED
             else -> Unit
         }
-        if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW       // #10
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE              // #11
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON          // #13
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                          // #14
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE          // #15
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                  // #16
+        if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
+        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #11
+        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #12
+        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #13
+        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #14
+        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #15
+        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #16
         return null
     }
 }
