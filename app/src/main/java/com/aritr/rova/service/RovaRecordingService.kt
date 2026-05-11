@@ -1509,7 +1509,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             val capturedSessionId = currentSessionId
                             val capturedFile = videoFile
                             val capturedFilename = segmentFilename
-                            val capturedDurationMs = nSeconds * 1000L
+                            // Persist the ACTUAL recorded length (CameraX
+                            // RecordingStats), not the configured clip length —
+                            // an early-stopped 60 s clip must not show "1:00" in
+                            // the Library/player when the .mp4 is 0:29.
+                            val capturedDurationMs = recordedSegmentDurationMs(
+                                recordedDurationNanos = event.recordingStats.recordedDurationNanos,
+                                configuredFallbackMs = nSeconds * 1000L
+                            )
                             // segmentCount is incremented by the outer loop
                             // after recordSegment returns — do NOT increment
                             // here. SessionStore reads segmentFile.length()
@@ -2519,4 +2526,25 @@ enum class StartBlocked {
     FGS_RESTRICTED,
     /** Other [IllegalStateException] from `startForegroundService`. Rare. */
     UNKNOWN_ISE
+}
+
+/**
+ * The actual recorded length (ms) of a finalized segment, derived from
+ * CameraX's `RecordingStats.recordedDurationNanos`. Falls back to the
+ * configured clip length only when the stat is non-positive (defensive
+ * — should not happen on a successful finalize, but a bogus 0/negative
+ * stat must not be persisted as a 0 ms / negative segment while the
+ * file on disk has real bytes).
+ *
+ * Top-level + `internal` (rather than a `private` member) so the JVM
+ * unit suite can pin the ns→ms conversion + fallback without
+ * constructing the `Service` — same posture as
+ * [com.aritr.rova.service.wakelock.WakeLockPolicy].
+ */
+internal fun recordedSegmentDurationMs(
+    recordedDurationNanos: Long,
+    configuredFallbackMs: Long
+): Long {
+    val fromStats = recordedDurationNanos / 1_000_000L // ns -> ms
+    return if (fromStats > 0L) fromStats else configuredFallbackMs
 }

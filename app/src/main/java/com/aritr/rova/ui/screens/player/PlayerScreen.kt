@@ -332,7 +332,14 @@ private fun InfoRow(state: PlayerUiState.Ready, progress: PlaybackProgress) {
     val math = remember(state.segmentDurationsMs, progress.positionMs) {
         SegmentedTimelineMath.compute(state.segmentDurationsMs, progress.positionMs)
     }
-    val perClipText = formatPerClip(state.perClipDurationMs)
+    // Show the CURRENT segment's actual recorded length, not the
+    // configured per-clip length — an early-stopped last clip is
+    // shorter than what the user configured, and this line should
+    // agree with the timeline fill and the header total. Resolver
+    // guarantees a non-empty list; the getOrElse default is defensive.
+    val currentClipDurationMs =
+        state.segmentDurationsMs.getOrElse(math.currentClipIndex - 1) { state.perClipDurationMs }
+    val perClipText = formatPerClip(currentClipDurationMs)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
