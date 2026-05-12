@@ -412,8 +412,9 @@ fun RecordScreen(
     // carries the actionable CTA).
     // ----------------------------------------------------------------
     val hardBlockActive = startBlocked   // = !cameraPermissionGranted || storageInsufficient (already computed)
-    val sessionLocked = serviceState.isPeriodicActive || serviceState.isMerging
-    val fabState = recordFabState(hudState, sessionLocked = sessionLocked, hardBlockActive = hardBlockActive)
+    // isUiLocked (declared above) == isPeriodicActive || isMerging — the same "session running" predicate
+    // recordFabState/RecordBottomNav want; no need for a second copy.
+    val fabState = recordFabState(hudState, sessionLocked = isUiLocked, hardBlockActive = hardBlockActive)
     val onFabClick: () -> Unit = {
         when (fabState) {
             RecordFabState.Start -> onStart()
@@ -655,7 +656,7 @@ fun RecordScreen(
                 )
                 RecordBottomNav(
                     fabState = fabState,
-                    navItemsLocked = sessionLocked,
+                    navItemsLocked = isUiLocked,
                     onLibrary = onNavigateToHistory,
                     onSettings = onNavigateToSettings,
                     onFabClick = onFabClick,
