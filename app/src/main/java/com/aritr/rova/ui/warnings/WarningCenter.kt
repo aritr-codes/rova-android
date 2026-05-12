@@ -45,6 +45,34 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 
 /**
+ * Where a given [WarningId] is surfaced on the Record screen (ADR 0007). The
+ * [WarningCenterViewModel] still resolves the single highest-priority active
+ * warning; this only decides how that warning is drawn.
+ *
+ * - [HardBlockSheet]   — recording can't start / must abort (camera perm, exact
+ *                        alarm, storage). Modal, auto-presents, collapses to a
+ *                        WarningChip on "Not now"; FAB goes Disabled, nav dims.
+ * - [SoftSheet]        — degraded but recordable (mic denied → video-only). Modal,
+ *                        secondary action "Continue without audio" dismisses to a chip.
+ * - [AdvisorySheet]    — informational (notifications off, battery-opt on, power-save).
+ *                        Modal, secondary "Not now" dismisses to a chip; never blocks Start.
+ * - [TopBanner]        — mid-recording risks (thermal, low/critical battery, camera in
+ *                        use/disabled). Rendered as a top banner over the active
+ *                        viewfinder, not a sheet. R1 wires the idle-reachable surfaces
+ *                        (sheets/chips); the top-banner render path lands with R2 unless
+ *                        trivially cheap here (spec A6).
+ */
+enum class WarningSurface { HardBlockSheet, SoftSheet, AdvisorySheet, TopBanner }
+
+fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
+    WarningId.CAMERA_PERMISSION_DENIED, WarningId.EXACT_ALARM_DENIED, WarningId.STORAGE_INSUFFICIENT -> WarningSurface.HardBlockSheet
+    WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
+    WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
+    WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
+    WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED -> WarningSurface.TopBanner
+}
+
+/**
  * Phase 4.1 — the WarningCenter banner. Mounted on the Record screen
  * (Phase 4.2 routes the same [WarningId] set to other surfaces). Shows
  * the single highest-priority active warning, or nothing. Always visible
