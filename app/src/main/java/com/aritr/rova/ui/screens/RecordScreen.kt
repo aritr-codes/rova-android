@@ -20,13 +20,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -63,6 +59,7 @@ import kotlinx.coroutines.launch
 fun RecordScreen(
     onMergeFinished: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     viewModel: RecordViewModel = viewModel(),
     settingsViewModel: SettingsViewModel
 ) {
@@ -428,6 +425,32 @@ fun RecordScreen(
         }
     }
 
+    // ----------------------------------------------------------------
+    // Task 13 — new-chrome inputs (top overlay status pill + bottom-nav
+    // FAB). The FAB subsumes the old idle-dock Start button and the
+    // big-red Stop button; on Disabled it is a no-op (the warning sheet
+    // carries the actionable CTA).
+    // ----------------------------------------------------------------
+    val hardBlockActive = startBlocked   // = !cameraPermissionGranted || storageInsufficient (already computed)
+    val sessionLocked = serviceState.isPeriodicActive || serviceState.isMerging
+    val fabState = recordFabState(hudState, sessionLocked = sessionLocked, hardBlockActive = hardBlockActive)
+    val onFabClick: () -> Unit = {
+        when (fabState) {
+            RecordFabState.Start -> onStart()
+            RecordFabState.Stop -> viewModel.stopRecording()
+            RecordFabState.Disabled -> { /* no-op — the warning sheet carries the CTA */ }
+        }
+    }
+    // status pill text — exact active-state copy is R2's concern
+    val statusText: String
+    val statusDetail: String?
+    when (hudState) {
+        RecordHudState.Recording -> { statusText = "Recording"; statusDetail = "${clipElapsedSeconds}s of ${duration}s" }
+        RecordHudState.Waiting   -> { statusText = "On break"; statusDetail = "next in ${displayedCountdownSeconds}s" }
+        is RecordHudState.Merging -> { statusText = "Merging"; statusDetail = null }
+        RecordHudState.Idle -> { statusText = "Ready to record"; statusDetail = null }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = !serviceState.isRecording,
@@ -515,78 +538,13 @@ fun RecordScreen(
 
                 // Top Bar + Battery Optimization Banner + Recovery Echo
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(listOf(Color.Black.copy(0.6f), Color.Transparent))
-                            )
-                            .padding(16.dp)
-                            .padding(top = 24.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, "Settings", tint = Color.White)
-                        }
-                        // Slice 3 / Phase 2.4 — when a periodic session is
-                        // active OR a merge is in flight, the active HUD
-                        // bands below carry the state, so the old centered
-                        // REC pill / "Rova" branding is suppressed.
-                        when {
-                            hudState != RecordHudState.Idle -> {
-                                Spacer(Modifier.weight(1f, fill = true))
-                            }
-                            serviceState.isRecording && !isCameraActive -> {
-                                Text(
-                                    "INITIALIZING...",
-                                    color = Color.Yellow,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            else -> {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Rova", color = Color.White, fontWeight = FontWeight.Bold)
-                                    Text(
-                                        "Hands-free loop recorder",
-                                        color = Color.White.copy(alpha = 0.72f),
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                            }
-                        }
-                        Row {
-                            val iconTint = if (isUiLocked) Color.Gray else Color.White
-                            IconButton(
-                                onClick = {
-                                    if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3)
-                                },
-                                enabled = !isUiLocked
-                            ) {
-                                val icon = when (flashMode) {
-                                    RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn
-                                    RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto
-                                    else -> Icons.Default.FlashOff
-                                }
-                                Icon(
-                                    icon, "Flash",
-                                    tint = if (flashMode == RovaRecordingService.FLASH_MODE_ON) Color.Yellow else iconTint
-                                )
-                            }
-                            IconButton(
-                                onClick = { if (!isUiLocked) viewModel.flipCamera() },
-                                enabled = !isUiLocked
-                            ) {
-                                Icon(Icons.Default.FlipCameraIos, "Flip", tint = iconTint)
-                            }
-                            IconButton(
-                                onClick = { showTutorial = true; tutorialStep = 0 },
-                                enabled = !isUiLocked
-                            ) {
-                                Icon(Icons.Outlined.Info, "Help", tint = iconTint)
-                            }
-                        }
-                    }
+                    // Task 13 — the old app-bar Row (hamburger / "Rova"
+                    // branding / "INITIALIZING…" / flash / flip / help) is
+                    // deleted. Flash + flip move into RecordCameraControls
+                    // (mounted below as a top-right overlay); the hamburger
+                    // (drawer) is removed in Task 14; "Rova" branding and
+                    // "INITIALIZING…" are absorbed by the status pill /
+                    // "Initializing Camera…" loading overlay.
                     // Phase 4.1 — unified WarningCenter banner. Shows the single
                     // highest-priority active warning (or nothing). Absorbs the old
                     // standalone battery-optimization banner. Always visible when a
@@ -656,7 +614,11 @@ fun RecordScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp),
+                            .padding(bottom = 16.dp)
+                            // Task 13 — transitional: clear the new bottom nav
+                            // mounted below. The big-red "Stop recording"
+                            // Button is gone; Stop is the FAB now.
+                            .padding(bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         when (hudState) {
@@ -671,30 +633,6 @@ fun RecordScreen(
                             )
                             else -> Unit
                         }
-                        Button(
-                            onClick = { viewModel.stopRecording() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError
-                            ),
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp)
-                                .height(72.dp)
-                                .semantics {
-                                    contentDescription =
-                                        "Stop recording. Ends the session and saves the clips."
-                                }
-                        ) {
-                            Icon(Icons.Default.Stop, contentDescription = null)
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Stop recording",
-                                fontWeight = FontWeight.SemiBold,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
                     }
                 } else if (hudState is RecordHudState.Merging) {
                     // Phase 2.4 — merge body anchored to the bottom of
@@ -707,6 +645,8 @@ fun RecordScreen(
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .padding(bottom = 32.dp)
+                            // Task 13 — transitional: clear the new bottom nav.
+                            .padding(bottom = 96.dp)
                     ) {
                         MergingProgressBand(
                             progress = hudState.progress,
@@ -739,9 +679,49 @@ fun RecordScreen(
                         onSavePreset = { presetNameInput = ""; showSavePresetDialog = true },
                         onStart = onStart,
                         startEnabled = !isUiLocked && !startBlocked,
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        // Task 13 — transitional: sits above the new bottom
+                        // nav so the navy dock and the nav bar don't collide.
+                        // Task 14 replaces the dock with the new idle body.
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 96.dp)
                     )
                 }
+
+                // ── Task 13 — new chrome: top overlay + cam-controls (top),
+                // bottom nav with the Start/Stop FAB (bottom). Painted after
+                // the bottom-area `when` so it sits on top of the camera
+                // preview / status strip / idle dock. The MergeCompleteCard
+                // and the tutorial overlay below still paint over this chrome.
+                RecordTopOverlay(
+                    hudState = hudState,
+                    statusText = statusText,
+                    statusDetail = statusDetail,
+                    currentLoop = serviceState.currentLoop,
+                    totalLoops = serviceState.totalLoops,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(start = 16.dp, top = 16.dp),
+                )
+                RecordCameraControls(
+                    flashMode = flashMode,
+                    onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
+                    onFlip = { if (!isUiLocked) viewModel.flipCamera() },
+                    enabled = !isUiLocked,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(end = 16.dp, top = 16.dp),
+                )
+                RecordBottomNav(
+                    fabState = fabState,
+                    navItemsLocked = sessionLocked,
+                    onLibrary = onNavigateToHistory,
+                    onSettings = onNavigateToSettings,
+                    onFabClick = onFabClick,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
                 // shown for ~900 ms between merge success and the
