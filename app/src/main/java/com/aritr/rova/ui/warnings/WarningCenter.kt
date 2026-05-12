@@ -167,9 +167,9 @@ private data class BannerContent(
     val action: WarningAction?
 )
 
-private data class WarningAction(val label: String, val target: ActionTarget)
+internal data class WarningAction(val label: String, val target: ActionTarget)
 
-private enum class ActionTarget {
+internal enum class ActionTarget {
     EXACT_ALARM_SETTINGS, BATTERY_OPTIMIZATION, NOTIFICATION_SETTINGS, APP_DETAILS_SETTINGS
 }
 
@@ -240,6 +240,76 @@ private fun bannerContent(id: WarningId): BannerContent = when (id) {
         Icons.Default.NotificationsOff, "Notifications off — you won't see recording progress", "",
         WarningAction("Turn on", ActionTarget.NOTIFICATION_SETTINGS)
     )
+}
+
+internal data class WarningSheetContent(
+    val icon: ImageVector,
+    val title: String,
+    /** Short supporting line; never blank for sheet-rendered warnings. Final copy is the dev's call. */
+    val body: String,
+    /** Primary CTA — always present (e.g. "Open App Settings"). */
+    val primary: WarningAction,
+    /** Secondary CTA — present for HardBlock/Soft/Advisory sheets ("Not now" / "Continue without audio"); may be null for TopBanner. */
+    val secondary: WarningAction?,
+)
+
+/**
+ * The 16-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
+ * Icons reuse the ones the old [bannerContent] carried. Replaces [bannerContent] when
+ * [WarningSheet] lands (Task 9).
+ */
+internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id) {
+    WarningId.CAMERA_PERMISSION_DENIED -> WarningSheetContent(
+        Icons.Default.NoPhotography, "Camera access required",
+        "Rova can't record without camera access. Grant the permission in App Settings to continue.",
+        WarningAction("Open App Settings", ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+    )
+    WarningId.EXACT_ALARM_DENIED -> WarningSheetContent(
+        Icons.Default.AlarmOff, "Alarm permission required",
+        "Rova uses exact alarms to time recording segments. Without it, clips won't start or stop on schedule.",
+        WarningAction("Allow exact alarms", ActionTarget.EXACT_ALARM_SETTINGS),
+        WarningAction("Not now", ActionTarget.EXACT_ALARM_SETTINGS),
+    )
+    WarningId.STORAGE_INSUFFICIENT -> WarningSheetContent(
+        Icons.Default.Storage, "Not enough storage to start",
+        "Free up space, then try again.",
+        WarningAction("Free up space", ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+    )
+    WarningId.MICROPHONE_DENIED -> WarningSheetContent(
+        Icons.Default.MicOff, "Recording without audio",
+        "This session will record video only. You can grant microphone access in Settings and try again.",
+        WarningAction("Grant microphone access", ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction("Continue without audio", ActionTarget.APP_DETAILS_SETTINGS),
+    )
+    WarningId.NOTIFICATIONS_DENIED -> WarningSheetContent(
+        Icons.Default.NotificationsOff, "Stay in the loop",
+        "Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.",
+        WarningAction("Enable notifications", ActionTarget.NOTIFICATION_SETTINGS),
+        WarningAction("Not now", ActionTarget.NOTIFICATION_SETTINGS),
+    )
+    WarningId.BATTERY_OPTIMIZATION_ON -> WarningSheetContent(
+        Icons.Default.BatterySaver, "Battery optimization may stop recording",
+        "Android may kill Rova in the background. Disable battery optimization for reliable long sessions.",
+        WarningAction("Disable", ActionTarget.BATTERY_OPTIMIZATION),
+        WarningAction("Not now", ActionTarget.BATTERY_OPTIMIZATION),
+    )
+    WarningId.POWER_SAVE_MODE -> WarningSheetContent(
+        Icons.Default.PowerSettingsNew, "Power-save mode may throttle recording",
+        "Turning off battery saver gives Rova full CPU/IO for the session.",
+        WarningAction("Settings", ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+    )
+    WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(Icons.Default.Thermostat, "Device overheating — recording stopped", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_EMERGENCY -> WarningSheetContent(Icons.Default.Thermostat, "Device critically hot", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_CRITICAL -> WarningSheetContent(Icons.Default.Thermostat, "Device very hot — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_SEVERE -> WarningSheetContent(Icons.Default.Thermostat, "Device hot — quality may drop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, "Device warming up", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery critical — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery low — consider charging", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
 
 private fun launchActionTarget(context: Context, target: ActionTarget) {
