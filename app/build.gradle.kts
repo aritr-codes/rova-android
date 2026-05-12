@@ -15,13 +15,13 @@ val keystoreProperties = Properties().apply {
 android {
     namespace = "com.aritr.rova"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
         applicationId = "com.aritr.rova"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 3
         versionName = "0.5.0"
 
