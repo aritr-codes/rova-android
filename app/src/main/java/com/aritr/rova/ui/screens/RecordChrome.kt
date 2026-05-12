@@ -274,6 +274,19 @@ private val BottomNavStroke = Color.White.copy(alpha = 0.055f)
 private val FabSize = 56.dp
 
 /**
+ * Layout metrics RecordScreen needs to clear chrome it can't measure directly.
+ *
+ * [bottomNavClearance] — bottom padding for content that sits above [RecordBottomNav]
+ * (the idle settings card, the active-HUD bands, the merge band): the FAB (⌀ [FabSize])
+ * plus the bar's vertical padding. Pair it with `windowInsetsPadding(navigationBars)` at
+ * the call site — that handles the gesture-nav inset separately. One source of truth so
+ * the three call sites can't drift; tune here if [RecordBottomNav]'s height changes.
+ */
+internal object RecordChromeMetrics {
+    val bottomNavClearance = 90.dp
+}
+
+/**
  * The Record screen's own bottom navigation (mockups/new_uiux/01-record-home.html .bottom-nav):
  * Library (left) · center Start/Stop FAB · Settings (right). There is no app-wide NavigationBar
  * any more — this bar lives only on the Record screen; Library/Settings PUSH those screens.

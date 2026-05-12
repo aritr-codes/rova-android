@@ -565,7 +565,7 @@ fun RecordScreen(
                             // Clear the bottom nav. The big-red "Stop recording"
                             // Button is gone; Stop is the FAB now.
                             .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = 90.dp),
+                            .padding(bottom = RecordChromeMetrics.bottomNavClearance),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         when (hudState) {
@@ -594,7 +594,7 @@ fun RecordScreen(
                             .padding(bottom = 32.dp)
                             // Clear the bottom nav.
                             .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = 90.dp)
+                            .padding(bottom = RecordChromeMetrics.bottomNavClearance)
                     ) {
                         MergingProgressBand(
                             progress = hudState.progress,
@@ -622,7 +622,7 @@ fun RecordScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = 90.dp, start = 16.dp, end = 16.dp),   // clear the bottom nav; tune to RecordBottomNav's height
+                            .padding(bottom = RecordChromeMetrics.bottomNavClearance, start = 16.dp, end = 16.dp),   // clear the bottom nav
                     )
                 }
 
