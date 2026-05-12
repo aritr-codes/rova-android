@@ -113,7 +113,7 @@ fun MainScreen() {
                     onBack = { navController.popBackStack() }
                 )
             }
-            composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel) }
+            composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel, onBack = { navController.popBackStack() }) }
         }
     }
 }
