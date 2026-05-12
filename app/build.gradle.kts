@@ -2,7 +2,6 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -80,8 +79,9 @@ android {
     }
 }
 
-// AGP 9 / Kotlin 2.x — the Android `kotlinOptions {}` shim is deprecated; the
-// Kotlin Gradle plugin's `compilerOptions {}` DSL is the replacement.
+// AGP 9 compiles Kotlin natively (built-in Kotlin) — no `org.jetbrains.kotlin.android`
+// plugin. Compiler options go through the Kotlin Gradle plugin's `compilerOptions {}`
+// DSL (the old `android { kotlinOptions {} }` shim is gone).
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
