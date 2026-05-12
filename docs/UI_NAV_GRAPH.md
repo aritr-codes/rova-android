@@ -5,6 +5,8 @@
 > **Source of truth for warning surfaces:** `mockups/new_uiux/07-warnings.html` (overlay-only — never owns a route).
 > **Source of truth for export options surface:** `mockups/new_uiux/09-notification-export.html` (overlay-only — sheet on `s-lib`).
 > **Branch:** `master`. **Phase 2 is not yet started.** This document precedes any screen implementation.
+>
+> **Nav model amended — Record-home redesign R1 (2026-05-12, branch `feat/record-home-redesign-r1`):** there is no longer an app-wide persistent `NavigationBar`. The `record` screen is the home and carries its OWN bottom nav (Library / center Start/Stop FAB / Settings). `history` and `settings` are now **drill-down** routes — pushed onto the back stack with `launchSingleTop = true`, each with a back arrow (`navController.popBackStack()`), like `player/{sessionId}` already was. The old `TOP_LEVEL_ROUTES` collapse mechanism is removed. Back-stack: `record` is the post-onboarding start destination; Library/Settings push onto it; system-back from Library/Settings → Record; system-back from Record → exits the app. See `docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md` for the full R1 spec.
 
 ---
 
@@ -27,10 +29,10 @@ The Compose Navigation graph stays structurally close to the shipped `MainScreen
 | Route id | Prototype screen | Status today | Owning ViewModel | Bottom nav visible? | New in Phase 2? |
 |---|---|---|---|---|---|
 | `onboarding` | `s-ob` | does not exist | new `OnboardingViewModel` | **No** (full-screen flow) | Yes — Phase 2.6 |
-| `record` | `s-rec` (idle) + `s-hud` (active state) | shipped | `RecordViewModel` (Slice 3 hoisted to MainScreen) | Yes (gated by `sessionLocked`) | No (re-skin only — Phase 2.1, 2.4 extend HUD) |
-| `history` | `s-lib` | shipped | `HistoryViewModel` | Yes | No (re-skin — Phase 2.2, 2.3) |
+| `record` | `s-rec` (idle) + `s-hud` (active state) | shipped | `RecordViewModel` (Slice 3 hoisted to MainScreen) | **Yes — Record owns its own bottom nav** (Library / Start-Stop FAB / Settings); gated by `sessionLocked` (**R1 redesign** — see note above) | No (re-skin — Record-home redesign R1) |
+| `history` | `s-lib` | shipped | `HistoryViewModel` | **No** — drill-down from `record`; back arrow → `record` (**R1 redesign**) | No (re-skin — Phase 2.2, 2.3) |
 | `player/{sessionId}` | `s-player` | does not exist | new `PlayerViewModel` | **No** (sub-screen, drill-down) | Yes — Phase 2.5 |
-| `settings` | `s-settings` | shipped | `SettingsViewModel` | Yes | No (re-skin — Phase 2.1) |
+| `settings` | `s-settings` | shipped | `SettingsViewModel` | **No** — drill-down from `record`; back arrow → `record` (**R1 redesign**) | No (re-skin — Phase 2.1) |
 | `editor` (`s-editor`) | `s-editor` | does not exist | n/a | n/a | **NO-GO for v1.0** (see §6.2) |
 
 Route id naming follows the existing `record` / `history` / `settings` convention from `MainScreen.kt:184-209` — short, lowercase, slash-segmented for argumented routes. The prototype's `s-` prefix is a static-page convention that does **not** carry into Compose route names.
@@ -76,9 +78,10 @@ flowchart TD
     REC_HUD_WAIT -->|STOP| REC_HUD_MERGE
     REC_HUD_MERGE -->|merge complete| REC_IDLE
 
-    REC_IDLE <-->|bottom nav| LIB
-    REC_IDLE <-->|bottom nav| SETTINGS
-    LIB <-->|bottom nav| SETTINGS
+    REC_IDLE -->|"bottom nav: Library"| LIB
+    REC_IDLE -->|"bottom nav: Settings"| SETTINGS
+    LIB -->|back arrow / system back| REC_IDLE
+    SETTINGS -->|back arrow / system back| REC_IDLE
 
     LIB -->|tap row| PLAYER
     PLAYER -->|back chevron| LIB
@@ -121,7 +124,7 @@ Legend:
   - `Waiting` — WAIT badge, countdown (32 sp `NumericMonoMedium`).
   - `Merging(progress)` — segment-by-segment progress text + spinner (Phase 2.4 — extends shipped HUD).
   - `Complete` — transient state; re-enters Idle once `RovaController` clears `serviceState.isPeriodicActive`.
-- **Bottom nav.** Visible. **Disabled** while `serviceState.isPeriodicActive` is true (already shipped via `MainScreen.kt:155` `enabled = !sessionLocked` + `Modifier.semantics { disabled() }`); the "Locked while recording" hint pill (lines 80-110) stays.
+- **Bottom nav.** **Record owns its own bottom nav** (Library / center Start-Stop FAB / Settings) per the R1 redesign. **Disabled** while `serviceState.isPeriodicActive` is true (`enabled = !sessionLocked`); the "Locked while recording" hint pill stays. There is no longer an app-wide `NavigationBar` — Library and Settings are drill-down destinations pushed from `record`.
 - **Edit sheets.** `EditSheetShell` (Slice 1) opens as a `ModalBottomSheet` from each cell tap. Sheet is an overlay; not pushed onto the back-stack. Back gesture / scrim tap discards.
 - **Recovery echo banner.** Already shipped (`RecoveryEchoBanner.kt`). Read-only; tapping the CTA navigates to `history`.
 - **Phase owner.** Already shipped (Slice 2 idle + Slice 3 active HUD). Phase 2.4 extends with Merging end-states.
@@ -136,7 +139,7 @@ Legend:
   - `View Settings` → opens `LibrarySessionConfigDialog` overlay (Phase 2.2). Reads `SessionManifest.config` for that session via existing `HistoryArtifactMapper`. Read-only.
 - **Recovery card.** Stays in the existing softened treatment from Slice 4. Phase 4.3 adds the "Merge what was recorded" 3rd action — that change does **not** alter the route, only the card body.
 - **Share menu.** Existing `safeShareUri` flow stays. Phase 5 (optional) adds the Export Options sheet as an overlay reachable from the share entry point.
-- **Bottom nav.** Visible.
+- **Bottom nav.** **Hidden — drill-down** (R1 redesign). `history` is pushed from `record`'s own bottom nav; back arrow / system back pops to `record`. No app-wide `NavigationBar` is shown on this route.
 - **Phase owner.** Already shipped (Slice 4). Phase 2.2 + 2.3 extend.
 
 ### 4.4 `player/{sessionId}` (NEW)
@@ -152,7 +155,7 @@ Legend:
 ### 4.5 `settings` (shipped — re-skin only)
 
 - **Layout.** Five sections per `06-app-settings.html` — Recording behavior, Alerts, Storage, Reliability, About.
-- **Bottom nav.** Visible.
+- **Bottom nav.** **Hidden — drill-down** (R1 redesign). `settings` is pushed from `record`'s own bottom nav; back arrow / system back pops to `record`. No app-wide `NavigationBar` is shown on this route.
 - **Internal navigation.** Battery dialog, folder-name dialog, etc. stay as in-place dialogs / sheets; they are overlays and not pushed onto the back-stack.
 - **No drawer.** The `ModalNavigationDrawer` from the legacy Record screen is gone (Slice 5 in the old UI_ROADMAP — not shipped under that numbering, replaced by Phase 2.1).
 - **Phase owner.** Phase 2.1.
@@ -170,35 +173,39 @@ The Library 3-dot `Edit` and the Player `trim` / `edit` shortcuts surface a `TOD
 | Edge | Type | Back-stack effect |
 |---|---|---|
 | `onboarding` → `record` (complete or skip) | replace | `popUpTo(onboarding) { inclusive = true }` then `navigate(record)` |
-| Bottom nav between `record` / `history` / `settings` | tab | `popUpTo(navController.graph.startDestinationId) { inclusive = false }` + `launchSingleTop = true` (matches shipped `MainScreen.kt:160-161`) |
+| `record` → `history` (bottom nav: Library) | push | `navigate("history") { launchSingleTop = true }` — **R1 redesign**: `history` is now a drill-down, not a tab peer |
+| `record` → `settings` (bottom nav: Settings) | push | `navigate("settings") { launchSingleTop = true }` — **R1 redesign**: `settings` is now a drill-down, not a tab peer |
+| `history` → `record` (back arrow / system back) | pop | `navController.popBackStack()` |
+| `settings` → `record` (back arrow / system back) | pop | `navController.popBackStack()` |
 | `history` → `player/{sessionId}` | push | normal `navigate("player/$sessionId")`; back returns to `history` |
 | `player/{sessionId}` → `history` (back chevron / system back) | pop | `navController.popBackStack()` |
 | `record` → EditSheet (cell tap) | overlay | not pushed; sheet `onDismissRequest` discards |
-| `record` → WarningCenter banner / sheet | overlay | not pushed |
+| `record` → WarningSheet / WarningChip (condition — ADR 0007) | overlay | not pushed |
 | `history` → View Settings popup | overlay | not pushed |
 | `history` → Export Options sheet (Phase 5) | overlay | not pushed |
 | Any route while `sessionLocked` is true | gated | bottom-nav `onClick` no-ops; system back is allowed (lifecycle, not nav) |
 
 System back gesture mapping:
-- On any **top-level** route (`record`, `history`, `settings`): system back exits the app per Android convention. **Not** "navigate to record then exit" — that pattern surprises users who expect a single back press to leave from any tab.
-- On `player/{sessionId}`: system back pops to the originating tab (`history`).
+- On `record` (start destination): system back exits the app per Android convention.
+- On `history` or `settings` (drill-down — **R1 redesign**): system back pops to `record`.
+- On `player/{sessionId}`: system back pops to the originating `history`.
 - On `onboarding`: system back walks slides backward; on slide 1, prompt before exit.
 - During an active recording session (`sessionLocked`): system back continues to follow the lifecycle convention (exits the app to background; does not interrupt the FGS).
 
-### 5.1 Bottom-nav shell — MainScreen change required for `onboarding` and `player/{sessionId}`
+### 5.1 Bottom-nav shell — R1 redesign model (amended 2026-05-12)
 
-The shipped `MainScreen.kt` (lines 50–211) uses a **single outer `Scaffold`** whose `bottomBar` slot wraps the entire `NavHost`. The `bottomBar` lambda renders unconditionally, gated only by `sessionLocked` (which dims/disables; it does not hide). Route composables run **inside** that NavHost — they do **not** own their own `Scaffold` and therefore cannot hide the bottom-nav by omitting a slot they do not own.
+**R1 redesign** (`feat/record-home-redesign-r1`) eliminates the app-wide `NavigationBar` and the `TOP_LEVEL_ROUTES` collapse mechanism. The `record` route owns its own bottom nav (Library / center Start-Stop FAB / Settings); `history` and `settings` are drill-down destinations with no `NavigationBar` of their own.
 
-Hiding the bottom-nav for `onboarding` and `player/{sessionId}` therefore requires a **MainScreen shell change**, owned by the implementing slice — Phase 2.6 for onboarding, Phase 2.5 for the player. Whichever slice lands first chooses the option below; the second slice inherits that choice and does not introduce a different shell.
+This resolves the pre-R1 shell question (previously Option A vs Option B below) in favor of **Option B** — Record's composable owns the bottom chrome; the outer `MainScreen` `Scaffold` no longer provides a shared `bottomBar` slot for `history`/`settings`. The `bottomBar` slot in `MainScreen`'s outer `Scaffold` is suppressed (or removed) for all routes except `onboarding` and `player/{sessionId}` (which were already hidden); `record`'s Scaffold provides the actual bottom nav.
 
-**Acceptable implementation options:**
+**Pre-R1 option analysis (archived — kept for context):**
 
 | Option | Sketch | Trade-off |
 |---|---|---|
-| **A. Conditional bottom-bar inside one Scaffold** | Keep one `MainScreen` `Scaffold`. Read `currentRoute` from `currentBackStackEntryAsState()` (already in scope at `MainScreen.kt:64-65`). Wrap the existing `bottomBar = { ... }` content in a guard — `if (currentRoute in topLevelRoutes) { /* nav pill + locked-while-recording hint */ }` — so the slot renders nothing on `onboarding` and `player/{sessionId}`. | Smallest diff; preserves the single-Scaffold structure shipped today. The `bottomBar` slot still occupies the layout tree; insets behave per `Scaffold` semantics. |
-| **B. Split shell — top-level vs drill-down/fullscreen** | Drop the `bottomBar` from `MainScreen`'s outer `Scaffold`. Top-level destinations (`record`, `history`, `settings`) re-introduce the bottom-nav inside their own `Scaffold` at the route composable. Drill-down / fullscreen routes (`player/{sessionId}`, `onboarding`) own their own `Scaffold` with no `bottomBar`. | Cleaner separation; each route fully owns its chrome. Larger diff — moves the bottomBar block out of `MainScreen` and re-introduces it under three per-tab Scaffolds. |
+| **A. Conditional bottom-bar inside one Scaffold** | Keep one `MainScreen` `Scaffold`. Read `currentRoute` from `currentBackStackEntryAsState()`. Wrap the `bottomBar = { ... }` in a guard — `if (currentRoute in topLevelRoutes) { … }` | Smallest diff; preserves single-Scaffold. No longer applicable — `history`/`settings` are not top-level peers in R1. |
+| **B. Split shell — top-level vs drill-down** | Drop the `bottomBar` from `MainScreen`'s outer `Scaffold`. Record's Scaffold provides its own bottom nav. Drill-down/fullscreen routes own their own `Scaffold` with no `bottomBar`. | Cleaner; each route fully owns its chrome. **This is the R1 model.** |
 
-The slice that lands first must call out the choice in its PR description. Adopting different shells for different routes is forbidden — pick one, both new routes consume it.
+The `player/{sessionId}` and `onboarding` shell requirement (hide bottom-nav) is unchanged; both are drill-down / fullscreen and own their own `Scaffold` with no `bottomBar`.
 
 These are not Phase 1 design choices — they are non-negotiable until the listed condition is met. Anything in this list must come back as a Phase 1 doc revision before it ships.
 
@@ -224,7 +231,7 @@ ROADMAP_v6 has a `## Out of Scope for v1.0` heading whose body is empty in the c
 
 NO-GO. WarningCenter does **not** own a route. Reasons:
 1. The prototype confirms: it never adds `s-warn` to `goScreen`. Warnings live on the screens that own the underlying signal — Record, History, in-place — never as a destination the user walks to.
-2. A standalone warning hub fragments the model: a battery banner shown on Record while recording is intentionally **inline** so the user never has to leave the camera to acknowledge it. Pushing them to a hub defeats that.
+2. A standalone warning hub fragments the model: a warning shown on Record while recording is intentionally **in-place** (as a `WarningSheet` / `WarningChip` per **ADR 0007** — Record-home redesign R1) so the user never has to leave the screen to acknowledge it. Pushing them to a hub defeats that.
 3. WarningCenter is a **VM aggregator** (`WarningCenterViewModel` per Phase 4.1) consumed by the same screens that already exist; not a route.
 
 If a future "see all current warnings" surface is required, it lives as a sheet (overlay) on `settings`, not as its own route.

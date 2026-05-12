@@ -35,7 +35,7 @@ The precedence model below (the per-category urgency ordering in §3 and §6.1) 
 **Resolved divergences from the original contract** (owner-signed, Phases 4.1 / 4.1b):
 - Precedence is one flat interleaved order, not category urgency.
 - The only hard-block warnings that *gate Start* (disable the Record Start button) are `CAMERA_PERMISSION_DENIED` and `STORAGE_INSUFFICIENT` — not every `HARD_BLOCK`-tier row. `EXACT_ALARM_DENIED` is a flat non-gating banner.
-- The Start-gate UX is "inline banner + disabled Start button", not a `FullCardOverlay` (NO-GO #3 — no `Modifier.blur` — still stands).
+- The Start-gate UX is "inline banner + disabled Start button", not a `FullCardOverlay` (NO-GO #3 — no `Modifier.blur` — still stands). **Superseded by ADR 0007** — the Record-screen presentation is the `WarningSheet` / `WarningChip` model (a per-tier modal sheet that collapses to a chip on dismiss), not an inline `Surface` strip. The precedence model described elsewhere in this contract is otherwise unchanged.
 - `WarningCenterViewModel`'s output is `StateFlow<WarningId?>` (not `StateFlow<WarningCenterUiState>`).
 - A resolution error logs and degrades to `null` (NO-GO #6).
 
@@ -115,7 +115,7 @@ Each row maps the mockup's title to a category, severity, surface, persistence, 
 
 | State | Mockup title | Severity | Producer status | Producer source | Surface | Persistence | Dismissibility | Phase 3 owner |
 |---|---|---|---|---|---|---|---|---|
-| C3.1 Battery optimization on | "Battery Optimization On" | `Soft` | shipped | `BatteryOptimizationHelper.buildRequestIntent` + existing `BatteryOptimizationBanner.kt` | Banner on `record` (pre-flight) and inside Settings → Reliability section. CTA: "Disable" opens system settings | until user disables battery optimization or 24 h snooze | dismissible (snooze) | n/a — Phase 4 only re-homes under WarningCenter |
+| C3.1 Battery optimization on | "Battery Optimization On" | `Soft` | shipped | `BatteryOptimizationHelper.buildRequestIntent` + existing `BatteryOptimizationBanner.kt` | **ADR 0007 supersedes the Record-screen surface** — rendered as `WarningSheet`/`WarningChip` (per-tier modal sheet, not an inline banner) per the Record-home redesign R1. Settings → Reliability section presentation is unchanged. CTA: "Disable" opens system settings | until user disables battery optimization or 24 h snooze | dismissible (snooze) | n/a — Phase 4 only re-homes under WarningCenter |
 | C3.2 Power saver on | "Power Saving Mode Is On" | `Soft` | **missing** | `ACTION_POWER_SAVE_MODE_CHANGED` BroadcastReceiver does not exist | Banner on `record` (pre-flight + mid-session). CTA: "Open battery settings" | until power saver disabled or 24 h snooze | dismissible (snooze) | **Phase 3.3** — `PowerSignal` |
 | C3.3 Low battery (<15%) | "Battery at 12%" | `Soft` | **missing** | BatteryManager polling at session start + threshold not in code | Banner on `record` (pre-flight) — non-blocking. CTA: "Plug in to keep recording" | until battery > 15% or charging | dismissible (snooze ends if level keeps dropping) | **Phase 3.3** — `PowerSignal` |
 | C3.4 Critical battery (<5%) | "Critical Battery — 4%" | `Hard` | **missing** | BatteryManager polling — no thresholds | Pre-launch screen on `record` — blocks Start. Mid-session: forced stop with terminal `StopReason.LOW_BATTERY` (new reason needed — see §7 open question) | until charging | **non-dismissible** for Start; mid-session emits a terminal recovery card | **Phase 3.3** — `PowerSignal` |
