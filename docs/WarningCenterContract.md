@@ -7,6 +7,44 @@
 
 ---
 
+## Revision — Phase 1.D (2026-05-11): precedence model superseded
+
+The precedence model below (the per-category urgency ordering in §3 and §6.1) is **superseded** by the flat 16-row "Banner precedence" table owner-signed in `NEW_UI_BACKEND_REPLAN.md` (the "Phase 4" section) and shipped as the `WarningId` enum's declaration order. Treat this revision as authoritative for ordering; the rest of this contract (categories, the 18 warning states, the NO-GO list, acceptance tests) still stands.
+
+**The 16 rows, in precedence order (highest first) — `WarningId` value · tier · summary:**
+
+1. `CAMERA_PERMISSION_DENIED` · HARD_BLOCK · CAMERA not granted — recording can't run. **Gates Start.**
+2. `EXACT_ALARM_DENIED` · HARD_BLOCK · exact alarms not allowed — loop falls back to inexact and drifts. Flat banner, **does NOT gate Start.**
+3. `STORAGE_INSUFFICIENT` · HARD_BLOCK · estimated peak bytes for the current clip settings exceed free space (mirrors the service's start-time preflight). **Gates Start.**
+4. `THERMAL_SHUTDOWN` · CRITICAL · thermal status SHUTDOWN.
+5. `THERMAL_EMERGENCY` · CRITICAL · thermal status EMERGENCY.
+6. `THERMAL_CRITICAL` · CRITICAL · thermal status CRITICAL.
+7. `BATTERY_CRITICAL` · CRITICAL · battery < 5% and not charging (known percent only).
+8. `CAMERA_IN_USE` · CRITICAL · another app holds the camera / concurrent-camera limit.
+9. `CAMERA_DISABLED` · CRITICAL · camera disabled by device policy / DnD.
+10. `BATTERY_LOW` · ADVISORY · battery < 15% and not charging (known percent only).
+11. `THERMAL_SEVERE` · ADVISORY · thermal status SEVERE.
+12. `MICROPHONE_DENIED` · ADVISORY · RECORD_AUDIO not granted — clips are video-only.
+13. `BATTERY_OPTIMIZATION_ON` · ADVISORY · app not exempt from battery optimization.
+14. `POWER_SAVE_MODE` · ADVISORY · power-save mode on.
+15. `THERMAL_MODERATE` · ADVISORY · thermal status MODERATE.
+16. `NOTIFICATIONS_DENIED` · ADVISORY · POST_NOTIFICATIONS not granted.
+
+**Outcome notes:** the camera-state signal's `OTHER_ERROR` routes to the Library recovery card (not a Record banner); its `UNKNOWN` (no session) raises nothing. Battery rows fire only when the percent is known, below threshold, and not charging.
+
+**Resolved divergences from the original contract** (owner-signed, Phases 4.1 / 4.1b):
+- Precedence is one flat interleaved order, not category urgency.
+- The only hard-block warnings that *gate Start* (disable the Record Start button) are `CAMERA_PERMISSION_DENIED` and `STORAGE_INSUFFICIENT` — not every `HARD_BLOCK`-tier row. `EXACT_ALARM_DENIED` is a flat non-gating banner.
+- The Start-gate UX is "inline banner + disabled Start button", not a `FullCardOverlay` (NO-GO #3 — no `Modifier.blur` — still stands).
+- `WarningCenterViewModel`'s output is `StateFlow<WarningId?>` (not `StateFlow<WarningCenterUiState>`).
+- A resolution error logs and degrades to `null` (NO-GO #6).
+
+**Snooze / hysteresis (§5): deferred.** The per-warning in-memory 24 h snooze (ADVISORY-tier only, not persisted across process death) and the thermal/storage hysteresis described in §5 are **not built in Phase 4.1 or 4.1b** — they are Phase 4.1c.
+
+**Signal producers (§7):** the camera-permission producer is `CameraPermissionSignal`; the storage producer is `StorageSignal` (mirrors `RovaRecordingService`'s preflight); the microphone producer is `MicrophonePermissionSignal` — all `RovaApp` lazy props added in Phase 4.1b. The battery-optimization producer is `BatteryOptimizationSignal` (Phase 4.1) — the old `BatteryOptimizationBanner.kt` was removed in PR #12.
+
+---
+
 ## 1. Scope
 
 This document defines the warning model that `WarningCenter` (Phase 4) will aggregate and present. It enumerates every warning state shown in `07-warnings.html`, classifies each by category and severity, identifies its producer (existing or missing), specifies its surface placement and persistence rules, and maps the missing producers to the Phase 3 slice that will land them.
@@ -35,6 +73,8 @@ Five categories, derived from `07-warnings.html`:
 ---
 
 ## 3. Severity model
+
+> **Superseded by the Phase 1.D revision at the top of this document — ordering is now the flat 16-row table.** The severity-token mapping (`sev-r/y/b/o`) below still stands.
 
 The mockup's `sev-r` / `sev-y` / `sev-b` / `sev-o` classes map directly to the four `RovaWarnings.*` tokens defined in `UI_DESIGN_TOKENS.md` §2.10:
 
@@ -117,6 +157,8 @@ The demotion keeps the mockup count consistent (18 numbered groups → 18 logica
 
 ## 5. Persistence rules — formal model
 
+> **Snooze + hysteresis: deferred to Phase 4.1c — not in 4.1 or 4.1b.**
+
 Each warning has a **lifetime** governed by three axes:
 
 ```
@@ -146,6 +188,8 @@ Termination   ∈ { ConditionResolved, UserDismissed, Snooze24h, ChoiceCommitted
 For each screen, the ordered set of warnings it can render. The order is fixed: when multiple are active the higher-priority warning displaces the lower (no stacking — one banner at a time per screen, except the recovery card list which can show multiple cards stacked).
 
 ### 6.1 `record` (Idle)
+
+> **Ordering superseded — see the Phase 1.D revision.**
 
 Pre-launch sequence (top-to-bottom on first violation):
 1. C1.1 Camera denied → full-card overlay, Start disabled.
@@ -207,6 +251,8 @@ Permission-step warnings inline:
 ---
 
 ## 7. Signal ownership graph (Mermaid)
+
+> Phase 4.1b: camera-permission → `CameraPermissionSignal`; storage → `StorageSignal`; microphone → `MicrophonePermissionSignal`; battery-optimization → `BatteryOptimizationSignal` (`BatteryOptimizationBanner.kt` removed in PR #12).
 
 Solid arrows = signal already in code. Dashed arrows = producer missing (Phase 3 owns).
 

@@ -26,10 +26,13 @@ import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
 import com.aritr.rova.ui.signals.BatteryOptimizationSignal
+import com.aritr.rova.ui.signals.CameraPermissionSignal
 import com.aritr.rova.ui.signals.CameraStateSignal
 import com.aritr.rova.ui.signals.ExactAlarmSignal
+import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
+import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
@@ -197,6 +200,36 @@ class RovaApp : Application() {
     val batteryOptimizationSignal: BatteryOptimizationSignal by lazy {
         BatteryOptimizationSignal.forContext(this)
     }
+
+    /**
+     * Phase 4.1b (NEW_UI_BACKEND_REPLAN row 1) — CAMERA permission grant as
+     * a [StateFlow], consumed by the Phase 4 WarningCenterViewModel (the
+     * `CAMERA_PERMISSION_DENIED` banner) and by RecordScreen's Start-gate.
+     * Lazy so cold-start paths pay nothing. Refresh contract lives on the
+     * signal (host Activity ON_RESUME + on permission-state change).
+     */
+    val cameraPermissionSignal: CameraPermissionSignal by lazy {
+        CameraPermissionSignal.forContext(this)
+    }
+
+    /**
+     * Phase 4.1b (NEW_UI_BACKEND_REPLAN row 12) — RECORD_AUDIO permission
+     * grant as a [StateFlow], consumed by the WarningCenterViewModel (the
+     * `MICROPHONE_DENIED` advisory banner). Lazy. Refresh contract on the
+     * signal (host Activity ON_RESUME + on permission-state change).
+     */
+    val microphonePermissionSignal: MicrophonePermissionSignal by lazy {
+        MicrophonePermissionSignal.forContext(this)
+    }
+
+    /**
+     * Phase 4.1b (NEW_UI_BACKEND_REPLAN row 3) — "not enough storage to
+     * start" as a [StateFlow], consumed by the WarningCenterViewModel (the
+     * `STORAGE_INSUFFICIENT` hard-block banner) and by RecordScreen's
+     * Start-gate. Lazy; initial value `false` until the host screen first
+     * calls [StorageSignal.recompute] with the current clip settings.
+     */
+    val storageSignal: StorageSignal by lazy { StorageSignal.forContext(this) }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

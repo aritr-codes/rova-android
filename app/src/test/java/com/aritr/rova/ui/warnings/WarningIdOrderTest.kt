@@ -15,9 +15,9 @@ class WarningIdOrderTest {
     @Test fun `declaration order matches the locked precedence table`() {
         assertEquals(
             listOf(
-                "CAMERA_PERMISSION_DENIED",  // #1  — DEFERRED to 4.1b
+                "CAMERA_PERMISSION_DENIED",  // #1
                 "EXACT_ALARM_DENIED",        // #2
-                "STORAGE_INSUFFICIENT",      // #3  — DEFERRED to 4.1b
+                "STORAGE_INSUFFICIENT",      // #3
                 "THERMAL_SHUTDOWN",          // #4
                 "THERMAL_EMERGENCY",         // #5
                 "THERMAL_CRITICAL",          // #6
@@ -26,7 +26,7 @@ class WarningIdOrderTest {
                 "CAMERA_DISABLED",           // #9
                 "BATTERY_LOW",               // #10
                 "THERMAL_SEVERE",            // #11
-                "MICROPHONE_DENIED",         // #12 — DEFERRED to 4.1b
+                "MICROPHONE_DENIED",         // #12
                 "BATTERY_OPTIMIZATION_ON",   // #13
                 "POWER_SAVE_MODE",           // #14
                 "THERMAL_MODERATE",          // #15
@@ -53,5 +53,12 @@ class WarningIdOrderTest {
         assertEquals(WarningTier.ADVISORY, WarningId.POWER_SAVE_MODE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.THERMAL_MODERATE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.NOTIFICATIONS_DENIED.tier)
+    }
+
+    @Test fun `only camera-permission and storage gate Start`() {
+        assertEquals(
+            listOf("CAMERA_PERMISSION_DENIED", "STORAGE_INSUFFICIENT"),
+            WarningId.values().filter { it.gatesStart }.map { it.name }
+        )
     }
 }

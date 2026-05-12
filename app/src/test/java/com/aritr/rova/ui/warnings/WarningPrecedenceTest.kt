@@ -16,19 +16,25 @@ class WarningPrecedenceTest {
 
     /** All-clear defaults; override one knob per test. */
     private fun resolve(
+        cameraPermissionGranted: Boolean = true,
         exactAlarmGranted: Boolean = true,
+        storageInsufficient: Boolean = false,
         thermal: ThermalStatus = ThermalStatus.NONE,
         percent: Int? = 80,
         charging: Boolean = false,
         powerSaveMode: Boolean = false,
         camera: CameraSignalState = CameraSignalState.OK,
+        microphonePermissionGranted: Boolean = true,
         notificationsGranted: Boolean = true,
         batteryOptimizationExempt: Boolean = true
     ): WarningId? = WarningPrecedence.resolve(
+        cameraPermissionGranted = cameraPermissionGranted,
         exactAlarmGranted = exactAlarmGranted,
+        storageInsufficient = storageInsufficient,
         thermal = thermal,
         power = PowerState(percent = percent, charging = charging, powerSaveMode = powerSaveMode),
         camera = camera,
+        microphonePermissionGranted = microphonePermissionGranted,
         notificationsGranted = notificationsGranted,
         batteryOptimizationExempt = batteryOptimizationExempt
     )
@@ -95,4 +101,34 @@ class WarningPrecedenceTest {
         assertEquals(WarningId.POWER_SAVE_MODE, resolve(powerSaveMode = true, thermal = ThermalStatus.MODERATE))
     @Test fun `thermal moderate beats notifications denied`() =
         assertEquals(WarningId.THERMAL_MODERATE, resolve(thermal = ThermalStatus.MODERATE, notificationsGranted = false))
+
+    // --- new wired rows (Phase 4.1b) ---
+    @Test fun `camera permission denied`() =
+        assertEquals(WarningId.CAMERA_PERMISSION_DENIED, resolve(cameraPermissionGranted = false))
+    @Test fun `storage insufficient`() =
+        assertEquals(WarningId.STORAGE_INSUFFICIENT, resolve(storageInsufficient = true))
+    @Test fun `microphone denied`() =
+        assertEquals(WarningId.MICROPHONE_DENIED, resolve(microphonePermissionGranted = false))
+
+    // --- new suppression / precedence pairs (Phase 4.1b) ---
+    @Test fun `camera permission beats exact alarm`() =
+        assertEquals(WarningId.CAMERA_PERMISSION_DENIED, resolve(cameraPermissionGranted = false, exactAlarmGranted = false))
+    @Test fun `exact alarm beats storage insufficient`() =
+        assertEquals(WarningId.EXACT_ALARM_DENIED, resolve(exactAlarmGranted = false, storageInsufficient = true))
+    @Test fun `storage insufficient beats thermal shutdown`() =
+        assertEquals(WarningId.STORAGE_INSUFFICIENT, resolve(storageInsufficient = true, thermal = ThermalStatus.SHUTDOWN))
+    @Test fun `thermal severe beats microphone denied`() =
+        assertEquals(WarningId.THERMAL_SEVERE, resolve(thermal = ThermalStatus.SEVERE, microphonePermissionGranted = false))
+    @Test fun `microphone denied beats battery optimization`() =
+        assertEquals(WarningId.MICROPHONE_DENIED, resolve(microphonePermissionGranted = false, batteryOptimizationExempt = false))
+    @Test fun `camera permission outranks every other active warning`() =
+        assertEquals(
+            WarningId.CAMERA_PERMISSION_DENIED,
+            resolve(
+                cameraPermissionGranted = false, exactAlarmGranted = false, storageInsufficient = true,
+                thermal = ThermalStatus.SHUTDOWN, percent = 1, camera = CameraSignalState.IN_USE,
+                microphonePermissionGranted = false, notificationsGranted = false,
+                batteryOptimizationExempt = false, powerSaveMode = true
+            )
+        )
 }
