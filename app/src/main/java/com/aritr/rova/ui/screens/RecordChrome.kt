@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +24,9 @@ import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraIos
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
@@ -246,4 +255,81 @@ private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnl
 @Composable
 private fun CellSep() {
     Box(Modifier.width(1.dp).height(22.dp).background(CellDivider))
+}
+
+// ── RecordBottomNav style constants ──
+private val BottomNavFill = Color.Black.copy(alpha = 0.50f)
+private val BottomNavStroke = Color.White.copy(alpha = 0.055f)
+private val FabSize = 56.dp
+
+/**
+ * The Record screen's own bottom navigation (mockups/new_uiux/01-record-home.html .bottom-nav):
+ * Library (left) · center Start/Stop FAB · Settings (right). There is no app-wide NavigationBar
+ * any more — this bar lives only on the Record screen; Library/Settings PUSH those screens.
+ *
+ * Library/Settings dim + disable while [navItemsLocked] (= isPeriodicActive || isMerging). The FAB
+ * is [RecordFabState.Stop] during an active session and [RecordFabState.Disabled] when a hard-block
+ * is active (idle) or during merge.
+ */
+@Composable
+fun RecordBottomNav(
+    fabState: RecordFabState,
+    navItemsLocked: Boolean,
+    onLibrary: () -> Unit,
+    onSettings: () -> Unit,
+    onFabClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(BottomNavFill)
+            .border(width = 1.dp, color = BottomNavStroke, shape = RoundedCornerShape(0.dp))
+            .windowInsetsPadding(WindowInsets.navigationBars)   // clear the gesture-nav bar
+            .padding(horizontal = 28.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceAround,
+    ) {
+        NavItem(icon = Icons.Default.PhotoLibrary, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+        RecordFab(state = fabState, onClick = onFabClick)
+        NavItem(icon = Icons.Default.SettingsIcon, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+    }
+}
+
+@Composable
+private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = if (enabled) Modifier.clickable { onClick() } else Modifier,
+    ) {
+        Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = if (enabled) 0.4f else 0.14f), modifier = Modifier.size(34.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = if (enabled) 0.32f else 0.12f))
+    }
+}
+
+@Composable
+private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
+    val (fill, stroke, semanticsLabel) = when (state) {
+        RecordFabState.Start -> Triple(Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.15f), "Start recording")
+        RecordFabState.Stop -> Triple(Color(0xFFEF4444).copy(alpha = 0.13f), Color(0xFFEF4444).copy(alpha = 0.30f), "Stop recording")
+        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), "Start recording (unavailable)")
+    }
+    val enabled = state != RecordFabState.Disabled
+    Box(
+        modifier = Modifier
+            .size(FabSize)
+            .clip(CircleShape)
+            .background(fill)
+            .border(1.5.dp, stroke, CircleShape)
+            .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+            .semantics { contentDescription = semanticsLabel },
+        contentAlignment = Alignment.Center,
+    ) {
+        when (state) {
+            RecordFabState.Stop -> Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFFEF4444)))
+            RecordFabState.Start -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(26.dp))
+            RecordFabState.Disabled -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(26.dp))
+        }
+    }
 }
