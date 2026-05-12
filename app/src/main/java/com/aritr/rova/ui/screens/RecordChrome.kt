@@ -26,10 +26,12 @@ import androidx.compose.material.icons.filled.FlipCameraIos
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.History as HistoryIcon
 import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -330,6 +332,32 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
             RecordFabState.Stop -> Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFFEF4444)))
             RecordFabState.Start -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(26.dp))
             RecordFabState.Disabled -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(26.dp))
+        }
+    }
+}
+
+/**
+ * Low-key recovery nudge on the Record idle screen (a chip near the status pill). Recovery
+ * *cards* live on the Library (the replan / ADR 0005); this is just the landing-screen ping.
+ * Replaces the visual of the old RecoveryEchoBanner; RecordScreen still computes [count] from
+ * RovaApp.recoveryReport via RecoveryViewSource.eligibleSessionCount.
+ */
+@Composable
+fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.clickable { onReview() },
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Black.copy(alpha = 0.40f),
+        contentColor = Color.White,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+            val word = if (count == 1) "recording" else "recordings"
+            Text("$count $word interrupted · Review", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
     }
 }
