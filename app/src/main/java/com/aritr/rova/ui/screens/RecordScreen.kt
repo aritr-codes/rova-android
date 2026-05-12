@@ -457,7 +457,11 @@ fun RecordScreen(
                 // Loading Overlay — also held during the 1500 ms
                 // CameraX warm-up window so the user does not see an
                 // unexplained black gap between bind and first frame.
-                if ((!isCameraActive || cameraWarmingUp) && !serviceState.isMerging) {
+                // Suppressed when camera permission is missing: there's no
+                // camera to initialize, and the auto-presented hard-block
+                // sheet already explains why — a "Initializing Camera…"
+                // spinner there would be wrong copy.
+                if ((!isCameraActive || cameraWarmingUp) && !serviceState.isMerging && hasCapturePermissions) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
