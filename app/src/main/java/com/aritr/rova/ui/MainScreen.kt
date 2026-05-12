@@ -99,7 +99,8 @@ fun MainScreen() {
                         // PlayerViewModel to a fresh manifest, which
                         // would re-create ExoPlayer mid-composition.
                         navController.navigate("player/$sessionId")
-                    }
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(
