@@ -649,7 +649,9 @@ fun RecordScreen(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(end = 16.dp, top = 16.dp),
+                        // 7.dp + the 9.dp the 30.dp glass circle is inset within its
+                        // 48.dp touch box ≈ the mockup's 16.dp from the safe-area edge.
+                        .padding(end = 7.dp, top = 7.dp),
                 )
                 RecordBottomNav(
                     fabState = fabState,

@@ -53,7 +53,8 @@ private val GlassFill = Color.Black.copy(alpha = 0.40f)
 private val GlassStroke = Color.White.copy(alpha = 0.07f)
 private val StatusPillShape = RoundedCornerShape(20.dp)
 private val PillShape = RoundedCornerShape(11.dp)
-private val ControlBtnSize = 30.dp
+private val ControlBtnSize = 30.dp          // visible glass-circle diameter
+private val ControlBtnTouchSize = 48.dp     // a11y touch target (the glass circle is centered inside)
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -180,15 +181,21 @@ fun RecordCameraControls(
 
 @Composable
 private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @Composable () -> Unit) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .size(ControlBtnSize)
-            .clip(CircleShape)
-            .background(GlassFill)
-            .border(1.dp, GlassStroke, CircleShape),
-    ) { content() }
+    // The IconButton carries the 48 dp touch target; the glass circle is the
+    // smaller ControlBtnSize visual centered inside it. Sizing the IconButton
+    // itself to ControlBtnSize would clamp the hit box to ~30 dp (the incoming
+    // fixed constraint defeats IconButton's minimumInteractiveComponentSize) —
+    // a regression vs the pre-R1 48 dp flash/flip IconButtons.
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(ControlBtnTouchSize)) {
+        Box(
+            modifier = Modifier
+                .size(ControlBtnSize)
+                .clip(CircleShape)
+                .background(GlassFill)
+                .border(1.dp, GlassStroke, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { content() }
+    }
 }
 
 // ── RecordSettingsCard style constants ──
