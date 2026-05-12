@@ -1,6 +1,6 @@
 # ADR 0007 — Record-screen warnings: modal sheets, not an inline banner
 
-- **Status:** Proposed — pending owner sign-off (Record-home redesign R1 spec review)
+- **Status:** Accepted (owner sign-off 2026-05-12, Record-home redesign R1 spec review)
 - **Date:** 2026-05-12
 - **Phase:** Record-home redesign R1 (idle + chrome + warning sheets)
 - **Supersedes:** the `NEW_UI_BACKEND_REPLAN.md` Phase-4 decision "the WarningCenter surfaces exactly **one Record-screen banner at a time**" (inline `Surface` strip), and the `WarningBanner` presentation shipped in PR #12 (Phase 4.1) / PR #13 (Phase 4.1b)
@@ -35,4 +35,4 @@ The Record-home redesign (R1) converges the Record screen onto `01-record-home.h
 
 ## Status / sign-off
 
-Owner sign-off recorded in the R1 spec review (`docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md`). Until then: **Proposed.**
+Accepted — owner sign-off recorded 2026-05-12 in the R1 spec review (`docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md`). The `NEW_UI_BACKEND_REPLAN.md` §"Phase 4" and `docs/WarningCenterContract.md` pointer-amendments are R1 implementation tasks (see the R1 plan).
