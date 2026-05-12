@@ -5,25 +5,16 @@ import android.os.Build
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -73,7 +64,6 @@ fun RecordScreen(
     val loopCount by viewModel.loopCount.collectAsStateWithLifecycle()
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
-    val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
     val editingField by viewModel.editingField.collectAsStateWithLifecycle()
 
     // Slice 2 — read-only echo of the existing app-level recovery
@@ -138,7 +128,6 @@ fun RecordScreen(
     val startBlocked = !cameraPermissionGranted || storageInsufficient
 
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
-    val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
 
     // Q3: Wire keepScreenOn to the view flag
     DisposableEffect(keepScreenOn) {
@@ -188,15 +177,6 @@ fun RecordScreen(
     val hasCapturePermissions = permissionsState.permissions
         .filterNot { it.permission == Manifest.permission.RECORD_AUDIO }
         .all { it.status is PermissionStatus.Granted }
-
-    // UI State
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    var showSavePresetDialog by remember { mutableStateOf(false) }
-    var presetNameInput by remember { mutableStateOf("") }
-
-    // Tutorial State
-    var showTutorial by remember { mutableStateOf(false) }
-    var tutorialStep by remember { mutableIntStateOf(0) }
 
     // Recording error snackbar
     val snackbarHostState = remember { SnackbarHostState() }
@@ -451,59 +431,14 @@ fun RecordScreen(
         RecordHudState.Idle -> { statusText = "Ready to record"; statusDetail = null }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = !serviceState.isRecording,
-        drawerContent = {
-            ModalDrawerSheet {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Drawer "Quick settings" panel preserved per Slice 2
-                    // contract; Slice 5 owns drawer cleanup.
-                    Surface(
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            Text(
-                                "Quick settings",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Adjust capture behavior without leaving the camera.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
-                            )
-                        }
-                    }
-                    Text(
-                        "Recording",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    SwitchRow(
-                        Icons.Default.Smartphone, "Keep Screen On", "Prevent screen timeout",
-                        keepScreenOn
-                    ) { settingsViewModel.keepScreenOn.value = it }
-                    SwitchRow(
-                        Icons.AutoMirrored.Filled.VolumeUp, "Sounds", "Start/Stop beeps",
-                        enableBeeps
-                    ) { settingsViewModel.enableBeeps.value = it }
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Black
-        ) { innerPadding ->
+    // Task 14 — the ModalNavigationDrawer wrapper (with its "Quick settings"
+    // panel + the two SwitchRows) is removed; Keep-Screen-On / Sounds now live
+    // in the Settings screen. settingsViewModel is still consumed for the
+    // keepScreenOn DisposableEffect above.
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Black
+    ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -536,38 +471,25 @@ fun RecordScreen(
                     }
                 }
 
-                // Top Bar + Battery Optimization Banner + Recovery Echo
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Task 13 — the old app-bar Row (hamburger / "Rova"
-                    // branding / "INITIALIZING…" / flash / flip / help) is
-                    // deleted. Flash + flip move into RecordCameraControls
-                    // (mounted below as a top-right overlay); the hamburger
-                    // (drawer) is removed in Task 14; "Rova" branding and
-                    // "INITIALIZING…" are absorbed by the status pill /
-                    // "Initializing Camera…" loading overlay.
-                    // Phase 4.1 — unified WarningCenter banner. Shows the single
-                    // highest-priority active warning (or nothing). Absorbs the old
-                    // standalone battery-optimization banner. Always visible when a
-                    // warning is active — independent of hudState.
-                    WarningCenter()
-                    // Slice 2 / Phase 2.4 — read-only recovery echo.
-                    // Idle only; hidden during Recording, Waiting, or
-                    // Merging so the merge HUD owns the user's
-                    // attention end-to-end.
-                    if (hudState == RecordHudState.Idle && interruptedSessionCount > 0) {
-                        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            RecoveryEchoBanner(
-                                interruptedCount = interruptedSessionCount,
-                                onReviewInHistory = onNavigateToHistory
-                            )
-                        }
-                    }
-                    // Slice 3 / Phase 2.4 — persistent active-HUD
-                    // status strip. Mounted only for Recording or
-                    // Waiting; the merge body is self-contained and
-                    // does not reuse the REC/WAIT badge layout.
-                    if (hudState == RecordHudState.Recording ||
-                        hudState == RecordHudState.Waiting
+                // Task 14 — the old "top bar" Column (app-bar Row + WarningCenter
+                // + RecoveryEchoBanner + RecordStatusStrip) is broken apart:
+                //   - WarningCenter() is a standalone Box child now (it renders a
+                //     ModalBottomSheet / chip and positions itself).
+                //   - the recovery echo becomes RecordRecoveryChip pinned under the
+                //     status pill (see below).
+                //   - only the active-HUD status strip stays in a slimmed Column,
+                //     pushed below the top overlay.
+                if (hudState == RecordHudState.Recording ||
+                    hudState == RecordHudState.Waiting
+                ) {
+                    // Slice 3 / Phase 2.4 — persistent active-HUD status strip.
+                    // Mounted only for Recording or Waiting; the merge body is
+                    // self-contained and does not reuse the REC/WAIT badge layout.
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(top = 100.dp)
                     ) {
                         Spacer(Modifier.height(8.dp))
                         RecordStatusStrip(
@@ -577,7 +499,31 @@ fun RecordScreen(
                             totalElapsedSeconds = sessionElapsedSeconds
                         )
                     }
-                } // Column: top bar + battery banner + recovery echo + status strip
+                }
+                // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
+                // just below the status pill. Idle only; hidden during Recording,
+                // Waiting, or Merging so the active HUD owns the user's attention.
+                if (hudState == RecordHudState.Idle && interruptedSessionCount > 0) {
+                    RecordRecoveryChip(
+                        count = interruptedSessionCount,
+                        onReview = onNavigateToHistory,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(start = 16.dp, top = 70.dp),   // sits just below the status pill (~16 + pill height)
+                    )
+                }
+                // ADR 0007 — renders the warning sheet (modal) or, if collapsed, a
+                // chip. The chip lands near the status pill via this wrapper; the
+                // modal sheet ignores the wrapper's position.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(start = 16.dp, top = 110.dp)
+                ) {
+                    WarningCenter()
+                }
 
                 // ------------------------------------------------------
                 // Bottom area:
@@ -615,10 +561,10 @@ fun RecordScreen(
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .padding(bottom = 16.dp)
-                            // Task 13 — transitional: clear the new bottom nav
-                            // mounted below. The big-red "Stop recording"
+                            // Clear the bottom nav. The big-red "Stop recording"
                             // Button is gone; Stop is the FAB now.
-                            .padding(bottom = 96.dp),
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(bottom = 90.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         when (hudState) {
@@ -645,8 +591,9 @@ fun RecordScreen(
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .padding(bottom = 32.dp)
-                            // Task 13 — transitional: clear the new bottom nav.
-                            .padding(bottom = 96.dp)
+                            // Clear the bottom nav.
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(bottom = 90.dp)
                     ) {
                         MergingProgressBand(
                             progress = hudState.progress,
@@ -655,44 +602,34 @@ fun RecordScreen(
                         )
                     }
                 } else if (!showCompleteCard) {
-                    // Idle: Slice 2 dock anchored at the bottom of the
-                    // overlay box. Sibling of the bottom nav, never an
-                    // absolute overlay.
+                    // Idle: camera-first body. The settings card sits above the
+                    // bottom nav; the viewfinder is the camera preview behind. The
+                    // recovery chip (if any) is rendered separately near the status
+                    // pill (see above).
                     //
-                    // Phase 2.4 — suppressed during the brief
-                    // post-merge grace window so a rapid Start tap
-                    // cannot race the impending nav to Library.
-                    RecordIdleDock(
+                    // Phase 2.4 — suppressed during the brief post-merge grace
+                    // window so a rapid Start tap cannot race the impending nav to
+                    // Library. The FAB owns Start; per-preset / save-preset
+                    // plumbing is gone (the VM methods stay, just unused — spec
+                    // dormancy).
+                    RecordSettingsCard(
                         durationSeconds = duration,
                         loopCount = loopCount,
                         intervalMinutes = interval,
                         quality = resolution,
-                        customPresets = customPresets,
-                        onCellTap = { viewModel.openSheet(it) },
-                        onPresetSelected = { p ->
-                            viewModel.duration.value = p.duration
-                            viewModel.interval.value = p.interval
-                            viewModel.loopCount.value = p.loopCount
-                            viewModel.resolution.value = p.resolution
-                        },
-                        onPresetDeleted = { viewModel.deletePreset(it) },
-                        onSavePreset = { presetNameInput = ""; showSavePresetDialog = true },
-                        onStart = onStart,
-                        startEnabled = !isUiLocked && !startBlocked,
-                        // Task 13 — transitional: sits above the new bottom
-                        // nav so the navy dock and the nav bar don't collide.
-                        // Task 14 replaces the dock with the new idle body.
+                        onOpenSheet = { viewModel.openSettingsSheet() },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 96.dp)
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(bottom = 90.dp, start = 16.dp, end = 16.dp),   // clear the bottom nav; tune to RecordBottomNav's height
                     )
                 }
 
-                // ── Task 13 — new chrome: top overlay + cam-controls (top),
+                // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
                 // bottom nav with the Start/Stop FAB (bottom). Painted after
                 // the bottom-area `when` so it sits on top of the camera
-                // preview / status strip / idle dock. The MergeCompleteCard
-                // and the tutorial overlay below still paint over this chrome.
+                // preview / status strip / settings card. The MergeCompleteCard
+                // below still paints over this chrome.
                 RecordTopOverlay(
                     hudState = hudState,
                     statusText = statusText,
@@ -740,77 +677,16 @@ fun RecordScreen(
                     }
                 }
 
-                // Tutorial Overlay
-                if (showTutorial) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.8f))
-                            .clickable {
-                                if (tutorialStep < 2) tutorialStep++ else showTutorial = false
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(32.dp)
-                        ) {
-                            when (tutorialStep) {
-                                0 -> {
-                                    Icon(Icons.Default.Tune, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("Customize Your Recording", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                                    Text(
-                                        "Tap any of the four cells to set Clip length, Repeats, Wait, or Quality.",
-                                        color = Color.White.copy(0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                                1 -> {
-                                    Icon(Icons.Default.Videocam, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("Hands-Free Mode", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                                    Text(
-                                        "Rova will automatically start and stop recording loops based on your settings.",
-                                        color = Color.White.copy(0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                                2 -> {
-                                    Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("Save Presets", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                                    Text(
-                                        "Save your favorite configurations for quick access later.",
-                                        color = Color.White.copy(0.8f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Spacer(Modifier.height(24.dp))
-                                    Button(onClick = { showTutorial = false }) { Text("Got it!") }
-                                }
-                            }
-                            Spacer(Modifier.height(32.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                repeat(3) { i ->
-                                    Box(
-                                        Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(if (i == tutorialStep) Color.White else Color.Gray)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+                // Task 14 — the in-app tutorial overlay (3-step walkthrough) is
+                // removed; onboarding owns the first-run tutorial now (spec A2).
+            }   // close Box
+        }       // close Scaffold content lambda
 
     // --------------------------------------------------------------
-    // Edit sheets — single-target router driven by editingField. The
-    // sheet lives outside the drawer/scaffold so the ModalBottomSheet
-    // overlays the entire screen including the drawer scrim.
+    // Edit sheets — single-target router driven by editingField. Lives outside
+    // the Scaffold so the ModalBottomSheet overlays the entire screen. When
+    // invoked from a SessionSettingsSheet row, the per-param sheet stacks ON TOP
+    // of the combined sheet.
     // --------------------------------------------------------------
     when (editingField) {
         SheetTarget.ClipLength -> ClipLengthEditSheet(
@@ -834,6 +710,21 @@ fun RecordScreen(
             onCancel = { viewModel.closeSheet() }
         )
         null -> Unit
+    }
+
+    // Task 12/14 — the combined "Session settings" sheet. Opened from the idle
+    // settings card; each row hands off to the per-param editingField router
+    // above, so the per-param sheet stacks ON TOP of this one.
+    val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
+    if (combinedOpen) {
+        SessionSettingsSheet(
+            durationSeconds = duration,
+            loopCount = loopCount,
+            intervalMinutes = interval,
+            quality = resolution,
+            onPickRow = { target -> viewModel.openSheet(target) },   // opens the existing per-param sheet ON TOP
+            onDismiss = { viewModel.closeSettingsSheet() },
+        )
     }
 
     // Phase 2.4 — Merge HUD progression.
@@ -879,34 +770,8 @@ fun RecordScreen(
         }
     }
 
-    // Save Preset Dialog
-    if (showSavePresetDialog) {
-        AlertDialog(
-            onDismissRequest = { showSavePresetDialog = false },
-            title = { Text("Save Preset") },
-            text = {
-                OutlinedTextField(
-                    value = presetNameInput,
-                    onValueChange = { presetNameInput = it },
-                    label = { Text("Preset Name") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (presetNameInput.isNotBlank()) {
-                            viewModel.savePreset(presetNameInput)
-                            showSavePresetDialog = false
-                        }
-                    }
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSavePresetDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
+    // Task 14 — the "Save Preset" dialog is removed. The custom-preset CRUD VM
+    // methods (savePreset / deletePreset) stay but are dormant (spec dormancy).
 }
 
 // Formatting Helpers — retained for any consumers outside RecordScreen.
