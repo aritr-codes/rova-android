@@ -61,10 +61,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-        freeCompilerArgs += "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -81,6 +77,31 @@ android {
         // detector so the gate is green again; revisit when Accompanist
         // ships a fix.
         disable += "PermissionLaunchedDuringComposition"
+    }
+}
+
+// AGP 9 / Kotlin 2.x — the Android `kotlinOptions {}` shim is deprecated; the
+// Kotlin Gradle plugin's `compilerOptions {}` DSL is the replacement.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
+    }
+}
+
+// androidx.test.espresso:espresso-core (androidTest) transitively requests
+// androidx.concurrent:concurrent-futures(-ktx):1.2.0, but AGP's main↔androidTest
+// version alignment (android.dependency.useConstraints) pins the androidTest
+// classpath to main's 1.1.0 — and Gradle 9 fails on the disagreement instead of
+// downgrading espresso's transitive request. Force the androidx.concurrent group
+// to the current stable 1.1.0 everywhere so the two sides agree. (There is no
+// stable 1.2.0 of androidx.concurrent:concurrent-futures on Google's Maven.)
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "androidx.concurrent:concurrent-futures:1.1.0",
+            "androidx.concurrent:concurrent-futures-ktx:1.1.0",
+        )
     }
 }
 
