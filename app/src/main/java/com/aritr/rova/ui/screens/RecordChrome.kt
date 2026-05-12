@@ -10,6 +10,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.FlipCameraIos
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.components.RecordHudState
 
 // Screen-local style constants (see mockups/new_uiux/01-record-home.html .status-pill / .loop-pill;
@@ -26,6 +34,7 @@ private val GlassFill = Color.Black.copy(alpha = 0.40f)
 private val GlassStroke = Color.White.copy(alpha = 0.07f)
 private val StatusPillShape = RoundedCornerShape(20.dp)
 private val PillShape = RoundedCornerShape(11.dp)
+private val ControlBtnSize = 30.dp
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -119,4 +128,46 @@ fun recordFabState(
     RecordHudState.Idle -> if (hardBlockActive) RecordFabState.Disabled else RecordFabState.Start
     RecordHudState.Recording, RecordHudState.Waiting -> RecordFabState.Stop
     is RecordHudState.Merging -> RecordFabState.Disabled
+}
+
+/**
+ * Floating flash + flip controls, top-right of the viewfinder (mockups/new_uiux/01-record-home.html
+ * .cam-controls). Replaces the flash/flip IconButtons in the old app-bar Row. Disabled (greyed)
+ * while [enabled] is false (i.e. during an active session — same as today).
+ */
+@Composable
+fun RecordCameraControls(
+    flashMode: Int,
+    onCycleFlash: () -> Unit,
+    onFlip: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
+            val (icon, contentTint) = when (flashMode) {
+                RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn to (if (enabled) Color.Yellow else tint)
+                RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto to tint
+                else -> Icons.Default.FlashOff to tint
+            }
+            Icon(icon, contentDescription = "Flash", tint = contentTint)
+        }
+        GlassCircleButton(onClick = onFlip, enabled = enabled) {
+            Icon(Icons.Default.FlipCameraIos, contentDescription = "Flip camera", tint = tint)
+        }
+    }
+}
+
+@Composable
+private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @Composable () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(ControlBtnSize)
+            .clip(CircleShape)
+            .background(GlassFill)
+            .border(1.dp, GlassStroke, CircleShape),
+    ) { content() }
 }
