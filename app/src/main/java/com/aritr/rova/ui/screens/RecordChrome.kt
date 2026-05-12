@@ -2,12 +2,17 @@ package com.aritr.rova.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +20,7 @@ import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.FlipCameraIos
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.components.RecordHudState
@@ -170,4 +178,72 @@ private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @C
             .background(GlassFill)
             .border(1.dp, GlassStroke, CircleShape),
     ) { content() }
+}
+
+// ── RecordSettingsCard style constants ──
+private val SettingsCardShape = RoundedCornerShape(14.dp)
+private val SettingsCardFill = Color.White.copy(alpha = 0.065f)
+private val SettingsCardStroke = Color.White.copy(alpha = 0.09f)
+private val CellDivider = Color.White.copy(alpha = 0.07f)
+
+/**
+ * The idle-state settings strip (mockups/new_uiux/01-record-home.html .settings-wrap +
+ * .settings-card). A display-only row of cells — Clip / Repeats / Wait / Quality / Mode
+ * (Mode is read-only "Portrait" for v1.0.0) — over a "swipe to edit" hint, with a chevron.
+ * The whole card is one tap target AND has a swipe-up gesture; both call [onOpenSheet],
+ * which opens SessionSettingsSheet.
+ */
+@Composable
+fun RecordSettingsCard(
+    durationSeconds: Int,
+    loopCount: Int,
+    intervalMinutes: Int,
+    quality: String,
+    onOpenSheet: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        // swipe-to-edit hint
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 1.dp)) {
+            Box(Modifier.width(30.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.White.copy(alpha = 0.22f)))
+            Text("SWIPE TO EDIT", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.22f))
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(SettingsCardShape)
+                .background(SettingsCardFill)
+                .border(1.dp, SettingsCardStroke, SettingsCardShape)
+                .clickable { onOpenSheet() }
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dragAmount -> if (dragAmount < -8f) onOpenSheet() }
+                }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsCell("Clip", recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+            CellSep()
+            SettingsCell("Repeats", recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+            CellSep()
+            SettingsCell("Wait", recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+            CellSep()
+            SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
+            CellSep()
+            SettingsCell("Mode", recordModeValue(), Modifier.weight(1f), readOnly = true)
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Edit session settings", tint = Color.White.copy(alpha = 0.18f), modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean) {
+    Column(modifier = modifier.padding(horizontal = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.labelLarge, color = if (readOnly) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.88f), textAlign = TextAlign.Center, maxLines = 1)
+        Text(key.uppercase(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.28f), textAlign = TextAlign.Center, maxLines = 1)
+    }
+}
+
+@Composable
+private fun CellSep() {
+    Box(Modifier.width(1.dp).height(22.dp).background(CellDivider))
 }
