@@ -16,8 +16,9 @@ import com.aritr.rova.ui.signals.ThermalStatus
  * decision #5): there is no queue — the active warning follows the
  * signals directly, every recomputation.
  *
- * As of Phase 4.1b all 16 rows are reachable (#1 camera-permission, #3
- * storage-to-start and #12 mic/video-only got their parameters here).
+ * As of Phase 4.1b all 16 rows are reachable. R2 (2026-05-13)
+ * inserts #11 STORAGE_LOW_MID_REC; it becomes reachable when T5 wires
+ * the 10th source flow into [resolve].
  *
  * Battery semantics: a low / critical battery warning fires only when the
  * percent is KNOWN (non-null) AND below the threshold AND not charging.
@@ -63,12 +64,12 @@ internal object WarningPrecedence {
             else -> Unit
         }
         if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #11
-        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #12
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #13
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #14
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #15
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #16
+        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #12
+        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #13
+        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #14
+        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #15
+        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #16
+        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #17
         return null
     }
 }

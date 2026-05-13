@@ -7,7 +7,7 @@ package com.aritr.rova.ui.warnings
  * ordinals so a reorder cannot slip through review.
  *
  * Order mirrors NEW_UI_BACKEND_REPLAN.md the "Phase 4" "Banner precedence"
- * table (owner-signed 2026-05-11), rows 1..16. As of Phase 4.1b all 16
+ * table (owner-signed 2026-05-11), rows 1..17. As of Phase 4.1b all 16
  * rows are reachable from [WarningPrecedence.resolve]. R2 (2026-05-13)
  * inserts row #11 STORAGE_LOW_MID_REC per ADR 0007 amendment.
  *
