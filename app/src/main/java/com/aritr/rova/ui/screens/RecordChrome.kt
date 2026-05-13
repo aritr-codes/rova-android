@@ -53,6 +53,9 @@ import com.aritr.rova.ui.components.RecordHudState
 // docs/UI_DESIGN_TOKENS.md decides any of these the tokens doc promotes to MaterialTheme.*).
 private val GlassFill = Color.Black.copy(alpha = 0.40f)
 private val GlassStroke = Color.White.copy(alpha = 0.07f)
+private val RecordingDotColor = Color(0xFFEF4444)   // red
+private val WaitingDotColor   = Color(0xFFFBBF24)   // amber (matches WarningCenter's AmberWarning + SoftSheet accent)
+private val MergingDotColor   = Color(0xFF60A5FA)   // blue
 private val StatusPillShape = RoundedCornerShape(20.dp)
 private val PillShape = RoundedCornerShape(11.dp)
 private val ControlBtnSize = 30.dp          // visible glass-circle diameter
@@ -435,4 +438,95 @@ internal fun hudStatusPillContent(
     )
     RecordHudState.Idle ->
         error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
+}
+
+// ── R2 active-HUD composables (Task 8). Consume the Phase-A helpers above. ──
+
+@Composable
+private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
+    val color = when (dot) {
+        StatusDotColor.RECORDING -> RecordingDotColor
+        StatusDotColor.WAITING   -> WaitingDotColor
+        StatusDotColor.MERGING   -> MergingDotColor
+    }
+    Box(
+        modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
+}
+
+@Composable
+private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+    val text = loopPillContent(loopIndex, loopTotal) ?: return       // hide pill on single-clip / zero-clip
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = GlassFill,
+        contentColor = Color.White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, GlassStroke),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = GlassFill,
+        contentColor = Color.White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, GlassStroke),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatusDot(content.dot)
+            Text(
+                content.main,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+            )
+            Text(
+                content.time,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+/**
+ * R2 — top-anchored active-state HUD. Stacks [LoopPill] (when applicable) above [StatusPill].
+ * MUST NOT be mounted at [com.aritr.rova.ui.components.RecordHudState.Idle] — the
+ * `hudStatusPillContent` helper throws for Idle (caller-bug guard).
+ *
+ * Layout: vertical Column at the top safe-area, centered, with 8 dp spacing between the
+ * loop-pill and the status-pill. Both pills are glass-on-camera (R1 token set).
+ */
+@Composable
+internal fun RecordActiveHud(
+    state: RecordHudState,
+    loopIndex: Int,
+    loopTotal: Int,
+    clipSecondsLeft: Int,
+    waitSecondsLeft: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+        StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+    }
 }
