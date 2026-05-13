@@ -593,29 +593,31 @@ fun RecordScreen(
                 // the bottom-area `when` so it sits on top of the camera
                 // preview / status strip / settings card. The MergeCompleteCard
                 // below still paints over this chrome.
-                RecordTopOverlay(
-                    hudState = hudState,
-                    statusText = statusText,
-                    statusDetail = statusDetail,
-                    currentLoop = serviceState.currentLoop,
-                    totalLoops = serviceState.totalLoops,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(start = 16.dp, top = 16.dp),
-                )
-                RecordCameraControls(
-                    flashMode = flashMode,
-                    onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
-                    onFlip = { if (!isUiLocked) viewModel.flipCamera() },
-                    enabled = !isUiLocked,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        // 7.dp + the 9.dp the 30.dp glass circle is inset within its
-                        // 48.dp touch box ≈ the mockup's 16.dp from the safe-area edge.
-                        .padding(end = 7.dp, top = 7.dp),
-                )
+                if (hudState is RecordHudState.Idle) {
+                    RecordTopOverlay(
+                        hudState = hudState,
+                        statusText = statusText,
+                        statusDetail = statusDetail,
+                        currentLoop = serviceState.currentLoop,
+                        totalLoops = serviceState.totalLoops,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(start = 16.dp, top = 16.dp),
+                    )
+                    RecordCameraControls(
+                        flashMode = flashMode,
+                        onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
+                        onFlip = { if (!isUiLocked) viewModel.flipCamera() },
+                        enabled = !isUiLocked,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            // 7.dp + the 9.dp the 30.dp glass circle is inset within its
+                            // 48.dp touch box ≈ the mockup's 16.dp from the safe-area edge.
+                            .padding(end = 7.dp, top = 7.dp),
+                    )
+                }
                 RecordBottomNav(
                     fabState = fabState,
                     navItemsLocked = isUiLocked,
