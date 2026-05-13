@@ -1,6 +1,9 @@
 package com.aritr.rova.ui.warnings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,5 +34,16 @@ class WarningSheetContentTest {
     @Test fun micDeniedSecondaryIsContinueWithoutAudio() {
         val c = warningSheetContent(WarningId.MICROPHONE_DENIED)
         assertTrue(c.secondary!!.label.contains("audio", ignoreCase = true) || c.secondary!!.label.contains("without", ignoreCase = true))
+    }
+
+    @Test fun storage_low_mid_rec_arm_returns_nonblank_defensive_content() {
+        // Defensive — STORAGE_LOW_MID_REC is TopBanner-only; this exists to keep
+        // warningSheetContent total over WarningId. The test checks that the arm
+        // returns a non-blank, callable sheet content (never rendered as a sheet).
+        val c = warningSheetContent(WarningId.STORAGE_LOW_MID_REC)
+        assertFalse("title", c.title.isBlank())
+        assertNotNull("icon", c.icon)
+        assertEquals("OK", c.primary.label)
+        assertNull("secondary should be null on TopBanner-only arm", c.secondary)
     }
 }

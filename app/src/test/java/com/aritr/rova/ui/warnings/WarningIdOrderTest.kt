@@ -25,12 +25,13 @@ class WarningIdOrderTest {
                 "CAMERA_IN_USE",             // #8
                 "CAMERA_DISABLED",           // #9
                 "BATTERY_LOW",               // #10
-                "THERMAL_SEVERE",            // #11
-                "MICROPHONE_DENIED",         // #12
-                "BATTERY_OPTIMIZATION_ON",   // #13
-                "POWER_SAVE_MODE",           // #14
-                "THERMAL_MODERATE",          // #15
-                "NOTIFICATIONS_DENIED"       // #16
+                "STORAGE_LOW_MID_REC",       // #11 — NEW (R2)
+                "THERMAL_SEVERE",            // #12
+                "MICROPHONE_DENIED",         // #13
+                "BATTERY_OPTIMIZATION_ON",   // #14
+                "POWER_SAVE_MODE",           // #15
+                "THERMAL_MODERATE",          // #16
+                "NOTIFICATIONS_DENIED"       // #17
             ),
             WarningId.values().map { it.name }
         )
@@ -47,6 +48,7 @@ class WarningIdOrderTest {
         assertEquals(WarningTier.CRITICAL, WarningId.CAMERA_IN_USE.tier)
         assertEquals(WarningTier.CRITICAL, WarningId.CAMERA_DISABLED.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.BATTERY_LOW.tier)
+        assertEquals(WarningTier.ADVISORY, WarningId.STORAGE_LOW_MID_REC.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.THERMAL_SEVERE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.MICROPHONE_DENIED.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.BATTERY_OPTIMIZATION_ON.tier)

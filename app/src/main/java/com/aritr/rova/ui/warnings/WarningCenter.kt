@@ -87,7 +87,8 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
-    WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED -> WarningSurface.TopBanner
+    WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
+    WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner       // ← NEW arm in the TopBanner cluster
 }
 
 /**
@@ -228,8 +229,9 @@ internal data class WarningSheetContent(
 )
 
 /**
- * The 16-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
+ * The 17-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
  * Icons reuse the ones the old banner carried. Replaces `bannerContent` now that [WarningSheet] is live.
+ * STORAGE_LOW_MID_REC (#11, R2) has a defensive arm — TopBanner-only, never renders as a sheet.
  */
 internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED -> WarningSheetContent(
@@ -281,6 +283,14 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
     WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, "Device warming up", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery critical — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery low — consider charging", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.STORAGE_LOW_MID_REC -> WarningSheetContent(
+        // Defensive — STORAGE_LOW_MID_REC is TopBanner-only (see midRecBannerContent in T6).
+        // This arm keeps warningSheetContent exhaustive over WarningId; never renders as a sheet.
+        Icons.Default.Storage, "Storage running low",
+        "Free space on this device.",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        null,
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }

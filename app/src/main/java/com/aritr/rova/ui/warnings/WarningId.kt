@@ -1,14 +1,15 @@
 package com.aritr.rova.ui.warnings
 
 /**
- * The 16 Record-screen warning banners, in PRECEDENCE ORDER (highest
+ * The 17 Record-screen warning banners, in PRECEDENCE ORDER (highest
  * first). Declaration order IS the contract — [WarningPrecedence.resolve]
  * returns the first active one, and `WarningIdOrderTest` pins the
  * ordinals so a reorder cannot slip through review.
  *
  * Order mirrors NEW_UI_BACKEND_REPLAN.md the "Phase 4" "Banner precedence"
  * table (owner-signed 2026-05-11), rows 1..16. As of Phase 4.1b all 16
- * rows are reachable from [WarningPrecedence.resolve].
+ * rows are reachable from [WarningPrecedence.resolve]. R2 (2026-05-13)
+ * inserts row #11 STORAGE_LOW_MID_REC per ADR 0007 amendment.
  *
  * [gatesStart] = this warning, while active, disables the Record screen's
  * Start button (Phase 4.1b). Only `CAMERA_PERMISSION_DENIED` and
@@ -35,12 +36,13 @@ enum class WarningId(val tier: WarningTier, val gatesStart: Boolean = false) {
     CAMERA_DISABLED(WarningTier.CRITICAL),              // #9
     // Advisory — degraded but functional
     BATTERY_LOW(WarningTier.ADVISORY),                  // #10
-    THERMAL_SEVERE(WarningTier.ADVISORY),               // #11
-    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #12
-    BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #13
-    POWER_SAVE_MODE(WarningTier.ADVISORY),              // #14
-    THERMAL_MODERATE(WarningTier.ADVISORY),             // #15
-    NOTIFICATIONS_DENIED(WarningTier.ADVISORY)          // #16
+    STORAGE_LOW_MID_REC(WarningTier.ADVISORY),          // #11  ← NEW (R2 — ADR 0007 amendment 2026-05-13)
+    THERMAL_SEVERE(WarningTier.ADVISORY),               // #12
+    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #13
+    BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #14
+    POWER_SAVE_MODE(WarningTier.ADVISORY),              // #15
+    THERMAL_MODERATE(WarningTier.ADVISORY),             // #16
+    NOTIFICATIONS_DENIED(WarningTier.ADVISORY)          // #17
 }
 
 /** Visual tier for the banner chrome. NOT the priority axis — that is [WarningId.ordinal]. */
