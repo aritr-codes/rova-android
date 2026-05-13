@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -465,7 +466,7 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
         shape = RoundedCornerShape(20.dp),
         color = GlassFill,
         contentColor = Color.White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, GlassStroke),
+        border = BorderStroke(1.dp, GlassStroke),
     ) {
         Text(
             text,
@@ -482,7 +483,7 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
         shape = RoundedCornerShape(22.dp),
         color = GlassFill,
         contentColor = Color.White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, GlassStroke),
+        border = BorderStroke(1.dp, GlassStroke),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
