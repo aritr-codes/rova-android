@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.screens
 
+import com.aritr.rova.ui.components.RecordHudState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -38,7 +39,7 @@ class RecordActiveHudFormattersTest {
 
     @Test fun status_recording_red_with_clip_countdown() {
         val c = hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Recording,
+            state = RecordHudState.Recording,
             clipSecondsLeft = 18, waitSecondsLeft = 0,
         )
         assertEquals(StatusDotColor.RECORDING, c.dot)
@@ -48,17 +49,17 @@ class RecordActiveHudFormattersTest {
 
     @Test fun status_waiting_amber_with_next_in_countdown() {
         val c = hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Waiting,
+            state = RecordHudState.Waiting,
             clipSecondsLeft = 0, waitSecondsLeft = 42,
         )
-        assertEquals(StatusDotColor.BREAK, c.dot)
+        assertEquals(StatusDotColor.WAITING, c.dot)
         assertEquals("On break", c.main)
         assertEquals("· next in 00:42", c.time)
     }
 
     @Test fun status_merging_blue_with_percent() {
         val c = hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Merging(
+            state = RecordHudState.Merging(
                 progress = 0.534f, currentSegment = 3, totalSegments = 6,
             ),
             clipSecondsLeft = 0, waitSecondsLeft = 0,
@@ -70,7 +71,7 @@ class RecordActiveHudFormattersTest {
 
     @Test fun status_merging_zeroProgress_is_0_percent() {
         val c = hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Merging(
+            state = RecordHudState.Merging(
                 progress = 0f, currentSegment = 0, totalSegments = 0,
             ),
             clipSecondsLeft = 0, waitSecondsLeft = 0,
@@ -81,7 +82,7 @@ class RecordActiveHudFormattersTest {
     @Test fun status_merging_clamps_to_100() {
         // progress > 1 shouldn't happen but the helper should clamp defensively.
         val c = hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Merging(
+            state = RecordHudState.Merging(
                 progress = 1.7f, currentSegment = 0, totalSegments = 0,
             ),
             clipSecondsLeft = 0, waitSecondsLeft = 0,
@@ -91,7 +92,7 @@ class RecordActiveHudFormattersTest {
 
     @Test(expected = IllegalStateException::class) fun status_idle_throws_caller_bug() {
         hudStatusPillContent(
-            state = com.aritr.rova.ui.components.RecordHudState.Idle,
+            state = RecordHudState.Idle,
             clipSecondsLeft = 0, waitSecondsLeft = 0,
         )
     }

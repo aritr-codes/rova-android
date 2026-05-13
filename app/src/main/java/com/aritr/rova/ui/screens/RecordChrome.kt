@@ -399,7 +399,7 @@ internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
     else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
 }
 
-internal enum class StatusDotColor { RECORDING, BREAK, MERGING }
+internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
 
 internal data class StatusPillContent(
     val dot: StatusDotColor,
@@ -424,7 +424,7 @@ internal fun hudStatusPillContent(
         time = "· ${RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())} left",
     )
     RecordHudState.Waiting -> StatusPillContent(
-        dot = StatusDotColor.BREAK,
+        dot = StatusDotColor.WAITING,
         main = "On break",
         time = "· next in ${RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())}",
     )
