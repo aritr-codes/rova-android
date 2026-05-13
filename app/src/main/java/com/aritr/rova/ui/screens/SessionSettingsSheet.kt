@@ -3,9 +3,9 @@
 package com.aritr.rova.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,7 +29,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 // ── Settings-card / settings-sheet display-value formatters (sentinel-blind).
 // Accessibility descriptions live in com.aritr.rova.ui.components.UiCopy; these
@@ -53,9 +57,6 @@ internal fun recordWaitValue(intervalMinutes: Int): String = when {
     else -> "$intervalMinutes m"
 }
 
-/** v1.0.0 is Portrait-only; the Portrait/Landscape picker ships with Phase 6. */
-internal fun recordModeValue(): String = "Portrait"
-
 /**
  * The swipe-up combined per-session settings sheet (mockups/new_uiux/02-settings-sheet.html).
  * "Recording mode" is a single non-interactive "Portrait" row for v1.0.0 (the picker ships with
@@ -69,7 +70,10 @@ fun SessionSettingsSheet(
     loopCount: Int,
     intervalMinutes: Int,
     quality: String,
+    currentMode: String,
+    modeEnabled: Boolean,
     onPickRow: (SheetTarget) -> Unit,
+    onModePick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -79,20 +83,11 @@ fun SessionSettingsSheet(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             SectionLabel("Recording mode")
-            Row(
-                modifier = Modifier
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f), RoundedCornerShape(9.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(recordModeValue(), style = MaterialTheme.typography.bodyMedium)
-                Text("· landscape coming soon", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.height(8.dp))
+            ModeTabsPicker(
+                currentMode = currentMode,
+                enabled = modeEnabled,
+                onPick = onModePick,
+            )
             SectionLabel("Session settings")
             SettingRow("Clip duration", recordClipValue(durationSeconds)) { onPickRow(SheetTarget.ClipLength) }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -130,5 +125,53 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+    }
+}
+
+private enum class ModeTab(val label: String, val value: String?) {
+    Portrait("Portrait", "Portrait"),
+    Landscape("Landscape", "Landscape"),
+    PortraitLandscape("P + L", null),  // null value → always disabled
+}
+
+@Composable
+private fun ModeTabsPicker(
+    currentMode: String,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(13.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ModeTab.entries.forEach { tab ->
+            val isActive = currentMode == tab.value
+            val isDisabled = tab.value == null
+            val tabModifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(10.dp))
+                .let { if (isActive) it.shadow(1.dp, RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.11f)) else it }
+                .let { if (enabled && !isDisabled) it.clickable { tab.value?.let(onPick) } else it }
+                .padding(vertical = 8.dp, horizontal = 4.dp)
+            val textColor = when {
+                isActive -> Color.White.copy(alpha = 0.90f)
+                isDisabled -> Color.White.copy(alpha = 0.16f)
+                else -> Color.White.copy(alpha = 0.26f)
+            }
+            Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
+                Text(
+                    text = tab.label,
+                    color = textColor,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.1.sp,
+                    ),
+                )
+            }
+        }
     }
 }

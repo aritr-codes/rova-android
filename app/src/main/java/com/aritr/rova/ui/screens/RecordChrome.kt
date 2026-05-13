@@ -232,7 +232,7 @@ fun RecordSettingsCard(
             CellSep()
             SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Mode", recordModeValue(), Modifier.weight(1f), readOnly = true)
+            SettingsCell("Mode", "Portrait", Modifier.weight(1f), readOnly = true)
             Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Edit session settings", tint = Color.White.copy(alpha = 0.18f), modifier = Modifier.padding(start = 6.dp))
         }
     }

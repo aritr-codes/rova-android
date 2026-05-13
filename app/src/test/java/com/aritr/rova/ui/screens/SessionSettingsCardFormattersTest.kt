@@ -27,7 +27,4 @@ class SessionSettingsCardFormattersTest {
         assertEquals("2 h", recordWaitValue(120))
     }
 
-    @Test fun modeValue() {
-        assertEquals("Portrait", recordModeValue())
-    }
 }
