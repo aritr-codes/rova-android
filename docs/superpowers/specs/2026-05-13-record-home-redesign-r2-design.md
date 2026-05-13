@@ -51,7 +51,9 @@
 
 **D4.** `StorageLowMidRecSignal` is a new leaf signal under `ui/signals/`. Same architectural shape as `StorageSignal` — `forContext(Context)` factory + a `computeIsLow` lambda seam for tests. UI-side StatFs poll every ~30 s while `hudState !is RecordHudState.Idle`. Fires when `freeBytes < LOW_THRESHOLD_CLIPS × bytesPerClip(durationSeconds, resolution)`, where `bytesPerClip = StorageEstimator.bytesPerSecondForResolution(resolution) * durationSeconds`. `LOW_THRESHOLD_CLIPS = 3` (companion-object constant — file-local, not a public knob). Null external root → returns `false` (don't false-warn — symmetric with `StorageSignal`). StatFs throw → returns `false`. **No hysteresis** in R2 — if `freeBytes` oscillates around the threshold the banner flickers. Acknowledged tradeoff: the threshold is deliberately conservative (3 clips of capture-only bytes), so oscillation is unlikely; if flicker is observed on device the fix is bundled with the future 4.1c snooze/hysteresis work. **No `service/**` diff** — StatFs and `StorageEstimator.bytesPerSecondForResolution(...)` are both read-only from UI.
 
-**D5.** Active-HUD chrome composables are added to the existing `ui/screens/RecordChrome.kt` — same file that already houses the R1 idle chrome. New `internal` symbols: `RecordActiveHud(state: RecordHudState, modifier: Modifier = Modifier)`, `internal fun hudStatusPillContent(state: RecordHudState): StatusPillContent`, plus file-private `LoopPill`, `StatusPill`, `StatusDot` composables and per-state dot colors (`RecordingDotColor`, `BreakDotColor`, `MergingDotColor`) as file-local `val`s.
+**D5.** Active-HUD chrome composables are added to the existing `ui/screens/RecordChrome.kt` — same file that already houses the R1 idle chrome. New `internal` symbols: `RecordActiveHud(state: RecordHudState, modifier: Modifier = Modifier)`, `internal fun hudStatusPillContent(state: RecordHudState): StatusPillContent`, plus file-private `LoopPill`, `StatusPill`, `StatusDot` composables and per-state dot colors (`RecordingDotColor`, `WaitingDotColor`, `MergingDotColor`) as file-local `val`s.
+
+> Note (post-implementation): `StatusDotColor.BREAK` was renamed to `WAITING` in T2 code-quality review to align with `RecordHudState.Waiting`. Spec text updated 2026-05-13.
 
 **D6.** Top-banner composable is added to `ui/warnings/WarningCenter.kt`. `WarningCenter` composable gains one parameter: `hudState: RecordHudState`. Routing rule inside `WarningCenter`: TopBanner surfaces render only when `hudState !is RecordHudState.Idle`; Sheet/Chip surfaces render only when `hudState is RecordHudState.Idle`. (Today, TopBanner surfaces always no-op via the `if (surface == WarningSurface.TopBanner) return` at line 130 — that early-return is replaced with the hud-state branch.) New file-private composable `WarningTopBanner(content, onAction)` + new helper `internal fun midRecBannerContent(id: WarningId): TopBannerContent` + new internal data class `TopBannerContent(icon: ImageVector, title: String, sub: String, cta: String)`. **`warningSurfaceFor(id)` does not gain a `hudState` parameter** — the id→surface map stays pure data; the active-vs-idle routing lives in `WarningCenter`. Only the new arm for `STORAGE_LOW_MID_REC` is added.
 
@@ -132,7 +134,7 @@ internal fun hudStatusPillContent(
         time = "· ${mmss(clipSecondsLeft)} left",
     )
     RecordHudState.Waiting -> StatusPillContent(
-        dot = StatusDotColor.BREAK,
+        dot = StatusDotColor.WAITING,
         main = "On break",
         time = "· next in ${mmss(waitSecondsLeft)}",
     )
@@ -162,7 +164,7 @@ Visual: glass-on-camera tokens, same `GlassFill` / `GlassStroke` constants `Reco
 
 Dot colors — file-local `val`s in `RecordChrome.kt`:
 - `RecordingDotColor = Color(0xFFEF4444)` (red)
-- `BreakDotColor = Color(0xFFFBBF24)` (amber — matches the existing soft-sheet accent)
+- `WaitingDotColor = Color(0xFFFBBF24)` (amber — matches the existing soft-sheet accent)
 - `MergingDotColor = Color(0xFF60A5FA)` (blue)
 
 If theme tokens for these dots are added to `RovaTokens.kt` later (out of scope), the constants migrate; for R2 they are file-local.
@@ -557,7 +559,7 @@ Checklist (pasted into the PR's first comment when the branch opens, the way R1 
 - Any `app/build.gradle.kts` diff.
 - Camera-disconnect timer bug RCA (standalone, owner-tracked).
 - Dynamic "~N min remaining" estimate in the storage-low banner (deferred — the static "Free space on this device" sub copy ships).
-- Theme-token migration for the dot colors (`RecordingDotColor` / `BreakDotColor` / `MergingDotColor` stay file-local — `RovaTokens.kt` migration is later if the design system grows).
+- Theme-token migration for the dot colors (`RecordingDotColor` / `WaitingDotColor` / `MergingDotColor` stay file-local — `RovaTokens.kt` migration is later if the design system grows).
 
 ---
 

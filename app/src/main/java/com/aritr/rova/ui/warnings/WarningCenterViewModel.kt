@@ -56,7 +56,7 @@ class WarningCenterViewModel(
          * kotlinx-coroutines has typed `combine` overloads only up to five
          * flows, so six of the plain booleans are folded into one upstream
          * `combine(vararg flows: Flow<Boolean>) -> Bools6` first (using the
-         * reified vararg overload), then a 5-arg
+         * vararg overload), then a 5-arg
          * `combine(bools6, batteryOptExempt, thermal, power, camera)` does
          * the real work.
          */

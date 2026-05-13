@@ -405,10 +405,9 @@ fun RecordScreen(
     // big-red Stop button; on Disabled it is a no-op (the warning sheet
     // carries the actionable CTA).
     // ----------------------------------------------------------------
-    val hardBlockActive = startBlocked   // = !cameraPermissionGranted || storageInsufficient (already computed)
     // isUiLocked (declared above) == isPeriodicActive || isMerging — the same "session running" predicate
     // recordFabState/RecordBottomNav want; no need for a second copy.
-    val fabState = recordFabState(hudState, sessionLocked = isUiLocked, hardBlockActive = hardBlockActive)
+    val fabState = recordFabState(hudState, sessionLocked = isUiLocked, hardBlockActive = startBlocked)
     val onFabClick: () -> Unit = {
         when (fabState) {
             RecordFabState.Start -> onStart()

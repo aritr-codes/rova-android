@@ -233,7 +233,7 @@ class RovaApp : Application() {
     val storageSignal: StorageSignal by lazy { StorageSignal.forContext(this) }
 
     /**
-     * R2 (NEW_UI_BACKEND_REPLAN row 17) - mid-recording free-space advisory.
+     * R2 (NEW_UI_BACKEND_REPLAN row 17) — mid-recording free-space advisory.
      * Drives STORAGE_LOW_MID_REC. The host (RecordScreen, T9) calls poll()
      * every ~30 s while in an active HUD state and clear() on transition to Idle.
      */
