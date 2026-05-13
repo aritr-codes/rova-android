@@ -2548,3 +2548,25 @@ internal fun recordedSegmentDurationMs(
     val fromStats = recordedDurationNanos / 1_000_000L // ns -> ms
     return if (fromStats > 0L) fromStats else configuredFallbackMs
 }
+
+/**
+ * Phase 6 — Mode picker.
+ * Derive CameraX target rotation from the display's natural rotation
+ * plus the user-chosen Mode. Portrait = identity; Landscape = quarter-
+ * turn clockwise. Mirrors the integer arithmetic `Surface.ROTATION_*`
+ * use (0/1/2/3) so the math handles devices whose natural orientation
+ * is non-portrait (tablets) correctly.
+ *
+ * `internal` (not `private`) so JVM tests in the same module can reach
+ * the helper without Robolectric — Phase 3.5 PR #10 gotcha.
+ */
+internal fun computeTargetRotation(displayRotation: Int, mode: String): Int {
+    val base = when (displayRotation) {
+        android.view.Surface.ROTATION_0,
+        android.view.Surface.ROTATION_90,
+        android.view.Surface.ROTATION_180,
+        android.view.Surface.ROTATION_270 -> displayRotation
+        else -> android.view.Surface.ROTATION_0
+    }
+    return if (mode == "Landscape") (base + 1) % 4 else base
+}
