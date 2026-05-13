@@ -7,20 +7,11 @@ import org.junit.Test
 
 class MidRecBannerContentTest {
 
-    private val ids = listOf(
-        WarningId.THERMAL_SHUTDOWN,
-        WarningId.THERMAL_EMERGENCY,
-        WarningId.THERMAL_CRITICAL,
-        WarningId.THERMAL_SEVERE,
-        WarningId.THERMAL_MODERATE,
-        WarningId.BATTERY_CRITICAL,
-        WarningId.BATTERY_LOW,
-        WarningId.CAMERA_IN_USE,
-        WarningId.CAMERA_DISABLED,
-        WarningId.STORAGE_LOW_MID_REC,
-    )
+    // Derived from the surface map — any future TopBanner-mapped WarningId is automatically covered.
+    private val ids = WarningId.entries.filter { warningSurfaceFor(it) == WarningSurface.TopBanner }
 
     @Test fun every_mid_rec_id_returns_nonblank_content() {
+        assertEquals("expected 10 TopBanner-mapped ids", 10, ids.size)
         for (id in ids) {
             val c = midRecBannerContent(id)
             assertNotNull("icon for $id", c.icon)
@@ -46,5 +37,41 @@ class MidRecBannerContentTest {
         val c = midRecBannerContent(WarningId.STORAGE_LOW_MID_REC)
         assertEquals("Storage running low", c.title)
         assertEquals("Free space on this device.", c.sub)
+    }
+
+    @Test fun thermal_emergency_copy() {
+        val c = midRecBannerContent(WarningId.THERMAL_EMERGENCY)
+        assertEquals("Device critically hot", c.title)
+        assertEquals("Stop now to let it cool.", c.sub)
+    }
+
+    @Test fun thermal_critical_copy() {
+        val c = midRecBannerContent(WarningId.THERMAL_CRITICAL)
+        assertEquals("Device very hot", c.title)
+        assertEquals("Recording may auto-stop soon.", c.sub)
+    }
+
+    @Test fun thermal_severe_copy() {
+        val c = midRecBannerContent(WarningId.THERMAL_SEVERE)
+        assertEquals("Device hot", c.title)
+        assertEquals("Quality may drop.", c.sub)
+    }
+
+    @Test fun thermal_moderate_copy() {
+        val c = midRecBannerContent(WarningId.THERMAL_MODERATE)
+        assertEquals("Device warming up", c.title)
+        assertEquals("Watch the temperature.", c.sub)
+    }
+
+    @Test fun battery_critical_copy() {
+        val c = midRecBannerContent(WarningId.BATTERY_CRITICAL)
+        assertEquals("Battery critical", c.title)
+        assertEquals("Recording may stop soon.", c.sub)
+    }
+
+    @Test fun camera_disabled_copy() {
+        val c = midRecBannerContent(WarningId.CAMERA_DISABLED)
+        assertEquals("Camera disabled", c.title)
+        assertEquals("Disabled by device policy.", c.sub)
     }
 }
