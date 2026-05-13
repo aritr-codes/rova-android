@@ -77,29 +77,9 @@ fun RecordTopOverlay(
     totalLoops: Int,
     modifier: Modifier = Modifier,
 ) {
+    // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
+    // (Recording/Waiting) block was removed — unreachable since T9.
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (hudState is RecordHudState.Recording || hudState is RecordHudState.Waiting) {
-            Row(
-                modifier = Modifier
-                    .clip(PillShape)
-                    .background(GlassFill)
-                    .border(1.dp, GlassStroke, PillShape)
-                    .padding(horizontal = 13.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "${currentLoop.coerceAtLeast(0)}/${totalLoops.coerceAtLeast(0)}",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White.copy(alpha = 0.93f),
-                )
-                Text(
-                    text = "loops done",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.32f),
-                )
-            }
-        }
         Row(
             modifier = Modifier
                 .clip(StatusPillShape)
@@ -118,13 +98,11 @@ fun RecordTopOverlay(
     }
 }
 
+// R2: RecordTopOverlay is Idle-only (RecordScreen.kt:595 gate); the Recording branch
+// of the original when-expression is unreachable. Simplified to the idle/white dot.
 @Composable
 private fun StatusDot(hudState: RecordHudState) {
-    val color = when (hudState) {
-        RecordHudState.Recording -> Color(0xFFEF4444)
-        else -> Color.White.copy(alpha = 0.25f)
-    }
-    Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+    Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f)))
 }
 
 /** What the center button in the Record bottom nav shows / does. */

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * R2 (NEW_UI_BACKEND_REPLAN row 17) - leaf signal: is the device's free space running
+ * R2 (NEW_UI_BACKEND_REPLAN row 11) - leaf signal: is the device's free space running
  * low MID-RECORDING? Drives the STORAGE_LOW_MID_REC warning, surfaced as the
  * mid-recording top banner (ADR 0007 amendment 2026-05-13).
  *
