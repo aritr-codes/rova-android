@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -96,7 +97,8 @@ import kotlinx.coroutines.launch
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToRecord: () -> Unit = {},
-    onOpenPlayer: (sessionId: String) -> Unit = {}
+    onOpenPlayer: (sessionId: String) -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
@@ -355,6 +357,11 @@ fun HistoryScreen(
                                         )
                                     }
                                 }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)

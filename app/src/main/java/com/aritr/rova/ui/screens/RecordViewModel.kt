@@ -95,6 +95,16 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         _editingField.value = null
     }
 
+    // --- Combined settings sheet visibility.
+    //
+    // Mirrors the editingField/openSheet/closeSheet pattern above.
+    // Opened when the user taps the settings card on the idle layout.
+    private val _combinedSettingsOpen = MutableStateFlow(false)
+    val combinedSettingsOpen: StateFlow<Boolean> = _combinedSettingsOpen.asStateFlow()
+
+    fun openSettingsSheet() { _combinedSettingsOpen.value = true }
+    fun closeSettingsSheet() { _combinedSettingsOpen.value = false }
+
     // --- Slice 3: presentation-only timer anchors for the active HUD.
     //
     // The recording service does not publish a "session start time"
