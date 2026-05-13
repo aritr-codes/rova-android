@@ -30,13 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
-import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
-import com.aritr.rova.ui.components.RecordStatusStrip
-import com.aritr.rova.ui.components.SessionTimer
-import com.aritr.rova.ui.components.ClipProgressBand
-import com.aritr.rova.ui.components.WaitingCountdown
-import com.aritr.rova.ui.components.MergingProgressBand
 import com.aritr.rova.ui.components.MergeCompleteCard
 import com.aritr.rova.ui.warnings.WarningCenter
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -237,29 +231,19 @@ fun RecordScreen(
     val isUiLocked = serviceState.isPeriodicActive || serviceState.isMerging
     val isCameraActive = serviceState.isCameraActive
 
-    // Slice 3 — wall-clock derived presentation timers for the active
-    // HUD. Anchors live on the VM (set on rising edge of the matching
-    // service flag); the composable ticks 1 Hz against those anchors
-    // and re-publishes the elapsed seconds as Compose state. When the
-    // anchor is null (idle / between rising edges) elapsed is 0 and
-    // the producer suspends until the next anchor change.
-    val sessionAnchorMillis by viewModel.sessionAnchorMillis.collectAsStateWithLifecycle()
+    // Slice 3 — wall-clock derived presentation timer for the active
+    // HUD's clip pill. Anchor lives on the VM (set on the rising edge
+    // of the matching service flag); the composable ticks 1 Hz against
+    // the anchor and re-publishes the elapsed seconds as Compose state.
+    // When the anchor is null (idle / between rising edges) elapsed is 0
+    // and the producer suspends until the next anchor change.
+    //
+    // R2 — the per-session elapsed timer (sessionAnchorMillis →
+    // SessionTimer) is retired; the status pill now carries per-clip /
+    // per-wait / merge progress only. We no longer subscribe to
+    // viewModel.sessionAnchorMillis from this UI (the VM flow remains
+    // on the VM as a no-op subscription source).
     val clipAnchorMillis by viewModel.clipAnchorMillis.collectAsStateWithLifecycle()
-    val sessionElapsedSeconds by produceState(
-        initialValue = 0L,
-        key1 = sessionAnchorMillis
-    ) {
-        val anchor = sessionAnchorMillis
-        if (anchor == null) {
-            value = 0L
-            return@produceState
-        }
-        while (true) {
-            val now = System.currentTimeMillis()
-            value = ((now - anchor) / 1000L).coerceAtLeast(0L)
-            delay(1000L)
-        }
-    }
     val clipElapsedSeconds by produceState(
         initialValue = 0,
         key1 = clipAnchorMillis
@@ -275,11 +259,6 @@ fun RecordScreen(
             delay(1000L)
         }
     }
-    // Round the live-region announcement down to the nearest minute
-    // so TalkBack speaks the timer at most once per 60 s (per
-    // UI_ROADMAP §"Slice 3 special requirements" — no per-second
-    // accessibility chatter).
-    val sessionAnnouncementSeconds = sessionElapsedSeconds - (sessionElapsedSeconds % 60L)
     // Phase 2.4 — fold the merge axis into the HUD state. The
     // resolution priority in `RecordHudState.from` makes `Merging`
     // win over `Idle` for the brief window where the service has
@@ -293,6 +272,21 @@ fun RecordScreen(
         mergeProgress = serviceState.mergeProgress,
         segmentCount = serviceState.segmentCount
     )
+
+    // R2 — drive StorageLowMidRecSignal while in an active HUD state.
+    // Clear on Idle transition so a stale "low" never leaks into the
+    // next session's idle chrome. The signal is consumed by the
+    // WarningCenter active-state mount (STORAGE_LOW_MID_REC → TopBanner).
+    LaunchedEffect(hudState, duration, resolution) {
+        if (hudState is RecordHudState.Idle) {
+            rovaApp?.storageLowMidRecSignal?.clear()
+            return@LaunchedEffect
+        }
+        while (true) {
+            rovaApp?.storageLowMidRecSignal?.poll(duration, resolution)
+            delay(30_000L)
+        }
+    }
 
     // Phase 2.4 — merge transition state. Declared up here (rather
     // than next to the LaunchedEffect that drives them) because the
@@ -482,29 +476,10 @@ fun RecordScreen(
                 //     ModalBottomSheet / chip and positions itself).
                 //   - the recovery echo becomes RecordRecoveryChip pinned under the
                 //     status pill (see below).
-                //   - only the active-HUD status strip stays in a slimmed Column,
-                //     pushed below the top overlay.
-                if (hudState == RecordHudState.Recording ||
-                    hudState == RecordHudState.Waiting
-                ) {
-                    // Slice 3 / Phase 2.4 — persistent active-HUD status strip.
-                    // Mounted only for Recording or Waiting; the merge body is
-                    // self-contained and does not reuse the REC/WAIT badge layout.
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(top = 100.dp)
-                    ) {
-                        Spacer(Modifier.height(8.dp))
-                        RecordStatusStrip(
-                            isRecording = hudState == RecordHudState.Recording,
-                            currentLoop = serviceState.currentLoop,
-                            totalLoops = serviceState.totalLoops,
-                            totalElapsedSeconds = sessionElapsedSeconds
-                        )
-                    }
-                }
+                //   - R2 retires RecordStatusStrip; the active-state HUD chrome
+                //     (RecordActiveHud + WarningCenter mid-rec TopBanner) is the
+                //     new top-anchored Column rendered in the bottom-area branch
+                //     below for Recording / Waiting / Merging.
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -518,119 +493,99 @@ fun RecordScreen(
                             .padding(start = 16.dp, top = 70.dp),   // sits just below the status pill (~16 + pill height)
                     )
                 }
-                // ADR 0007 — renders the warning sheet (modal) or, if collapsed, a
-                // chip. The chip lands near the status pill via this wrapper; the
-                // modal sheet ignores the wrapper's position.
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(start = 16.dp, top = 110.dp)
-                ) {
-                    WarningCenter(
-                        hudState = RecordHudState.Idle,    // T7 interim — T9 will wire the live hudState + add the active-state mount
-                        onStopRecording = {},
-                    )
+                // ADR 0007 — idle WarningCenter mount: renders the warning sheet
+                // (modal) or, if collapsed, a chip for idle-reachable warnings. The
+                // chip lands near the status pill via this wrapper; the modal sheet
+                // ignores the wrapper's position. Mid-rec TopBanner-mapped ids are
+                // rendered by the separate active-state mount inside the active HUD
+                // Column below.
+                if (hudState is RecordHudState.Idle) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(start = 16.dp, top = 110.dp)
+                    ) {
+                        WarningCenter(
+                            hudState = RecordHudState.Idle,
+                            onStopRecording = {},
+                        )
+                    }
                 }
 
                 // ------------------------------------------------------
-                // Bottom area:
-                //   Recording / Waiting → Slice 3 active HUD with
-                //                         SessionTimer + body + Stop.
-                //   Merging              → Phase 2.4 merge body only;
-                //                         no SessionTimer, no Stop.
-                //   Idle                 → Slice 2 idle dock.
+                // R2 bottom-area body:
+                //   Idle                          → camera-first idle dock
+                //                                   (RecordSettingsCard).
+                //   Recording / Waiting / Merging → R2 active-state HUD:
+                //                                   WarningCenter (mid-rec
+                //                                   TopBanner) + RecordActiveHud
+                //                                   (loop-pill + status-pill),
+                //                                   top-centered. The status pill
+                //                                   carries the per-clip /
+                //                                   waiting-countdown / merge
+                //                                   progress; the legacy
+                //                                   SessionTimer / ClipProgressBand
+                //                                   / WaitingCountdown /
+                //                                   MergingProgressBand / Stop
+                //                                   button are retired.
                 // ------------------------------------------------------
-                if (hudState is RecordHudState.Recording ||
-                    hudState is RecordHudState.Waiting
-                ) {
-                    val timerSubtitle = when (hudState) {
-                        RecordHudState.Recording -> RecordHudFormatters.formatRecordingMeta(
-                            quality = resolution,
-                            flashLabel = RecordHudFormatters.formatFlashLabel(flashMode)
-                        )
-                        RecordHudState.Waiting -> RecordHudFormatters.formatNextClipDurationLabel(duration)
-                        else -> null
-                    }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(top = 96.dp)
-                    ) {
-                        SessionTimer(
-                            elapsedSeconds = sessionElapsedSeconds,
-                            announcementSeconds = sessionAnnouncementSeconds,
-                            label = "Session elapsed",
-                            subtitle = timerSubtitle
-                        )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp)
-                            // Clear the bottom nav. The big-red "Stop recording"
-                            // Button is gone; Stop is the FAB now.
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = RecordChromeMetrics.bottomNavClearance),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        when (hudState) {
-                            RecordHudState.Recording -> ClipProgressBand(
-                                elapsedSeconds = clipElapsedSeconds,
-                                clipSeconds = duration
+                when (hudState) {
+                    RecordHudState.Idle -> {
+                        if (!showCompleteCard) {
+                            // Idle: camera-first body. The settings card sits above the
+                            // bottom nav; the viewfinder is the camera preview behind. The
+                            // recovery chip (if any) is rendered separately near the status
+                            // pill (see above).
+                            //
+                            // Phase 2.4 — suppressed during the brief post-merge grace
+                            // window so a rapid Start tap cannot race the impending nav to
+                            // Library. The FAB owns Start; per-preset / save-preset
+                            // plumbing is gone (the VM methods stay, just unused — spec
+                            // dormancy).
+                            RecordSettingsCard(
+                                durationSeconds = duration,
+                                loopCount = loopCount,
+                                intervalMinutes = interval,
+                                quality = resolution,
+                                onOpenSheet = { viewModel.openSettingsSheet() },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .windowInsetsPadding(WindowInsets.navigationBars)
+                                    .padding(bottom = RecordChromeMetrics.bottomNavClearance, start = 16.dp, end = 16.dp),   // clear the bottom nav
                             )
-                            RecordHudState.Waiting -> WaitingCountdown(
-                                nextClipInSeconds = displayedCountdownSeconds,
-                                currentLoop = serviceState.currentLoop,
-                                totalLoops = serviceState.totalLoops
-                            )
-                            else -> Unit
                         }
                     }
-                } else if (hudState is RecordHudState.Merging) {
-                    // Phase 2.4 — merge body anchored to the bottom of
-                    // the screen. No SessionTimer, no Stop button: the
-                    // merge runs `NonCancellable` for terminal-write
-                    // atomicity (ADR 0006), so a Stop affordance would
-                    // be a visual lie.
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(bottom = 32.dp)
-                            // Clear the bottom nav.
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = RecordChromeMetrics.bottomNavClearance)
-                    ) {
-                        MergingProgressBand(
-                            progress = hudState.progress,
-                            currentSegment = hudState.currentSegment,
-                            totalSegments = hudState.totalSegments
-                        )
+                    RecordHudState.Recording,
+                    RecordHudState.Waiting,
+                    is RecordHudState.Merging -> {
+                        // R2 active-state HUD: WarningCenter (mid-rec TopBanner) +
+                        // RecordActiveHud (loop-pill + status-pill). One top-centered
+                        // Column, pushed below the status bar. The status pill consumes
+                        // clipSecondsLeft / waitSecondsLeft / Merging-progress per state;
+                        // the helper dispatches on `state`. Stop is the bottom-nav FAB.
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .windowInsetsPadding(WindowInsets.statusBars)
+                                .padding(top = 16.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            WarningCenter(
+                                hudState = hudState,
+                                onStopRecording = { viewModel.stopRecording() },
+                            )
+                            RecordActiveHud(
+                                state = hudState,
+                                loopIndex = serviceState.currentLoop,
+                                loopTotal = serviceState.totalLoops,
+                                clipSecondsLeft = (duration - clipElapsedSeconds).coerceAtLeast(0),
+                                waitSecondsLeft = displayedCountdownSeconds.toInt().coerceAtLeast(0),
+                            )
+                        }
                     }
-                } else if (!showCompleteCard) {
-                    // Idle: camera-first body. The settings card sits above the
-                    // bottom nav; the viewfinder is the camera preview behind. The
-                    // recovery chip (if any) is rendered separately near the status
-                    // pill (see above).
-                    //
-                    // Phase 2.4 — suppressed during the brief post-merge grace
-                    // window so a rapid Start tap cannot race the impending nav to
-                    // Library. The FAB owns Start; per-preset / save-preset
-                    // plumbing is gone (the VM methods stay, just unused — spec
-                    // dormancy).
-                    RecordSettingsCard(
-                        durationSeconds = duration,
-                        loopCount = loopCount,
-                        intervalMinutes = interval,
-                        quality = resolution,
-                        onOpenSheet = { viewModel.openSettingsSheet() },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = RecordChromeMetrics.bottomNavClearance, start = 16.dp, end = 16.dp),   // clear the bottom nav
-                    )
                 }
 
                 // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
