@@ -46,6 +46,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 
 // Screen-local style constants (see mockups/new_uiux/01-record-home.html .status-pill / .loop-pill;
@@ -396,4 +397,42 @@ internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
     loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
     loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
     else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
+}
+
+internal enum class StatusDotColor { RECORDING, BREAK, MERGING }
+
+internal data class StatusPillContent(
+    val dot: StatusDotColor,
+    val main: String,
+    val time: String,
+)
+
+/**
+ * R2 — status-pill content per HUD state. Pure. `clipSecondsLeft` / `waitSecondsLeft`
+ * come from RecordScreen's existing `produceState` timers (R1 preserve list); the
+ * helper takes them as ints rather than reading off `RecordHudState`, which holds no
+ * countdown fields. Idle is a caller bug — the active HUD must not be mounted at idle.
+ */
+internal fun hudStatusPillContent(
+    state: RecordHudState,
+    clipSecondsLeft: Int,
+    waitSecondsLeft: Int,
+): StatusPillContent = when (state) {
+    RecordHudState.Recording -> StatusPillContent(
+        dot = StatusDotColor.RECORDING,
+        main = "Recording",
+        time = "· ${RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())} left",
+    )
+    RecordHudState.Waiting -> StatusPillContent(
+        dot = StatusDotColor.BREAK,
+        main = "On break",
+        time = "· next in ${RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())}",
+    )
+    is RecordHudState.Merging -> StatusPillContent(
+        dot = StatusDotColor.MERGING,
+        main = "Merging…",
+        time = "· ${(state.progress * 100).toInt().coerceIn(0, 100)}%",
+    )
+    RecordHudState.Idle ->
+        error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
 }
