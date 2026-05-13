@@ -296,6 +296,70 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
 
+internal data class TopBannerContent(
+    val icon: ImageVector,
+    val title: String,
+    val sub: String,
+    val cta: String,            // "Stop" for all R2 ids
+)
+
+/**
+ * R2 — copy for the mid-recording top banner (ADR 0007 amendment 2026-05-13). One arm
+ * per WarningId mapped to [WarningSurface.TopBanner] (10 ids total). Pure / JVM-testable.
+ * Calling this with a non-TopBanner id is a caller bug — the function throws.
+ */
+internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
+    WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
+        Icons.Default.Thermostat, "Device overheating — stopping",
+        "Recording will stop automatically.", "Stop",
+    )
+    WarningId.THERMAL_EMERGENCY -> TopBannerContent(
+        Icons.Default.Thermostat, "Device critically hot",
+        "Stop now to let it cool.", "Stop",
+    )
+    WarningId.THERMAL_CRITICAL -> TopBannerContent(
+        Icons.Default.Thermostat, "Device very hot",
+        "Recording may auto-stop soon.", "Stop",
+    )
+    WarningId.THERMAL_SEVERE -> TopBannerContent(
+        Icons.Default.Thermostat, "Device hot",
+        "Quality may drop.", "Stop",
+    )
+    WarningId.THERMAL_MODERATE -> TopBannerContent(
+        Icons.Default.Thermostat, "Device warming up",
+        "Watch the temperature.", "Stop",
+    )
+    WarningId.BATTERY_CRITICAL -> TopBannerContent(
+        Icons.Default.BatteryAlert, "Battery critical",
+        "Recording may stop soon.", "Stop",
+    )
+    WarningId.BATTERY_LOW -> TopBannerContent(
+        Icons.Default.BatteryAlert, "Battery low",
+        "Consider charging.", "Stop",
+    )
+    WarningId.CAMERA_IN_USE -> TopBannerContent(
+        Icons.Default.VideocamOff, "Camera in use",
+        "Another app is using the camera.", "Stop",
+    )
+    WarningId.CAMERA_DISABLED -> TopBannerContent(
+        Icons.Default.VideocamOff, "Camera disabled",
+        "Disabled by device policy.", "Stop",
+    )
+    WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
+        Icons.Default.Storage, "Storage running low",
+        "Free space on this device.", "Stop",
+    )
+    // All other WarningIds are NOT TopBanner-mapped — calling midRecBannerContent on them is a caller bug.
+    WarningId.CAMERA_PERMISSION_DENIED,
+    WarningId.EXACT_ALARM_DENIED,
+    WarningId.STORAGE_INSUFFICIENT,
+    WarningId.MICROPHONE_DENIED,
+    WarningId.BATTERY_OPTIMIZATION_ON,
+    WarningId.POWER_SAVE_MODE,
+    WarningId.NOTIFICATIONS_DENIED ->
+        error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
+}
+
 private fun launchActionTarget(context: Context, target: ActionTarget) {
     val pkgUri = Uri.fromParts("package", context.packageName, null)
     val intent: Intent = when (target) {

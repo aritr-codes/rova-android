@@ -21,4 +21,8 @@ class WarningSurfaceTest {
         WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
         WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner     // ← NEW
     }
+
+    @Test fun storage_low_mid_rec_resolves_to_top_banner() {
+        assertEquals(WarningSurface.TopBanner, warningSurfaceFor(WarningId.STORAGE_LOW_MID_REC))
+    }
 }
