@@ -18,6 +18,12 @@ class RovaSettings(context: Context) {
         get() = prefs.getString("resolution", QualityPresets.DEFAULT) ?: QualityPresets.DEFAULT
         set(value) = prefs.edit { putString("resolution", value) }
 
+    /** Coerces unknown persisted values to the default — defends against stale/version-mismatched reads. */
+    var mode: String
+        get() = (prefs.getString("mode", "Portrait") ?: "Portrait")
+            .takeIf { it == "Portrait" || it == "Landscape" } ?: "Portrait"
+        set(value) = prefs.edit { putString("mode", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }
