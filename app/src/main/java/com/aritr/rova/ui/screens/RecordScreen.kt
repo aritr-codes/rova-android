@@ -527,7 +527,10 @@ fun RecordScreen(
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .padding(start = 16.dp, top = 110.dp)
                 ) {
-                    WarningCenter()
+                    WarningCenter(
+                        hudState = RecordHudState.Idle,    // T7 interim — T9 will wire the live hudState + add the active-state mount
+                        onStopRecording = {},
+                    )
                 }
 
                 // ------------------------------------------------------

@@ -60,6 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
+import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 
 /**
@@ -92,17 +93,24 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
 }
 
 /**
- * R1 — Warning surface entry point. Mounted on the Record screen. Shows the single
- * highest-priority active warning as a [WarningSheet] (or collapses to a [WarningChip]
- * after the user dismisses). [WarningSurface.TopBanner] warnings are mid-recording
- * (R2 territory) — rendered as nothing in this slice.
+ * R2 — Warning surface entry point. Mounted on the Record screen. Routes the single
+ * highest-priority active warning to the correct surface based on [hudState]:
+ *
+ * - [RecordHudState.Idle] → idle branch: sheet / chip path (R1 behaviour).
+ *   [WarningSurface.TopBanner] ids continue to no-op here (mid-recording only).
+ * - any other [hudState] → active branch: renders [WarningTopBanner] for
+ *   [WarningSurface.TopBanner]-mapped ids; sheet / chip ids suppress (no-op).
  *
  * Under preview / non-RovaApp contexts ([applicationContext] is not a [RovaApp]),
  * renders nothing.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WarningCenter(modifier: Modifier = Modifier) {
+fun WarningCenter(
+    hudState: RecordHudState,
+    onStopRecording: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
     val vm: WarningCenterViewModel = viewModel(
@@ -127,24 +135,34 @@ fun WarningCenter(modifier: Modifier = Modifier) {
     val id = active ?: return
 
     val surface = warningSurfaceFor(id)
-    // R1: TopBanner-tier warnings are mid-recording (R2 territory) — render nothing for them here
-    // unless the cheap top-banner path is added in this slice (spec A6). Default: no-op.
-    if (surface == WarningSurface.TopBanner) return
 
-    // Dismiss/collapse state — per active id, so a different warning re-presents fresh.
-    var collapsed by rememberSaveable(id) { mutableStateOf(false) }
+    if (hudState is RecordHudState.Idle) {
+        // Idle branch — sheet / chip path (R1). TopBanner-mapped ids continue to no-op here.
+        if (surface == WarningSurface.TopBanner) return
 
-    if (collapsed) {
-        WarningChip(id = id, onExpand = { collapsed = false }, modifier = modifier)
+        // Dismiss/collapse state — per active id, so a different warning re-presents fresh.
+        var collapsed by rememberSaveable(id) { mutableStateOf(false) }
+
+        if (collapsed) {
+            WarningChip(id = id, onExpand = { collapsed = false }, modifier = modifier)
+        } else {
+            WarningSheet(
+                id = id,
+                surface = surface,
+                onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); collapsed = true },
+                onSecondary = { collapsed = true },     // "Not now" / "Continue without audio" → collapse to a chip
+                onDismissRequest = {
+                    if (surface != WarningSurface.HardBlockSheet) collapsed = true
+                },
+            )
+        }
     } else {
-        WarningSheet(
-            id = id,
-            surface = surface,
-            onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); collapsed = true },
-            onSecondary = { collapsed = true },     // "Not now" / "Continue without audio" → collapse to a chip
-            onDismissRequest = {
-                if (surface != WarningSurface.HardBlockSheet) collapsed = true
-            },
+        // Active branch (Recording / Waiting / Merging) — TopBanner only; sheets / chips suppress.
+        if (surface != WarningSurface.TopBanner) return
+        WarningTopBanner(
+            content = midRecBannerContent(id),
+            onAction = onStopRecording,
+            modifier = modifier,
         )
     }
 }
@@ -208,6 +226,66 @@ private fun WarningChip(id: WarningId, onExpand: () -> Unit, modifier: Modifier 
         Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Icon(c.icon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
             Text(c.title, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+        }
+    }
+}
+
+/**
+ * R2 — Mid-recording amber top banner (ADR 0007, mockups/new_uiux/07-warnings.html row 6).
+ * Rounded glass surface, leading icon + two-line text block (title + sub), trailing Stop CTA pill.
+ * Only shown in the active branch (Recording / Waiting / Merging) for [WarningSurface.TopBanner] ids.
+ */
+@Composable
+private fun WarningTopBanner(
+    content: TopBannerContent,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val amber = Color(0xFFFBBF24)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Black.copy(alpha = 0.55f),
+        contentColor = Color.White,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                content.icon, contentDescription = null,
+                tint = amber, modifier = Modifier.size(18.dp),
+            )
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    content.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    content.sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+            }
+            Surface(
+                modifier = Modifier.clickable { onAction() },
+                shape = RoundedCornerShape(10.dp),
+                color = amber.copy(alpha = 0.20f),
+                contentColor = amber,
+            ) {
+                Text(
+                    content.cta,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                )
+            }
         }
     }
 }
