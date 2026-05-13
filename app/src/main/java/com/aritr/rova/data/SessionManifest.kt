@@ -87,9 +87,10 @@ data class SessionManifest(
     }
 
     companion object {
-        // v3 (Phase 1.4 / ADR 0006): added audioMode, stopReason. v1/v2
-        // manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 3
+        // v4 (Phase 6): added SessionConfig.mode. v1/v2/v3 manifests read with
+        // safe default ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
+        // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
+        const val SCHEMA_VERSION = 4
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -150,13 +151,15 @@ data class SessionConfig(
     val durationSeconds: Int,
     val intervalMinutes: Int,
     val resolution: String,
-    val loopCount: Int
+    val loopCount: Int,
+    val mode: String = "Portrait"
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("durationSeconds", durationSeconds)
         put("intervalMinutes", intervalMinutes)
         put("resolution", resolution)
         put("loopCount", loopCount)
+        put("mode", mode)
     }
 
     companion object {
@@ -164,7 +167,10 @@ data class SessionConfig(
             durationSeconds = json.getInt("durationSeconds"),
             intervalMinutes = json.getInt("intervalMinutes"),
             resolution = json.getString("resolution"),
-            loopCount = json.getInt("loopCount")
+            loopCount = json.getInt("loopCount"),
+            mode = json.optString("mode", "").ifEmpty { null }
+                ?.takeIf { it == "Portrait" || it == "Landscape" }
+                ?: "Portrait"
         )
     }
 }
