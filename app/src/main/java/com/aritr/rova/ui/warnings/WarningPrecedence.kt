@@ -34,8 +34,16 @@ import com.aritr.rova.ui.signals.ThermalStatus
  *
  * Storage: [storageInsufficient] is the recording service's start-time
  * preflight, surfaced early ([com.aritr.rova.ui.signals.StorageSignal]).
+ * [storageLowMidRec] is the mid-recording low-storage signal added in R2
+ * (row #11, [com.aritr.rova.ui.signals.StorageLowMidRecSignal]).
  */
 internal object WarningPrecedence {
+    /**
+     * Resolves the single highest-priority active [WarningId] from the
+     * current snapshot of all 17 rows (10 source signals after R2 T5).
+     * [storageLowMidRec] is the last param with a `= false` default so
+     * existing positional call sites remain unambiguous.
+     */
     fun resolve(
         cameraPermissionGranted: Boolean,
         exactAlarmGranted: Boolean,
@@ -45,7 +53,8 @@ internal object WarningPrecedence {
         camera: CameraSignalState,
         microphonePermissionGranted: Boolean,
         notificationsGranted: Boolean,
-        batteryOptimizationExempt: Boolean
+        batteryOptimizationExempt: Boolean,
+        storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
     ): WarningId? {
         if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
         if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
@@ -64,6 +73,7 @@ internal object WarningPrecedence {
             else -> Unit
         }
         if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
+        if (storageLowMidRec) return WarningId.STORAGE_LOW_MID_REC                         // #11
         if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #12
         if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #13
         if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #14

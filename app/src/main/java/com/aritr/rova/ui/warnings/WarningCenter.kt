@@ -117,7 +117,8 @@ fun WarningCenter(modifier: Modifier = Modifier) {
                     camera = app.cameraStateSignal.state,
                     microphonePermissionGranted = app.microphonePermissionSignal.state,
                     notificationsGranted = app.notificationPermissionSignal.state,
-                    batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt
+                    batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
+                    storageLowMidRec = app.storageLowMidRecSignal.isLow,        // ← NEW (R2 T5)
                 )
             }
         }
