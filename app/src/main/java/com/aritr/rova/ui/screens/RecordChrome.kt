@@ -387,12 +387,13 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
 // ── R2 active-HUD helpers (Phase A). Composables that consume these land in Task 8.
 
 /**
- * R2 — loop-pill text. Returns `null` when there's only one clip (single-clip sessions hide
- * the pill entirely; the status-pill alone carries the state). Indefinite sessions
- * (`loopTotal < 0`) render the index without a total. The index is clamped on both ends.
+ * R2 — loop-pill text. Returns `null` when there's only one clip or zero clips (single-clip
+ * and zero-clip sessions hide the pill entirely; the status-pill alone carries the state).
+ * Indefinite sessions (`loopTotal < 0`) render the index without a total. The index is
+ * clamped on both ends.
  */
 internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
-    loopTotal == 1 -> null
+    loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
     loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
     else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
 }

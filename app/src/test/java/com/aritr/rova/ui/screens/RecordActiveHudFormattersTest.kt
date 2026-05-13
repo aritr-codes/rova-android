@@ -12,6 +12,12 @@ class RecordActiveHudFormattersTest {
         assertNull(loopPillContent(loopIndex = 0, loopTotal = 1))
     }
 
+    @Test fun loop_zeroClip_isHidden() {
+        // Defensive — loopTotal == 0 shouldn't happen through legitimate session config,
+        // but the helper hides the pill rather than rendering "0/0 loops done".
+        assertNull(loopPillContent(loopIndex = 0, loopTotal = 0))
+    }
+
     @Test fun loop_indefinite_omitsTotal() {
         assertEquals("3 loops done", loopPillContent(loopIndex = 3, loopTotal = -1))
     }
