@@ -32,6 +32,7 @@ import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
+import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
 import com.aritr.rova.utils.RovaCrashReporter
@@ -230,6 +231,15 @@ class RovaApp : Application() {
      * calls [StorageSignal.recompute] with the current clip settings.
      */
     val storageSignal: StorageSignal by lazy { StorageSignal.forContext(this) }
+
+    /**
+     * R2 (NEW_UI_BACKEND_REPLAN row 17) - mid-recording free-space advisory.
+     * Drives STORAGE_LOW_MID_REC. The host (RecordScreen, T9) calls poll()
+     * every ~30 s while in an active HUD state and clear() on transition to Idle.
+     */
+    val storageLowMidRecSignal: StorageLowMidRecSignal by lazy {
+        StorageLowMidRecSignal.forContext(this)
+    }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
