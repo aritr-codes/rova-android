@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -63,6 +65,9 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 
+/** R1/R2 amber accent (soft-sheet body + top-banner). File-local — RovaTokens migration is later. */
+private val AmberWarning = Color(0xFFFBBF24)
+
 /**
  * Where a given [WarningId] is surfaced on the Record screen (ADR 0007). The
  * [WarningCenterViewModel] still resolves the single highest-priority active
@@ -108,7 +113,7 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
 @Composable
 fun WarningCenter(
     hudState: RecordHudState,
-    onStopRecording: () -> Unit = {},
+    onStopRecording: () -> Unit,            // required — every call site must declare intent
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -179,7 +184,7 @@ private fun WarningSheet(
     val c = warningSheetContent(id)
     val accent = when (surface) {
         WarningSurface.HardBlockSheet -> MaterialTheme.colorScheme.error
-        WarningSurface.SoftSheet -> Color(0xFFFBBF24)            // amber — or a tokens-doc token if defined
+        WarningSurface.SoftSheet -> AmberWarning
         WarningSurface.AdvisorySheet -> MaterialTheme.colorScheme.primary
         WarningSurface.TopBanner -> MaterialTheme.colorScheme.primary // unreachable here
     }
@@ -241,7 +246,6 @@ private fun WarningTopBanner(
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val amber = Color(0xFFFBBF24)
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -255,7 +259,7 @@ private fun WarningTopBanner(
         ) {
             Icon(
                 content.icon, contentDescription = null,
-                tint = amber, modifier = Modifier.size(18.dp),
+                tint = AmberWarning, modifier = Modifier.size(18.dp),
             )
             Column(
                 Modifier.weight(1f),
@@ -274,17 +278,21 @@ private fun WarningTopBanner(
                 )
             }
             Surface(
-                modifier = Modifier.clickable { onAction() },
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 48.dp)        // a11y floor (R1 cleanup pass convention)
+                    .clickable { onAction() },
                 shape = RoundedCornerShape(10.dp),
-                color = amber.copy(alpha = 0.20f),
-                contentColor = amber,
+                color = AmberWarning.copy(alpha = 0.20f),
+                contentColor = AmberWarning,
             ) {
-                Text(
-                    content.cta,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                )
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxHeight()) {
+                    Text(
+                        content.cta,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    )
+                }
             }
         }
     }
