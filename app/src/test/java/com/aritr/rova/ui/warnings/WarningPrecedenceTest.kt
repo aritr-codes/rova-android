@@ -26,7 +26,8 @@ class WarningPrecedenceTest {
         camera: CameraSignalState = CameraSignalState.OK,
         microphonePermissionGranted: Boolean = true,
         notificationsGranted: Boolean = true,
-        batteryOptimizationExempt: Boolean = true
+        batteryOptimizationExempt: Boolean = true,
+        storageLowMidRec: Boolean = false,                  // ← NEW
     ): WarningId? = WarningPrecedence.resolve(
         cameraPermissionGranted = cameraPermissionGranted,
         exactAlarmGranted = exactAlarmGranted,
@@ -36,7 +37,8 @@ class WarningPrecedenceTest {
         camera = camera,
         microphonePermissionGranted = microphonePermissionGranted,
         notificationsGranted = notificationsGranted,
-        batteryOptimizationExempt = batteryOptimizationExempt
+        batteryOptimizationExempt = batteryOptimizationExempt,
+        storageLowMidRec = storageLowMidRec,                // ← NEW (passed positionally to WarningPrecedence.resolve)
     )
 
     @Test fun `everything clear returns null`() = assertNull(resolve())
@@ -131,4 +133,42 @@ class WarningPrecedenceTest {
                 batteryOptimizationExempt = false, powerSaveMode = true
             )
         )
+
+    // ── R2 — STORAGE_LOW_MID_REC (ordinal 10, row #11) ──────────────
+
+    @Test fun `storage low mid-rec alone fires`() =
+        assertEquals(WarningId.STORAGE_LOW_MID_REC, resolve(storageLowMidRec = true))
+
+    @Test fun `storage low mid-rec outranks thermal severe`() =
+        assertEquals(
+            WarningId.STORAGE_LOW_MID_REC,
+            resolve(storageLowMidRec = true, thermal = ThermalStatus.SEVERE),
+        )
+
+    @Test fun `battery low outranks storage low mid-rec`() =
+        assertEquals(
+            WarningId.BATTERY_LOW,
+            resolve(storageLowMidRec = true, percent = 14, charging = false),
+        )
+
+    @Test fun `thermal critical outranks storage low mid-rec`() =
+        assertEquals(
+            WarningId.THERMAL_CRITICAL,
+            resolve(storageLowMidRec = true, thermal = ThermalStatus.CRITICAL),
+        )
+
+    @Test fun `storage low mid-rec outranks below-band advisories`() =
+        assertEquals(
+            WarningId.STORAGE_LOW_MID_REC,
+            resolve(
+                storageLowMidRec = true,
+                microphonePermissionGranted = false,         // would fire #13
+                notificationsGranted = false,                // would fire #17
+                batteryOptimizationExempt = false,           // would fire #14
+                powerSaveMode = true,                        // would fire #15
+            ),
+        )
+
+    @Test fun `storage low mid-rec false does not fire when otherwise clear`() =
+        assertNull(resolve(storageLowMidRec = false))
 }

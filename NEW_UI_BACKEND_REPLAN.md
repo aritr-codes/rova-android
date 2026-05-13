@@ -450,6 +450,8 @@ banner — it routes to the generic recovery card on the Library
 (no active session) raises nothing.
 
 > **Superseded for the Record-screen surface by ADR 0007 (2026-05-12, Record-home redesign R1):** the WarningCenter precedence VM is retained, but the single resolved warning is now rendered as a per-tier modal **sheet / chip** (`mockups/new_uiux/07-warnings.html`) — not a single inline banner. The hard-block Start-gate is unchanged. See `docs/adr/0007-record-warning-sheets.md` and `docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md`.
+>
+> **Amended by ADR 0007 amendment 2026-05-13 (Record-home redesign R2):** mid-rec top-banner render path is live; `STORAGE_LOW_MID_REC` added as row 11 (17-row table). The precedence table above now has 17 rows (row 11 = `STORAGE_LOW_MID_REC` — ADVISORY, `gatesStart = false`, mid-rec top-banner surface). See `docs/superpowers/specs/2026-05-13-record-home-redesign-r2-design.md` and `docs/superpowers/plans/2026-05-13-record-home-redesign-r2.md`.
 
 *Precedence finalized — owner sign-off 2026-05-11.* The table above is
 the locked input spec for 4.1. Decisions:
@@ -523,6 +525,10 @@ Same scope as the original `UI_ROADMAP.md` Slice 6 — dynamic font scale, TalkB
 | Per-session settings sheet | full | none | Phase 2.1 | low | persist round-trip |
 
 > **Note — Record-home re-skin vs Phase-2.1 App Settings re-skin:** the visual re-skin of the Record idle home (idle dock layout, chrome, nav restructure, and warning sheets) is tracked as the **Record-home redesign R1** (`docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md`) on branch `feat/record-home-redesign-r1` — it is *not* the same work as the Phase-2.1 "App Settings re-skin" slice listed above.
+>
+> **Record-home redesign R2** (active-state HUD restyle + mid-rec top-banner surface) is tracked as:
+> - R2 spec: `docs/superpowers/specs/2026-05-13-record-home-redesign-r2-design.md` — active-state HUD + mid-rec banner surface (ADR 0007 amendment 2026-05-13).
+> - R2 plan: `docs/superpowers/plans/2026-05-13-record-home-redesign-r2.md` — 12 tasks across 9 phases.
 | Library — list + thumbnails + retention pill + softened recovery card | full (shipped Slice 4) | none | shipped | n/a | n/a |
 | Library — 3-dot Open / Edit / View Settings menu | partial: Open via shipped share-URI player; Edit blocked by editor scope; View Settings adapter missing | adapter only for View Settings | Phase 2.2 | low | unit on `LibrarySessionConfigDialog`; on-device open/dismiss |
 | Library — Empty State | none — current screen always shows the empty list with a header | none | Phase 2.3 | low | install on clean device |

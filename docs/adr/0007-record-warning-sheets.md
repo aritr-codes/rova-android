@@ -36,3 +36,19 @@ The Record-home redesign (R1) converges the Record screen onto `01-record-home.h
 ## Status / sign-off
 
 Accepted — owner sign-off recorded 2026-05-12 in the R1 spec review (`docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md`). The `NEW_UI_BACKEND_REPLAN.md` §"Phase 4" and `docs/WarningCenterContract.md` pointer-amendments are R1 implementation tasks (see the R1 plan).
+
+---
+
+## Amendment 2026-05-13 — R2: mid-rec top-banner live, +1 row (STORAGE_LOW_MID_REC)
+
+R2 (`docs/superpowers/specs/2026-05-13-record-home-redesign-r2-design.md`) lands the deferred top-banner render path from §1 last sub-bullet. Concretely:
+
+1. **Mid-rec top-banner is live.** `WarningCenter(hudState: RecordHudState)` now renders `WarningTopBanner` when the active warning's surface is `TopBanner` AND `hudState != Idle`. At idle, TopBanner-mapped warnings continue to render nothing (the deliberate "no idle surface for mid-rec ids" choice).
+2. **+1 row: `STORAGE_LOW_MID_REC`** (ADVISORY-tier, `gatesStart = false`). Placed at ordinal 10 in `WarningId.kt` — between `BATTERY_LOW` (#10 → 1-indexed) and `THERMAL_SEVERE` (was #11, now #12). Rationale: it's more urgent than the configuration-style advisories (mic / notif / battery-opt / power-save) because storage exhaustion will autonomously halt the session via the per-segment storage gate in `RovaRecordingService`, but it ranks below `BATTERY_LOW` because a 14 %-battery session has less remaining runtime than a session with 3 clips of storage headroom in the common case.
+3. **`StorageLowMidRecSignal`** is a new UI-side leaf signal on `RovaApp`, polled by RecordScreen every ~30 s while HUD state ∈ {Recording, Waiting, Merging}. Fires when `freeBytes < 3 × bytesPerSecondForResolution(resolution) × durationSeconds`. No `service/**` diff.
+4. **`WarningPrecedence.resolve(...)`** gains `storageLowMidRec: Boolean = false` (last param). **`WarningCenterViewModel.aggregate(...)`** gains a 10th source flow. **`WarningCenter` composable signature** gains `hudState: RecordHudState` and `onStopRecording: () -> Unit`. **`WarningCenterContract.md`** is the 17-row contract document; the Phase-1.D revision block's 16-row table is updated.
+5. **Retired:** the five legacy active-state composables (`SessionTimer`, `ClipProgressBand`, `WaitingCountdown`, `MergingProgressBand`, `RecordStatusStrip`) are deleted and replaced by `RecordActiveHud` + `LoopPill` + `StatusPill` in `RecordChrome.kt`.
+6. **Out of scope / deferred:** the snooze / dismiss model + hysteresis on the top banner (future 4.1c bundle); service-side cancel for in-progress merges; the dynamic "~N min remaining" estimate in the storage-low banner sub-copy.
+7. **Invariants preserved:** the 16 existing rows of `WarningId` keep their original ordinal positions; their tier values and `gatesStart` flags are unchanged. The Start-gate in `RecordScreen` (`startBlocked = !cameraPermissionGranted || storageInsufficient`) is byte-identical.
+
+Owner sign-off recorded 2026-05-13 in the R2 spec review.

@@ -6,7 +6,7 @@
 |-------|-----------|
 | Language | Kotlin |
 | Min SDK | 24 (Android 7.0) |
-| Target SDK | 36 |
+| Target SDK | 37 |
 | UI | Jetpack Compose (Material3) |
 | Camera | AndroidX CameraX (Core, Video, View, Lifecycle) |
 | Concurrency | Kotlin Coroutines & StateFlow |
@@ -23,21 +23,25 @@
 ```
 app/src/main/java/com/aritr/rova/
 ├── MainActivity.kt                  # Entry point, renders MainScreen
+├── RovaApp.kt                       # Application class; hosts leaf signals as lazy props
 ├── data/
 │   └── RovaSettings.kt             # SharedPreferences wrapper + RovaPreset data class
 ├── service/
 │   └── RovaRecordingService.kt     # Foreground service: CameraX, recording loops, merge
 ├── ui/
-│   ├── MainScreen.kt               # Navigation shell (3 tabs: Record, History, Settings)
+│   ├── MainScreen.kt               # Navigation shell (History + Settings drill-down; Record owns nav)
 │   ├── PreviewActivity.kt          # In-app video player
 │   ├── components/
+│   │   ├── BackgroundRecordingBanner.kt
 │   │   ├── RovaAnimations.kt       # Pulsing opacity, slide animations
 │   │   ├── RovaCardComponents.kt   # SwitchRow and other shared UI components
 │   │   ├── RovaComponents.kt       # StepperControl
-│   │   ├── RovaDialogs.kt          # Shared dialog components
-│   │   └── BackgroundRecordingBanner.kt
+│   │   └── RovaDialogs.kt          # Shared dialog components
 │   ├── screens/
 │   │   ├── RecordScreen.kt         # Camera preview + recording controls
+│   │   ├── RecordChrome.kt         # R1/R2: chrome metrics, active HUD (RecordActiveHud,
+│   │   │                           #   LoopPill, StatusPill), SessionSettingsSheet
+│   │   ├── SessionSettingsSheet.kt # R1: combined per-session settings ModalBottomSheet
 │   │   ├── RecordViewModel.kt      # ViewModel: service binding, recording settings, presets
 │   │   ├── HistoryScreen.kt        # Video library with thumbnails and batch operations
 │   │   ├── HistoryViewModel.kt     # Off-thread metadata loading for HistoryScreen
@@ -45,6 +49,22 @@ app/src/main/java/com/aritr/rova/
 │   │   ├── SettingsViewModel.kt    # Activity-scoped: single source of truth for app settings
 │   │   ├── BatteryOptimizationHelper.kt
 │   │   └── VideoMetadataUtils.kt   # Thumbnail + resolution extraction helpers
+│   ├── signals/
+│   │   ├── BatteryOptimizationSignal.kt
+│   │   ├── CameraPermissionSignal.kt
+│   │   ├── CameraStateSignal.kt
+│   │   ├── ExactAlarmSignal.kt
+│   │   ├── MicrophonePermissionSignal.kt
+│   │   ├── NotificationPermissionSignal.kt
+│   │   ├── PowerSignal.kt
+│   │   ├── StorageLowMidRecSignal.kt   # R2 (2026-05-13): mid-rec storage poll; top-banner surface
+│   │   ├── StorageSignal.kt
+│   │   └── ThermalStatusSignal.kt
+│   ├── warnings/
+│   │   ├── WarningCenter.kt            # R1: WarningSheet/WarningChip; R2: +WarningTopBanner
+│   │   ├── WarningCenterViewModel.kt
+│   │   ├── WarningId.kt               # 17-row enum (R2 adds STORAGE_LOW_MID_REC at ordinal 10)
+│   │   └── WarningPrecedence.kt        # Pure resolver: 9 leaf-signal booleans/states → WarningId? (highest-priority)
 │   └── theme/
 │       ├── Color.kt
 │       ├── Theme.kt

@@ -18,6 +18,11 @@ class WarningSurfaceTest {
         WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
         WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
         WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
-        WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED -> WarningSurface.TopBanner
+        WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
+        WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner     // ← NEW
+    }
+
+    @Test fun storage_low_mid_rec_resolves_to_top_banner() {
+        assertEquals(WarningSurface.TopBanner, warningSurfaceFor(WarningId.STORAGE_LOW_MID_REC))
     }
 }

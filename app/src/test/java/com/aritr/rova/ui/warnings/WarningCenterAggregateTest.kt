@@ -15,13 +15,13 @@ import org.junit.Test
 /**
  * Tests [WarningCenterViewModel.aggregate] — the combine logic — with fake
  * [MutableStateFlow]s and no `viewModelScope`. Same plain-JVM coroutine
- * idiom as the Phase 3 signal tests. 9 source flows after Phase 4.1b.
+ * idiom as the Phase 3 signal tests. 10 source flows after R2 T5.
  */
 class WarningCenterAggregateTest {
 
     private fun clearPower() = PowerState(percent = 80, charging = false, powerSaveMode = false)
 
-    private data class NineSources(
+    private data class TenSources(
         val cameraPerm: MutableStateFlow<Boolean>,   // cameraPermissionGranted
         val ea: MutableStateFlow<Boolean>,           // exactAlarmGranted
         val storage: MutableStateFlow<Boolean>,      // storageInsufficient
@@ -30,10 +30,11 @@ class WarningCenterAggregateTest {
         val camState: MutableStateFlow<CameraSignalState>, // camera (state)
         val mic: MutableStateFlow<Boolean>,          // microphonePermissionGranted
         val nt: MutableStateFlow<Boolean>,           // notificationsGranted
-        val bo: MutableStateFlow<Boolean>            // batteryOptimizationExempt
+        val bo: MutableStateFlow<Boolean>,           // batteryOptimizationExempt
+        val storageLowMidRec: MutableStateFlow<Boolean>,  // storageLowMidRec — NEW
     )
 
-    private fun sources() = NineSources(
+    private fun sources() = TenSources(
         MutableStateFlow(true),                       // cameraPerm — granted
         MutableStateFlow(true),                       // ea — exact alarm granted
         MutableStateFlow(false),                      // storage — not insufficient
@@ -42,12 +43,14 @@ class WarningCenterAggregateTest {
         MutableStateFlow(CameraSignalState.OK),       // camera state
         MutableStateFlow(true),                       // mic — granted
         MutableStateFlow(true),                       // notificationsGranted
-        MutableStateFlow(true)                        // batteryOptimizationExempt
+        MutableStateFlow(true),                       // batteryOptimizationExempt
+        MutableStateFlow(false),                      // storageLowMidRec — NEW
     )
 
-    private suspend fun NineSources.collectInto(emissions: MutableList<WarningId?>) =
-        WarningCenterViewModel.aggregate(cameraPerm, ea, storage, th, pw, camState, mic, nt, bo)
-            .collect { emissions += it }
+    private suspend fun TenSources.collectInto(emissions: MutableList<WarningId?>) =
+        WarningCenterViewModel.aggregate(
+            cameraPerm, ea, storage, th, pw, camState, mic, nt, bo, storageLowMidRec,
+        ).collect { emissions += it }
 
     @Test fun `emits null when all sources are clear`() = runBlocking {
         val s = sources()
@@ -94,5 +97,29 @@ class WarningCenterAggregateTest {
         yield()
         job.cancelAndJoin()
         assertEquals(listOf<WarningId?>(null, WarningId.CAMERA_PERMISSION_DENIED, null), emissions)
+    }
+
+    @Test fun `storage-low-mid-rec flow flip emits id`() = runBlocking {
+        val s = sources()
+        val emissions = mutableListOf<WarningId?>()
+        val job = launch(Dispatchers.Unconfined) { s.collectInto(emissions) }
+        yield()
+        s.storageLowMidRec.value = true
+        yield()
+        s.storageLowMidRec.value = false
+        yield()
+        job.cancelAndJoin()
+        assertEquals(listOf<WarningId?>(null, WarningId.STORAGE_LOW_MID_REC, null), emissions)
+    }
+
+    @Test fun `battery-low outranks storage-low-mid-rec`() = runBlocking {
+        val s = sources()
+        s.pw.value = PowerState(percent = 14, charging = false, powerSaveMode = false)   // would fire BATTERY_LOW
+        s.storageLowMidRec.value = true                                                  // would also fire — but lower priority
+        val emissions = mutableListOf<WarningId?>()
+        val job = launch(Dispatchers.Unconfined) { s.collectInto(emissions) }
+        yield()
+        job.cancelAndJoin()
+        assertEquals(listOf<WarningId?>(WarningId.BATTERY_LOW), emissions)
     }
 }

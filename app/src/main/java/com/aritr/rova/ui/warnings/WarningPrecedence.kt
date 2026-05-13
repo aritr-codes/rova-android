@@ -16,8 +16,9 @@ import com.aritr.rova.ui.signals.ThermalStatus
  * decision #5): there is no queue — the active warning follows the
  * signals directly, every recomputation.
  *
- * As of Phase 4.1b all 16 rows are reachable (#1 camera-permission, #3
- * storage-to-start and #12 mic/video-only got their parameters here).
+ * As of Phase 4.1b all 16 rows are reachable. R2 (2026-05-13)
+ * inserts #11 STORAGE_LOW_MID_REC; it becomes reachable when T5 wires
+ * the 10th source flow into [resolve].
  *
  * Battery semantics: a low / critical battery warning fires only when the
  * percent is KNOWN (non-null) AND below the threshold AND not charging.
@@ -33,8 +34,16 @@ import com.aritr.rova.ui.signals.ThermalStatus
  *
  * Storage: [storageInsufficient] is the recording service's start-time
  * preflight, surfaced early ([com.aritr.rova.ui.signals.StorageSignal]).
+ * [storageLowMidRec] is the mid-recording low-storage signal added in R2
+ * (row #11, [com.aritr.rova.ui.signals.StorageLowMidRecSignal]).
  */
 internal object WarningPrecedence {
+    /**
+     * Resolves the single highest-priority active [WarningId] from the
+     * current snapshot of all 17 rows (10 source signals after R2 T5).
+     * [storageLowMidRec] is the last param with a `= false` default so
+     * existing positional call sites remain unambiguous.
+     */
     fun resolve(
         cameraPermissionGranted: Boolean,
         exactAlarmGranted: Boolean,
@@ -44,7 +53,8 @@ internal object WarningPrecedence {
         camera: CameraSignalState,
         microphonePermissionGranted: Boolean,
         notificationsGranted: Boolean,
-        batteryOptimizationExempt: Boolean
+        batteryOptimizationExempt: Boolean,
+        storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
     ): WarningId? {
         if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
         if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
@@ -63,12 +73,13 @@ internal object WarningPrecedence {
             else -> Unit
         }
         if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #11
-        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #12
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #13
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #14
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #15
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #16
+        if (storageLowMidRec) return WarningId.STORAGE_LOW_MID_REC                         // #11
+        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #12
+        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #13
+        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #14
+        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #15
+        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #16
+        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #17
         return null
     }
 }

@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Phase 4.1 / 4.1b — the unified WarningCenter aggregator. Consumes the
- * nine wired leaf signals and exposes the single highest-priority active
+ * Phase 4.1 / 4.1b / R2-T5 — the unified WarningCenter aggregator. Consumes
+ * the ten wired leaf signals and exposes the single highest-priority active
  * warning as a [StateFlow]. ONE ViewModel — no per-category split
  * (WarningCenterContract NO-GO #8). It does NOT own the signals; it
  * observes them.
@@ -34,28 +34,31 @@ class WarningCenterViewModel(
     camera: StateFlow<CameraSignalState>,
     microphonePermissionGranted: StateFlow<Boolean>,
     notificationsGranted: StateFlow<Boolean>,
-    batteryOptimizationExempt: StateFlow<Boolean>
+    batteryOptimizationExempt: StateFlow<Boolean>,
+    storageLowMidRec: StateFlow<Boolean>,           // ← NEW (R2 T5)
 ) : ViewModel() {
 
     val activeWarning: StateFlow<WarningId?> =
         aggregate(
             cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
             thermal, power, camera,
-            microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt
+            microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
+            storageLowMidRec,                                    // ← NEW
         ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     companion object {
         /**
-         * Combine the nine source flows => highest-priority active
+         * Combine the ten source flows => highest-priority active
          * [WarningId] via [WarningPrecedence.resolve]. WarningCenterContract
          * NO-GO #6: a throw inside the combine logs and degrades to `null`
          * — a failure to compute a banner must not itself become a banner.
          *
          * kotlinx-coroutines has typed `combine` overloads only up to five
-         * flows, so five of the six plain booleans are folded into one
-         * upstream `combine(...) -> Bools5` first, then a 5-arg
-         * `combine(bools5, sixthBoolean, thermal, power, camera)` does the
-         * real work.
+         * flows, so six of the plain booleans are folded into one upstream
+         * `combine(vararg flows: Flow<Boolean>) -> Bools6` first (using the
+         * vararg overload), then a 5-arg
+         * `combine(bools6, batteryOptExempt, thermal, power, camera)` does
+         * the real work.
          */
         fun aggregate(
             cameraPermissionGranted: Flow<Boolean>,
@@ -66,16 +69,20 @@ class WarningCenterViewModel(
             camera: Flow<CameraSignalState>,
             microphonePermissionGranted: Flow<Boolean>,
             notificationsGranted: Flow<Boolean>,
-            batteryOptimizationExempt: Flow<Boolean>
+            batteryOptimizationExempt: Flow<Boolean>,
+            storageLowMidRec: Flow<Boolean>,                // ← NEW (last param)
         ): Flow<WarningId?> {
-            val bools5: Flow<Bools5> = combine(
+            val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
                 exactAlarmGranted,
                 storageInsufficient,
                 microphonePermissionGranted,
-                notificationsGranted
-            ) { cam, ea, st, mic, nt -> Bools5(cam, ea, st, mic, nt) }
-            return combine(bools5, batteryOptimizationExempt, thermal, power, camera) { b, bo, th, pw, cm ->
+                notificationsGranted,
+                storageLowMidRec,
+            ) { arr: Array<Boolean> ->
+                Bools6(arr[0], arr[1], arr[2], arr[3], arr[4], arr[5])
+            }
+            return combine(bools6, batteryOptimizationExempt, thermal, power, camera) { b, bo, th, pw, cm ->
                 runCatching {
                     WarningPrecedence.resolve(
                         cameraPermissionGranted = b.cameraPermissionGranted,
@@ -86,7 +93,8 @@ class WarningCenterViewModel(
                         camera = cm,
                         microphonePermissionGranted = b.microphonePermissionGranted,
                         notificationsGranted = b.notificationsGranted,
-                        batteryOptimizationExempt = bo
+                        batteryOptimizationExempt = bo,
+                        storageLowMidRec = b.storageLowMidRec,
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)
@@ -97,11 +105,12 @@ class WarningCenterViewModel(
     }
 }
 
-/** Phase 4.1b — packs 5 of the 6 boolean signals so the aggregator stays within `combine`'s 5-flow typed overloads. */
-private class Bools5(
+/** R2 T5 — packs 6 boolean signals so the aggregator stays within `combine`'s 5-flow typed overloads. */
+private class Bools6(
     val cameraPermissionGranted: Boolean,
     val exactAlarmGranted: Boolean,
     val storageInsufficient: Boolean,
     val microphonePermissionGranted: Boolean,
-    val notificationsGranted: Boolean
+    val notificationsGranted: Boolean,
+    val storageLowMidRec: Boolean,                  // ← NEW
 )

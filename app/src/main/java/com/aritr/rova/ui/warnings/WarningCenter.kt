@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -60,7 +62,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
+import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
+
+/** R1/R2 amber accent (soft-sheet body + top-banner). File-local — RovaTokens migration is later. */
+private val AmberWarning = Color(0xFFFBBF24)
 
 /**
  * Where a given [WarningId] is surfaced on the Record screen (ADR 0007). The
@@ -87,21 +93,29 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
-    WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED -> WarningSurface.TopBanner
+    WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
+    WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner       // ← NEW arm in the TopBanner cluster
 }
 
 /**
- * R1 — Warning surface entry point. Mounted on the Record screen. Shows the single
- * highest-priority active warning as a [WarningSheet] (or collapses to a [WarningChip]
- * after the user dismisses). [WarningSurface.TopBanner] warnings are mid-recording
- * (R2 territory) — rendered as nothing in this slice.
+ * R2 — Warning surface entry point. Mounted on the Record screen. Routes the single
+ * highest-priority active warning to the correct surface based on [hudState]:
+ *
+ * - [RecordHudState.Idle] → idle branch: sheet / chip path (R1 behaviour).
+ *   [WarningSurface.TopBanner] ids continue to no-op here (mid-recording only).
+ * - any other [hudState] → active branch: renders [WarningTopBanner] for
+ *   [WarningSurface.TopBanner]-mapped ids; sheet / chip ids suppress (no-op).
  *
  * Under preview / non-RovaApp contexts ([applicationContext] is not a [RovaApp]),
  * renders nothing.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WarningCenter(modifier: Modifier = Modifier) {
+fun WarningCenter(
+    hudState: RecordHudState,
+    onStopRecording: () -> Unit,            // required — every call site must declare intent
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
     val vm: WarningCenterViewModel = viewModel(
@@ -116,7 +130,8 @@ fun WarningCenter(modifier: Modifier = Modifier) {
                     camera = app.cameraStateSignal.state,
                     microphonePermissionGranted = app.microphonePermissionSignal.state,
                     notificationsGranted = app.notificationPermissionSignal.state,
-                    batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt
+                    batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
+                    storageLowMidRec = app.storageLowMidRecSignal.isLow,        // ← NEW (R2 T5)
                 )
             }
         }
@@ -125,24 +140,34 @@ fun WarningCenter(modifier: Modifier = Modifier) {
     val id = active ?: return
 
     val surface = warningSurfaceFor(id)
-    // R1: TopBanner-tier warnings are mid-recording (R2 territory) — render nothing for them here
-    // unless the cheap top-banner path is added in this slice (spec A6). Default: no-op.
-    if (surface == WarningSurface.TopBanner) return
 
-    // Dismiss/collapse state — per active id, so a different warning re-presents fresh.
-    var collapsed by rememberSaveable(id) { mutableStateOf(false) }
+    if (hudState is RecordHudState.Idle) {
+        // Idle branch — sheet / chip path (R1). TopBanner-mapped ids continue to no-op here.
+        if (surface == WarningSurface.TopBanner) return
 
-    if (collapsed) {
-        WarningChip(id = id, onExpand = { collapsed = false }, modifier = modifier)
+        // Dismiss/collapse state — per active id, so a different warning re-presents fresh.
+        var collapsed by rememberSaveable(id) { mutableStateOf(false) }
+
+        if (collapsed) {
+            WarningChip(id = id, onExpand = { collapsed = false }, modifier = modifier)
+        } else {
+            WarningSheet(
+                id = id,
+                surface = surface,
+                onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); collapsed = true },
+                onSecondary = { collapsed = true },     // "Not now" / "Continue without audio" → collapse to a chip
+                onDismissRequest = {
+                    if (surface != WarningSurface.HardBlockSheet) collapsed = true
+                },
+            )
+        }
     } else {
-        WarningSheet(
-            id = id,
-            surface = surface,
-            onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); collapsed = true },
-            onSecondary = { collapsed = true },     // "Not now" / "Continue without audio" → collapse to a chip
-            onDismissRequest = {
-                if (surface != WarningSurface.HardBlockSheet) collapsed = true
-            },
+        // Active branch (Recording / Waiting / Merging) — TopBanner only; sheets / chips suppress.
+        if (surface != WarningSurface.TopBanner) return
+        WarningTopBanner(
+            content = midRecBannerContent(id),
+            onAction = onStopRecording,
+            modifier = modifier,
         )
     }
 }
@@ -159,7 +184,7 @@ private fun WarningSheet(
     val c = warningSheetContent(id)
     val accent = when (surface) {
         WarningSurface.HardBlockSheet -> MaterialTheme.colorScheme.error
-        WarningSurface.SoftSheet -> Color(0xFFFBBF24)            // amber — or a tokens-doc token if defined
+        WarningSurface.SoftSheet -> AmberWarning
         WarningSurface.AdvisorySheet -> MaterialTheme.colorScheme.primary
         WarningSurface.TopBanner -> MaterialTheme.colorScheme.primary // unreachable here
     }
@@ -210,6 +235,69 @@ private fun WarningChip(id: WarningId, onExpand: () -> Unit, modifier: Modifier 
     }
 }
 
+/**
+ * R2 — Mid-recording amber top banner (ADR 0007, mockups/new_uiux/07-warnings.html row 6).
+ * Rounded glass surface, leading icon + two-line text block (title + sub), trailing Stop CTA pill.
+ * Only shown in the active branch (Recording / Waiting / Merging) for [WarningSurface.TopBanner] ids.
+ */
+@Composable
+private fun WarningTopBanner(
+    content: TopBannerContent,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Black.copy(alpha = 0.55f),
+        contentColor = Color.White,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                content.icon, contentDescription = null,
+                tint = AmberWarning, modifier = Modifier.size(18.dp),
+            )
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    content.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    content.sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+            }
+            Surface(
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 48.dp)        // a11y floor (R1 cleanup pass convention)
+                    .clickable { onAction() },
+                shape = RoundedCornerShape(10.dp),
+                color = AmberWarning.copy(alpha = 0.20f),
+                contentColor = AmberWarning,
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxHeight()) {
+                    Text(
+                        content.cta,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 internal data class WarningAction(val label: String, val target: ActionTarget)
 
 internal enum class ActionTarget {
@@ -228,8 +316,9 @@ internal data class WarningSheetContent(
 )
 
 /**
- * The 16-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
+ * The 17-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
  * Icons reuse the ones the old banner carried. Replaces `bannerContent` now that [WarningSheet] is live.
+ * STORAGE_LOW_MID_REC (#11, R2) has a defensive arm — TopBanner-only, never renders as a sheet.
  */
 internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED -> WarningSheetContent(
@@ -281,8 +370,80 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
     WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, "Device warming up", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery critical — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery low — consider charging", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.STORAGE_LOW_MID_REC -> WarningSheetContent(
+        // Defensive — STORAGE_LOW_MID_REC is TopBanner-only (see midRecBannerContent in T6).
+        // This arm keeps warningSheetContent exhaustive over WarningId; never renders as a sheet.
+        Icons.Default.Storage, "Storage running low",
+        "Free space on this device.",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        null,
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+}
+
+internal data class TopBannerContent(
+    val icon: ImageVector,
+    val title: String,
+    val sub: String,
+    val cta: String,            // "Stop" for all R2 ids
+)
+
+/**
+ * R2 — copy for the mid-recording top banner (ADR 0007 amendment 2026-05-13). One arm
+ * per WarningId mapped to [WarningSurface.TopBanner] (10 ids total). Pure / JVM-testable.
+ * Calling this with a non-TopBanner id is a caller bug — the function throws.
+ */
+internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
+    WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
+        Icons.Default.Thermostat, "Device overheating — stopping",
+        "Recording will stop automatically.", "Stop",
+    )
+    WarningId.THERMAL_EMERGENCY -> TopBannerContent(
+        Icons.Default.Thermostat, "Device critically hot",
+        "Stop now to let it cool.", "Stop",
+    )
+    WarningId.THERMAL_CRITICAL -> TopBannerContent(
+        Icons.Default.Thermostat, "Device very hot",
+        "Recording may auto-stop soon.", "Stop",
+    )
+    WarningId.THERMAL_SEVERE -> TopBannerContent(
+        Icons.Default.Thermostat, "Device hot",
+        "Quality may drop.", "Stop",
+    )
+    WarningId.THERMAL_MODERATE -> TopBannerContent(
+        Icons.Default.Thermostat, "Device warming up",
+        "Watch the temperature.", "Stop",
+    )
+    WarningId.BATTERY_CRITICAL -> TopBannerContent(
+        Icons.Default.BatteryAlert, "Battery critical",
+        "Recording may stop soon.", "Stop",
+    )
+    WarningId.BATTERY_LOW -> TopBannerContent(
+        Icons.Default.BatteryAlert, "Battery low",
+        "Consider charging.", "Stop",
+    )
+    WarningId.CAMERA_IN_USE -> TopBannerContent(
+        Icons.Default.VideocamOff, "Camera in use",
+        "Another app is using the camera.", "Stop",
+    )
+    WarningId.CAMERA_DISABLED -> TopBannerContent(
+        Icons.Default.VideocamOff, "Camera disabled",
+        "Disabled by device policy.", "Stop",
+    )
+    WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
+        Icons.Default.Storage, "Storage running low",
+        "Free space on this device.", "Stop",
+    )
+    // All other WarningIds are NOT TopBanner-mapped — calling midRecBannerContent on them is a caller bug.
+    WarningId.CAMERA_PERMISSION_DENIED,
+    WarningId.EXACT_ALARM_DENIED,
+    WarningId.STORAGE_INSUFFICIENT,
+    WarningId.MICROPHONE_DENIED,
+    WarningId.BATTERY_OPTIMIZATION_ON,
+    WarningId.POWER_SAVE_MODE,
+    WarningId.NOTIFICATIONS_DENIED ->
+        error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
 }
 
 private fun launchActionTarget(context: Context, target: ActionTarget) {

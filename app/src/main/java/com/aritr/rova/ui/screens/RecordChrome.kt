@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,12 +47,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 
 // Screen-local style constants (see mockups/new_uiux/01-record-home.html .status-pill / .loop-pill;
 // docs/UI_DESIGN_TOKENS.md decides any of these the tokens doc promotes to MaterialTheme.*).
 private val GlassFill = Color.Black.copy(alpha = 0.40f)
 private val GlassStroke = Color.White.copy(alpha = 0.07f)
+private val RecordingDotColor = Color(0xFFEF4444)   // red
+private val WaitingDotColor   = Color(0xFFFBBF24)   // amber (matches WarningCenter's AmberWarning + SoftSheet accent)
+private val MergingDotColor   = Color(0xFF60A5FA)   // blue
 private val StatusPillShape = RoundedCornerShape(20.dp)
 private val PillShape = RoundedCornerShape(11.dp)
 private val ControlBtnSize = 30.dp          // visible glass-circle diameter
@@ -72,29 +77,9 @@ fun RecordTopOverlay(
     totalLoops: Int,
     modifier: Modifier = Modifier,
 ) {
+    // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
+    // (Recording/Waiting) block was removed — unreachable since T9.
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (hudState is RecordHudState.Recording || hudState is RecordHudState.Waiting) {
-            Row(
-                modifier = Modifier
-                    .clip(PillShape)
-                    .background(GlassFill)
-                    .border(1.dp, GlassStroke, PillShape)
-                    .padding(horizontal = 13.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "${currentLoop.coerceAtLeast(0)}/${totalLoops.coerceAtLeast(0)}",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White.copy(alpha = 0.93f),
-                )
-                Text(
-                    text = "loops done",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.32f),
-                )
-            }
-        }
         Row(
             modifier = Modifier
                 .clip(StatusPillShape)
@@ -113,13 +98,11 @@ fun RecordTopOverlay(
     }
 }
 
+// R2: RecordTopOverlay is Idle-only (RecordScreen.kt:595 gate); the Recording branch
+// of the original when-expression is unreachable. Simplified to the idle/white dot.
 @Composable
 private fun StatusDot(hudState: RecordHudState) {
-    val color = when (hudState) {
-        RecordHudState.Recording -> Color(0xFFEF4444)
-        else -> Color.White.copy(alpha = 0.25f)
-    }
-    Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+    Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f)))
 }
 
 /** What the center button in the Record bottom nav shows / does. */
@@ -381,5 +364,148 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
             val word = if (count == 1) "recording" else "recordings"
             Text("$count $word interrupted · Review", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
+    }
+}
+
+// ── R2 active-HUD helpers (Phase A). Composables that consume these land in Task 8.
+
+/**
+ * R2 — loop-pill text. Returns `null` when there's only one clip or zero clips (single-clip
+ * and zero-clip sessions hide the pill entirely; the status-pill alone carries the state).
+ * Indefinite sessions (`loopTotal < 0`) render the index without a total. The index is
+ * clamped on both ends.
+ */
+internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
+    loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
+    loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
+    else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
+}
+
+internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
+
+internal data class StatusPillContent(
+    val dot: StatusDotColor,
+    val main: String,
+    val time: String,
+)
+
+/**
+ * R2 — status-pill content per HUD state. Pure. `clipSecondsLeft` / `waitSecondsLeft`
+ * come from RecordScreen's existing `produceState` timers (R1 preserve list); the
+ * helper takes them as ints rather than reading off `RecordHudState`, which holds no
+ * countdown fields. Idle is a caller bug — the active HUD must not be mounted at idle.
+ */
+internal fun hudStatusPillContent(
+    state: RecordHudState,
+    clipSecondsLeft: Int,
+    waitSecondsLeft: Int,
+): StatusPillContent = when (state) {
+    RecordHudState.Recording -> StatusPillContent(
+        dot = StatusDotColor.RECORDING,
+        main = "Recording",
+        time = "· ${RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())} left",
+    )
+    RecordHudState.Waiting -> StatusPillContent(
+        dot = StatusDotColor.WAITING,
+        main = "On break",
+        time = "· next in ${RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())}",
+    )
+    is RecordHudState.Merging -> StatusPillContent(
+        dot = StatusDotColor.MERGING,
+        main = "Merging…",
+        time = "· ${(state.progress * 100).toInt().coerceIn(0, 100)}%",
+    )
+    RecordHudState.Idle ->
+        error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
+}
+
+// ── R2 active-HUD composables (Task 8). Consume the Phase-A helpers above. ──
+
+@Composable
+private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
+    val color = when (dot) {
+        StatusDotColor.RECORDING -> RecordingDotColor
+        StatusDotColor.WAITING   -> WaitingDotColor
+        StatusDotColor.MERGING   -> MergingDotColor
+    }
+    Box(
+        modifier
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
+}
+
+@Composable
+private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+    val text = loopPillContent(loopIndex, loopTotal) ?: return       // hide pill on single-clip / zero-clip
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = GlassFill,
+        contentColor = Color.White,
+        border = BorderStroke(1.dp, GlassStroke),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = GlassFill,
+        contentColor = Color.White,
+        border = BorderStroke(1.dp, GlassStroke),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatusDot(content.dot)
+            Text(
+                content.main,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+            )
+            Text(
+                content.time,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+/**
+ * R2 — top-anchored active-state HUD. Stacks [LoopPill] (when applicable) above [StatusPill].
+ * MUST NOT be mounted at [com.aritr.rova.ui.components.RecordHudState.Idle] — the
+ * `hudStatusPillContent` helper throws for Idle (caller-bug guard).
+ *
+ * Layout: vertical Column at the top safe-area, centered, with 8 dp spacing between the
+ * loop-pill and the status-pill. Both pills are glass-on-camera (R1 token set).
+ */
+@Composable
+internal fun RecordActiveHud(
+    state: RecordHudState,
+    loopIndex: Int,
+    loopTotal: Int,
+    clipSecondsLeft: Int,
+    waitSecondsLeft: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+        StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
     }
 }
