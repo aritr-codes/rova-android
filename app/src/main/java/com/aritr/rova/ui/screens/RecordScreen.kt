@@ -237,12 +237,6 @@ fun RecordScreen(
     // the anchor and re-publishes the elapsed seconds as Compose state.
     // When the anchor is null (idle / between rising edges) elapsed is 0
     // and the producer suspends until the next anchor change.
-    //
-    // R2 — the per-session elapsed timer (sessionAnchorMillis →
-    // SessionTimer) is retired; the status pill now carries per-clip /
-    // per-wait / merge progress only. We no longer subscribe to
-    // viewModel.sessionAnchorMillis from this UI (the VM flow remains
-    // on the VM as a no-op subscription source).
     val clipAnchorMillis by viewModel.clipAnchorMillis.collectAsStateWithLifecycle()
     val clipElapsedSeconds by produceState(
         initialValue = 0,
@@ -469,16 +463,6 @@ fun RecordScreen(
                     }
                 }
 
-                // Task 14 — the old "top bar" Column (app-bar Row + WarningCenter
-                // + RecoveryEchoBanner + RecordStatusStrip) is broken apart:
-                //   - WarningCenter() is a standalone Box child now (it renders a
-                //     ModalBottomSheet / chip and positions itself).
-                //   - the recovery echo becomes RecordRecoveryChip pinned under the
-                //     status pill (see below).
-                //   - R2 retires RecordStatusStrip; the active-state HUD chrome
-                //     (RecordActiveHud + WarningCenter mid-rec TopBanner) is the
-                //     new top-anchored Column rendered in the bottom-area branch
-                //     below for Recording / Waiting / Merging.
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -523,11 +507,7 @@ fun RecordScreen(
                 //                                   top-centered. The status pill
                 //                                   carries the per-clip /
                 //                                   waiting-countdown / merge
-                //                                   progress; the legacy
-                //                                   SessionTimer / ClipProgressBand
-                //                                   / WaitingCountdown /
-                //                                   MergingProgressBand / Stop
-                //                                   button are retired.
+                //                                   progress.
                 // ------------------------------------------------------
                 when (hudState) {
                     RecordHudState.Idle -> {
@@ -693,13 +673,9 @@ fun RecordScreen(
         )
     }
 
-    // Phase 2.4 — Merge HUD progression.
-    //
-    // The legacy `AlertDialog` overlay is gone. Merging now renders
-    // inside the active HUD column as a [MergingProgressBand] body
-    // (see the `hudState is RecordHudState.Merging` branch below),
-    // so it shares the same locked-chrome contract as Recording /
-    // Waiting and never duplicates focus with the camera surface.
+    // Phase 2.4 — Merge HUD progression. Merging renders inside the
+    // active HUD's [StatusPill] (RecordActiveHud's Merging branch),
+    // sharing the locked-chrome contract with Recording / Waiting.
     //
     // On the falling edge of `isMerging`:
     //   - mergeError == null → show the brief [MergeCompleteCard]

@@ -589,7 +589,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         stopRequested = false
         userStopRequested = false
         // Phase 2.4 — publish `segmentCount` into `_serviceState` so
-        // the new in-HUD merge band (`MergingProgressBand`) and the
+        // the active HUD's status pill (Merging branch) and the
         // `MergeCompleteCard` can read the live finalized-segment
         // count. Reset is bundled with the existing session-start
         // update so the UI never sees a stale count from a prior
