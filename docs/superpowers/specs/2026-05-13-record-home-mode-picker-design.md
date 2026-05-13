@@ -28,11 +28,11 @@
 - Recovery re-encode of prior-mode clips (rotation is baked in at encode time; merger is rotation-agnostic).
 - Landscape UI elsewhere on the home screen or in other surfaces.
 
-**HARD CONSTRAINTS** (preserve verbatim from dispatch):
+**HARD CONSTRAINTS** (preserve verbatim from dispatch, with one owner-approved carve-out below):
 - "Do NOT start implementation until spec + plan are locked and owner has GO'd the plan."
 - "Do NOT touch the parked 4.1c / 4.2 / 4.3 backlog as part of this slice."
 - "Do NOT touch the P+L dual-capture path — that's Phase 6.1, not this slice."
-- "out-of-scope: service/** beyond Preview/VideoCapture rotation override — zero diff otherwise"
+- "out-of-scope: service/** beyond Preview/VideoCapture rotation override — zero diff otherwise" — **OWNER-APPROVED CARVE-OUT (Approach 1, brainstorm 2026-05-13)**: also permits (a) `private var currentMode: String` field + `onCreate` seed, (b) `fun setMode(mode: String)` on the binder mirroring `flipCamera()` 1:1, (c) `mode = currentMode` added to the existing `SessionConfig(...)` constructor at [RovaRecordingService.kt:760](app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt#L760), (d) `internal fun computeTargetRotation(...)` top-level helper. No other `service/**` diff.
 - "data/** beyond settings-persistence row + SessionConfig.mode field"
 - "app/build.gradle.kts (no SDK / dep changes)"
 

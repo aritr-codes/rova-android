@@ -29,7 +29,7 @@ Tasks 1–3 are independent leaf changes (data layer + pure helper). Task 4 depe
 
 ### Steps
 
-1. **(Red)** Add test class `app/src/test/java/com/aritr/rova/data/RovaSettingsModeTest.kt` — Robolectric-free. NOT counted in the +16 because RovaSettings tests don't exist today; **DROP this test step**. RovaSettings is a thin SharedPreferences wrapper with no JVM-only test surface today; the corrupt-value coercion will be covered indirectly by `SessionConfigModeTest` via the constructor default. No new test file for this task.
+1. **(No test)** RovaSettings has no JVM-only test surface today — it's a thin SharedPreferences wrapper requiring a `Context`, and we are not adding Robolectric for this slice. The trust boundary is `RecordViewModel.setMode` (Task 5), which is the only writer; the getter's coerce-unknown-to-`"Portrait"` defense is covered indirectly via `SessionConfigModeTest` and the manifest migration tests in Task 2. Skipping a Red step here keeps the test-count predictable (+16, not +17+) and avoids a Robolectric dependency for one trivial getter.
 2. **(Green)** Insert `var mode: String` immediately after the `resolution` block ([RovaSettings.kt:17-19](../../app/src/main/java/com/aritr/rova/data/RovaSettings.kt#L17-L19)):
 
    ```kotlin
@@ -166,15 +166,19 @@ Wiring the helper into `setupCamera` — Task 4.
    currentMode = RovaSettings(this).mode
    ```
 
-3. **(Edit)** Thread rotation into `setupCamera` at [RovaRecordingService.kt:1103-1124](../../app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt#L1103-L1124). Just before the `videoCapture = VideoCapture.withOutput(recorder)` line (1106), insert:
+3. **(Edit)** Thread rotation into `setupCamera` at [RovaRecordingService.kt:1103-1124](../../app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt#L1103-L1124). Just before the `videoCapture = VideoCapture.withOutput(recorder)` line (1106), insert (use **`DisplayManager.getDisplay(Display.DEFAULT_DISPLAY)`** — `WindowManager.defaultDisplay` is deprecated at API 30+ and would surface a `Deprecation` lint warning, breaking the lint-53 gate):
 
    ```kotlin
-   val display = display ?: ContextCompat.getSystemService(this, WindowManager::class.java)?.defaultDisplay
-   val displayRotation = display?.rotation ?: android.view.Surface.ROTATION_0
+   import android.hardware.display.DisplayManager
+   import android.view.Display
+   // …
+   val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+       ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+       ?: android.view.Surface.ROTATION_0
    val targetRot = computeTargetRotation(displayRotation, currentMode)
    ```
 
-   Note: services don't have a `Display` directly. The pattern is `(getSystemService(DISPLAY_SERVICE) as DisplayManager).getDisplay(Display.DEFAULT_DISPLAY)`. **Subagent: verify the correct Service-context display lookup** (the spec assumed `display.rotation` is reachable; in practice it's `getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY).rotation`). Confirm with `ctx_search` / `grep` before writing the final code; if the lookup is awkward, prefer the `DisplayManager` path. The fallback `?: ROTATION_0` matches §4.
+   The `?: ROTATION_0` fallback matches spec §4. **DO NOT** use `WindowManager.defaultDisplay` (`Display`-from-`WindowManager` is deprecated since API 30; current `compileSdk = 37` would emit a `Deprecation` lint warning → 53→54).
 
    Then swap line 1106:
 
@@ -222,15 +226,25 @@ Wiring the helper into `setupCamera` — Task 4.
 
 Manifest-side `config.mode` is written downstream by `SessionStore.createSession` consumers (Task 5+); this task changes ONLY the recorder rotation wiring.
 
+6. **(Edit)** Thread `mode = currentMode` into the `SessionConfig(...)` constructor at [RovaRecordingService.kt:760-765](../../app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt#L760-L765) (inside `startPeriodicRecording`). Pinned site, verified via `Grep`:
+
+   ```kotlin
+   val config = SessionConfig(
+       durationSeconds = nSeconds.toInt(),
+       intervalMinutes = mMinutes.toInt(),
+       resolution = resolutionStr,
+       loopCount = limitLoops,
+       mode = currentMode,                                    // NEW
+   )
+   ```
+
+   No new parameter on `RovaRecordingService.start(...)` — `currentMode` is service-cached (Step 1) and re-seeded from prefs in `onCreate` (Step 2), and `RecordViewModel.setMode` (Task 5) writes prefs BEFORE the binder call so `currentMode` is in sync when `start()` fires.
+
 ### Subagent notes
 
-- **Verify Display lookup pattern** via `Grep` for `getSystemService(DisplayManager` or `Display.DEFAULT_DISPLAY` in the codebase before writing the exact lines. If no precedent exists in this service, the cleanest path is `(getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(android.view.Display.DEFAULT_DISPLAY)`.
 - **DO NOT** change any other `setupCamera` logic — preview surface wiring, bindToLifecycle args, error paths.
-- **DO NOT** add a new SessionConfig writer call here. The recorder uses `currentMode` for rotation; the manifest write happens through `SessionStore.createSession(config, ...)` which receives the `SessionConfig` from the start-call site — that wiring happens in Task 5 via `RecordViewModel.setMode` setting both the StateFlow AND the prefs, so the next `start()` call reads `RovaSettings.mode` for the `SessionConfig` field.
-
-### Open question that the subagent MUST flag if unresolved
-
-The current `start()` call site in `RecordScreen.onStart` at [RecordScreen.kt:376-382](../../app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt#L376-L382) constructs `SessionConfig` from `viewModel.duration.value`, `viewModel.interval.value`, `viewModel.loopCount.value`, `viewModel.resolution.value`. To include `mode`, `RovaRecordingService.start(...)` needs a new `mode: String` parameter, and `SessionConfig` constructor at the call inside the service needs `mode = mode`. **This is a Task 4 sub-step the spec didn't explicitly itemize.** Subagent: locate the `SessionConfig(` constructor invocation inside `RovaRecordingService` (likely in `onStartCommand` or `startPeriodicRecording`), and add `mode = currentMode` to that constructor call. NO new parameter on the `start()` companion method — `currentMode` is already cached service-side from `RovaSettings.mode` at `onCreate`, and `RecordViewModel.setMode` writes prefs before calling the binder. The prefs-commit ordering in `setMode` (Task 5) ensures `currentMode` is in sync when `start()` fires.
+- **DO NOT** add any other `SessionConfig(...)` constructor sites. Grep confirmed line 760 is the only call inside the service; the recovery code path consumes manifests, never constructs new `SessionConfig`.
+- **DO NOT** widen `RovaRecordingService.start(...)` companion-method signature — the prefs → `currentMode` → `SessionConfig` chain is the design.
 
 ---
 
