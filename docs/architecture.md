@@ -32,6 +32,7 @@ app/src/main/java/com/aritr/rova/
 │   ├── MainScreen.kt               # Navigation shell (History + Settings drill-down; Record owns nav)
 │   ├── PreviewActivity.kt          # In-app video player
 │   ├── components/
+│   │   ├── BackgroundRecordingBanner.kt
 │   │   ├── RovaAnimations.kt       # Pulsing opacity, slide animations
 │   │   ├── RovaCardComponents.kt   # SwitchRow and other shared UI components
 │   │   ├── RovaComponents.kt       # StepperControl
@@ -40,6 +41,7 @@ app/src/main/java/com/aritr/rova/
 │   │   ├── RecordScreen.kt         # Camera preview + recording controls
 │   │   ├── RecordChrome.kt         # R1/R2: chrome metrics, active HUD (RecordActiveHud,
 │   │   │                           #   LoopPill, StatusPill), SessionSettingsSheet
+│   │   ├── SessionSettingsSheet.kt # R1: combined per-session settings ModalBottomSheet
 │   │   ├── RecordViewModel.kt      # ViewModel: service binding, recording settings, presets
 │   │   ├── HistoryScreen.kt        # Video library with thumbnails and batch operations
 │   │   ├── HistoryViewModel.kt     # Off-thread metadata loading for HistoryScreen
@@ -61,7 +63,8 @@ app/src/main/java/com/aritr/rova/
 │   ├── warnings/
 │   │   ├── WarningCenter.kt            # R1: WarningSheet/WarningChip; R2: +WarningTopBanner
 │   │   ├── WarningCenterViewModel.kt
-│   │   └── WarningId.kt               # 17-row enum (R2 adds STORAGE_LOW_MID_REC at ordinal 10)
+│   │   ├── WarningId.kt               # 17-row enum (R2 adds STORAGE_LOW_MID_REC at ordinal 10)
+│   │   └── WarningPrecedence.kt        # Pure resolver: 9 leaf-signal booleans/states → WarningId? (highest-priority)
 │   └── theme/
 │       ├── Color.kt
 │       ├── Theme.kt
