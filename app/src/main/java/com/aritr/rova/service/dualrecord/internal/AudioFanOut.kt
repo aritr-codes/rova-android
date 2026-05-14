@@ -1,5 +1,6 @@
 package com.aritr.rova.service.dualrecord.internal
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaCodec
@@ -23,7 +24,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Runtime layer — no unit tests; the planner seam already has 8 JVM
  * tests in AudioFanOutPlannerTest (Task 8).
+ *
+ * Permission contract: the caller MUST hold `Manifest.permission.RECORD_AUDIO`
+ * before constructing this class. The 6.1b consumer
+ * (`RovaRecordingService`) gates the FGS start on the permission grant —
+ * matches the existing single-mode capture path. The class-level
+ * `@SuppressLint("MissingPermission")` reflects this caller-gated
+ * contract; do not remove without re-locating the permission check.
  */
+@SuppressLint("MissingPermission")
 internal class AudioFanOut(
     private val sampleRate: Int,
     private val bitrateBps: Int,

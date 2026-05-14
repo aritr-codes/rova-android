@@ -1,5 +1,6 @@
 package com.aritr.rova.service.dualrecord.internal
 
+import android.annotation.SuppressLint
 import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -56,6 +57,12 @@ internal class EglRouter(private val lensFacing: LensFacing) {
     val inputSurface: Surface
         get() = Surface(inputSurfaceTexture ?: error("EglRouter not initialised"))
 
+    // EGL_RECORDABLE_ANDROID = 0x3142 is annotated @RequiresApi(26) in the
+    // current stub, but the constant value and the EGL_ANDROID_recordable
+    // extension have been stable since AOSP 4.3 (API 18) — well below
+    // minSdk=24. The inlined int is safe at runtime on every supported
+    // device; this is the canonical workaround.
+    @SuppressLint("InlinedApi")
     fun setup() {
         eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         require(eglDisplay !== EGL14.EGL_NO_DISPLAY) { "eglGetDisplay failed" }
