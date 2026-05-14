@@ -10,9 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.hardware.display.DisplayManager
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
+import android.view.Display
 import android.os.PowerManager
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
@@ -292,6 +294,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     // Camera config
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var currentMode: String = "Portrait"
     private var flashMode = 0 // 0: OFF, 1: ON, 2: AUTO
 
     // Recording config
@@ -551,6 +554,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     override fun onCreate() {
         super.onCreate()
+        currentMode = RovaSettings(this).mode
         lifecycleRegistry = LifecycleRegistry(this)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         createNotificationChannel()
@@ -761,7 +765,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     durationSeconds = nSeconds.toInt(),
                     intervalMinutes = mMinutes.toInt(),
                     resolution = resolutionStr,
-                    loopCount = limitLoops
+                    loopCount = limitLoops,
+                    mode = currentMode,
                 )
                 // ADR 0005 §"Concurrency Invariants" item 1 — startupMutex.
                 // The recovery scan holds this mutex for its full duration;
@@ -1103,9 +1108,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val recorder = Recorder.Builder()
                 .setQualitySelector(qualitySelector)
                 .build()
-            videoCapture = VideoCapture.withOutput(recorder)
+            val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+                ?: android.view.Surface.ROTATION_0
+            val targetRot = computeTargetRotation(displayRotation, currentMode)
+            videoCapture = VideoCapture.Builder(recorder).setTargetRotation(targetRot).build()
 
-            preview = Preview.Builder().build()
+            preview = Preview.Builder().setTargetRotation(targetRot).build()
             // Samsung devices require Preview to have an active surface for VideoCapture
             // to produce frames. Use a dummy surface as fallback when UI hasn't connected yet.
             val useDummy = currentSurfaceProvider == null
@@ -1176,6 +1185,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
+        serviceScope.launch { forceReconfigureCamera() }
+    }
+
+    /**
+     * Phase 6 — Mode picker.
+     * Mirrors [flipCamera] 1:1. Guarded on `isRecording` (silent no-op
+     * mid-rec; the UI's `enabled = !isUiLocked` is the user-facing
+     * gate). Calls `forceReconfigureCamera()` to rebind Preview +
+     * VideoCapture with the new rotation.
+     *
+     * Future seamless-rebind slice: this guard and `flipCamera`'s
+     * guard drop together; `forceReconfigureCamera` upgrades to
+     * preserve the live Recording across rebind.
+     */
+    fun setMode(mode: String) {
+        if (_serviceState.value.isRecording) {
+            RovaLog.d("setMode: Ignored — recording in progress")
+            return
+        }
+        currentMode = mode
         serviceScope.launch { forceReconfigureCamera() }
     }
 
@@ -2547,4 +2576,26 @@ internal fun recordedSegmentDurationMs(
 ): Long {
     val fromStats = recordedDurationNanos / 1_000_000L // ns -> ms
     return if (fromStats > 0L) fromStats else configuredFallbackMs
+}
+
+/**
+ * Phase 6 — Mode picker.
+ * Derive CameraX target rotation from the display's natural rotation
+ * plus the user-chosen Mode. Portrait = identity; Landscape = quarter-
+ * turn clockwise. Mirrors the integer arithmetic `Surface.ROTATION_*`
+ * use (0/1/2/3) so the math handles devices whose natural orientation
+ * is non-portrait (tablets) correctly.
+ *
+ * `internal` (not `private`) so JVM tests in the same module can reach
+ * the helper without Robolectric — Phase 3.5 PR #10 gotcha.
+ */
+internal fun computeTargetRotation(displayRotation: Int, mode: String): Int {
+    val base = when (displayRotation) {
+        android.view.Surface.ROTATION_0,
+        android.view.Surface.ROTATION_90,
+        android.view.Surface.ROTATION_180,
+        android.view.Surface.ROTATION_270 -> displayRotation
+        else -> android.view.Surface.ROTATION_0
+    }
+    return if (mode == "Landscape") (base + 1) % 4 else base
 }

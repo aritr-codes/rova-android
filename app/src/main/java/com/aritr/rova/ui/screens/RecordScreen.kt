@@ -58,6 +58,7 @@ fun RecordScreen(
     val loopCount by viewModel.loopCount.collectAsStateWithLifecycle()
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
+    val mode by viewModel.mode.collectAsStateWithLifecycle()
     val editingField by viewModel.editingField.collectAsStateWithLifecycle()
 
     // Slice 2 — read-only echo of the existing app-level recovery
@@ -668,7 +669,10 @@ fun RecordScreen(
             loopCount = loopCount,
             intervalMinutes = interval,
             quality = resolution,
+            currentMode = mode,
+            modeEnabled = !isUiLocked,
             onPickRow = { target -> viewModel.openSheet(target) },   // opens the existing per-param sheet ON TOP
+            onModePick = { viewModel.setMode(it) },
             onDismiss = { viewModel.closeSettingsSheet() },
         )
     }
