@@ -528,6 +528,7 @@ fun RecordScreen(
                                 loopCount = loopCount,
                                 intervalMinutes = interval,
                                 quality = resolution,
+                                mode = mode,
                                 onOpenSheet = { viewModel.openSettingsSheet() },
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
