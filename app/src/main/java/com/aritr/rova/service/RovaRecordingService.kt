@@ -1548,6 +1548,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
         }
 
+        // Phase 6.1b — dual dispatch: P+L mode uses DualVideoRecorder path.
+        if (currentMode == "PortraitLandscape") {
+            return recordSegmentDual()
+        }
+
         var videoFile: File? = null
         fun failRecording(message: String): SegmentResult {
             RovaLog.e("recordSegment: $message")
@@ -1830,6 +1835,215 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     AlarmScheduler.cancel(this, watchdogSid, TickKind.WATCHDOG)
                 } catch (e: Exception) {
                     RovaLog.w("recordSegment: watchdog cancel failed for $watchdogSid", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 6.1b — dual-recording path for [recordSegment] when
+     * `currentMode == "PortraitLandscape"`. Mirrors the single-mode path
+     * structure 1:1 (watchdog, recordingFinalized deferred,
+     * CancellationException / Exception catch blocks) so all existing
+     * cancellation-safety and recovery invariants apply equally to dual.
+     *
+     * Per-side failure tolerance: if [DualRecordEvent.Finalize] delivers a
+     * null file for one side (side failed mid-write per 6.1a DualMuxer
+     * contract), only the present side is persisted. The error field is
+     * logged but does NOT abort the segment — [DualMuxer] has already
+     * handled the side gracefully.
+     *
+     * Duration: uses `nSeconds * 1000L` (configured clip length) as the
+     * fallback. Unlike CameraX's [VideoRecordEvent.Finalize] which carries
+     * `recordingStats.recordedDurationNanos`, [DualRecordEvent.Finalize]
+     * carries no timing stats. This matches the `configuredFallbackMs`
+     * argument that the single-mode path would use for an early-stopped clip
+     * — acceptable for dual until MediaMuxer stats are exposed.
+     */
+    private suspend fun recordSegmentDual(): SegmentResult {
+        val recorder = currentDualRecorder
+        val sessionId = currentSessionId
+        val sessionDir = currentSessionDir
+        if (recorder == null || sessionId == null || sessionDir == null) {
+            RovaLog.w("recordSegmentDual: dual recorder / session missing; aborting segment")
+            return SegmentResult.RetryableFailure
+        }
+        if (!sessionDir.exists()) sessionDir.mkdirs()
+
+        // sequence = segmentCount + 1 (pre-increment for this segment's
+        // filenames; the outer loop increments segmentCount after Success).
+        val seq = segmentCount + 1
+        val portraitFile = com.aritr.rova.service.dualrecord.internal.SegmentPathBuilder.build(
+            sessionDir, seq, com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+        )
+        val landscapeFile = com.aritr.rova.service.dualrecord.internal.SegmentPathBuilder.build(
+            sessionDir, seq, com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+        )
+        val output = com.aritr.rova.service.dualrecord.DualOutput(portraitFile, landscapeFile)
+        val durationMs = nSeconds * 1000L
+
+        // R2: Fresh deferreds for this segment's finalize event — same
+        // coordination pattern as single-mode so catch blocks work.
+        recordingFinalized = CompletableDeferred()
+        val recordingResult = CompletableDeferred<Boolean>()
+
+        var watchdogSid: String? = null
+        var watchdogArmed = false
+
+        try {
+            currentDualRecording = recorder.start(
+                outputs = output,
+                executor = ContextCompat.getMainExecutor(this),
+            ) { event ->
+                handleDualVideoEvent(
+                    event = event,
+                    sessionId = sessionId,
+                    portraitFile = portraitFile,
+                    landscapeFile = landscapeFile,
+                    durationMs = durationMs,
+                    recordingResult = recordingResult,
+                )
+            }
+
+            RovaLog.d("recordSegmentDual: Recording initialized, waiting ${nSeconds}s")
+
+            // Watchdog — same arm pattern as single-mode.
+            watchdogSid = currentSessionId
+            if (watchdogSid != null) {
+                val watchdogSeq = nextTickSeq++
+                val watchdogTriggerAt =
+                    System.currentTimeMillis() + durationMs + WATCHDOG_GRACE_MS
+                try {
+                    AlarmScheduler.arm(this, watchdogSid, watchdogSeq, watchdogTriggerAt, TickKind.WATCHDOG)
+                    watchdogArmed = true
+                } catch (e: Exception) {
+                    RovaLog.w("recordSegmentDual: watchdog arm failed for $watchdogSid", e)
+                }
+            }
+
+            delay(durationMs)
+
+            RovaLog.d("recordSegmentDual: Stopping recording normally")
+            currentDualRecording?.stop()
+            currentDualRecording = null
+
+            // Wait for DualRecordEvent.Finalize — same bounded-timeout
+            // pattern as single-mode.
+            val success = withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingResult.await() }
+            if (success == null) {
+                RovaLog.w("recordSegmentDual: segment did not finalize within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+                stopNeedsRecovery = true
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+                return SegmentResult.Terminated
+            }
+            return if (success) SegmentResult.Success else SegmentResult.RetryableFailure
+
+        } catch (e: CancellationException) {
+            RovaLog.d("recordSegmentDual: Cancelled")
+            try { currentDualRecording?.stop() } catch (e2: Exception) {}
+            currentDualRecording = null
+
+            val finalizedInTime = withContext(NonCancellable) {
+                withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingFinalized.await() }
+            }
+            if (finalizedInTime == null) {
+                RovaLog.w("recordSegmentDual: cancelled segment did not finalize within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+                stopNeedsRecovery = true
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+            }
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+            RovaLog.e("recordSegmentDual: Exception: ${e.message}", e)
+
+            val finalizedInTime = withContext(NonCancellable) {
+                withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingFinalized.await() }
+            }
+            if (finalizedInTime == null) {
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+                RovaLog.w("recordSegmentDual: exception with no finalize callback within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+            } else {
+                RovaLog.w("recordSegmentDual: exception after finalize callback; deferring to recovery")
+            }
+            stopNeedsRecovery = true
+            val msg = e.message ?: "Dual recording failed unexpectedly"
+            updateNotification(msg)
+            _serviceState.update { it.copy(recordingError = msg) }
+            return SegmentResult.Terminated
+        } finally {
+            if (watchdogArmed && watchdogSid != null) {
+                try {
+                    AlarmScheduler.cancel(this, watchdogSid, TickKind.WATCHDOG)
+                } catch (e: Exception) {
+                    RovaLog.w("recordSegmentDual: watchdog cancel failed for $watchdogSid", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 6.1b — [DualRecordEvent] callback for [recordSegmentDual].
+     * Invoked on the executor thread provided to [DualVideoRecorder.start].
+     *
+     * On [DualRecordEvent.Finalize]: persists up to 2 [SegmentRecord]s (one
+     * per side present) via [SessionStore.appendSegment] on [Dispatchers.IO].
+     * Per-side failure tolerance: a null file means that side failed
+     * mid-write (per 6.1a DualMuxer contract); only non-null sides are
+     * persisted. A non-null [DualRecordEvent.Finalize.error] is logged but
+     * does not abort — [DualMuxer] has already handled the side gracefully.
+     */
+    private fun handleDualVideoEvent(
+        event: com.aritr.rova.service.dualrecord.DualRecordEvent,
+        sessionId: String,
+        portraitFile: java.io.File,
+        landscapeFile: java.io.File,
+        durationMs: Long,
+        recordingResult: CompletableDeferred<Boolean>,
+    ) {
+        when (event) {
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Start -> {
+                RovaLog.d("recordSegmentDual: DualRecord Start")
+            }
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Status -> {
+                // Reserved — currently no status display for dual recording bytes
+                // (matches existing single-mode VideoRecordEvent.Status no-op).
+            }
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Finalize -> {
+                // Persist 2 SegmentRecords (one per side present); single-side
+                // failure tolerance per 6.1a DualMuxer contract.
+                val success = event.portraitFile != null || event.landscapeFile != null
+                serviceScope.launch(Dispatchers.IO) {
+                    val pFile = event.portraitFile
+                    if (pFile != null) {
+                        val rec = com.aritr.rova.data.SegmentRecord(
+                            filename = pFile.name,
+                            durationMs = durationMs,
+                            sizeBytes = pFile.length(),
+                            sha1 = com.aritr.rova.data.SessionStore.sha1Of(pFile),
+                            side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                        )
+                        sessionStore.appendSegment(sessionId, rec)
+                    }
+                    val lFile = event.landscapeFile
+                    if (lFile != null) {
+                        val rec = com.aritr.rova.data.SegmentRecord(
+                            filename = lFile.name,
+                            durationMs = durationMs,
+                            sizeBytes = lFile.length(),
+                            sha1 = com.aritr.rova.data.SessionStore.sha1Of(lFile),
+                            side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                        )
+                        sessionStore.appendSegment(sessionId, rec)
+                    }
+                    if (event.error != null) {
+                        RovaLog.w("recordSegmentDual: DualRecord Finalize error: ${event.error}", event.error)
+                    }
+                }
+                if (!recordingResult.isCompleted) {
+                    recordingResult.complete(success)
+                }
+                if (!recordingFinalized.isCompleted) {
+                    recordingFinalized.complete(Unit)
                 }
             }
         }
