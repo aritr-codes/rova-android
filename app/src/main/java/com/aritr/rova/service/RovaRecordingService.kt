@@ -2293,7 +2293,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             durationSeconds = nSeconds,
             loopCount = limitLoops,
             resolution = resolutionStr,
-            tier = tier
+            tier = tier,
+            mode = currentMode
         )
 
     private fun hasEnoughStorage(peakBytesRequired: Long): Boolean {

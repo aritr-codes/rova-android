@@ -194,8 +194,8 @@ fun RecordScreen(
     // Phase 4.1b — recompute the storage estimate whenever the clip
     // settings change (covers preset-select and every edit sheet) and on
     // first composition.
-    LaunchedEffect(duration, loopCount, resolution) {
-        rovaApp?.storageSignal?.recompute(duration, loopCount, resolution)
+    LaunchedEffect(duration, loopCount, resolution, mode) {
+        rovaApp?.storageSignal?.recompute(duration, loopCount, resolution, mode)
     }
 
     // Release camera when app goes to background (unless recording); on
@@ -219,7 +219,8 @@ fun RecordScreen(
                     it.storageSignal.recompute(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
-                        viewModel.resolution.value
+                        viewModel.resolution.value,
+                        viewModel.mode.value
                     )
                 }
                 else -> {}

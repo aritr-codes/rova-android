@@ -29,17 +29,17 @@ import kotlinx.coroutines.flow.asStateFlow
  * RecordViewModel's StateFlows and are passed to the service at start time;
  * the host screen passes them into [recompute]. Refresh contract: call
  * [recompute] from the host Activity's ON_RESUME and whenever a clip setting
- * (duration / loop count / resolution) changes. Idempotent.
+ * (duration / loop count / resolution / mode) changes. Idempotent.
  */
 class StorageSignal(
-    private val computeInsufficient: (durationSeconds: Int, loopCount: Int, resolution: String) -> Boolean
+    private val computeInsufficient: (durationSeconds: Int, loopCount: Int, resolution: String, mode: String) -> Boolean
 ) {
     private val _insufficientToStart: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val insufficientToStart: StateFlow<Boolean> = _insufficientToStart.asStateFlow()
 
     /** Re-run the estimate for the given settings and publish if changed. */
-    fun recompute(durationSeconds: Int, loopCount: Int, resolution: String) {
-        _insufficientToStart.value = computeInsufficient(durationSeconds, loopCount, resolution)
+    fun recompute(durationSeconds: Int, loopCount: Int, resolution: String, mode: String) {
+        _insufficientToStart.value = computeInsufficient(durationSeconds, loopCount, resolution, mode)
     }
 
     companion object {
@@ -47,8 +47,8 @@ class StorageSignal(
 
         fun forContext(context: Context): StorageSignal {
             val app = context.applicationContext
-            return StorageSignal(computeInsufficient = { durationSeconds, loopCount, resolution ->
-                estimateInsufficient(app, durationSeconds, loopCount, resolution)
+            return StorageSignal(computeInsufficient = { durationSeconds, loopCount, resolution, mode ->
+                estimateInsufficient(app, durationSeconds, loopCount, resolution, mode)
             })
         }
 
@@ -62,7 +62,8 @@ class StorageSignal(
             app: Context,
             durationSeconds: Int,
             loopCount: Int,
-            resolution: String
+            resolution: String,
+            mode: String
         ): Boolean {
             return try {
                 val rovaApp = app as? RovaApp ?: return false
@@ -73,7 +74,8 @@ class StorageSignal(
                     durationSeconds = durationSeconds.toLong(),
                     loopCount = loopCount,
                     resolution = resolution,
-                    tier = currentExportTier()
+                    tier = currentExportTier(),
+                    mode = mode
                 )
                 available < peak + FINALIZE_HEADROOM_BYTES
             } catch (_: Exception) {
