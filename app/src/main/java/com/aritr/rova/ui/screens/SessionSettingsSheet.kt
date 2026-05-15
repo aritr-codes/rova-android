@@ -131,7 +131,7 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit) {
 private enum class ModeTab(val label: String, val value: String?) {
     Portrait("Portrait", "Portrait"),
     Landscape("Landscape", "Landscape"),
-    PortraitLandscape("P + L", null),  // null value → always disabled
+    PortraitLandscape("P + L", "PortraitLandscape"),
 }
 
 @Composable
