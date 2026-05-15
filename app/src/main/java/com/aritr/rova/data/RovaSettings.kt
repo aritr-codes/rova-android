@@ -21,7 +21,7 @@ class RovaSettings(context: Context) {
     /** Coerces unknown persisted values to the default — defends against stale/version-mismatched reads. */
     var mode: String
         get() = (prefs.getString("mode", "Portrait") ?: "Portrait")
-            .takeIf { it == "Portrait" || it == "Landscape" } ?: "Portrait"
+            .takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" } ?: "Portrait"
         set(value) = prefs.edit { putString("mode", value) }
 
     var loopCount: Int

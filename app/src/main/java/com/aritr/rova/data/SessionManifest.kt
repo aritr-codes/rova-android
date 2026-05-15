@@ -169,7 +169,7 @@ data class SessionConfig(
             resolution = json.getString("resolution"),
             loopCount = json.getInt("loopCount"),
             mode = json.optString("mode", "").ifEmpty { null }
-                ?.takeIf { it == "Portrait" || it == "Landscape" }
+                ?.takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" }
                 ?: "Portrait"
         )
     }

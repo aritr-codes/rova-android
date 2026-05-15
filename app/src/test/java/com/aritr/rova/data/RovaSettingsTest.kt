@@ -131,6 +131,22 @@ class RovaSettingsTest {
         assertEquals(25, s.autoDeleteKeepLatest)
     }
 
+    // ─── Mode coercion ─────────────────────────────────────────────
+
+    @Test fun `mode default is Portrait`() {
+        assertEquals("Portrait", settings().mode)
+    }
+
+    @Test fun `mode persists PortraitLandscape`() {
+        val s = settings(); s.mode = "PortraitLandscape"
+        assertEquals("PortraitLandscape", s.mode)
+    }
+
+    @Test fun `mode coerces unknown value to Portrait`() {
+        val s = settings(mapOf("mode" to "P + L"))
+        assertEquals("Portrait", s.mode)
+    }
+
     // ─── Round-trip: 3 UI-pending keys ────────────────────────────
 
     @Test fun `onboardingCompleted round-trip`() {
