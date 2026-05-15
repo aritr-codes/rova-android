@@ -301,6 +301,140 @@ class SessionStoreExportMutatorsTest {
         assertEquals(ExportState.NOT_STARTED, reload().exportState)
     }
 
+    // ─── Phase 6.1b T11 — per-side mutators ─────────────────────────
+
+    @Test
+    fun `setExportPendingForSide PORTRAIT writes portraitPendingUri only`() {
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "content://media/portrait/77"
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals("content://media/portrait/77", m.portraitPendingUri)
+        assertNull(m.landscapePendingUri)
+        // Single-mode pointers untouched
+        assertNull(m.pendingUri)
+        assertNull(m.privateTempPath)
+        assertNull(m.publicTargetPath)
+        assertFalse(m.mediaScanCompleted)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `setExportPendingForSide LANDSCAPE writes landscapePendingUri only`() {
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                "content://media/landscape/88"
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals("content://media/landscape/88", m.landscapePendingUri)
+        assertNull(m.portraitPendingUri)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `setExportPrivateTargetForSide PORTRAIT writes portraitPrivateTempPath only`() {
+        val result = runBlocking {
+            store.setExportPrivateTargetForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "/tmp/portrait.mp4"
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals("/tmp/portrait.mp4", m.portraitPrivateTempPath)
+        assertNull(m.landscapePrivateTempPath)
+        assertNull(m.portraitPublicTargetPath)
+        assertNull(m.portraitPendingUri)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `setExportFinalizedForSide PORTRAIT clearPrivateTempPath=true clears only portraitPrivateTempPath`() {
+        // Pre-state: both sides' private temp paths populated.
+        writePreState(
+            initial.copy(
+                portraitPrivateTempPath = "/tmp/p.mp4",
+                landscapePrivateTempPath = "/tmp/l.mp4"
+            )
+        )
+        val result = runBlocking {
+            store.setExportFinalizedForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                publicTargetPath = "/storage/Movies/Rova/portrait.mp4",
+                clearPrivateTempPath = true
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals("/storage/Movies/Rova/portrait.mp4", m.portraitPublicTargetPath)
+        assertNull(m.portraitPrivateTempPath)
+        // Landscape private path untouched.
+        assertEquals("/tmp/l.mp4", m.landscapePrivateTempPath)
+        assertNull(m.landscapePublicTargetPath)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `setExportFinalizedForSide LANDSCAPE clearPrivateTempPath=false retains landscapePrivateTempPath`() {
+        writePreState(initial.copy(landscapePrivateTempPath = "/tmp/l.mp4"))
+        val result = runBlocking {
+            store.setExportFinalizedForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                publicTargetPath = "/storage/Movies/Rova/landscape.mp4",
+                clearPrivateTempPath = false
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals("/storage/Movies/Rova/landscape.mp4", m.landscapePublicTargetPath)
+        assertEquals("/tmp/l.mp4", m.landscapePrivateTempPath)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `setMediaScanCompletedForSide PORTRAIT flips only portraitMediaScanCompleted`() {
+        val result = runBlocking {
+            store.setMediaScanCompletedForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertTrue(m.portraitMediaScanCompleted)
+        assertFalse(m.landscapeMediaScanCompleted)
+        assertFalse(m.mediaScanCompleted)
+        assertNonExportFieldsPreserved(m)
+    }
+
+    @Test
+    fun `per-side mutators on unknown sessionId return UnknownSession`() {
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                "ghost",
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "content://x"
+            )
+        }
+        assertTrue(result is UnknownSession)
+        // Real session unchanged.
+        val m = reload()
+        assertNull(m.portraitPendingUri)
+        assertNull(m.landscapePendingUri)
+    }
+
     // ─── Cross-cutting ──────────────────────────────────────────────
 
     @Test

@@ -474,6 +474,90 @@ open class SessionStore internal constructor(rootDirArg: File) {
         }
 
     /**
+     * Phase 6.1b T11 — per-side analog of [setExportPending] for P+L
+     * sessions. Routes to `portraitPendingUri` or `landscapePendingUri`
+     * based on [side]; does NOT change `exportState` (the single-mode
+     * `exportState` field stays — the per-side pipeline tracks success
+     * via the pointer pair + scan flag, not a separate state machine).
+     * Side-orthogonal: a portrait write never touches landscape fields
+     * and vice versa.
+     */
+    open suspend fun setExportPendingForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        uri: String
+    ): ExportMutationResult = mutateExport("setExportPendingForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitPendingUri = uri)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapePendingUri = uri)
+        }
+    }
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setExportPrivateTarget] for
+     * the Tier 2/3 path of a P+L session. Caller may invoke this
+     * independently for each side (the two sides run separate mux
+     * pipelines). Side-orthogonal.
+     */
+    suspend fun setExportPrivateTargetForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        privateTempPath: String
+    ): ExportMutationResult = mutateExport("setExportPrivateTargetForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitPrivateTempPath = privateTempPath)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapePrivateTempPath = privateTempPath)
+        }
+    }
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setExportFinalized]. Writes
+     * the public target path for [side]; optionally clears that side's
+     * private temp path (Tier 2/3 happy path) or retains it (Tier 1, or
+     * Tier 2/3 with scan-callback timeout — recovery's deferred-scan
+     * branch needs it to re-fire `scanFile`). Side-orthogonal: the
+     * other side's pointers are untouched.
+     */
+    open suspend fun setExportFinalizedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        publicTargetPath: String,
+        clearPrivateTempPath: Boolean
+    ): ExportMutationResult = mutateExport("setExportFinalizedForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> current.copy(
+                portraitPublicTargetPath = publicTargetPath,
+                portraitPrivateTempPath = if (clearPrivateTempPath) null else current.portraitPrivateTempPath
+            )
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> current.copy(
+                landscapePublicTargetPath = publicTargetPath,
+                landscapePrivateTempPath = if (clearPrivateTempPath) null else current.landscapePrivateTempPath
+            )
+        }
+    }
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setMediaScanCompleted].
+     * Idempotent — second call writes the same `true` value. The other
+     * side's scan flag is untouched.
+     */
+    suspend fun setMediaScanCompletedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide
+    ): ExportMutationResult = mutateExport("setMediaScanCompletedForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitMediaScanCompleted = true)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapeMediaScanCompleted = true)
+        }
+    }
+
+    /**
      * Phase 1.3 cooperative-stop signal. Idempotent — once true, stays true.
      * Phase 1.2 only needs the field-shape; the writer is RovaStopReceiver in
      * Phase 1.3.

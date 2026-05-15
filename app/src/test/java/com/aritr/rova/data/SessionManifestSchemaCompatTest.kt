@@ -204,4 +204,53 @@ class SessionManifestSchemaCompatTest {
         assertEquals(1, manifest.segments.size)
         assertNull(manifest.segments[0].side)
     }
+
+    /**
+     * Phase 6.1b T11: v5 manifests round-trip per-side export-state
+     * fields. The 8 nullable fields (portrait/landscape × privateTempPath
+     * / pendingUri / publicTargetPath / mediaScanCompleted) must survive
+     * `toJson` → `fromJson`. Single-mode sessions leave them all null.
+     */
+    @Test
+    fun `v5 manifest round-trips per-side export fields`() {
+        val manifest = SessionManifest(
+            sessionId = "sid",
+            startedAt = 1000L,
+            config = SessionConfig(10, 1, "FHD", 5, "PortraitLandscape"),
+            segments = emptyList(),
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            portraitPendingUri = "content://media/portrait",
+            landscapePendingUri = "content://media/landscape"
+        )
+        val json = manifest.toJson()
+        val back = SessionManifest.fromJson(json)
+        assertEquals("content://media/portrait", back.portraitPendingUri)
+        assertEquals("content://media/landscape", back.landscapePendingUri)
+    }
+
+    /**
+     * Phase 6.1b T11 forward-compat: a v4 manifest (no per-side export
+     * fields) must load cleanly with all per-side pointers null and the
+     * per-side mediaScanCompleted flags false. Legacy single-mode
+     * sessions written before T11 must not crash on read.
+     */
+    @Test
+    fun `v4 manifest with no per-side fields reads them as null`() {
+        val v4 = JSONObject().apply {
+            put("schemaVersion", 4)
+            put("sessionId", "sid")
+            put("startedAt", 1000L)
+            put("config", JSONObject().apply {
+                put("durationSeconds", 10); put("intervalMinutes", 1)
+                put("resolution", "FHD"); put("loopCount", 5); put("mode", "Portrait")
+            })
+            put("segments", JSONArray())
+            put("exportTier", "TIER1_API29_PLUS")
+            put("exportState", "NOT_STARTED"); put("stopRequested", false)
+            put("audioMode", "VIDEO_ONLY"); put("stopReason", "NONE")
+        }
+        val manifest = SessionManifest.fromJson(v4)
+        assertNull(manifest.portraitPendingUri)
+        assertNull(manifest.landscapePendingUri)
+    }
 }
