@@ -1,8 +1,11 @@
 package com.aritr.rova.data
 
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -74,5 +77,50 @@ class SessionManifestModeMigrationTest {
         val emptyConfigJson = v3ConfigJson().apply { put("mode", "") }
         val emptyManifest = SessionManifest.fromJson(buildManifestJson(4, emptyConfigJson))
         assertEquals("Portrait", emptyManifest.config.mode)
+    }
+
+    @Test
+    fun `SegmentRecord round-trips with side PORTRAIT`() {
+        val rec = SegmentRecord(
+            filename = "segment_0001_P.mp4",
+            durationMs = 10000L,
+            sizeBytes = 1024L,
+            sha1 = "abc",
+            side = VideoSide.PORTRAIT
+        )
+        val json = rec.toJson()
+        val back = SegmentRecord.fromJson(json)
+        assertEquals(VideoSide.PORTRAIT, back.side)
+        assertEquals("segment_0001_P.mp4", back.filename)
+    }
+
+    @Test
+    fun `SegmentRecord with side null does not emit side field in JSON`() {
+        val rec = SegmentRecord(
+            filename = "segment_0001.mp4",
+            durationMs = 10000L,
+            sizeBytes = 1024L,
+            sha1 = "abc",
+            side = null
+        )
+        val json = rec.toJson()
+        assertFalse(json.has("side"))
+    }
+
+    @Test
+    fun `SegmentRecord fromJson with missing side reads as null (legacy)`() {
+        val json = JSONObject().apply {
+            put("filename", "segment_0001.mp4")
+            put("durationMs", 10000L)
+            put("sizeBytes", 1024L)
+            put("sha1", "abc")
+        }
+        val rec = SegmentRecord.fromJson(json)
+        assertNull(rec.side)
+    }
+
+    @Test
+    fun `SCHEMA_VERSION is 5`() {
+        assertEquals(5, SessionManifest.SCHEMA_VERSION)
     }
 }

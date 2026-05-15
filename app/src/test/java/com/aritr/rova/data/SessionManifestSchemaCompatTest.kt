@@ -166,4 +166,42 @@ class SessionManifestSchemaCompatTest {
         assertFalse(manifest.mediaScanCompleted)
         assertNotNull(manifest.exportTier)
     }
+
+    /**
+     * Phase 6.1b forward-compat: a v4 manifest (no `side` field in any
+     * SegmentRecord) must load cleanly with all segment sides defaulting
+     * to null. A single-mode session written before Phase 6.1b must not
+     * produce a crash or a non-null side value on read.
+     */
+    @Test
+    fun `v4 manifest reads with all SegmentRecord side null (legacy)`() {
+        val v4 = JSONObject().apply {
+            put("schemaVersion", 4)
+            put("sessionId", "abc")
+            put("startedAt", 1000L)
+            put("config", JSONObject().apply {
+                put("durationSeconds", 10)
+                put("intervalMinutes", 1)
+                put("resolution", "FHD")
+                put("loopCount", 5)
+                put("mode", "Portrait")
+            })
+            put("segments", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("filename", "segment_0001.mp4")
+                    put("durationMs", 10000L)
+                    put("sizeBytes", 1024L)
+                    put("sha1", "abc")
+                })
+            })
+            put("exportTier", "TIER1_API29_PLUS")
+            put("exportState", "NOT_STARTED")
+            put("stopRequested", false)
+            put("audioMode", "VIDEO_ONLY")
+            put("stopReason", "NONE")
+        }
+        val manifest = SessionManifest.fromJson(v4)
+        assertEquals(1, manifest.segments.size)
+        assertNull(manifest.segments[0].side)
+    }
 }

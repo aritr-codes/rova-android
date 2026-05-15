@@ -87,10 +87,12 @@ data class SessionManifest(
     }
 
     companion object {
-        // v4 (Phase 6): added SessionConfig.mode. v1/v2/v3 manifests read with
-        // safe default ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
+        // v5 (Phase 6.1b): SegmentRecord.side optional discriminator for P+L
+        // sessions (null = legacy/single-mode). v4 (Phase 6): added
+        // SessionConfig.mode. v1/v2/v3 manifests read with safe default
+        // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -179,13 +181,15 @@ data class SegmentRecord(
     val filename: String,
     val durationMs: Long,
     val sizeBytes: Long,
-    val sha1: String
+    val sha1: String,
+    val side: com.aritr.rova.service.dualrecord.VideoSide? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("filename", filename)
         put("durationMs", durationMs)
         put("sizeBytes", sizeBytes)
         put("sha1", sha1)
+        side?.let { put("side", it.name) }
     }
 
     companion object {
@@ -193,7 +197,10 @@ data class SegmentRecord(
             filename = json.getString("filename"),
             durationMs = json.getLong("durationMs"),
             sizeBytes = json.getLong("sizeBytes"),
-            sha1 = json.getString("sha1")
+            sha1 = json.getString("sha1"),
+            side = json.optString("side", "").ifEmpty { null }?.let {
+                runCatching { com.aritr.rova.service.dualrecord.VideoSide.valueOf(it) }.getOrNull()
+            }
         )
     }
 }
