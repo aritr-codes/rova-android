@@ -28,6 +28,7 @@ import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -127,6 +128,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private var preview: Preview? = null
     private var videoCapture: VideoCapture<Recorder>? = null
+    // Phase 6.1b — dual recorder + dual recording handle for P+L mode.
+    // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
+    // path. Released on service teardown.
+    private var currentDualRecorder: com.aritr.rova.service.dualrecord.DualVideoRecorder? = null
+    private var currentDualRecording: com.aritr.rova.service.dualrecord.DualRecording? = null
     private var camera: androidx.camera.core.Camera? = null
     // Phase 3.5 — observer on `camera`'s cameraState LiveData; re-made on bind, nulled on unbind.
     private var cameraStateObserver: Observer<CameraState>? = null
@@ -362,6 +368,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
         RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
+        currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+        currentDualRecording = null
+        currentDualRecorder?.release()
+        currentDualRecorder = null
         markCameraUnbound()  // Phase 3.5
         releaseDummySurface()
         preview = null
@@ -1046,6 +1056,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         setupMutex.withLock {
             RovaLog.d("forceReconfigureCamera: Unbinding for fresh setup")
             try { cameraProvider?.unbindAll() } catch (e: Exception) {}
+            currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+            currentDualRecording = null
+            currentDualRecorder?.release()
+            currentDualRecorder = null
             markCameraUnbound()  // Phase 3.5
             preview = null
             videoCapture = null
@@ -1057,6 +1071,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private suspend fun setupCamera() {
+        if (currentMode == "PortraitLandscape") {
+            setupDualCamera()
+        } else {
+            setupSingleCamera()
+        }
+    }
+
+    private suspend fun setupSingleCamera() {
+        // BODY: verbatim move of the prior setupCamera() launch block.
+        // Every line preserved character-for-character including comments,
+        // whitespace, log statements, and the serviceScope.launch + mutex
+        // structure. Do NOT modify any line of the extracted body.
         setupMutex.withLock {
             RovaLog.d("setupCamera: Starting setup workflow")
 
@@ -1141,6 +1167,85 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupCamera: Binding failed", e)
+                _serviceState.update { it.copy(isCameraActive = false) }
+            }
+        }
+    }
+
+    private suspend fun setupDualCamera() {
+        setupMutex.withLock {
+            if (_serviceState.value.isCameraActive) {
+                RovaLog.d("setupDualCamera: camera already active, short-circuit")
+                return@withLock
+            }
+
+            if (cameraProvider == null) {
+                val provider = withContext(Dispatchers.IO) {
+                    ProcessCameraProvider.getInstance(this@RovaRecordingService).get()
+                }
+                cameraProvider = provider
+            }
+
+            val provider = cameraProvider ?: return@withLock
+
+            RovaLog.d("setupDualCamera: Initializing UseCases (Preview + CameraEffect)")
+
+            val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+                ?: android.view.Surface.ROTATION_0
+
+            val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                com.aritr.rova.service.dualrecord.LensFacing.FRONT
+            } else {
+                com.aritr.rova.service.dualrecord.LensFacing.BACK
+            }
+
+            // 6.1b consumer config — FHD-locked for v1; 6.1c may lookup BitrateTable per resolution.
+            val portraitSize = android.util.Size(1080, 1920)
+            val landscapeSize = android.util.Size(1920, 1080)
+            val config = com.aritr.rova.service.dualrecord.DualVideoRecorderConfig(
+                cameraInputSize = android.util.Size(1920, 1080),
+                portraitOutputSize = portraitSize,
+                landscapeOutputSize = landscapeSize,
+                portraitBitrate = 8_000_000,
+                landscapeBitrate = 8_000_000,
+                videoCodec = com.aritr.rova.service.dualrecord.VideoCodec.H264,
+                audioBitrate = 128_000,
+                audioSampleRate = 48_000,
+                lensFacing = lensFacing,
+                displayRotation = displayRotation,
+                fps = 30
+            )
+            currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
+
+            preview = Preview.Builder().setTargetRotation(displayRotation).build()
+            val useDummy = currentSurfaceProvider == null
+            val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
+            preview?.setSurfaceProvider(surfaceProvider)
+            RovaLog.d("setupDualCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}")
+
+            val ucg = UseCaseGroup.Builder()
+                .addUseCase(preview!!)
+                .addEffect(currentDualRecorder!!.asCameraEffect())
+                .build()
+
+            try {
+                provider.unbindAll()
+                RovaLog.d("setupDualCamera: Binding to lifecycle (UseCaseGroup)")
+                camera = provider.bindToLifecycle(
+                    this@RovaRecordingService,
+                    currentCameraSelector,
+                    ucg
+                )
+                camera?.let { observeCameraState(it) }
+                configuredResolution = "FHD"
+                boundToDummy = useDummy
+                _serviceState.update { it.copy(isCameraActive = true) }
+                RovaLog.d("setupDualCamera: Camera binding COMPLETED. boundToDummy=$boundToDummy")
+                applyFlashState()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                RovaLog.e("setupDualCamera: Binding failed", e)
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
@@ -1851,6 +1956,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         stopAndMergeJob?.cancel()
         try { currentRecording?.stop() } catch (e: Exception) {}
         currentRecording = null
+        currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+        currentDualRecording = null
+        currentDualRecorder?.release()
+        currentDualRecorder = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
         markCameraUnbound()  // Phase 3.5 — service teardown
         releaseDummySurface()
