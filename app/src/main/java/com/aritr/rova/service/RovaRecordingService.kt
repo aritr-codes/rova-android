@@ -1987,10 +1987,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
      *
      * On [DualRecordEvent.Finalize]: persists up to 2 [SegmentRecord]s (one
      * per side present) via [SessionStore.appendSegment] on [Dispatchers.IO].
+     * Each persist job is wrapped in [serviceScope].async and added to
+     * [pendingPersistJobs] so that [stopPeriodicRecordingAndMerge]'s
+     * `awaitAll` fence covers both sides — matching the single-mode fix from
+     * Phase 1.2 (documented at lines 1765-1769).
+     *
+     * Note: [SessionStore.submitPersistFinalizedSegment] is not used here
+     * because it does not accept a [com.aritr.rova.service.dualrecord.VideoSide]
+     * field. Each async block builds the [SegmentRecord] inline (sha1 + length
+     * on IO) and calls [SessionStore.appendSegment], returning the record so
+     * the Deferred carries [SegmentRecord] to match [pendingPersistJobs]'s type.
+     *
      * Per-side failure tolerance: a null file means that side failed
      * mid-write (per 6.1a DualMuxer contract); only non-null sides are
      * persisted. A non-null [DualRecordEvent.Finalize.error] is logged but
      * does not abort — [DualMuxer] has already handled the side gracefully.
+     *
+     * Both-null + error: treated as [SegmentResult.RetryableFailure] (success=false)
+     * so the per-segment retry budget eventually terminates the session.
+     * The service's "tolerant" dual-record theme intentionally avoids
+     * immediately setting [stopNeedsRecovery] for a single-segment mux failure.
      */
     private fun handleDualVideoEvent(
         event: com.aritr.rova.service.dualrecord.DualRecordEvent,
@@ -2009,12 +2025,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // (matches existing single-mode VideoRecordEvent.Status no-op).
             }
             is com.aritr.rova.service.dualrecord.DualRecordEvent.Finalize -> {
-                // Persist 2 SegmentRecords (one per side present); single-side
+                // Persist up to 2 SegmentRecords (one per side present); single-side
                 // failure tolerance per 6.1a DualMuxer contract.
+                //
+                // T9b fix: each side's persist is wrapped in serviceScope.async so
+                // stopPeriodicRecordingAndMerge's pendingPersistJobs.awaitAll() fence
+                // covers both sides. A bare launch would not be tracked, silently
+                // dropping in-flight dual persists if the service stops mid-write.
                 val success = event.portraitFile != null || event.landscapeFile != null
-                serviceScope.launch(Dispatchers.IO) {
-                    val pFile = event.portraitFile
-                    if (pFile != null) {
+                val pFile = event.portraitFile
+                if (pFile != null) {
+                    val portraitDeferred = serviceScope.async(Dispatchers.IO) {
                         val rec = com.aritr.rova.data.SegmentRecord(
                             filename = pFile.name,
                             durationMs = durationMs,
@@ -2023,9 +2044,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
                         )
                         sessionStore.appendSegment(sessionId, rec)
+                        rec
                     }
-                    val lFile = event.landscapeFile
-                    if (lFile != null) {
+                    pendingPersistJobs.add(portraitDeferred)
+                }
+                val lFile = event.landscapeFile
+                if (lFile != null) {
+                    val landscapeDeferred = serviceScope.async(Dispatchers.IO) {
                         val rec = com.aritr.rova.data.SegmentRecord(
                             filename = lFile.name,
                             durationMs = durationMs,
@@ -2034,10 +2059,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
                         )
                         sessionStore.appendSegment(sessionId, rec)
+                        rec
                     }
-                    if (event.error != null) {
-                        RovaLog.w("recordSegmentDual: DualRecord Finalize error: ${event.error}", event.error)
-                    }
+                    pendingPersistJobs.add(landscapeDeferred)
+                }
+                if (event.error != null) {
+                    RovaLog.w("recordSegmentDual: DualRecord Finalize error: ${event.error}", event.error)
                 }
                 if (!recordingResult.isCompleted) {
                     recordingResult.complete(success)
