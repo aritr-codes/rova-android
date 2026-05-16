@@ -2371,23 +2371,93 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val sessionId = currentSessionId
             val sessionDir = currentSessionDir
-            val segments: List<File> = if (sessionId != null && sessionDir != null) {
-                val manifest = withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
-                manifest?.segments
-                    ?.map { File(sessionDir, it.filename) }
-                    ?.filter { it.exists() && it.length() > 0 }
-                    ?: emptyList()
-            } else emptyList()
+            // Phase 6.1b T13: load the manifest once and branch on the
+            // session mode. P+L (mode == "PortraitLandscape") goes through
+            // performMergeDual, which runs ExportPipeline.export twice (once
+            // per side) with independent atomicity per D12. Single-mode
+            // (Portrait / Landscape) falls back to the pre-T13 single
+            // performMerge call — semantically byte-identical to the prior
+            // implementation (same `segments` filter, same call site).
+            val manifest: com.aritr.rova.data.SessionManifest? = if (sessionId != null) {
+                withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
+            } else null
 
-            if (segments.isNotEmpty()) {
-                performMerge(segments)
+            if (manifest != null && sessionDir != null && manifest.config.mode == "PortraitLandscape") {
+                val portraitSegments = manifest.segments
+                    .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT }
+                    .map { File(sessionDir, it.filename) }
+                    .filter { it.exists() && it.length() > 0 }
+                val landscapeSegments = manifest.segments
+                    .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE }
+                    .map { File(sessionDir, it.filename) }
+                    .filter { it.exists() && it.length() > 0 }
+
+                if (portraitSegments.isNotEmpty() || landscapeSegments.isNotEmpty()) {
+                    performMergeDual(portraitSegments, landscapeSegments)
+                } else {
+                    cancelAlarmsAndUnregister()
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                    stopSelf()
+                }
             } else {
-                cancelAlarmsAndUnregister()
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-                stopSelf()
+                // Single-mode path — semantically unchanged from prior impl.
+                // Re-uses the `manifest` loaded above (DRY, no second
+                // loadManifest call); produces the same `segments` content
+                // and the same call to performMerge as before T13.
+                val segments: List<File> = if (sessionId != null && sessionDir != null) {
+                    manifest?.segments
+                        ?.map { File(sessionDir, it.filename) }
+                        ?.filter { it.exists() && it.length() > 0 }
+                        ?: emptyList()
+                } else emptyList()
+
+                if (segments.isNotEmpty()) {
+                    performMerge(segments)
+                } else {
+                    cancelAlarmsAndUnregister()
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                    stopSelf()
+                }
             }
         }
+    }
+
+    /**
+     * Phase 6.1b T13 — sole call-shape wrapper around
+     * [ExportPipeline.export]. The Phase-1.7 single-entry gate
+     * (`checkExportPipelineSingleEntry`, `app/build.gradle.kts`) requires
+     * exactly one literal `ExportPipeline.export(` occurrence across
+     * `app/src/main/java/com/aritr/rova/`; this helper holds that sole
+     * site so [performMerge] (single-mode) and [performMergeDual]
+     * (P+L, two passes) both route through one definition.
+     *
+     * Call shape MUST match the single-mode invocation byte-for-byte
+     * (modulo the [side] arg and the per-call [onProgress] lambda) — the
+     * single-mode path's behavior is invariant per the Phase 6.1b
+     * "byte-identical single-mode semantics" contract: `context` is
+     * `this@RovaRecordingService`, `sessionStore` is the service-injected
+     * store, `mediaScanWaiter` uses the default ([AndroidMediaScanWaiter]
+     * built from `context`), and the trailing-lambda binding is preserved
+     * by the caller's lambda body.
+     */
+    private suspend fun runExportPipeline(
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        onProgress: (Float) -> Unit
+    ): ExportResult {
+        return ExportPipeline.export(
+            context = this@RovaRecordingService,
+            sessionStore = sessionStore,
+            sessionId = sessionId,
+            sessionDir = sessionDir,
+            segments = segments,
+            side = side,
+            onProgress = onProgress
+        )
     }
 
     private suspend fun performMerge(segments: List<File>) {
@@ -2412,12 +2482,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
             if (!sessionDir.exists()) sessionDir.mkdirs()
 
-            val result = ExportPipeline.export(
-                context = this@RovaRecordingService,
-                sessionStore = sessionStore,
+            val result = runExportPipeline(
                 sessionId = sid,
                 sessionDir = sessionDir,
-                segments = segments
+                segments = segments,
+                side = null
             ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
                 updateNotification(NotificationState.Merging((progress * segments.size).toInt(), segments.size))
@@ -2530,6 +2599,213 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         }
                     } catch (e: Exception) {
                         RovaLog.e("performMerge: markTerminated($reason) threw for $sid", e)
+                    }
+                }
+            }
+            cancelAlarmsAndUnregister()
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+            stopSelf()
+        }
+    }
+
+    /**
+     * Phase 6.1b T13 — P+L variant of [performMerge]. Drives two
+     * independent [ExportPipeline.export] passes (PORTRAIT then LANDSCAPE)
+     * and writes the single terminal record once both sides settle.
+     *
+     * Independent atomicity per D12: the LANDSCAPE pass runs even when
+     * PORTRAIT failed (and vice versa). Per-side success/failure routes
+     * through the per-side mutators (T11/T12); the shared `exportState`
+     * is advanced to `FINALIZED` here only when at least one side
+     * succeeded — calling `setExportFailed` would wipe the per-side
+     * pointers needed by Task 14 recovery, so the both-sides-failed case
+     * leaves shared `exportState` untouched and defers to recovery
+     * (TODO T17: explicit shared-FAILED write that preserves per-side
+     * fields, or per-side `exportState` split).
+     *
+     * Progress is split 0–50% portrait / 50–100% landscape.
+     *
+     * The terminal markTerminated write fires once per session regardless
+     * of per-side outcome, mirroring [performMerge]'s contract — partial
+     * success is allowed (manifest reflects it via the per-side fields).
+     * On both-sides-failure no terminal write is performed; recovery on
+     * next launch picks up the failed sides per Task 14.
+     */
+    private suspend fun performMergeDual(
+        portraitSegments: List<File>,
+        landscapeSegments: List<File>
+    ) {
+        var portraitOk = false
+        var landscapeOk = false
+        try {
+            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            val totalSegments = portraitSegments.size + landscapeSegments.size
+            updateNotification(NotificationState.Merging(done = 0, total = totalSegments))
+
+            val sid = currentSessionId
+            val sessionDir = currentSessionDir
+            if (sid == null || sessionDir == null) {
+                RovaLog.w("performMergeDual: no active session; skipping export")
+                _serviceState.update { it.copy(mergeError = "No active session") }
+                return
+            }
+            if (!sessionDir.exists()) sessionDir.mkdirs()
+
+            // Portrait pass
+            if (portraitSegments.isNotEmpty()) {
+                val portraitResult = runExportPipeline(
+                    sessionId = sid,
+                    sessionDir = sessionDir,
+                    segments = portraitSegments,
+                    side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+                ) { progress ->
+                    _serviceState.update { it.copy(mergeProgress = progress * 0.5f) }
+                    updateNotification(
+                        NotificationState.Merging(
+                            done = (progress * portraitSegments.size).toInt(),
+                            total = totalSegments
+                        )
+                    )
+                }
+                portraitOk = portraitResult is ExportResult.Success
+                if (!portraitOk) RovaLog.e("performMergeDual: portrait export failed: $portraitResult")
+            }
+
+            // Landscape pass — runs even if portrait failed (independent
+            // atomicity per D12). Progress: 50–100%.
+            if (landscapeSegments.isNotEmpty()) {
+                val landscapeResult = runExportPipeline(
+                    sessionId = sid,
+                    sessionDir = sessionDir,
+                    segments = landscapeSegments,
+                    side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+                ) { progress ->
+                    _serviceState.update { it.copy(mergeProgress = 0.5f + progress * 0.5f) }
+                    updateNotification(
+                        NotificationState.Merging(
+                            done = portraitSegments.size + (progress * landscapeSegments.size).toInt(),
+                            total = totalSegments
+                        )
+                    )
+                }
+                landscapeOk = landscapeResult is ExportResult.Success
+                if (!landscapeOk) RovaLog.e("performMergeDual: landscape export failed: $landscapeResult")
+            }
+
+            // Cleanup successful-side raw segments only; failed-side raws
+            // stay on disk for Task 14 recovery to consume.
+            withContext(Dispatchers.IO) {
+                if (portraitOk) {
+                    portraitSegments.forEach {
+                        if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
+                        try { it.delete() } catch (_: Exception) {}
+                    }
+                }
+                if (landscapeOk) {
+                    landscapeSegments.forEach {
+                        if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
+                        try { it.delete() } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            if (portraitOk || landscapeOk) {
+                // Phase 6.1b T13 — OQ-C lock: T12's per-side exporters skip
+                // the shared setExportFinalized; advance it here so consumers
+                // observing the shared exportState see FINALIZED on at least
+                // one-side success. setExportFinalized only touches
+                // exportState (and optionally privateTempPath, kept here),
+                // so the per-side pointers populated by T11/T12 are
+                // preserved.
+                val sidForFinalize = currentSessionId
+                if (sidForFinalize != null) {
+                    try {
+                        withContext(NonCancellable) {
+                            sessionStore.setExportFinalized(sidForFinalize, clearPrivateTempPath = false)
+                        }
+                    } catch (e: Exception) {
+                        RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
+                    }
+                }
+                updateNotification(NotificationState.MergeComplete(clipCount = totalSegments))
+                delay(1000)
+            } else {
+                // TODO T17: when both sides failed, advance shared
+                // exportState to FAILED without wiping the per-side
+                // pointers (current setExportFailed nulls publicTargetPath /
+                // pendingUri / privateTempPath, which kills Task 14
+                // diagnostics). Either add a new mutator that flips
+                // exportState only, or split exportState per side.
+                _serviceState.update { it.copy(mergeError = "Both sides failed") }
+                updateNotification("Merge failed")
+                delay(3000)
+            }
+
+        } catch (ce: CancellationException) {
+            // C6 mirror: keep cancellation semantics intact — must not be
+            // converted into a merge-failure UI state. finally still tears
+            // the service down.
+            throw ce
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _serviceState.update { it.copy(mergeError = e.message) }
+            updateNotification("Merge failed: ${e.message}")
+            delay(3000)
+        } finally {
+            _serviceState.update { it.copy(isMerging = false) }
+            // Phase 1.2 / 1.3 / 6.1b T13: write the terminal record before
+            // unregister and stopForeground/stopSelf. For P+L, the terminal
+            // write fires when at least one side succeeded (mirroring the
+            // single-mode `mergeSucceeded` gate in performMerge — partial
+            // success is acceptable; the manifest reflects the partial
+            // outcome via the per-side fields). On both-sides failure no
+            // terminal write is performed; ExportRecoveryRunner picks up
+            // the failed sides on next launch per Task 14.
+            //
+            // Discriminator (Phase 1.3): userStopRequested distinguishes
+            // user-driven stop (USER_STOPPED) from natural completion
+            // (COMPLETED). markTerminated runs in NonCancellable on the
+            // SessionStore persist dispatcher and is first-writer-wins.
+            if (portraitOk || landscapeOk) {
+                val sid = currentSessionId
+                if (sid != null) {
+                    val reason: Terminated
+                    val stopReason: com.aritr.rova.data.StopReason
+                    if (userStopRequested) {
+                        reason = Terminated.USER_STOPPED
+                        stopReason = com.aritr.rova.data.StopReason.USER
+                    } else {
+                        reason = Terminated.COMPLETED
+                        stopReason = com.aritr.rova.data.StopReason.NONE
+                    }
+                    try {
+                        withContext(NonCancellable) {
+                            when (val result = sessionStore.markTerminated(sid, reason, stopReason)) {
+                                is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
+                                    RovaLog.d("performMergeDual: wrote $reason / $stopReason for $sid")
+                                }
+                                is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
+                                    RovaLog.d(
+                                        "performMergeDual: $sid already" +
+                                            " ${result.existingTerminated}/${result.existingStopReason};" +
+                                            " merge-success suppressed"
+                                    )
+                                }
+                                is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
+                                    RovaLog.e(
+                                        "performMergeDual: markTerminated($reason) FAILED" +
+                                            " for $sid (attempts=${result.attempts})", result.cause
+                                    )
+                                    updateNotification(
+                                        "Recording finished but state save failed —" +
+                                            " will reconcile on next launch."
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        RovaLog.e("performMergeDual: markTerminated($reason) threw for $sid", e)
                     }
                 }
             }
