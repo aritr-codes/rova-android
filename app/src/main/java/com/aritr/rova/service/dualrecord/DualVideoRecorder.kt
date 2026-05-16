@@ -136,7 +136,16 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
         portraitEnc.start(); landscapeEnc.start(); audio.start()
         executor.execute { callback(DualRecordEvent.Start) }
 
-        return DualRecording(portraitEnc, landscapeEnc, audio, muxer, callback, executor).also {
+        return DualRecording(
+            portraitEncoder = portraitEnc,
+            landscapeEncoder = landscapeEnc,
+            audio = audio,
+            muxer = muxer,
+            callback = callback,
+            callbackExecutor = executor,
+            // Phase 6.1b smoke-fix — allow recorder reuse across segments.
+            onStopped = { activeRecording = null },
+        ).also {
             activeRecording = it
         }
     }
