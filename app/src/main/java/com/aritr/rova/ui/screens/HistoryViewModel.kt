@@ -271,24 +271,49 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 runCatching { sessionStore.loadManifest(sid) }.getOrNull()
             }
         return HistoryArtifactMapper.finalizedManifests(manifests)
-            .mapNotNull { m ->
-                val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
-                    resolveMediaStoreUriToFile(resolver, uri)
-                } ?: return@mapNotNull null
-                // Tier 1 ships the canonical content URI in the manifest;
-                // Tier 2/3 only persist the path, so look the URI up by
-                // `_DATA` against MediaStore. A null result means the
-                // scan never registered (rare — recording not yet
-                // indexed); the share path then falls back to
-                // FileProvider, which the UI guards against
-                // IllegalArgumentException.
-                val shareUriString = HistoryArtifactMapper.resolveShareUri(m)
-                    ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
-                ResolvedRecording(
-                    file = file,
-                    shareUri = shareUriString?.let(Uri::parse),
-                    sessionId = m.sessionId
-                )
+            .flatMap { m ->
+                // Phase 6.1b T16 — branch on the persisted mode. P+L
+                // sessions fan out to per-side rows (0/1/2 cards per
+                // manifest); single-mode keeps the pre-T16 single-card
+                // shape byte-identically.
+                if (m.config.mode == "PortraitLandscape") {
+                    HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
+                        resolveMediaStoreUriToFile(resolver, uri)
+                    }.map { perSide ->
+                        // Tier 2/3 P+L: mapper returns null share URI,
+                        // same as single-mode resolveShareUri. Resolve
+                        // via _DATA against MediaStore so the share path
+                        // prefers the content URI over FileProvider
+                        // (which would throw on a Movies/Rova/... path).
+                        val shareUriString = perSide.shareUri
+                            ?: queryMediaStoreUriByPath(resolver, perSide.file.absolutePath)
+                        ResolvedRecording(
+                            file = perSide.file,
+                            shareUri = shareUriString?.let(Uri::parse),
+                            sessionId = m.sessionId
+                        )
+                    }
+                } else {
+                    val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
+                        resolveMediaStoreUriToFile(resolver, uri)
+                    } ?: return@flatMap emptyList()
+                    // Tier 1 ships the canonical content URI in the
+                    // manifest; Tier 2/3 only persist the path, so look
+                    // the URI up by `_DATA` against MediaStore. A null
+                    // result means the scan never registered (rare —
+                    // recording not yet indexed); the share path then
+                    // falls back to FileProvider, which the UI guards
+                    // against IllegalArgumentException.
+                    val shareUriString = HistoryArtifactMapper.resolveShareUri(m)
+                        ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
+                    listOf(
+                        ResolvedRecording(
+                            file = file,
+                            shareUri = shareUriString?.let(Uri::parse),
+                            sessionId = m.sessionId
+                        )
+                    )
+                }
             }
             .filter { rec ->
                 // Drop entries whose artifact is no longer on disk —

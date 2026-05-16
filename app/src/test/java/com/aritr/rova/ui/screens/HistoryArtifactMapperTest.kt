@@ -4,6 +4,7 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -30,16 +31,25 @@ class HistoryArtifactMapperTest {
         exportState: ExportState,
         tier: ExportTier,
         pendingUri: String? = null,
-        publicTargetPath: String? = null
+        publicTargetPath: String? = null,
+        mode: String = "Portrait",
+        portraitPendingUri: String? = null,
+        portraitPublicTargetPath: String? = null,
+        landscapePendingUri: String? = null,
+        landscapePublicTargetPath: String? = null
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = 0L,
-        config = SessionConfig(30, 5, "FHD", 4),
+        config = SessionConfig(30, 5, "FHD", 4, mode = mode),
         segments = emptyList(),
         exportTier = tier,
         exportState = exportState,
         pendingUri = pendingUri,
-        publicTargetPath = publicTargetPath
+        publicTargetPath = publicTargetPath,
+        portraitPendingUri = portraitPendingUri,
+        portraitPublicTargetPath = portraitPublicTargetPath,
+        landscapePendingUri = landscapePendingUri,
+        landscapePublicTargetPath = landscapePublicTargetPath
     )
 
     // ─── finalizedManifests ────────────────────────────────────────
@@ -253,5 +263,149 @@ class HistoryArtifactMapperTest {
         assertTrue(files.any { it.endsWith("Rova_q.mp4") })
         assertTrue(files.any { it.endsWith("Rova_r.mp4") })
         assertTrue(files.any { it.endsWith("Rova_s.mp4") })
+    }
+
+    // ─── Phase 6.1b T16 — resolveArtifactsPerSide (P+L fanout) ────
+
+    @Test
+    fun `Tier 2 P+L both sides emits 2 PORTRAIT plus LANDSCAPE artifacts`() {
+        val m = manifest(
+            "pl", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/Rova_pl_portrait.mp4",
+            landscapePublicTargetPath = "/storage/Movies/Rova/Rova_pl_landscape.mp4"
+        )
+
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
+            error("Tier 1 callback must not fire for Tier 2 P+L: uri=$uri")
+        }
+
+        assertEquals(2, artifacts.size)
+        val portrait = artifacts.single { it.side == VideoSide.PORTRAIT }
+        val landscape = artifacts.single { it.side == VideoSide.LANDSCAPE }
+        assertEquals(File("/storage/Movies/Rova/Rova_pl_portrait.mp4"), portrait.file)
+        assertEquals(File("/storage/Movies/Rova/Rova_pl_landscape.mp4"), landscape.file)
+        // Tier 2 carries no per-side share URI at the mapper layer; caller
+        // looks it up by _DATA against MediaStore (same contract as
+        // single-mode resolveShareUri).
+        assertNull(portrait.shareUri)
+        assertNull(landscape.shareUri)
+    }
+
+    @Test
+    fun `Tier 1 P+L both sides emits 2 artifacts with per-side share URIs`() {
+        val m = manifest(
+            "pl1", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS,
+            mode = "PortraitLandscape",
+            portraitPendingUri = "content://media/external/video/media/100",
+            portraitPublicTargetPath = "content://media/external/video/media/100",
+            landscapePendingUri = "content://media/external/video/media/200",
+            landscapePublicTargetPath = "content://media/external/video/media/200"
+        )
+
+        val portraitFile = File("/storage/Movies/Rova/Rova_pl1_portrait.mp4")
+        val landscapeFile = File("/storage/Movies/Rova/Rova_pl1_landscape.mp4")
+        val seenUris = mutableListOf<String>()
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
+            seenUris += uri
+            when (uri) {
+                "content://media/external/video/media/100" -> portraitFile
+                "content://media/external/video/media/200" -> landscapeFile
+                else -> null
+            }
+        }
+
+        assertEquals(2, artifacts.size)
+        assertEquals(
+            setOf(
+                "content://media/external/video/media/100",
+                "content://media/external/video/media/200"
+            ),
+            seenUris.toSet()
+        )
+        val portrait = artifacts.single { it.side == VideoSide.PORTRAIT }
+        val landscape = artifacts.single { it.side == VideoSide.LANDSCAPE }
+        assertEquals(portraitFile, portrait.file)
+        assertEquals(landscapeFile, landscape.file)
+        assertEquals("content://media/external/video/media/100", portrait.shareUri)
+        assertEquals("content://media/external/video/media/200", landscape.shareUri)
+    }
+
+    @Test
+    fun `Tier 2 P+L one-sided success emits only the side that succeeded`() {
+        val m = manifest(
+            "pl1s", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/Rova_pl1s_portrait.mp4",
+            landscapePublicTargetPath = null
+        )
+
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(m) { error("never") }
+
+        assertEquals(1, artifacts.size)
+        assertEquals(VideoSide.PORTRAIT, artifacts.single().side)
+        assertEquals(
+            File("/storage/Movies/Rova/Rova_pl1s_portrait.mp4"),
+            artifacts.single().file
+        )
+    }
+
+    @Test
+    fun `Tier 2 P+L both sides null emits empty`() {
+        val m = manifest(
+            "pl0", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = null,
+            landscapePublicTargetPath = null
+        )
+
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(m) { error("never") }
+
+        assertTrue("expected empty fanout for P+L with no per-side paths", artifacts.isEmpty())
+    }
+
+    @Test
+    fun `Tier 1 P+L with unresolvable URI drops that side`() {
+        val m = manifest(
+            "pl1u", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS,
+            mode = "PortraitLandscape",
+            portraitPendingUri = "content://media/external/video/media/300",
+            portraitPublicTargetPath = "content://media/external/video/media/300",
+            landscapePendingUri = "content://media/external/video/media/9999",
+            landscapePublicTargetPath = "content://media/external/video/media/9999"
+        )
+
+        val portraitFile = File("/storage/Movies/Rova/Rova_pl1u_portrait.mp4")
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
+            if (uri == "content://media/external/video/media/300") portraitFile else null
+        }
+
+        assertEquals(1, artifacts.size)
+        assertEquals(VideoSide.PORTRAIT, artifacts.single().side)
+        assertEquals(portraitFile, artifacts.single().file)
+    }
+
+    @Test
+    fun `single-mode session returns empty per-side fanout`() {
+        // Pin the routing invariant: only Portrait+Landscape sessions are
+        // eligible for the per-side fanout. Single-mode "Portrait" /
+        // "Landscape" manifests must surface via the existing single-card
+        // resolveArtifactFile path, not the per-side path. This pins the
+        // VM-layer branch: "if mode == PortraitLandscape, call
+        // resolveArtifactsPerSide; else call resolveArtifactFile."
+        val portraitOnly = manifest(
+            "p", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
+            mode = "Portrait",
+            publicTargetPath = "/storage/Movies/Rova/Rova_p.mp4",
+            // Even if a legacy/buggy build wrote per-side fields on a
+            // single-mode session, the mapper does not fan them out.
+            portraitPublicTargetPath = "/storage/Movies/Rova/Rova_should_not_emit.mp4"
+        )
+
+        val artifacts = HistoryArtifactMapper.resolveArtifactsPerSide(portraitOnly) {
+            error("never")
+        }
+
+        assertTrue("single-mode must not fan out per-side", artifacts.isEmpty())
     }
 }
