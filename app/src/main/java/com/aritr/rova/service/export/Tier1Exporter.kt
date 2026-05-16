@@ -119,26 +119,47 @@ class Tier1Exporter(
     private val validatePending: suspend (uri: String) -> Boolean = { true }
 ) {
 
-    suspend fun export(sessionId: String, segments: List<File>): ExportResult {
+    suspend fun export(
+        sessionId: String,
+        segments: List<File>,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): ExportResult {
         // 1. Insert pending row. No manifest write yet — failure here
         //    cleans up the manifest only (no row to delete).
         val uri: String = try {
             insertPendingRow(sessionId)
         } catch (t: Throwable) {
             RovaLog.w("$TAG: insertPendingRow threw for $sessionId", t)
-            return cleanupAndMap(sessionId, ExportResult.PendingInsertFailed(t), uri = null)
-        } ?: return cleanupAndMap(sessionId, ExportResult.PendingInsertFailed(null), uri = null)
+            return cleanupAndMap(sessionId, ExportResult.PendingInsertFailed(t), uri = null, side = side)
+        } ?: return cleanupAndMap(
+            sessionId,
+            ExportResult.PendingInsertFailed(null),
+            uri = null,
+            side = side
+        )
 
-        // 2. Manifest commit point — BEFORE muxer opens the FD.
-        when (val r = sessionStore.setExportPending(sessionId, uri)) {
+        // 2. Manifest commit point — BEFORE muxer opens the FD. Phase 6.1b
+        //    T12: when `side != null` the per-side mutator populates the
+        //    portrait/landscape `pendingUri` field; the shared `pendingUri`
+        //    is left untouched (T13's caller writes the final shared
+        //    `exportState` after both sides settle).
+        val pendingResult = if (side == null) {
+            sessionStore.setExportPending(sessionId, uri)
+        } else {
+            sessionStore.setExportPendingForSide(sessionId, side, uri)
+        }
+        when (pendingResult) {
             is ExportMutationResult.Wrote -> {}
             is ExportMutationResult.UnknownSession -> {
                 safeDeleteRow(uri)
-                return ExportResult.UnknownSession(r.sessionId)
+                return ExportResult.UnknownSession(pendingResult.sessionId)
             }
             is ExportMutationResult.Failed -> {
                 safeDeleteRow(uri)
-                return ExportResult.ManifestWriteFailed("setExportPending", r.cause)
+                return ExportResult.ManifestWriteFailed(
+                    if (side == null) "setExportPending" else "setExportPendingForSide",
+                    pendingResult.cause
+                )
             }
         }
 
@@ -152,7 +173,7 @@ class Tier1Exporter(
         }
         if (muxThrew != null) {
             RovaLog.w("$TAG: mux failed for $sessionId", muxThrew)
-            return cleanupAndMap(sessionId, ExportResult.MuxFailed(muxThrew), uri = uri)
+            return cleanupAndMap(sessionId, ExportResult.MuxFailed(muxThrew), uri = uri, side = side)
         }
 
         // 4. Tier 1's publish atom — IS_PENDING=0. Live treats every
@@ -165,26 +186,53 @@ class Tier1Exporter(
             Tier1FinalizeResult.Finalized -> { /* proceed */ }
             Tier1FinalizeResult.NoRowsUpdated -> {
                 RovaLog.w("$TAG: finalizePendingRow reported 0 rows updated for $sessionId")
-                return cleanupAndMap(sessionId, ExportResult.FinalizeFailed(null), uri = uri)
+                return cleanupAndMap(
+                    sessionId,
+                    ExportResult.FinalizeFailed(null),
+                    uri = uri,
+                    side = side
+                )
             }
             is Tier1FinalizeResult.Failed -> {
                 RovaLog.w("$TAG: finalizePendingRow threw for $sessionId", r.cause)
-                return cleanupAndMap(sessionId, ExportResult.FinalizeFailed(r.cause), uri = uri)
+                return cleanupAndMap(
+                    sessionId,
+                    ExportResult.FinalizeFailed(r.cause),
+                    uri = uri,
+                    side = side
+                )
             }
         }
 
         // 5. FINALIZED. pendingUri retained; clearPrivateTempPath is a
         //    no-op for Tier 1 (never sets privateTempPath in the first
         //    place) but the parameter is required by the shared mutator.
-        return when (
-            val r = sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
-        ) {
+        //    Phase 6.1b T12: when `side != null` route to the per-side
+        //    mutator — shared `exportState` is NOT advanced here; T13's
+        //    caller writes the final shared `exportState` after both
+        //    sides settle. The per-side mutator records `pendingUri` as
+        //    the publicTargetPath for Tier 1 (the MediaStore URI is the
+        //    artifact reference; there is no separate path).
+        val finalizedResult = if (side == null) {
+            sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
+        } else {
+            sessionStore.setExportFinalizedForSide(
+                sessionId = sessionId,
+                side = side,
+                publicTargetPath = uri,
+                clearPrivateTempPath = false
+            )
+        }
+        return when (finalizedResult) {
             is ExportMutationResult.Wrote ->
                 ExportResult.Success(mediaScanCompleted = true, privateTempRetained = false)
             is ExportMutationResult.UnknownSession ->
-                ExportResult.UnknownSession(r.sessionId)
+                ExportResult.UnknownSession(finalizedResult.sessionId)
             is ExportMutationResult.Failed ->
-                ExportResult.ManifestWriteFailed("setExportFinalized", r.cause)
+                ExportResult.ManifestWriteFailed(
+                    if (side == null) "setExportFinalized" else "setExportFinalizedForSide",
+                    finalizedResult.cause
+                )
         }
     }
 
@@ -265,9 +313,16 @@ class Tier1Exporter(
     private suspend fun cleanupAndMap(
         sessionId: String,
         naturalFailure: ExportResult,
-        uri: String?
+        uri: String?,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
     ): ExportResult {
         if (uri != null) safeDeleteRow(uri)
+        // Phase 6.1b T12: when `side != null`, do NOT touch the shared
+        // `exportState` via `setExportFailed` — T13's caller owns failure
+        // attribution after both sides settle. The pending row was
+        // already deleted above; the per-side `pendingUri` field is left
+        // populated for forensics so T13 can detect the per-side failure.
+        if (side != null) return naturalFailure
         return when (val r = sessionStore.setExportFailed(sessionId)) {
             is ExportMutationResult.Wrote -> naturalFailure
             is ExportMutationResult.UnknownSession ->

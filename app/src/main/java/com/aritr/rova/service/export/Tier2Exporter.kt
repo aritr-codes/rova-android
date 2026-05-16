@@ -71,8 +71,9 @@ class Tier2Exporter(
         sessionId: String,
         segments: List<File>,
         privateTempFile: File,
-        publicTargetFile: File
-    ): ExportResult = core.export(sessionId, segments, privateTempFile, publicTargetFile)
+        publicTargetFile: File,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): ExportResult = core.export(sessionId, segments, privateTempFile, publicTargetFile, side)
 
     suspend fun recover(manifest: SessionManifest): RecoveryResult = core.recover(manifest)
 }

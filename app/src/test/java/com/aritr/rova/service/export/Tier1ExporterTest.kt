@@ -473,6 +473,74 @@ class Tier1ExporterTest {
         assertNotNull(ctorParams)
     }
 
+    // ─── Phase 6.1b T12 — per-side routing ──────────────────────────
+
+    /**
+     * Phase 6.1b T12 — when `side` is non-null, manifest writes route to
+     * the per-side mutators (T11): `setExportPendingForSide`,
+     * `setExportFinalizedForSide` (clearPrivateTempPath=false on Tier 1),
+     * and `setMediaScanCompletedForSide` is irrelevant on Tier 1 (no
+     * scan-after-rename on the MediaStore path). The shared
+     * `setExportPending` / `setExportFinalized` mutators MUST NOT be
+     * touched — that asymmetry is the whole point of the per-side path:
+     * one side can finalize while the other is still muxing, with no
+     * shared-state churn until T13's caller writes the final shared
+     * `exportState` after both sides settle.
+     */
+    @Test
+    fun `export with side PORTRAIT routes to setExportPendingForSide and setExportFinalizedForSide`() {
+        val r = Recorder()
+        val exporter = newExporter(r)
+
+        val result = runBlocking {
+            exporter.export(
+                sessionId = sessionId,
+                segments = emptyList(),
+                side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Success, got $result", result is ExportResult.Success)
+        // Per-side mutators called exactly once each (pending + finalized).
+        assertEquals(1, store.setExportPendingForSideCalls)
+        assertEquals(
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+            store.lastSetExportPendingForSide
+        )
+        assertEquals(testUri, store.lastSetExportPendingForSideUri)
+        assertEquals(1, store.setExportFinalizedForSideCalls)
+        assertEquals(
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+            store.lastSetExportFinalizedForSide
+        )
+        // Shared mutators MUST NOT be called when side != null.
+        assertEquals(0, store.setExportPendingCalls)
+        assertEquals(0, store.setExportFinalizedCalls)
+
+        // Manifest reflects per-side write — portrait pending URI populated,
+        // shared pendingUri NOT touched.
+        val m = reload()
+        assertEquals(testUri, m.portraitPendingUri)
+        assertNull(m.pendingUri)
+    }
+
+    @Test
+    fun `export with side null preserves single-mode setExportPending plus setExportFinalized`() {
+        val r = Recorder()
+        val exporter = newExporter(r)
+
+        // side defaults to null
+        val result = runBlocking { exporter.export(sessionId, emptyList()) }
+
+        assertTrue("expected Success, got $result", result is ExportResult.Success)
+        // Shared mutators called.
+        assertEquals(1, store.setExportPendingCalls)
+        assertEquals(1, store.setExportFinalizedCalls)
+        // Per-side mutators MUST NOT be touched.
+        assertEquals(0, store.setExportPendingForSideCalls)
+        assertEquals(0, store.setExportFinalizedForSideCalls)
+    }
+
     // ─── Sanity: bytes flow through FD seam end-to-end ───────────────
 
     @Test
@@ -525,5 +593,40 @@ internal open class StubbingSessionStoreTier1(
     ): ExportMutationResult {
         setExportFinalizedCalls++
         return setExportFinalizedOverride ?: super.setExportFinalized(sessionId, clearPrivateTempPath)
+    }
+
+    // Phase 6.1b T12 — per-side mutator recording.
+    var setExportPendingForSideCalls: Int = 0
+        private set
+    var lastSetExportPendingForSide: com.aritr.rova.service.dualrecord.VideoSide? = null
+        private set
+    var lastSetExportPendingForSideUri: String? = null
+        private set
+
+    var setExportFinalizedForSideCalls: Int = 0
+        private set
+    var lastSetExportFinalizedForSide: com.aritr.rova.service.dualrecord.VideoSide? = null
+        private set
+
+    override suspend fun setExportPendingForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        uri: String
+    ): ExportMutationResult {
+        setExportPendingForSideCalls++
+        lastSetExportPendingForSide = side
+        lastSetExportPendingForSideUri = uri
+        return super.setExportPendingForSide(sessionId, side, uri)
+    }
+
+    override suspend fun setExportFinalizedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        publicTargetPath: String,
+        clearPrivateTempPath: Boolean
+    ): ExportMutationResult {
+        setExportFinalizedForSideCalls++
+        lastSetExportFinalizedForSide = side
+        return super.setExportFinalizedForSide(sessionId, side, publicTargetPath, clearPrivateTempPath)
     }
 }

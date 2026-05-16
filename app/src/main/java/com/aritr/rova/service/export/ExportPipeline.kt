@@ -70,6 +70,7 @@ internal object ExportPipeline {
         sessionDir: File,
         segments: List<File>,
         mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null,
         onProgress: (Float) -> Unit
     ): ExportResult {
         // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): include
@@ -77,7 +78,16 @@ internal object ExportPipeline {
         // do not produce the same name. Tier 2/3 add a second probe-
         // and-suffix layer in [exportPreQ]; Tier 1 relies on
         // MediaStore's automatic " (N)" disambiguation on insert.
-        val displayName = "Rova_${TIMESTAMP_FORMAT.format(Date())}.mp4"
+        // Phase 6.1b T12: append `_portrait` / `_landscape` to the
+        // displayName when `side != null` so the two sides of a single
+        // P+L stop produce distinguishable artifacts.
+        val baseName = "Rova_${TIMESTAMP_FORMAT.format(Date())}"
+        val suffix = when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> "_portrait"
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> "_landscape"
+            null -> ""
+        }
+        val displayName = "${baseName}${suffix}.mp4"
         return when (val tier = currentExportTier()) {
             ExportTier.TIER1_API29_PLUS -> {
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -93,6 +103,7 @@ internal object ExportPipeline {
                         sessionId = sessionId,
                         segments = segments,
                         displayName = displayName,
+                        side = side,
                         onProgress = onProgress
                     )
                 }
@@ -106,6 +117,7 @@ internal object ExportPipeline {
                     displayName = displayName,
                     mediaScanWaiter = mediaScanWaiter,
                     tier = tier,
+                    side = side,
                     onProgress = onProgress
                 )
             }
@@ -119,6 +131,7 @@ internal object ExportPipeline {
         sessionId: String,
         segments: List<File>,
         displayName: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
         onProgress: (Float) -> Unit
     ): ExportResult {
         val exporter = Tier1Exporter(
@@ -134,7 +147,7 @@ internal object ExportPipeline {
             deletePendingRow = { uri -> Tier1AndroidOps.deletePendingRow(resolver, uri) },
             validatePending = { uri -> Tier1AndroidOps.validatePending(resolver, uri) }
         )
-        return exporter.export(sessionId, segments)
+        return exporter.export(sessionId, segments, side)
     }
 
     private suspend fun exportPreQ(
@@ -145,6 +158,7 @@ internal object ExportPipeline {
         displayName: String,
         mediaScanWaiter: MediaScanWaiter,
         tier: ExportTier,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
         onProgress: (Float) -> Unit
     ): ExportResult {
         @Suppress("DEPRECATION")
@@ -171,7 +185,7 @@ internal object ExportPipeline {
                     mediaScanWaiter = mediaScanWaiter,
                     mux = muxLambda
                 )
-                exporter.export(sessionId, segments, privateTempFile, publicTargetFile)
+                exporter.export(sessionId, segments, privateTempFile, publicTargetFile, side)
             }
             ExportTier.TIER3_API24_25 -> {
                 val exporter = Tier3Exporter(
@@ -179,7 +193,7 @@ internal object ExportPipeline {
                     mediaScanWaiter = mediaScanWaiter,
                     mux = muxLambda
                 )
-                exporter.export(sessionId, segments, privateTempFile, publicTargetFile)
+                exporter.export(sessionId, segments, privateTempFile, publicTargetFile, side)
             }
             ExportTier.TIER1_API29_PLUS -> error("exportPreQ called with TIER1")
         }

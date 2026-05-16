@@ -269,6 +269,56 @@ class Tier2ExporterTest {
         assertFalse(publicTargetFile.exists())
     }
 
+    // ─── Phase 6.1b T12 — per-side routing ──────────────────────────
+
+    /**
+     * Phase 6.1b T12 — Tier 2 mirror of the Tier 3 per-side routing test.
+     * When `side != null`, manifest writes route to per-side mutators;
+     * shared `exportState` stays at NOT_STARTED (T13 owns the final
+     * shared write); shared `privateTempPath` / `publicTargetPath` are
+     * not touched.
+     */
+    @Test
+    fun `export with side PORTRAIT routes to per-side mutators leaving shared exportState NOT_STARTED`() {
+        val exporter = newExporter()
+
+        val result = runBlocking {
+            exporter.export(
+                sessionId,
+                emptyList(),
+                privateTempFile,
+                publicTargetFile,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Success, got $result", result is ExportResult.Success)
+        val m = reload()
+        assertEquals(ExportState.NOT_STARTED, m.exportState)
+        assertNull(m.privateTempPath)
+        assertNull(m.publicTargetPath)
+        assertFalse(m.mediaScanCompleted)
+        assertEquals(publicTargetFile.absolutePath, m.portraitPublicTargetPath)
+        assertTrue(m.portraitMediaScanCompleted)
+        assertNull(m.landscapePublicTargetPath)
+    }
+
+    @Test
+    fun `export with side null preserves single-mode shared mutator writes`() {
+        val exporter = newExporter()
+
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertTrue(result is ExportResult.Success)
+        val m = reload()
+        assertEquals(ExportState.FINALIZED, m.exportState)
+        assertEquals(publicTargetFile.absolutePath, m.publicTargetPath)
+        assertTrue(m.mediaScanCompleted)
+        assertNull(m.portraitPublicTargetPath)
+    }
+
     // ─── Cleanup-write contract (commit-2 patch through Tier 2) ─────
 
     @Test
