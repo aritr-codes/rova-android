@@ -15,6 +15,7 @@ import com.aritr.rova.service.export.AndroidMediaScanWaiter
 import com.aritr.rova.service.export.ExportCleanupPredicate
 import com.aritr.rova.service.export.ExportRecoveryReport
 import com.aritr.rova.service.export.ExportRecoveryRunner
+import com.aritr.rova.service.export.combineRecoveryResults
 import com.aritr.rova.service.export.OrphanSweepResult
 import com.aritr.rova.service.export.RecoveryResult
 import com.aritr.rova.service.export.Tier1AndroidOps
@@ -432,16 +433,29 @@ class RovaApp : Application() {
             mux = recoveryOnlyMux
         )
 
-        val recoverSession: suspend (SessionManifest) -> RecoveryResult = { m ->
+        // Phase 6.1b T14: P+L manifests dispatch recovery PER SIDE
+        // (tier × side). Single-mode (`Portrait` / `Landscape` /
+        // anything else) falls through to the prior single-call recover
+        // path — byte-identical to pre-T14.
+        //
+        // The per-side path inspects the manifest's per-side pointers
+        // (`portraitPendingUri` / `landscapePendingUri` / `portrait*` /
+        // `landscape*`) to decide whether each side has anything to
+        // recover. If a side's pointers are all null, that side returns
+        // `RecoveryResult.NoOp` semantics via [RecoveryResult.Abandoned]
+        // (the per-side `abandon` skips the shared `setExportFailed`
+        // write per T14's OQ-C lock).
+        //
+        // Side results are combined via [combineRecoveryResults] so the
+        // runner sees one `RecoveryResult` for the session as a whole.
+        // See the helper KDoc for the conservative precedence rules.
+        fun tierRecover(m: SessionManifest, s: com.aritr.rova.service.dualrecord.VideoSide?):
+            suspend () -> RecoveryResult = {
             when (m.exportTier) {
                 ExportTier.TIER1_API29_PLUS -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        buildTier1Exporter().recover(m)
+                        buildTier1Exporter().recover(m, s)
                     } else {
-                        // Defensive only — a TIER1 manifest can only exist on
-                        // an API 29+ device, and SDK_INT does not regress for
-                        // a device. Defer rather than crash if the impossible
-                        // happens (e.g., manifest copied across devices).
                         RecoveryResult.RetryableFailure(
                             phase = "tier1-on-pre-q",
                             cause = IllegalStateException(
@@ -450,8 +464,35 @@ class RovaApp : Application() {
                         )
                     }
                 }
-                ExportTier.TIER2_API26_28 -> tier2Exporter.recover(m)
-                ExportTier.TIER3_API24_25 -> tier3Exporter.recover(m)
+                ExportTier.TIER2_API26_28 -> tier2Exporter.recover(m, s)
+                ExportTier.TIER3_API24_25 -> tier3Exporter.recover(m, s)
+            }
+        }
+
+        val recoverSession: suspend (SessionManifest) -> RecoveryResult = { m ->
+            if (m.config.mode == "PortraitLandscape") {
+                // Per-side dispatch. A side with no per-side pointers is
+                // treated as a no-op via the per-side abandon's
+                // shared-failed skip, surfaced here as Abandoned.
+                val portraitHasWork = m.portraitPendingUri != null ||
+                    m.portraitPrivateTempPath != null ||
+                    m.portraitPublicTargetPath != null
+                val landscapeHasWork = m.landscapePendingUri != null ||
+                    m.landscapePrivateTempPath != null ||
+                    m.landscapePublicTargetPath != null
+                val portraitResult = if (portraitHasWork) {
+                    tierRecover(m, com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT)()
+                } else {
+                    RecoveryResult.Abandoned
+                }
+                val landscapeResult = if (landscapeHasWork) {
+                    tierRecover(m, com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE)()
+                } else {
+                    RecoveryResult.Abandoned
+                }
+                combineRecoveryResults(portraitResult, landscapeResult)
+            } else {
+                tierRecover(m, null)()
             }
         }
 

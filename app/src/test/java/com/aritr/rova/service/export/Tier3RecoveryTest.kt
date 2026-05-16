@@ -401,4 +401,190 @@ class Tier3RecoveryTest {
 
         store.close()
     }
+
+    // ─── Phase 6.1b T14 — per-side recovery (side != null) ──────────
+
+    /**
+     * Phase 6.1b T14 — per-side Tier 3 recovery, Case A (public artifact
+     * already on disk). `recover(m, side = PORTRAIT)` reads
+     * `m.portraitPrivateTempPath` + `m.portraitPublicTargetPath`. Per-side
+     * mutators are used (`setExportFinalizedForSide` +
+     * `setMediaScanCompletedForSide`); shared `setExportFinalized` is
+     * NOT called — shared `exportState` stays untouched per the OQ-C
+     * lock (T13's caller owns the final shared advance).
+     */
+    @Test
+    fun `recover side PORTRAIT case A reads portrait pointers and writes per-side mutators`() {
+        // Distinct portrait artifact paths, not the shared ones.
+        val portraitPriv = File(store.sessionDir(sessionId), "export/${sessionId}_P.mp4")
+        val portraitPub = File(publicTargetFile.parentFile, "Rova_${sessionId}_P.mp4")
+        portraitPub.parentFile?.mkdirs()
+        portraitPub.writeBytes("ALREADY_PUBLISHED_PORTRAIT".toByteArray())
+        portraitPriv.parentFile?.mkdirs()
+        portraitPriv.writeBytes("STILL_HERE_P".toByteArray())
+
+        val pre = initial.copy(
+            exportTier = ExportTier.TIER3_API24_25,
+            // Shared single-mode pointers null — P+L manifest.
+            privateTempPath = null,
+            publicTargetPath = null,
+            portraitPrivateTempPath = portraitPriv.absolutePath,
+            portraitPublicTargetPath = portraitPub.absolutePath,
+            exportState = ExportState.FINALIZED
+        )
+        writePreState(pre)
+
+        val result = runBlocking {
+            newExporter(scanResult = true).recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Resumed, got $result", result is RecoveryResult.Resumed)
+        val export = (result as RecoveryResult.Resumed).export
+        assertTrue(export is ExportResult.Success)
+
+        assertTrue("public portrait artifact left in place", portraitPub.exists())
+        assertFalse("portrait private temp deleted on case-A happy", portraitPriv.exists())
+
+        val m = reload()
+        // Shared state untouched — T13 owns final advance.
+        assertEquals(ExportState.FINALIZED, m.exportState)
+        assertNull("shared privateTempPath must not be written", m.privateTempPath)
+        assertNull("shared publicTargetPath must not be written", m.publicTargetPath)
+        assertFalse("shared mediaScanCompleted must not be flipped", m.mediaScanCompleted)
+        // Per-side fields updated.
+        assertEquals(portraitPub.absolutePath, m.portraitPublicTargetPath)
+        assertNull("portrait private temp cleared on happy path", m.portraitPrivateTempPath)
+        assertTrue("portrait scan completed", m.portraitMediaScanCompleted)
+        // Landscape untouched.
+        assertNull(m.landscapePublicTargetPath)
+        assertFalse(m.landscapeMediaScanCompleted)
+    }
+
+    /**
+     * Phase 6.1b T14 — per-side Tier 3 recovery, Case C (only private
+     * temp on disk → resume publish-and-finalize). LANDSCAPE side.
+     */
+    @Test
+    fun `recover side LANDSCAPE case C resumes publish-and-finalize from landscape private temp`() {
+        val landscapePriv = File(store.sessionDir(sessionId), "export/${sessionId}_L.mp4")
+        val landscapePub = File(publicTargetFile.parentFile, "Rova_${sessionId}_L.mp4")
+        landscapePriv.parentFile?.mkdirs()
+        landscapePriv.writeBytes("MUX_DONE_LANDSCAPE".toByteArray())
+
+        val pre = initial.copy(
+            exportTier = ExportTier.TIER3_API24_25,
+            privateTempPath = null,
+            publicTargetPath = null,
+            landscapePrivateTempPath = landscapePriv.absolutePath,
+            landscapePublicTargetPath = landscapePub.absolutePath,
+            exportState = ExportState.MUXING
+        )
+        writePreState(pre)
+
+        val result = runBlocking {
+            newExporter(scanResult = true).recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+            )
+        }
+
+        assertTrue("expected Resumed, got $result", result is RecoveryResult.Resumed)
+        assertTrue(landscapePub.exists())
+        assertFalse(landscapePriv.exists())
+
+        val m = reload()
+        // Shared exportState untouched (stays MUXING — T13 advances).
+        assertEquals(ExportState.MUXING, m.exportState)
+        assertEquals(landscapePub.absolutePath, m.landscapePublicTargetPath)
+        assertNull(m.landscapePrivateTempPath)
+        assertTrue(m.landscapeMediaScanCompleted)
+        // Portrait untouched.
+        assertNull(m.portraitPublicTargetPath)
+    }
+
+    /**
+     * Phase 6.1b T14 — per-side recovery Case D (nothing usable on
+     * portrait side) skips shared `setExportFailed` (OQ-C lock: T13
+     * owns shared-FAILED attribution after both sides settle). Returns
+     * Abandoned so the runner records the per-side outcome.
+     */
+    @Test
+    fun `recover side PORTRAIT case D skips shared setExportFailed write`() {
+        val store2 = StubbingSessionStore(tmp.newFolder("videos_t14"))
+        val initialManifest = store2.createSession(
+            config = SessionConfig(
+                durationSeconds = 30,
+                intervalMinutes = 5,
+                resolution = "FHD",
+                loopCount = 4
+            )
+        )
+        val sid = initialManifest.sessionId
+        val portraitPriv = File(store2.sessionDir(sid), "export/${sid}_P.mp4")
+        val portraitPub = File(tmp.newFolder("public_t14"), "Rova_${sid}_P.mp4")
+        val pre = initialManifest.copy(
+            exportTier = ExportTier.TIER3_API24_25,
+            // Nothing on disk — Case D.
+            portraitPrivateTempPath = portraitPriv.absolutePath,
+            portraitPublicTargetPath = portraitPub.absolutePath,
+            exportState = ExportState.MUXING
+        )
+        File(store2.sessionDir(sid), "manifest.json").writeText(pre.toJson().toString(2))
+
+        val exporter = Tier3Exporter(
+            sessionStore = store2,
+            mediaScanWaiter = FakeMediaScanWaiter(scanResult = true),
+            mux = { _, _ -> }
+        )
+
+        val result = runBlocking {
+            exporter.recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Abandoned, got $result", result === RecoveryResult.Abandoned)
+        // Shared setExportFailed MUST NOT be called on per-side path.
+        assertEquals(
+            "shared setExportFailed must not be called on per-side recovery",
+            0,
+            store2.setExportFailedCalls
+        )
+
+        store2.close()
+    }
+
+    /**
+     * Phase 6.1b T14 — single-mode recover (side = null) preserves the
+     * pre-T14 byte-identical behavior end-to-end (Case A happy path).
+     * This guard ensures the new default parameter does not change the
+     * single-mode write path.
+     */
+    @Test
+    fun `recover side null preserves shared single-mode write contract case A`() {
+        publicTargetFile.parentFile?.mkdirs()
+        publicTargetFile.writeBytes("PUBLISHED".toByteArray())
+        privateTempFile.parentFile?.mkdirs()
+        privateTempFile.writeBytes("STILL_HERE".toByteArray())
+        val pre = tier3Manifest(exportState = ExportState.FINALIZED, mediaScanCompleted = false)
+        writePreState(pre)
+
+        val result = runBlocking { newExporter(scanResult = true).recover(pre) }
+
+        assertTrue(result is RecoveryResult.Resumed)
+        val m = reload()
+        // Shared mutators wrote: shared exportState FINALIZED + shared
+        // publicTargetPath + mediaScanCompleted.
+        assertEquals(ExportState.FINALIZED, m.exportState)
+        assertEquals(publicTargetFile.absolutePath, m.publicTargetPath)
+        assertTrue(m.mediaScanCompleted)
+        assertNull(m.privateTempPath)
+        // Per-side fields stay defaults.
+        assertNull(m.portraitPublicTargetPath)
+        assertNull(m.landscapePublicTargetPath)
+    }
 }

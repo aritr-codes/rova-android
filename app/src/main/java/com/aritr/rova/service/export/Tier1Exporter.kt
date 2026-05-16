@@ -236,13 +236,22 @@ class Tier1Exporter(
         }
     }
 
-    suspend fun recover(manifest: SessionManifest): RecoveryResult {
+    suspend fun recover(
+        manifest: SessionManifest,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): RecoveryResult {
         require(manifest.exportTier == ExportTier.TIER1_API29_PLUS) {
             "$TAG.recover called with tier ${manifest.exportTier} (expected TIER1_API29_PLUS)"
         }
         val sessionId = manifest.sessionId
-        val uri = manifest.pendingUri
-            ?: return abandon(sessionId, uri = null)
+        // Phase 6.1b T14: when `side != null`, read the per-side
+        // pendingUri pointer. Single-mode (`side == null`) is
+        // byte-identical to pre-T14.
+        val uri = when (side) {
+            null -> manifest.pendingUri
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> manifest.portraitPendingUri
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> manifest.landscapePendingUri
+        } ?: return abandon(sessionId, uri = null, side = side)
 
         val valid: Boolean = try {
             validatePending(uri)
@@ -253,7 +262,7 @@ class Tier1Exporter(
         if (!valid) {
             // The probe failed — the row is corrupt/missing/unopenable.
             // This is the ONLY recovery path that may delete the row.
-            return abandon(sessionId, uri = uri)
+            return abandon(sessionId, uri = uri, side = side)
         }
 
         // INVARIANT (NO-GO patch from commit-4 review): from this point
@@ -266,7 +275,7 @@ class Tier1Exporter(
         return when (val r = finalizePendingRow(uri)) {
             // `IS_PENDING` was 1, just transitioned to 0 — fresh finalize.
             Tier1FinalizeResult.Finalized ->
-                writeFinalizedAfterValidatedRow(sessionId)
+                writeFinalizedAfterValidatedRow(sessionId, uri, side)
 
             // `update` returned 0 rows. Combined with `validatePending`
             // having just succeeded, the only consistent reading is "the
@@ -278,7 +287,7 @@ class Tier1Exporter(
                     "$TAG.recover: finalizePendingRow reported 0 rows for $sessionId — " +
                         "treating as already-finalized (lost manifest write); not deleting row"
                 )
-                writeFinalizedAfterValidatedRow(sessionId)
+                writeFinalizedAfterValidatedRow(sessionId, uri, side)
             }
 
             // The seam threw. The row is intact (validatePending proved
@@ -296,8 +305,27 @@ class Tier1Exporter(
         }
     }
 
-    private suspend fun writeFinalizedAfterValidatedRow(sessionId: String): RecoveryResult =
-        when (val r = sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)) {
+    private suspend fun writeFinalizedAfterValidatedRow(
+        sessionId: String,
+        uri: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): RecoveryResult {
+        // Phase 6.1b T14: when `side != null` route to the per-side
+        // mutator — shared `exportState` is NOT advanced here; T13's
+        // caller writes the final shared `exportState` after both sides
+        // settle. Tier 1's MediaStore URI is recorded as the per-side
+        // publicTargetPath (consistent with T12's per-side export path).
+        val r = if (side == null) {
+            sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
+        } else {
+            sessionStore.setExportFinalizedForSide(
+                sessionId = sessionId,
+                side = side,
+                publicTargetPath = uri,
+                clearPrivateTempPath = false
+            )
+        }
+        return when (r) {
             is ExportMutationResult.Wrote ->
                 RecoveryResult.Resumed(
                     ExportResult.Success(mediaScanCompleted = true, privateTempRetained = false)
@@ -307,6 +335,7 @@ class Tier1Exporter(
             is ExportMutationResult.Failed ->
                 RecoveryResult.ManifestWriteFailed(r.cause)
         }
+    }
 
     // ─── Cleanup helpers ────────────────────────────────────────────
 
@@ -332,8 +361,17 @@ class Tier1Exporter(
         }
     }
 
-    private suspend fun abandon(sessionId: String, uri: String?): RecoveryResult {
+    private suspend fun abandon(
+        sessionId: String,
+        uri: String?,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): RecoveryResult {
         if (uri != null) safeDeleteRow(uri)
+        // Phase 6.1b T14: when `side != null`, SKIP the shared
+        // `setExportFailed` write — T13's caller owns failure attribution
+        // after both sides settle. The row deletion above still runs
+        // unconditionally.
+        if (side != null) return RecoveryResult.Abandoned
         return when (val r = sessionStore.setExportFailed(sessionId)) {
             is ExportMutationResult.Wrote -> RecoveryResult.Abandoned
             is ExportMutationResult.UnknownSession ->
