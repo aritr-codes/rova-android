@@ -485,8 +485,11 @@ class Tier3ExporterTest {
         assertFalse("private temp deleted on happy path", privateTempFile.exists())
 
         val m = reload()
-        // Shared state untouched — T13's caller owns the final write.
-        assertEquals(ExportState.NOT_STARTED, m.exportState)
+        // Phase 6.1b T18 final-review remediation: per-side mutators
+        // floor-advance shared exportState NOT_STARTED -> MUXING on the
+        // first write. T13's caller still owns the final FINALIZED
+        // transition after both sides settle.
+        assertEquals(ExportState.MUXING, m.exportState)
         assertNull("shared privateTempPath must not be touched by per-side path", m.privateTempPath)
         assertNull("shared publicTargetPath must not be touched by per-side path", m.publicTargetPath)
         assertFalse("shared mediaScanCompleted must not be touched", m.mediaScanCompleted)
@@ -550,9 +553,14 @@ class Tier3ExporterTest {
 
         val m = reload()
         // Shared state NOT flipped to FAILED — T13 owns that decision.
+        // Phase 6.1b T18 final-review remediation: per-side commit-point-A
+        // floor-advanced shared exportState NOT_STARTED -> MUXING BEFORE
+        // mux ran, so the post-mux-failure state is MUXING (not
+        // NOT_STARTED). The key invariant is "not FAILED" — that decision
+        // still belongs to T13's caller after both sides settle.
         assertEquals(
             "shared exportState must not flip to FAILED on per-side cleanup",
-            ExportState.NOT_STARTED,
+            ExportState.MUXING,
             m.exportState
         )
         // Landscape private-temp pointer remains (set on commit point A,

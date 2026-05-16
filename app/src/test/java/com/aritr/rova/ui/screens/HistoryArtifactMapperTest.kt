@@ -4,8 +4,10 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,7 +38,8 @@ class HistoryArtifactMapperTest {
         portraitPendingUri: String? = null,
         portraitPublicTargetPath: String? = null,
         landscapePendingUri: String? = null,
-        landscapePublicTargetPath: String? = null
+        landscapePublicTargetPath: String? = null,
+        terminated: Terminated? = null
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = 0L,
@@ -49,7 +52,8 @@ class HistoryArtifactMapperTest {
         portraitPendingUri = portraitPendingUri,
         portraitPublicTargetPath = portraitPublicTargetPath,
         landscapePendingUri = landscapePendingUri,
-        landscapePublicTargetPath = landscapePublicTargetPath
+        landscapePublicTargetPath = landscapePublicTargetPath,
+        terminated = terminated
     )
 
     // ─── finalizedManifests ────────────────────────────────────────
@@ -383,6 +387,145 @@ class HistoryArtifactMapperTest {
         assertEquals(1, artifacts.size)
         assertEquals(VideoSide.PORTRAIT, artifacts.single().side)
         assertEquals(portraitFile, artifacts.single().file)
+    }
+
+    // ─── Phase 6.1b T20 — finalizedManifests P+L escape hatch ───────
+
+    @Test
+    fun `finalizedManifests admits P+L COMPLETED with per-side artifact even when shared exportState is not FINALIZED`() {
+        // Phase 6.1b T20 final-review remediation: if performMergeDual's
+        // shared `setExportFinalized` write throws AFTER both per-side
+        // pipelines succeeded, the manifest is terminal (`terminated ==
+        // COMPLETED`) with intact per-side artifacts on disk but the
+        // shared exportState is stuck at MUXING. Pre-T20 filter would
+        // hide the cards from History; user would see nothing despite
+        // playable files. Post-T20: P+L escape hatch admits the session.
+        val m = manifest(
+            "pl-stuck-at-muxing",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/pl_p.mp4",
+            terminated = Terminated.COMPLETED
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertEquals(1, finalized.size)
+        assertEquals("pl-stuck-at-muxing", finalized.single().sessionId)
+    }
+
+    @Test
+    fun `finalizedManifests admits P+L COMPLETED Tier 1 with per-side pendingUri populated`() {
+        // Same escape-hatch path on Tier 1: per-side `portraitPendingUri`
+        // AND `portraitPublicTargetPath` carry the URI string (T12
+        // contract — see resolveArtifactsPerSide KDoc); shared
+        // `pendingUri` and `publicTargetPath` are null per OQ-C.
+        val m = manifest(
+            "pl1-stuck",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER1_API29_PLUS,
+            mode = "PortraitLandscape",
+            portraitPendingUri = "content://media/external/video/media/777",
+            portraitPublicTargetPath = "content://media/external/video/media/777",
+            terminated = Terminated.COMPLETED
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertEquals(1, finalized.size)
+    }
+
+    @Test
+    fun `finalizedManifests admits P+L COMPLETED with only landscape side`() {
+        // Pin the one-sided success contract: the escape hatch fires when
+        // EITHER per-side pointer is populated.
+        val m = manifest(
+            "pl-l-only",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            landscapePublicTargetPath = "/storage/Movies/Rova/pl_l.mp4",
+            terminated = Terminated.COMPLETED
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertEquals(1, finalized.size)
+    }
+
+    @Test
+    fun `finalizedManifests does NOT admit P+L without terminated COMPLETED`() {
+        // Escape hatch requires `terminated == COMPLETED`. A P+L manifest
+        // that's mid-recording (terminated == null) or USER_STOPPED must
+        // not surface as if export finalized.
+        val midRecording = manifest(
+            "pl-mid",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/pl_mid.mp4",
+            terminated = null
+        )
+        val userStopped = manifest(
+            "pl-us",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/pl_us.mp4",
+            terminated = Terminated.USER_STOPPED
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(midRecording, userStopped))
+        assertTrue("expected empty, got ${finalized.map { it.sessionId }}", finalized.isEmpty())
+    }
+
+    @Test
+    fun `finalizedManifests does NOT admit P+L COMPLETED with both sides null`() {
+        // Escape hatch requires at-least-one per-side pointer. A P+L
+        // manifest with terminated COMPLETED but no per-side artifact is
+        // a degenerate state (no playable file); must not surface.
+        val m = manifest(
+            "pl-empty",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = null,
+            landscapePublicTargetPath = null,
+            terminated = Terminated.COMPLETED
+        )
+        assertTrue(HistoryArtifactMapper.finalizedManifests(listOf(m)).isEmpty())
+    }
+
+    @Test
+    fun `finalizedManifests does NOT admit single-mode COMPLETED with publicTargetPath when exportState is MUXING`() {
+        // Single-mode regression: the escape hatch is P+L-only. A
+        // single-mode session that's terminal but stuck at MUXING is a
+        // bug-state in production (single-mode mutators advance
+        // exportState monotonically), but must not be admitted via the
+        // P+L hatch — keeps the single-mode contract byte-identical.
+        val m = manifest(
+            "sm-stuck",
+            exportState = ExportState.MUXING,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "Portrait",
+            publicTargetPath = "/storage/Movies/Rova/sm.mp4",
+            terminated = Terminated.COMPLETED
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertFalse(
+            "single-mode escape hatch must NOT exist; got ${finalized.map { it.sessionId }}",
+            finalized.any { it.sessionId == "sm-stuck" }
+        )
+    }
+
+    @Test
+    fun `finalizedManifests still admits P+L when exportState IS FINALIZED (happy path)`() {
+        // Happy path: T13's shared setExportFinalized succeeded. The
+        // session admits via the existing FINALIZED filter regardless of
+        // terminated or per-side pointer state.
+        val m = manifest(
+            "pl-happy",
+            exportState = ExportState.FINALIZED,
+            tier = ExportTier.TIER2_API26_28,
+            mode = "PortraitLandscape",
+            portraitPublicTargetPath = "/storage/Movies/Rova/pl_h.mp4"
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertEquals(1, finalized.size)
     }
 
     @Test

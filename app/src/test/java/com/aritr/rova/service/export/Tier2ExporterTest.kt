@@ -279,7 +279,12 @@ class Tier2ExporterTest {
      * not touched.
      */
     @Test
-    fun `export with side PORTRAIT routes to per-side mutators leaving shared exportState NOT_STARTED`() {
+    fun `export with side PORTRAIT routes to per-side mutators floor-advancing shared exportState to MUXING`() {
+        // Phase 6.1b T18 final-review remediation: per-side mutators
+        // floor-advance shared exportState NOT_STARTED -> MUXING on the
+        // first write so ExportRecoveryRunner.needsExportRecovery routes
+        // crashed mid-export P+L sessions. T13's caller owns the final
+        // FINALIZED transition after both sides settle.
         val exporter = newExporter()
 
         val result = runBlocking {
@@ -294,7 +299,7 @@ class Tier2ExporterTest {
 
         assertTrue("expected Success, got $result", result is ExportResult.Success)
         val m = reload()
-        assertEquals(ExportState.NOT_STARTED, m.exportState)
+        assertEquals(ExportState.MUXING, m.exportState)
         assertNull(m.privateTempPath)
         assertNull(m.publicTargetPath)
         assertFalse(m.mediaScanCompleted)

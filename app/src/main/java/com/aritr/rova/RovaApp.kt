@@ -503,26 +503,20 @@ class RovaApp : Application() {
         // MediaExtractor (works post-finalize too — IS_PENDING=0 doesn't
         // affect MediaExtractor.setDataSource(fd)). Tier 2/3: the public
         // file must exist with non-zero length.
-        val validateTierArtifact: suspend (SessionManifest) -> Boolean = { m ->
-            when (m.exportTier) {
-                ExportTier.TIER1_API29_PLUS -> {
-                    val uri = m.pendingUri
-                    if (uri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        Tier1AndroidOps.validatePending(contentResolver, uri)
-                    } else {
-                        false
-                    }
-                }
-                ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> {
-                    val path = m.publicTargetPath
-                    if (path != null) {
-                        val f = File(path)
-                        f.exists() && f.length() > 0L
-                    } else {
-                        false
-                    }
-                }
+        //
+        // Phase 6.1b T19 final-review remediation: dispatch through
+        // [TierArtifactValidator] so the P+L branch consults the
+        // per-side pointers (the shared `pendingUri` / `publicTargetPath`
+        // are null for P+L sessions per the OQ-C lock — pre-T19 always
+        // returned `false` and stranded the manifest at `terminated = null`).
+        val tier1Probe: (String) -> Boolean =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                { uri -> Tier1AndroidOps.validatePending(contentResolver, uri) }
+            } else {
+                { false }
             }
+        val validateTierArtifact: suspend (SessionManifest) -> Boolean = { m ->
+            com.aritr.rova.service.export.TierArtifactValidator.isArtifactValid(m, tier1Probe)
         }
 
         val orphanSweep: (suspend (Set<String>) -> OrphanSweepResult)? =

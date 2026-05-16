@@ -3,6 +3,7 @@ package com.aritr.rova.ui.screens
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.dualrecord.VideoSide
 import java.io.File
 
@@ -38,14 +39,37 @@ internal object HistoryArtifactMapper {
     /**
      * Filters the loaded manifests down to the ones whose export
      * actually finalized. `terminated` is intentionally NOT used as a
-     * gate — a session can be `FINALIZED` with `terminated == null` for
-     * one cold-launch tick before [com.aritr.rova.service.export.ExportRecoveryRunner]'s
-     * late-terminal pass writes `markTerminated(COMPLETED, NONE)`. The
-     * artifact is on disk; the user expects to see it. The terminal
-     * record catches up out-of-band.
+     * gate for the single-mode path — a session can be `FINALIZED` with
+     * `terminated == null` for one cold-launch tick before
+     * [com.aritr.rova.service.export.ExportRecoveryRunner]'s late-terminal
+     * pass writes `markTerminated(COMPLETED, NONE)`. The artifact is on
+     * disk; the user expects to see it. The terminal record catches up
+     * out-of-band.
+     *
+     * Phase 6.1b T20 final-review remediation — P+L escape hatch.
+     * `performMergeDual`'s shared `setExportFinalized` write may throw
+     * AFTER both per-side pipelines have finalized successfully (per-side
+     * pointers populated, terminal `COMPLETED` written). The shared
+     * `exportState` stays at `MUXING` in that race. Pre-T20 the History
+     * screen filtered the manifest out and the user saw nothing despite
+     * intact files. The hatch admits a P+L manifest when:
+     *   1. `config.mode == "PortraitLandscape"`,
+     *   2. `terminated == COMPLETED` (the per-side pipelines settled),
+     *   3. at least one per-side public target pointer is populated.
+     *
+     * Single-mode contract is byte-identical: the hatch is gated on
+     * `mode == "PortraitLandscape"` so a single-mode session that is
+     * stuck-at-MUXING (a bug state that should not be reachable in
+     * production) is NOT silently surfaced.
      */
     fun finalizedManifests(manifests: List<SessionManifest>): List<SessionManifest> =
-        manifests.filter { it.exportState == ExportState.FINALIZED }
+        manifests.filter { m ->
+            val isFinalized = m.exportState == ExportState.FINALIZED
+            val isDualWithArtifacts = m.config.mode == "PortraitLandscape" &&
+                m.terminated == Terminated.COMPLETED &&
+                (m.portraitPublicTargetPath != null || m.landscapePublicTargetPath != null)
+            isFinalized || isDualWithArtifacts
+        }
 
     /**
      * Tier dispatch for the on-disk artifact path.

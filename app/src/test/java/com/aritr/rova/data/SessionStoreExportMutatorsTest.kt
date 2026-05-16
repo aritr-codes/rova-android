@@ -419,6 +419,143 @@ class SessionStoreExportMutatorsTest {
         assertNonExportFieldsPreserved(m)
     }
 
+    // ─── Phase 6.1b T18 — per-side mutators floor-advance shared exportState ──
+
+    @Test
+    fun `setExportPendingForSide advances shared exportState NOT_STARTED to MUXING`() {
+        // Phase 6.1b T18 final-review remediation: per-side mutators MUST
+        // floor-advance shared `exportState` from NOT_STARTED to MUXING on
+        // the first per-side write, mirroring single-mode `setExportPending`.
+        // Without this, ExportRecoveryRunner.needsExportRecovery (gates on
+        // shared exportState) skips crashed mid-export P+L sessions and
+        // strands per-side data.
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "content://media/portrait/77"
+            )
+        }
+        assertTrue(result is Wrote)
+        val m = reload()
+        assertEquals(ExportState.MUXING, m.exportState)
+        assertEquals("content://media/portrait/77", m.portraitPendingUri)
+    }
+
+    @Test
+    fun `setExportPendingForSide does not overwrite shared exportState when already FINALIZED`() {
+        // Floor-only invariant: the per-side mutator must NOT regress
+        // a later shared state. Reachable when a recovery flow re-asserts
+        // a per-side pointer on a manifest that was already finalized
+        // (T13's shared setExportFinalized landed). Verifies the
+        // single-direction NOT_STARTED -> MUXING transition.
+        writePreState(initial.copy(exportState = ExportState.FINALIZED))
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                "content://media/landscape/99"
+            )
+        }
+        assertTrue(result is Wrote)
+        assertEquals(ExportState.FINALIZED, reload().exportState)
+    }
+
+    @Test
+    fun `setExportPendingForSide does not overwrite shared exportState when already COPYING`() {
+        // Floor-only invariant case 2: COPYING is also later than MUXING.
+        writePreState(initial.copy(exportState = ExportState.COPYING))
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "content://media/portrait/1"
+            )
+        }
+        assertTrue(result is Wrote)
+        assertEquals(ExportState.COPYING, reload().exportState)
+    }
+
+    @Test
+    fun `setExportPendingForSide does not overwrite shared exportState when already FAILED`() {
+        // Floor-only invariant case 3: FAILED is a terminal state; a
+        // late per-side write must not silently re-arm the export.
+        writePreState(initial.copy(exportState = ExportState.FAILED))
+        val result = runBlocking {
+            store.setExportPendingForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                "content://media/landscape/2"
+            )
+        }
+        assertTrue(result is Wrote)
+        assertEquals(ExportState.FAILED, reload().exportState)
+    }
+
+    @Test
+    fun `setExportPrivateTargetForSide advances shared exportState NOT_STARTED to MUXING`() {
+        // Phase 6.1b T18 — Tier 2/3 per-side commit point mirrors the
+        // Tier 1 floor-advance. ExportRecoveryRunner.needsExportRecovery
+        // must see MUXING after the first per-side commit so a crashed
+        // mid-export P+L session at Tier 2/3 routes into recovery.
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+        val result = runBlocking {
+            store.setExportPrivateTargetForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                "/tmp/portrait.mp4"
+            )
+        }
+        assertTrue(result is Wrote)
+        assertEquals(ExportState.MUXING, reload().exportState)
+        assertEquals("/tmp/portrait.mp4", reload().portraitPrivateTempPath)
+    }
+
+    @Test
+    fun `setExportPrivateTargetForSide does not overwrite shared exportState when already FINALIZED`() {
+        writePreState(initial.copy(exportState = ExportState.FINALIZED))
+        val result = runBlocking {
+            store.setExportPrivateTargetForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                "/tmp/landscape.mp4"
+            )
+        }
+        assertTrue(result is Wrote)
+        assertEquals(ExportState.FINALIZED, reload().exportState)
+    }
+
+    @Test
+    fun `setExportFinalizedForSide does not advance shared exportState`() {
+        // T13 owns the shared FINALIZED advance after both sides settle.
+        // The per-side finalize mutator must NOT advance shared state
+        // (otherwise a one-sided failure would prematurely flip the
+        // shared flag).
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+        runBlocking {
+            store.setExportFinalizedForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                publicTargetPath = "/storage/Movies/Rova/portrait.mp4",
+                clearPrivateTempPath = false
+            )
+        }
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+    }
+
+    @Test
+    fun `setMediaScanCompletedForSide does not advance shared exportState`() {
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+        runBlocking {
+            store.setMediaScanCompletedForSide(
+                sessionId,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+        assertEquals(ExportState.NOT_STARTED, reload().exportState)
+    }
+
     @Test
     fun `per-side mutators on unknown sessionId return UnknownSession`() {
         val result = runBlocking {
