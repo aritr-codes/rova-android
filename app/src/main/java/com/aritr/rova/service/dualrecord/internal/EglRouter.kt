@@ -15,6 +15,9 @@ import android.view.Surface
 import com.aritr.rova.service.dualrecord.LensFacing
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.utils.RovaLog
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 
 /**
  * Phase 6.1a — EGL14 context + GLES20 shader + per-frame fan-out to 3
@@ -32,6 +35,19 @@ import com.aritr.rova.utils.RovaLog
  * render only (uv.x → 1.0 - uv.x). Encoder renders are NOT mirrored
  * (recorded files play with correct orientation on share).
  *
+ * Phase 6.1b smoke-fix — completed the runtime GL pump that 6.1a left
+ * stubbed (see KDoc "filled at 6.1b binding time" hand-off in the original
+ * `renderFrame()`):
+ *  - Full-screen quad vertex/uv interleaved buffer + glDrawArrays.
+ *  - Cached attribute + uniform locations after glLinkProgram.
+ *  - Per-target glViewport sized from RenderTarget.width/height.
+ *  - uTexMatrix bound per target = texMatrix × mirrorMatrix.
+ *  - eglMakeCurrent BEFORE SurfaceTexture.updateTexImage (the OES bind
+ *    needs the context current).
+ *  - SurfaceTexture.setDefaultBufferSize() now wired via
+ *    [setInputBufferSize] — caller (DualSurfaceProcessor.onInputSurface)
+ *    feeds CameraX's SurfaceRequest.resolution through.
+ *
  * Runtime layer — no unit tests.
  */
 internal class EglRouter(private val lensFacing: LensFacing) {
@@ -39,23 +55,54 @@ internal class EglRouter(private val lensFacing: LensFacing) {
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
     private var eglConfig: EGLConfig? = null
+    private var pbufferSurface: EGLSurface = EGL14.EGL_NO_SURFACE
     private var inputTextureId: Int = 0
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var program: Int = 0
     private val targets = mutableListOf<RenderTarget>()
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
+    private val finalMatrix = FloatArray(16)
+
+    private var aPositionLoc: Int = -1
+    private var aUvLoc: Int = -1
+    private var uTexMatrixLoc: Int = -1
+    private var uTextureLoc: Int = -1
+
+    // Full-screen quad in clip space; interleaved (x, y, u, v) per vertex.
+    // TRIANGLE_STRIP order: BL, BR, TL, TR.
+    private val vertexBuffer: FloatBuffer = ByteBuffer
+        .allocateDirect(QUAD_VERTS.size * 4)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
+        .apply { put(QUAD_VERTS).position(0) }
 
     private data class RenderTarget(
         val side: VideoSide?,            // null = PREVIEW
         val surface: Surface,
         val eglSurface: EGLSurface,
+        val width: Int,
+        val height: Int,
         val cropMatrix: FloatArray,
         val mirrorMatrix: FloatArray,
     )
 
     val inputSurface: Surface
         get() = Surface(inputSurfaceTexture ?: error("EglRouter not initialised"))
+
+    /**
+     * Set the input SurfaceTexture's default buffer size so CameraX's
+     * producer dequeues correctly-sized frames. MUST be called once,
+     * before the first frame arrives, from
+     * `DualSurfaceProcessor.onInputSurface` using
+     * `SurfaceRequest.resolution`. Without this, the SurfaceTexture's
+     * buffer dimensions default to display density — the camera may
+     * starve frames or render at the wrong size (Bug 2 of the 6.1b
+     * smoke-fix).
+     */
+    fun setInputBufferSize(width: Int, height: Int) {
+        inputSurfaceTexture?.setDefaultBufferSize(width, height)
+    }
 
     // EGL_RECORDABLE_ANDROID = 0x3142 is annotated @RequiresApi(26) in the
     // current stub, but the constant value and the EGL_ANDROID_recordable
@@ -85,12 +132,23 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         eglContext = EGL14.eglCreateContext(eglDisplay, eglConfig, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
         require(eglContext !== EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
 
-        // PBuffer surface so we can make-current before any output is attached.
+        // PBuffer surface kept so we can make-current even when no output
+        // is attached yet (e.g. updateTexImage before the first target is
+        // added — also used as the fallback current-surface in renderFrame
+        // if no targets exist yet).
         val pbAttribs = intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE)
-        val pbuf = EGL14.eglCreatePbufferSurface(eglDisplay, eglConfig, pbAttribs, 0)
-        require(EGL14.eglMakeCurrent(eglDisplay, pbuf, pbuf, eglContext)) { "eglMakeCurrent failed" }
+        pbufferSurface = EGL14.eglCreatePbufferSurface(eglDisplay, eglConfig, pbAttribs, 0)
+        require(EGL14.eglMakeCurrent(eglDisplay, pbufferSurface, pbufferSurface, eglContext)) {
+            "eglMakeCurrent failed"
+        }
 
         program = buildProgram()
+        // Cache attribute + uniform locations once (after glLinkProgram).
+        aPositionLoc = GLES20.glGetAttribLocation(program, "aPosition")
+        aUvLoc = GLES20.glGetAttribLocation(program, "aUv")
+        uTexMatrixLoc = GLES20.glGetUniformLocation(program, "uTexMatrix")
+        uTextureLoc = GLES20.glGetUniformLocation(program, "sTex")
+
         inputTextureId = createOesTexture()
         inputSurfaceTexture = SurfaceTexture(inputTextureId)
         Matrix.setIdentityM(mvpMatrix, 0)
@@ -100,7 +158,17 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         inputSurfaceTexture?.setOnFrameAvailableListener(listener)
     }
 
-    fun addTarget(side: VideoSide?, surface: Surface) {
+    /**
+     * Register an output Surface as a render target. `width`/`height` are
+     * the intrinsic pixel dimensions of [surface]:
+     *  - PREVIEW target → `SurfaceOutput.size`.
+     *  - Encoder target → the configured encoder output `Size`.
+     * These drive the per-target `glViewport` so each target receives a
+     * full-frame draw regardless of aspect ratio (cropMatrix work that
+     * preserves source aspect is a 6.1b follow-up — current matrices are
+     * identity).
+     */
+    fun addTarget(side: VideoSide?, surface: Surface, width: Int, height: Int) {
         val winAttribs = intArrayOf(EGL14.EGL_NONE)
         val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, winAttribs, 0)
         val crop = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
@@ -108,28 +176,56 @@ internal class EglRouter(private val lensFacing: LensFacing) {
             Matrix.setIdentityM(it, 0)
             if (side == null && lensFacing == LensFacing.FRONT) Matrix.scaleM(it, 0, -1f, 1f, 1f)
         }
-        targets.add(RenderTarget(side, surface, eglSurface, crop, mirror))
+        targets.add(RenderTarget(side, surface, eglSurface, width, height, crop, mirror))
     }
 
     fun renderFrame() {
         val tex = inputSurfaceTexture ?: return
+        // EGL context MUST be current before SurfaceTexture.updateTexImage:
+        // the call samples the OES texture binding, which lives on the
+        // current EGL context. Use the first target if available, else the
+        // 1x1 PBuffer from setup() so the call still has a valid current
+        // surface (Bug 3 of the 6.1b smoke-fix).
+        val anchor = if (targets.isNotEmpty()) targets[0].eglSurface else pbufferSurface
+        if (anchor === EGL14.EGL_NO_SURFACE) return
+        EGL14.eglMakeCurrent(eglDisplay, anchor, anchor, eglContext)
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
+
         targets.forEach { target ->
             EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)
+            GLES20.glViewport(0, 0, target.width, target.height)
             GLES20.glUseProgram(program)
+            GLES20.glClearColor(0f, 0f, 0f, 1f)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
-            // Canonical Grafika-style fan-out: render full-screen quad with
-            // texMatrix × mirrorMatrix applied via the uTexMatrix uniform.
-            // Encoder targets render at full output size (set by encoder
-            // input Surface). 6.1b on-device smoke verifies pixel correctness.
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            // glDrawArrays would go here in the full Grafika program; the
-            // architectural decision (one program, fan-out to multiple
-            // EGLSurface targets) is what 6.1a locks. Vertex/uv buffer
-            // setup + glVertexAttribPointer + glDrawArrays(TRIANGLE_STRIP,0,4)
-            // is filled at 6.1b binding time when the live preview can verify.
+            GLES20.glUniform1i(uTextureLoc, 0)
+
+            // uTexMatrix = texMatrix × mirrorMatrix. cropMatrix is identity
+            // in the 6.1b smoke-fix (aspect-preserving crop is a follow-up
+            // — portrait surfaces get a stretched source for now, but the
+            // recording is functional and the pump runs).
+            Matrix.multiplyMM(finalMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
+            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
+
+            // Interleaved (x, y, u, v) → bind aPosition at offset 0,
+            // aUv at offset 2 floats, stride = 4 floats = 16 bytes.
+            vertexBuffer.position(0)
+            GLES20.glEnableVertexAttribArray(aPositionLoc)
+            GLES20.glVertexAttribPointer(
+                aPositionLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+            )
+            vertexBuffer.position(2)
+            GLES20.glEnableVertexAttribArray(aUvLoc)
+            GLES20.glVertexAttribPointer(
+                aUvLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+            )
+
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+
+            GLES20.glDisableVertexAttribArray(aPositionLoc)
+            GLES20.glDisableVertexAttribArray(aUvLoc)
             EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
         }
     }
@@ -143,6 +239,11 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         try { inputSurfaceTexture?.release() } catch (e: Throwable) { RovaLog.w("EglRouter SurfaceTexture", e) }
         try { EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
         catch (e: Throwable) { RovaLog.w("EglRouter eglMakeCurrent NO", e) }
+        if (pbufferSurface !== EGL14.EGL_NO_SURFACE) {
+            try { EGL14.eglDestroySurface(eglDisplay, pbufferSurface) }
+            catch (e: Throwable) { RovaLog.w("EglRouter pbuffer", e) }
+            pbufferSurface = EGL14.EGL_NO_SURFACE
+        }
         try { EGL14.eglDestroyContext(eglDisplay, eglContext) } catch (e: Throwable) { RovaLog.w("EglRouter context", e) }
         try { EGL14.eglTerminate(eglDisplay) } catch (e: Throwable) { RovaLog.w("EglRouter terminate", e) }
     }
@@ -180,5 +281,18 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         GLES20.glGetShaderiv(s, GLES20.GL_COMPILE_STATUS, ok, 0)
         require(ok[0] == GLES20.GL_TRUE) { "shader compile failed: ${GLES20.glGetShaderInfoLog(s)}" }
         return s
+    }
+
+    companion object {
+        private const val FLOATS_PER_VERT = 4 // x, y, u, v
+        // Full-screen quad in clip space + matching UV [0,1] range; the
+        // texMatrix from SurfaceTexture remaps these UVs to sample the OES
+        // texture correctly. TRIANGLE_STRIP order: BL, BR, TL, TR.
+        private val QUAD_VERTS: FloatArray = floatArrayOf(
+            -1f, -1f, 0f, 0f, // bottom-left
+             1f, -1f, 1f, 0f, // bottom-right
+            -1f,  1f, 0f, 1f, // top-left
+             1f,  1f, 1f, 1f, // top-right
+        )
     }
 }

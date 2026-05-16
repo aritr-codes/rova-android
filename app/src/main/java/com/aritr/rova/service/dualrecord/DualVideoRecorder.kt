@@ -109,8 +109,21 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
             onSideFailure = { e -> RovaLog.w("EncoderSurface LANDSCAPE failure", e) },
         )
 
-        processor.attachEncoderInput(VideoSide.PORTRAIT, portraitEnc.inputSurface)
-        processor.attachEncoderInput(VideoSide.LANDSCAPE, landscapeEnc.inputSurface)
+        // Phase 6.1b smoke-fix: pass encoder output dims so EglRouter can
+        // set glViewport per target (the GL pump can't query a Surface's
+        // intrinsic size, so the dims must travel through the registration).
+        processor.attachEncoderInput(
+            VideoSide.PORTRAIT,
+            portraitEnc.inputSurface,
+            config.portraitOutputSize.width,
+            config.portraitOutputSize.height,
+        )
+        processor.attachEncoderInput(
+            VideoSide.LANDSCAPE,
+            landscapeEnc.inputSurface,
+            config.landscapeOutputSize.width,
+            config.landscapeOutputSize.height,
+        )
 
         val audio = AudioFanOut(
             sampleRate = config.audioSampleRate,
