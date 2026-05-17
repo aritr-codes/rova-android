@@ -198,6 +198,26 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         serviceBinder?.getService()?.flipCamera()
     }
 
+    /**
+     * Phase 6.1c — DualPreviewZone TextureView attached. Forwards to
+     * the service; no VM state held (service is the source of truth).
+     */
+    fun attachDualPreview(
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        surface: android.view.Surface,
+        width: Int,
+        height: Int,
+    ) {
+        serviceBinder?.getService()?.attachDualPreview(side, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — DualPreviewZone TextureView detached.
+     */
+    fun detachDualPreview(side: com.aritr.rova.service.dualrecord.VideoSide) {
+        serviceBinder?.getService()?.detachDualPreview(side)
+    }
+
     fun setMode(mode: String) {
         settings.mode = mode                                  // (1) prefs commit
         this.mode.value = mode                                // (2) StateFlow update
