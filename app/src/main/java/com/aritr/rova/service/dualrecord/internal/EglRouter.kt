@@ -74,7 +74,16 @@ import java.nio.FloatBuffer
  */
 internal enum class TargetKind { ENCODER, PREVIEW }
 
-internal class EglRouter(private val lensFacing: LensFacing) {
+internal class EglRouter(
+    private val lensFacing: LensFacing,
+    private val displayRotation: Int,
+) {
+
+    init {
+        require(displayRotation in 0..3) {
+            "displayRotation must be Surface.ROTATION_0..ROTATION_270 (0..3), was $displayRotation"
+        }
+    }
 
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -248,17 +257,54 @@ internal class EglRouter(private val lensFacing: LensFacing) {
     fun addTarget(side: VideoSide?, kind: TargetKind, surface: Surface, width: Int, height: Int) {
         val winAttribs = intArrayOf(EGL14.EGL_NONE)
         val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, winAttribs, 0)
-        val crop = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
+        val crop = FloatArray(16)
+        val viewport: IntArray
+        if (side != null) {
+            // Phase 6.1c — real target. Build cropMatrix once from the
+            // session-pinned displayRotation; viewport aspect-fits the
+            // side's content aspect inside the surface dims (encoder
+            // surfaces are aspect-matched → full viewport; preview
+            // TextureView surfaces letterbox).
+            AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+            val contentAspect = when (side) {
+                VideoSide.PORTRAIT -> 9f / 16f
+                VideoSide.LANDSCAPE -> 16f / 9f
+            }
+            viewport = AspectFitMath.computeFitViewport(width, height, contentAspect)
+        } else {
+            // Legacy CameraEffect Preview output (side=null, kind=PREVIEW).
+            // Inert in 6.1c — renderFrame skips. cropMatrix + viewport are
+            // placeholders.
+            Matrix.setIdentityM(crop, 0)
+            viewport = intArrayOf(0, 0, width, height)
+        }
         val mirror = FloatArray(16).also {
             Matrix.setIdentityM(it, 0)
-            if (side == null && lensFacing == LensFacing.FRONT) Matrix.scaleM(it, 0, -1f, 1f, 1f)
+            if (side == null && lensFacing == LensFacing.FRONT) {
+                Matrix.scaleM(it, 0, -1f, 1f, 1f)
+            }
         }
         targets.add(
             RenderTarget(
                 side, kind, surface, eglSurface, width, height, crop, mirror,
-                viewportX = 0, viewportY = 0, viewportW = width, viewportH = height,
+                viewportX = viewport[0], viewportY = viewport[1],
+                viewportW = viewport[2], viewportH = viewport[3],
             )
         )
+    }
+
+    /**
+     * Phase 6.1c — un-register a previously-added target by (side, kind).
+     * Destroys its EGL window surface and drops it from the targets
+     * list. Idempotent — missing target is a no-op. Called when a
+     * DualPreviewZone TextureView detaches (e.g. user navigates away
+     * from RecordScreen).
+     */
+    fun removeTarget(side: VideoSide?, kind: TargetKind) {
+        val target = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
+        try { EGL14.eglDestroySurface(eglDisplay, target.eglSurface) }
+        catch (e: Throwable) { RovaLog.w("EglRouter.removeTarget eglDestroySurface", e) }
+        targets.remove(target)
     }
 
     /**

@@ -31,9 +31,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - `onOutputSurface` passes `SurfaceOutput.size` through to
  *    `router.addTarget` for the PREVIEW target's viewport.
  */
-internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
+internal class DualSurfaceProcessor(
+    lensFacing: LensFacing,
+    displayRotation: Int,
+) : SurfaceProcessor {
 
-    private val router = EglRouter(lensFacing).also { it.setup() }
+    private val router = EglRouter(lensFacing, displayRotation).also { it.setup() }
     private val released = AtomicBoolean(false)
 
     /**

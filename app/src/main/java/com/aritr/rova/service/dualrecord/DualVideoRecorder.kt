@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
 
     private val released = AtomicBoolean(false)
-    private val processor by lazy { DualSurfaceProcessor(config.lensFacing) }
+    private val processor by lazy { DualSurfaceProcessor(config.lensFacing, config.displayRotation) }
     @Volatile private var activeRecording: DualRecording? = null
 
     /**
