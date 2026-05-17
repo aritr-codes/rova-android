@@ -189,13 +189,13 @@ class AspectFitMathTest {
     }
 
     @Test
-    fun `buildCropMatrix LANDSCAPE at rotation 1 is +180 pivot rotate after smokefix series`() {
-        // Phase 6.1c smoke-fix series (round 2, 2026-05-17): cropMatrix is now
+    fun `buildCropMatrix LANDSCAPE at rotation 1 is +270 pivot rotate after smokefix series`() {
+        // Phase 6.1c smoke-fix series (round 3, 2026-05-17): cropMatrix is now
         //   sideAspectCrop[side] × displayRotationCorrection × sideCorrection[side]
         // For LANDSCAPE at displayRotation=1:
-        //   crop = identity ; rot = R(0°) ; sideCorrection = R(+180°) (via displayRotation=3)
-        //   cropMatrix = R(+180° pivot about (0.5, 0.5)).
-        // R(+180° pivot) maps (u, v) → (1-u, 1-v).
+        //   crop = identity ; rot = R(0°) ; sideCorrection = R(+270°) (via displayRotation=2)
+        //   cropMatrix = R(+270° pivot about (0.5, 0.5)).
+        // R(+270° pivot) in GL y-up convention maps (u, v) → (v, 1-u).
         val m = FloatArray(16)
         AspectFitMath.buildCropMatrix(1, VideoSide.LANDSCAPE, m)
 
@@ -204,10 +204,11 @@ class AspectFitMathTest {
         assertEquals(0.5f, pivot[0], 1e-5f)
         assertEquals(0.5f, pivot[1], 1e-5f)
 
-        // (0.25, 0.75) → R(+180° pivot): (1-0.25, 1-0.75) = (0.75, 0.25).
+        // (0.25, 0.75) → R(+270° pivot about (0.5, 0.5)):
+        //   relative: (-0.25, 0.25) → R(+270° y-up): (0.25, 0.25) → add pivot: (0.75, 0.75).
         val out = applyMat4(m, floatArrayOf(0.25f, 0.75f, 0f, 1f))
         assertEquals(0.75f, out[0], 1e-5f)
-        assertEquals(0.25f, out[1], 1e-5f)
+        assertEquals(0.75f, out[1], 1e-5f)
     }
 
     @Test
