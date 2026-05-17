@@ -1310,6 +1310,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return
         }
         currentMode = mode
+        // Phase 6.1b smoke-fix #6 — P+L is rear-only. If the user was on
+        // the front camera and selects P+L, snap back to rear here so
+        // forceReconfigureCamera below rebinds with the correct selector.
+        // The RecordScreen flip button is also disabled in P+L mode
+        // (RecordCameraControls.flipEnabled) so the user can't re-enter
+        // the front-cam state until they leave P+L.
+        if (mode == "PortraitLandscape" &&
+            currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+        ) {
+            RovaLog.d("setMode: P+L selected on front camera — auto-snapping to rear")
+            currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+        }
         serviceScope.launch { forceReconfigureCamera() }
     }
 

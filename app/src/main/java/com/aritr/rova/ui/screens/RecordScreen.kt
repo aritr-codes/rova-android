@@ -599,11 +599,21 @@ fun RecordScreen(
                             .windowInsetsPadding(WindowInsets.statusBars)
                             .padding(start = 16.dp, top = 16.dp),
                     )
+                    // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
+                    // mode (rear-only by design — DualShot from one full-FOV
+                    // sensor frame; entry-level devices like Samsung A17
+                    // don't support concurrent rear+front streams either).
+                    // Gated INDEPENDENTLY of `enabled` so flash stays usable
+                    // in P+L; `onFlip` lambda also re-checks to prevent
+                    // accessibility-tool callers from bypassing the visual
+                    // disable.
+                    val flipAllowed = !isUiLocked && mode != "PortraitLandscape"
                     RecordCameraControls(
                         flashMode = flashMode,
                         onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
-                        onFlip = { if (!isUiLocked) viewModel.flipCamera() },
+                        onFlip = { if (flipAllowed) viewModel.flipCamera() },
                         enabled = !isUiLocked,
+                        flipEnabled = flipAllowed,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.statusBars)
