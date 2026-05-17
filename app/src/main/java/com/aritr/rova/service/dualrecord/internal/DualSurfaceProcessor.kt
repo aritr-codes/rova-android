@@ -49,6 +49,27 @@ internal class DualSurfaceProcessor(
         router.addTarget(side, TargetKind.ENCODER, surface, width, height)
     }
 
+    /**
+     * Phase 6.1c — register a UI-side TextureView surface as a preview
+     * render target. Called from [RovaRecordingService.attachDualPreview]
+     * when a [DualPreviewZone] TextureView attaches. Must be called
+     * BEFORE the first frame arrives for the target to render.
+     */
+    fun attachPreviewInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
+        if (released.get()) return
+        router.addTarget(side, TargetKind.PREVIEW, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — un-register a previously-attached preview target.
+     * Called from [RovaRecordingService.detachDualPreview] when the
+     * TextureView detaches. Idempotent.
+     */
+    fun detachPreviewInput(side: VideoSide) {
+        if (released.get()) return
+        router.removeTarget(side, TargetKind.PREVIEW)
+    }
+
     override fun onInputSurface(request: SurfaceRequest) {
         if (released.get()) {
             RovaLog.w("DualSurfaceProcessor.onInputSurface after release — ignoring", null)
