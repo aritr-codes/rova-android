@@ -23,13 +23,23 @@ import java.nio.FloatBuffer
  * Phase 6.1a — EGL14 context + GLES20 shader + per-frame fan-out to 3
  * targets:
  *  - PreviewView's expected output Surface (CameraEffect.PREVIEW target).
- *  - Portrait encoder's input Surface (crop + scale, no rotation).
- *  - Landscape encoder's input Surface (identity + scale, no rotation).
+ *  - Portrait encoder's input Surface (stretch-to-fit, no per-side rotation).
+ *  - Landscape encoder's input Surface (+90° UV rotation, stretch-to-fit).
  *
- * Pinned-rotation strategy (spec §9): the GL shader does NOT rotate; the
- * encoder track's MediaFormat.KEY_ROTATION metadata signals orientation.
- * Players rotate on playback. Prevents double-rotation playback (180° /
- * sideways).
+ * Pinned-rotation strategy — UPDATED at Phase 6.1b smoke-fix #4: the GL
+ * shader still does not rotate by itself, but the per-target `uTexMatrix`
+ * now encodes the per-target orientation (landscape gets +90° in UV
+ * space) so the landscape encoder's bitstream contains landscape-
+ * oriented pixels, not portrait pixels stretched into a landscape-aspect
+ * frame. The muxer's `setOrientationHint(displayRotation)` is the sole
+ * metadata source (MP4 ignores track-level `KEY_ROTATION` per AOSP
+ * `MediaMuxer.addTrack` docs — so it's also dropped from the encoder
+ * format). Both sides get the same `setOrientationHint` value because
+ * the pixels are already pre-rotated per side. Players still display
+ * with the correct orientation; the change is which side does the
+ * rotation (now the encoder pre-rotates, not the player post-rotates).
+ * Spec §9's "no double-rotation" intent is preserved — the muxer hint
+ * and the rendered pixels agree.
  *
  * Front-camera mirror: applied in the vertex transform for the PREVIEW
  * render only (uv.x → 1.0 - uv.x). Encoder renders are NOT mirrored
@@ -63,6 +73,11 @@ internal class EglRouter(private val lensFacing: LensFacing) {
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
     private val finalMatrix = FloatArray(16)
+    // Temp buffer for the 2-step matrix multiply:
+    //   tmpMatrix   = texMatrix × mirrorMatrix
+    //   finalMatrix = cropMatrix × tmpMatrix
+    // Reused per-target to avoid per-frame allocation.
+    private val tmpMatrix = FloatArray(16)
 
     private var aPositionLoc: Int = -1
     private var aUvLoc: Int = -1
@@ -164,14 +179,51 @@ internal class EglRouter(private val lensFacing: LensFacing) {
      *  - PREVIEW target → `SurfaceOutput.size`.
      *  - Encoder target → the configured encoder output `Size`.
      * These drive the per-target `glViewport` so each target receives a
-     * full-frame draw regardless of aspect ratio (cropMatrix work that
-     * preserves source aspect is a 6.1b follow-up — current matrices are
-     * identity).
+     * full-frame draw at its intrinsic aspect.
+     *
+     * Phase 6.1b smoke-fix #4 — per-side UV rotation. The single
+     * SurfaceTexture's transform matrix (from `getTransformMatrix`) is
+     * computed for the consumer's orientation, which CameraX resolves to
+     * portrait (PreviewView is portrait). Sampling that transform on the
+     * landscape encoder surface stretched portrait-rotated content into
+     * a landscape-aspect frame; the player then either rotated it (when
+     * the encoder's `KEY_ROTATION` was honored at bitstream level — e.g.
+     * Qualcomm encoders) or didn't (when it was honored as
+     * metadata-only) — either way the user saw "stretched portrait."
+     *
+     * Fix: for [VideoSide.LANDSCAPE] targets, prepend an in-UV-space
+     * rotation by +90° around the (0.5, 0.5) center, built with the
+     * standard Grafika translate→rotate→translate-back pattern. This
+     * rotates the sampled OES region 90° in the UV plane, so the
+     * landscape encoder reads landscape-oriented pixels from the same
+     * OES texture without changing what portrait or preview see.
+     *
+     * Sign caveat (research): GL's right-hand rule with CCW-positive
+     * rotation about +Z combined with CameraX's CCW-into-portrait
+     * SurfaceTexture matrix means +90° is the expected "un-rotate to
+     * landscape" direction here. If on-device verification shows the
+     * landscape video upside-down (i.e., a 180° flip from intent), the
+     * fix is a single sign change in [LANDSCAPE_ROTATE_DEG] — try -90f.
+     *
+     * Aspect-fit crop (sampling the 16:9 sub-region of a 9:16 source
+     * instead of stretching) is orthogonal to orientation and remains
+     * the parked "crop accuracy" follow-up. Both portrait and landscape
+     * sides currently stretch — orientation is the higher-impact half.
      */
     fun addTarget(side: VideoSide?, surface: Surface, width: Int, height: Int) {
         val winAttribs = intArrayOf(EGL14.EGL_NONE)
         val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, winAttribs, 0)
-        val crop = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
+        val crop = FloatArray(16).also {
+            Matrix.setIdentityM(it, 0)
+            if (side == VideoSide.LANDSCAPE) {
+                // Pivot to UV center → rotate about +Z → pivot back. The
+                // 3 calls compose right-to-left when applied to a vector,
+                // matching the natural reading order of the operation.
+                Matrix.translateM(it, 0, 0.5f, 0.5f, 0f)
+                Matrix.rotateM(it, 0, LANDSCAPE_ROTATE_DEG, 0f, 0f, 1f)
+                Matrix.translateM(it, 0, -0.5f, -0.5f, 0f)
+            }
+        }
         val mirror = FloatArray(16).also {
             Matrix.setIdentityM(it, 0)
             if (side == null && lensFacing == LensFacing.FRONT) Matrix.scaleM(it, 0, -1f, 1f, 1f)
@@ -202,11 +254,22 @@ internal class EglRouter(private val lensFacing: LensFacing) {
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
             GLES20.glUniform1i(uTextureLoc, 0)
 
-            // uTexMatrix = texMatrix × mirrorMatrix. cropMatrix is identity
-            // in the 6.1b smoke-fix (aspect-preserving crop is a follow-up
-            // — portrait surfaces get a stretched source for now, but the
-            // recording is functional and the pump runs).
-            Matrix.multiplyMM(finalMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
+            // uTexMatrix = cropMatrix × texMatrix × mirrorMatrix.
+            //   - mirrorMatrix: identity (encoder targets) or H-flip (FRONT
+            //     preview only — recorded files are NEVER mirrored so share
+            //     plays right-side-up on other apps).
+            //   - texMatrix: SurfaceTexture's per-frame consumer-orientation
+            //     transform (CameraX-resolved to portrait).
+            //   - cropMatrix: identity for PORTRAIT + PREVIEW; +90° UV
+            //     rotation around (0.5, 0.5) for LANDSCAPE so the landscape
+            //     encoder samples landscape-oriented pixels from the same
+            //     OES texture. See [addTarget] KDoc for the rationale.
+            //
+            // Composition is right-to-left when applied to `aUv`: mirror
+            // → tex → crop. Done as two multiplies via `tmpMatrix` because
+            // `Matrix.multiplyMM` doesn't support in-place destination.
+            Matrix.multiplyMM(tmpMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
+            Matrix.multiplyMM(finalMatrix, 0, target.cropMatrix, 0, tmpMatrix, 0)
             GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
 
             // Interleaved (x, y, u, v) → bind aPosition at offset 0,
@@ -294,5 +357,13 @@ internal class EglRouter(private val lensFacing: LensFacing) {
             -1f,  1f, 0f, 1f, // top-left
              1f,  1f, 1f, 1f, // top-right
         )
+        // Phase 6.1b smoke-fix #4 — degree value for the per-side UV
+        // rotation that turns the landscape encoder's sample area from
+        // portrait-rotated content back to landscape-oriented content.
+        // GL right-hand rule + CameraX CCW-into-portrait combine to make
+        // +90° the expected "un-rotate" direction; flip to -90f if
+        // on-device verification shows landscape inverted. See
+        // [addTarget] KDoc for the full derivation.
+        private const val LANDSCAPE_ROTATE_DEG = 90f
     }
 }
