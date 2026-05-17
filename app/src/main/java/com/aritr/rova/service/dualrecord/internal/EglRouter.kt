@@ -62,6 +62,15 @@ import java.nio.FloatBuffer
  *    feeds CameraX's SurfaceRequest.resolution through.
  *
  * Runtime layer — no unit tests.
+ *
+ * Phase 6.1c thread-safety: [targets] is mutated from multiple threads
+ * — [addTarget]/[removeTarget] called from UI/main (TextureView attach/
+ * detach), [renderFrame] called from the GL/frame-callback thread. All
+ * three serialize on `synchronized(targets) { ... }`. Holding the lock
+ * during [renderFrame]'s draw loop ensures that an EGL surface being
+ * destroyed by [removeTarget] is not concurrently used by a GL draw
+ * (prevents native segfault). Lock is uncontended in steady state —
+ * attach/detach are bind-time/teardown events, not per-frame.
  */
 /**
  * Phase 6.1c — render target classification. Lives next to EglRouter
@@ -284,13 +293,15 @@ internal class EglRouter(
                 Matrix.scaleM(it, 0, -1f, 1f, 1f)
             }
         }
-        targets.add(
-            RenderTarget(
-                side, kind, surface, eglSurface, width, height, crop, mirror,
-                viewportX = viewport[0], viewportY = viewport[1],
-                viewportW = viewport[2], viewportH = viewport[3],
+        synchronized(targets) {
+            targets.add(
+                RenderTarget(
+                    side, kind, surface, eglSurface, width, height, crop, mirror,
+                    viewportX = viewport[0], viewportY = viewport[1],
+                    viewportW = viewport[2], viewportH = viewport[3],
+                )
             )
-        )
+        }
     }
 
     /**
@@ -301,10 +312,12 @@ internal class EglRouter(
      * from RecordScreen).
      */
     fun removeTarget(side: VideoSide?, kind: TargetKind) {
-        val target = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
-        try { EGL14.eglDestroySurface(eglDisplay, target.eglSurface) }
-        catch (e: Throwable) { RovaLog.w("EglRouter.removeTarget eglDestroySurface", e) }
-        targets.remove(target)
+        synchronized(targets) {
+            val target = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
+            try { EGL14.eglDestroySurface(eglDisplay, target.eglSurface) }
+            catch (e: Throwable) { RovaLog.w("EglRouter.removeTarget eglDestroySurface", e) }
+            targets.remove(target)
+        }
     }
 
     /**
@@ -344,58 +357,60 @@ internal class EglRouter(
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
 
-        targets.forEach { target ->
-            EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)
-            GLES20.glViewport(0, 0, target.width, target.height)
-            GLES20.glUseProgram(program)
-            GLES20.glClearColor(0f, 0f, 0f, 1f)
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
-            GLES20.glUniform1i(uTextureLoc, 0)
+        synchronized(targets) {
+            targets.forEach { target ->
+                EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)
+                GLES20.glViewport(0, 0, target.width, target.height)
+                GLES20.glUseProgram(program)
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
+                GLES20.glUniform1i(uTextureLoc, 0)
 
-            // Smoke-fix #5: refresh per-target cropMatrix from the
-            // current consumer dims. ~50 ns / target — trivial vs the
-            // GL draw cost. See [computeCropMatrix].
-            computeCropMatrix(target)
+                // Smoke-fix #5: refresh per-target cropMatrix from the
+                // current consumer dims. ~50 ns / target — trivial vs the
+                // GL draw cost. See [computeCropMatrix].
+                computeCropMatrix(target)
 
-            // uTexMatrix = cropMatrix × texMatrix × mirrorMatrix.
-            //   - mirrorMatrix: identity (encoder targets) or H-flip (FRONT
-            //     preview only — recorded files are NEVER mirrored so share
-            //     plays right-side-up on other apps).
-            //   - texMatrix: SurfaceTexture's per-frame consumer-orientation
-            //     transform (CameraX-resolved per the current displayRotation).
-            //   - cropMatrix: identity when consumer & target share aspect
-            //     orientation, +90° UV rotation otherwise. Recomputed each
-            //     frame so a config change (e.g. consumer dims arriving
-            //     after the first addTarget) is reflected on the very next
-            //     frame.
-            //
-            // Composition is right-to-left when applied to `aUv`: mirror
-            // → tex → crop. Done as two multiplies via `tmpMatrix` because
-            // `Matrix.multiplyMM` doesn't support in-place destination.
-            Matrix.multiplyMM(tmpMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
-            Matrix.multiplyMM(finalMatrix, 0, target.cropMatrix, 0, tmpMatrix, 0)
-            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
+                // uTexMatrix = cropMatrix × texMatrix × mirrorMatrix.
+                //   - mirrorMatrix: identity (encoder targets) or H-flip (FRONT
+                //     preview only — recorded files are NEVER mirrored so share
+                //     plays right-side-up on other apps).
+                //   - texMatrix: SurfaceTexture's per-frame consumer-orientation
+                //     transform (CameraX-resolved per the current displayRotation).
+                //   - cropMatrix: identity when consumer & target share aspect
+                //     orientation, +90° UV rotation otherwise. Recomputed each
+                //     frame so a config change (e.g. consumer dims arriving
+                //     after the first addTarget) is reflected on the very next
+                //     frame.
+                //
+                // Composition is right-to-left when applied to `aUv`: mirror
+                // → tex → crop. Done as two multiplies via `tmpMatrix` because
+                // `Matrix.multiplyMM` doesn't support in-place destination.
+                Matrix.multiplyMM(tmpMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
+                Matrix.multiplyMM(finalMatrix, 0, target.cropMatrix, 0, tmpMatrix, 0)
+                GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
 
-            // Interleaved (x, y, u, v) → bind aPosition at offset 0,
-            // aUv at offset 2 floats, stride = 4 floats = 16 bytes.
-            vertexBuffer.position(0)
-            GLES20.glEnableVertexAttribArray(aPositionLoc)
-            GLES20.glVertexAttribPointer(
-                aPositionLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
-            )
-            vertexBuffer.position(2)
-            GLES20.glEnableVertexAttribArray(aUvLoc)
-            GLES20.glVertexAttribPointer(
-                aUvLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
-            )
+                // Interleaved (x, y, u, v) → bind aPosition at offset 0,
+                // aUv at offset 2 floats, stride = 4 floats = 16 bytes.
+                vertexBuffer.position(0)
+                GLES20.glEnableVertexAttribArray(aPositionLoc)
+                GLES20.glVertexAttribPointer(
+                    aPositionLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+                )
+                vertexBuffer.position(2)
+                GLES20.glEnableVertexAttribArray(aUvLoc)
+                GLES20.glVertexAttribPointer(
+                    aUvLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+                )
 
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
-            GLES20.glDisableVertexAttribArray(aPositionLoc)
-            GLES20.glDisableVertexAttribArray(aUvLoc)
-            EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+                GLES20.glDisableVertexAttribArray(aPositionLoc)
+                GLES20.glDisableVertexAttribArray(aUvLoc)
+                EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+            }
         }
     }
 
