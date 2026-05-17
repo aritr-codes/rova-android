@@ -137,6 +137,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // onto the new DualVideoRecorder in setupDualCamera. Keyed by side;
     // re-registering the same side replaces the prior entry (TextureView
     // size-changed path).
+    // Thread-safety: all access guarded by synchronized(pendingPreviewSurfaces).
+    // UI thread (TextureView callbacks) mutates via attach/detachDualPreview;
+    // service thread reads via setupDualCamera replay (snapshot-then-iterate).
     private val pendingPreviewSurfaces =
         mutableMapOf<com.aritr.rova.service.dualrecord.VideoSide, Triple<android.view.Surface, Int, Int>>()
     private var currentDualRecording: com.aritr.rova.service.dualrecord.DualRecording? = null
@@ -1226,8 +1229,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
             currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
             // Phase 6.1c — replay any UI-registered preview surfaces onto
             // the new recorder. Survives camera flip / mode change without
-            // re-creating the TextureViews in the UI.
-            pendingPreviewSurfaces.forEach { (side, triple) ->
+            // re-creating the TextureViews in the UI. Snapshot inside
+            // the synchronized block to avoid ConcurrentModificationException
+            // if a TextureView callback fires during the replay iteration.
+            val snapshot = synchronized(pendingPreviewSurfaces) {
+                pendingPreviewSurfaces.toMap()
+            }
+            snapshot.forEach { (side, triple) ->
                 currentDualRecorder?.attachPreviewInput(side, triple.first, triple.second, triple.third)
             }
 
@@ -1305,7 +1313,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         width: Int,
         height: Int,
     ) {
-        pendingPreviewSurfaces[side] = Triple(surface, width, height)
+        synchronized(pendingPreviewSurfaces) {
+            pendingPreviewSurfaces[side] = Triple(surface, width, height)
+        }
         currentDualRecorder?.attachPreviewInput(side, surface, width, height)
     }
 
@@ -1314,7 +1324,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * cached surface AND tells the live recorder to remove its target.
      */
     fun detachDualPreview(side: com.aritr.rova.service.dualrecord.VideoSide) {
-        pendingPreviewSurfaces.remove(side)
+        synchronized(pendingPreviewSurfaces) {
+            pendingPreviewSurfaces.remove(side)
+        }
         currentDualRecorder?.detachPreviewInput(side)
     }
 
