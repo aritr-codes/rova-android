@@ -1,5 +1,6 @@
 package com.aritr.rova.service.dualrecord
 
+import android.view.Surface
 import androidx.camera.core.CameraEffect
 import androidx.camera.core.SurfaceProcessor
 import androidx.core.util.Consumer
@@ -162,6 +163,25 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
         ).also {
             activeRecording = it
         }
+    }
+
+    /**
+     * Phase 6.1c — public seam for [com.aritr.rova.service.RovaRecordingService]
+     * to attach a UI-side preview TextureView surface as a per-side
+     * render target. Delegates to the lazy-initialised processor.
+     */
+    fun attachPreviewInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
+        check(!released.get()) { "DualVideoRecorder is released" }
+        processor.attachPreviewInput(side, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — un-register a previously-attached preview target.
+     * No-op after release.
+     */
+    fun detachPreviewInput(side: VideoSide) {
+        if (released.get()) return
+        processor.detachPreviewInput(side)
     }
 
     fun release() {
