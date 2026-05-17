@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.PlayerView
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.screens.HistoryRowFormatters
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -75,13 +76,19 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun PlayerScreen(
     sessionId: String,
+    side: VideoSide? = null,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as RovaApp
+    // Phase 6.1b smoke-fix #3 — `side` is part of the VM identity for
+    // P+L sessions: a single sessionId can produce two cards (one per
+    // side), each routing to a distinct VM/ExoPlayer instance. Keying
+    // by sessionId alone would force the second nav to re-bind the
+    // first side's player to the second URI mid-composition.
     val viewModel: PlayerViewModel = viewModel(
-        factory = PlayerViewModel.factory(app, sessionId),
-        key = "player-$sessionId"
+        factory = PlayerViewModel.factory(app, sessionId, side),
+        key = "player-$sessionId-${side?.name ?: "single"}"
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()

@@ -535,7 +535,13 @@ fun RecordScreen(
                                 loopCount = loopCount,
                                 intervalMinutes = interval,
                                 quality = resolution,
-                                mode = mode,
+                                // Phase 6.1b smoke-fix #3 — display-only
+                                // map: the persisted "PortraitLandscape"
+                                // truncates to "PortraitLa..." inside the
+                                // chip. Mirror the canonical "P + L"
+                                // string used in SessionSettingsSheet's
+                                // P+L tab so the chip stays legible.
+                                mode = if (mode == "PortraitLandscape") "P + L" else mode,
                                 onOpenSheet = { viewModel.openSettingsSheet() },
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)

@@ -13,6 +13,7 @@ import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -55,7 +56,21 @@ data class VideoItem(
      * `videos/<sessionId>/` directory do not linger as invisible
      * disk waste once the gallery row is gone.
      */
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    /**
+     * Phase 6.1b smoke-fix #3 — which side of a P+L session this row
+     * represents. Non-null for P+L rows (one card per side, populated
+     * from [com.aritr.rova.ui.screens.HistoryArtifactMapper.PerSideArtifact.side]);
+     * null for single-mode rows and for legacy file-only entries.
+     *
+     * Threaded through the History card click → MainScreen nav arg →
+     * PlayerViewModel → PlayerUriResolver so the player picks the
+     * correct per-side `pendingUri` / `publicTargetPath` from the
+     * manifest. Without this field both cards for a P+L session would
+     * collide on the same shared (null) pointers and surface
+     * Unavailable.
+     */
+    val side: VideoSide? = null
 )
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -195,7 +210,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             thumbnail = cached?.first,
             resolution = cached?.second ?: VideoMetadataUtils.UNKNOWN_RESOLUTION,
             shareUri = rec.shareUri,
-            sessionId = rec.sessionId
+            sessionId = rec.sessionId,
+            side = rec.side
         )
     }
 
@@ -259,7 +275,11 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private data class ResolvedRecording(
         val file: File,
         val shareUri: Uri?,
-        val sessionId: String?
+        val sessionId: String?,
+        // Phase 6.1b smoke-fix #3 — non-null for P+L rows (one per
+        // side); null for single-mode rows and legacy file-only
+        // entries. Threaded into [VideoItem.side] via [buildItem].
+        val side: VideoSide? = null
     )
 
     private fun manifestDrivenArtifacts(
@@ -290,7 +310,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                         ResolvedRecording(
                             file = perSide.file,
                             shareUri = shareUriString?.let(Uri::parse),
-                            sessionId = m.sessionId
+                            sessionId = m.sessionId,
+                            side = perSide.side
                         )
                     }
                 } else {

@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.screens.HistoryScreen
 import com.aritr.rova.ui.screens.RecordScreen
 import com.aritr.rova.ui.screens.SettingsScreen
@@ -90,7 +91,7 @@ fun MainScreen() {
                             launchSingleTop = true
                         }
                     },
-                    onOpenPlayer = { sessionId ->
+                    onOpenPlayer = { sessionId, side ->
                         // Phase 2.5 — argumented routes do NOT use
                         // launchSingleTop because each (route, args)
                         // pair is its own back-stack entry; reusing
@@ -98,18 +99,45 @@ fun MainScreen() {
                         // sessionIds would re-bind the existing
                         // PlayerViewModel to a fresh manifest, which
                         // would re-create ExoPlayer mid-composition.
-                        navController.navigate("player/$sessionId")
+                        //
+                        // Phase 6.1b smoke-fix #3 — P+L sessions thread
+                        // a `side` query arg so the route disambiguates
+                        // the two cards per sessionId. Single-mode omits
+                        // the query arg so the route stays byte-identical
+                        // to the pre-smoke-fix-#3 shape.
+                        val route = if (side != null) {
+                            "player/$sessionId?side=${side.name}"
+                        } else {
+                            "player/$sessionId"
+                        }
+                        navController.navigate(route)
                     },
                     onBack = { navController.popBackStack() }
                 )
             }
             composable(
-                route = "player/{sessionId}",
-                arguments = listOf(navArgument("sessionId") { type = NavType.StringType })
+                route = "player/{sessionId}?side={side}",
+                arguments = listOf(
+                    navArgument("sessionId") { type = NavType.StringType },
+                    navArgument("side") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
             ) { backStackEntry ->
                 val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+                // Phase 6.1b smoke-fix #3 — `side` is an optional query
+                // arg; null for single-mode rows, "PORTRAIT" / "LANDSCAPE"
+                // for P+L rows. runCatching guards against an unknown
+                // enum value (manual deep-link probe etc.) — falls back
+                // to null, which the resolver surfaces as Unavailable
+                // on P+L manifests.
+                val sideStr = backStackEntry.arguments?.getString("side")
+                val side = sideStr?.let { runCatching { VideoSide.valueOf(it) }.getOrNull() }
                 PlayerScreen(
                     sessionId = sessionId,
+                    side = side,
                     onBack = { navController.popBackStack() }
                 )
             }

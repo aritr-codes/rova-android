@@ -5,6 +5,7 @@ import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SegmentRecord
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,7 +35,12 @@ class PlayerUriResolverTest {
         publicTargetPath: String? = null,
         segments: List<SegmentRecord> = emptyList(),
         durationSeconds: Int = 30,
-        startedAt: Long = 1_715_000_000_000L
+        startedAt: Long = 1_715_000_000_000L,
+        mode: String = "Portrait",
+        portraitPendingUri: String? = null,
+        portraitPublicTargetPath: String? = null,
+        landscapePendingUri: String? = null,
+        landscapePublicTargetPath: String? = null
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = startedAt,
@@ -42,13 +48,18 @@ class PlayerUriResolverTest {
             durationSeconds = durationSeconds,
             intervalMinutes = 0,
             resolution = "FHD",
-            loopCount = segments.size.coerceAtLeast(1)
+            loopCount = segments.size.coerceAtLeast(1),
+            mode = mode
         ),
         segments = segments,
         exportTier = tier,
         exportState = exportState,
         pendingUri = pendingUri,
-        publicTargetPath = publicTargetPath
+        publicTargetPath = publicTargetPath,
+        portraitPendingUri = portraitPendingUri,
+        portraitPublicTargetPath = portraitPublicTargetPath,
+        landscapePendingUri = landscapePendingUri,
+        landscapePublicTargetPath = landscapePublicTargetPath
     )
 
     private fun seg(durationMs: Long) =
@@ -239,5 +250,107 @@ class PlayerUriResolverTest {
         assertEquals(1, ready.totalClips)
         assertEquals(45_000L, ready.totalDurationFromSegmentsMs)
         assertEquals(listOf(45_000L), ready.segmentDurationsMs)
+    }
+
+    // ─── Phase 6.1b smoke-fix #3 — P+L per-side dispatch ─────────────
+    // PlayerScreen receives a `side: VideoSide?` argument threaded from
+    // the History card click. For P+L sessions the shared `pendingUri` /
+    // `publicTargetPath` are null (Tier1Exporter / Tier2Exporter write to
+    // the per-side variants — see ADR-0008 + Phase 6.1b T11/T13). Without
+    // this branch the resolver collapses to Unavailable on every P+L card
+    // click ("Recording file not found"). The 4th read-side consumer the
+    // T18-T20 final reviewer missed alongside HistoryArtifactMapper.
+    @Test
+    fun `P+L Tier 1 with side PORTRAIT returns Ready with portraitPendingUri`() {
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                sessionId = "pl1",
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/external/video/media/100",
+                landscapePendingUri = "content://media/external/video/media/200",
+                segments = listOf(seg(10_000), seg(10_000))
+            ),
+            side = VideoSide.PORTRAIT
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals("content://media/external/video/media/100", ready.mediaUri)
+        assertEquals("pl1", ready.sessionId)
+    }
+
+    @Test
+    fun `P+L Tier 1 with side LANDSCAPE returns Ready with landscapePendingUri`() {
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                sessionId = "pl1",
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/external/video/media/100",
+                landscapePendingUri = "content://media/external/video/media/200",
+                segments = listOf(seg(10_000), seg(10_000))
+            ),
+            side = VideoSide.LANDSCAPE
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals("content://media/external/video/media/200", ready.mediaUri)
+    }
+
+    @Test
+    fun `P+L Tier 2 with side PORTRAIT returns Ready with file URI of portraitPublicTargetPath`() {
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER2_API26_28,
+                mode = "PortraitLandscape",
+                portraitPublicTargetPath = "/storage/Movies/Rova/Rova_portrait.mp4",
+                landscapePublicTargetPath = "/storage/Movies/Rova/Rova_landscape.mp4",
+                segments = listOf(seg(5_000))
+            ),
+            side = VideoSide.PORTRAIT
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals("file:///storage/Movies/Rova/Rova_portrait.mp4", ready.mediaUri)
+    }
+
+    @Test
+    fun `P+L with null side returns Unavailable (defensive routing invariant)`() {
+        // The History card click ALWAYS passes a non-null side for P+L
+        // rows (HistoryViewModel populates VideoItem.side from
+        // PerSideArtifact.side). A null side reaching the resolver on a
+        // P+L manifest is a routing bug — surface Unavailable rather
+        // than silently picking one side or falling through to the
+        // (null) shared pointers.
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/external/video/media/100",
+                landscapePendingUri = "content://media/external/video/media/200",
+                segments = listOf(seg(10_000))
+            ),
+            side = null
+        )
+        assertTrue("expected Unavailable, got $state", state is PlayerUiState.Unavailable)
+    }
+
+    @Test
+    fun `single-mode ignores stale per-side fields and side argument`() {
+        // Regression: a manifest from a pre-T16 build (or a bug-mixed
+        // future state) that carries both shared `pendingUri` and stray
+        // per-side fields must keep returning the shared pointer for
+        // single-mode. The `side` arg is only consulted when
+        // `config.mode == "PortraitLandscape"`.
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "Portrait",
+                pendingUri = "content://media/single/canonical",
+                portraitPendingUri = "content://media/stale/portrait",
+                landscapePendingUri = "content://media/stale/landscape",
+                segments = listOf(seg(10_000))
+            ),
+            side = VideoSide.LANDSCAPE
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals("content://media/single/canonical", ready.mediaUri)
     }
 }

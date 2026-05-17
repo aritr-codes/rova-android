@@ -82,6 +82,7 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
@@ -97,7 +98,7 @@ import kotlinx.coroutines.launch
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToRecord: () -> Unit = {},
-    onOpenPlayer: (sessionId: String) -> Unit = {},
+    onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -432,7 +433,12 @@ fun HistoryScreen(
                             // tracked for a follow-up slice once the
                             // upgrade-window concern fades.
                             val playItem: () -> Unit = if (item.sessionId != null) {
-                                { onOpenPlayer(item.sessionId) }
+                                // Phase 6.1b smoke-fix #3 — pass item.side
+                                // through so P+L rows route to the per-side
+                                // artifact. Single-mode VideoItem.side is
+                                // null (HistoryViewModel single-mode branch
+                                // leaves it at its default).
+                                { onOpenPlayer(item.sessionId, item.side) }
                             } else {
                                 {
                                     val intent = Intent(context, PreviewActivity::class.java).apply {
