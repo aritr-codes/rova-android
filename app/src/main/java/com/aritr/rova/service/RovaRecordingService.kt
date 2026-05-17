@@ -1239,7 +1239,29 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 currentDualRecorder?.attachPreviewInput(side, triple.first, triple.second, triple.third)
             }
 
-            preview = Preview.Builder().setTargetRotation(displayRotation).build()
+            // Phase 6.1c — force landscape 1920×1080 consumer for full
+            // sensor FOV. Without this, CameraX picks portrait dims
+            // based on PreviewView size and center-crops the sensor to
+            // 9:16 before our shader sees it (loses ~44% horizontal FOV
+            // → both encoder outputs forced to share a portrait crop).
+            // setTargetRotation(ROTATION_0) keeps the camera producing
+            // sensor-native landscape — we own rotation correction in
+            // the EglRouter/AspectFitMath pipeline.
+            val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    androidx.camera.core.resolutionselector.ResolutionStrategy(
+                        android.util.Size(1920, 1080),
+                        androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                    )
+                )
+                .setAspectRatioStrategy(
+                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                )
+                .build()
+            preview = Preview.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .setTargetRotation(android.view.Surface.ROTATION_0)
+                .build()
             val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
