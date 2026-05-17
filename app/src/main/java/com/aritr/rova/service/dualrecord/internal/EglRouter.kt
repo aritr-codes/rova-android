@@ -128,6 +128,9 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         // Phase 6.1c — per-target aspect-fit viewport. Encoder targets
         // get viewport == full surface; preview targets letterbox the
         // side's content aspect inside the TextureView surface dims.
+        // Mutable `var` because the TextureView SurfaceTextureListener
+        // re-registers on size-changed → addTarget recomputes; no
+        // per-frame mutation.
         var viewportX: Int,
         var viewportY: Int,
         var viewportW: Int,
