@@ -105,7 +105,25 @@ internal object PlayerUriResolver {
         if (uri.isNullOrEmpty()) {
             return PlayerUiState.Unavailable("Recording file not found")
         }
-        val segmentDurations = manifest.segments.map { it.durationMs }
+        // Phase 6.1b smoke-fix #4 — P+L per-side segment filter. For a P+L
+        // session the manifest's `segments` list interleaves both sides
+        // (RovaRecordingService.handleDualVideoEvent.Finalize appends one
+        // SegmentRecord per side per loop, see RovaRecordingService.kt:2027).
+        // The player only renders the ONE side the user picked from the
+        // History card, so the timeline must be filtered down to that
+        // side's segments — otherwise a 2-loop P+L recording shows "Clip
+        // 4 of 4" instead of "Clip 2 of 2" and the cell timeline has 4
+        // cells where the played file only contains 2. Single-mode falls
+        // through to the unfiltered list (SegmentRecord.side is null for
+        // single-mode segments). P+L segments without a side tag (none
+        // exist in production — the service always tags) would filter to
+        // empty here and surface as "Recording incomplete" below, which
+        // is the right failure mode.
+        val segmentDurations = if (isPlusL && side != null) {
+            manifest.segments.filter { it.side == side }.map { it.durationMs }
+        } else {
+            manifest.segments.map { it.durationMs }
+        }
         // Audit F#11 — a finalized manifest with zero segments should
         // not exist (every loop writes at least one segment), but a
         // corrupted segments JSON parse can leave the list empty. The

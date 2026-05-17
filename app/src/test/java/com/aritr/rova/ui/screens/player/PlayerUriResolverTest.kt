@@ -62,8 +62,14 @@ class PlayerUriResolverTest {
         landscapePublicTargetPath = landscapePublicTargetPath
     )
 
-    private fun seg(durationMs: Long) =
-        SegmentRecord(filename = "segment_$durationMs.mp4", durationMs = durationMs, sizeBytes = 1L, sha1 = "0")
+    private fun seg(durationMs: Long, side: VideoSide? = null) =
+        SegmentRecord(
+            filename = "segment_${durationMs}_${side?.name ?: "single"}.mp4",
+            durationMs = durationMs,
+            sizeBytes = 1L,
+            sha1 = "0",
+            side = side
+        )
 
     // ─── Unavailable branches ─────────────────────────────────────
 
@@ -269,7 +275,10 @@ class PlayerUriResolverTest {
                 mode = "PortraitLandscape",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
-                segments = listOf(seg(10_000), seg(10_000))
+                segments = listOf(
+                    seg(10_000, VideoSide.PORTRAIT),
+                    seg(10_000, VideoSide.LANDSCAPE),
+                )
             ),
             side = VideoSide.PORTRAIT
         )
@@ -287,7 +296,10 @@ class PlayerUriResolverTest {
                 mode = "PortraitLandscape",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
-                segments = listOf(seg(10_000), seg(10_000))
+                segments = listOf(
+                    seg(10_000, VideoSide.PORTRAIT),
+                    seg(10_000, VideoSide.LANDSCAPE),
+                )
             ),
             side = VideoSide.LANDSCAPE
         )
@@ -303,7 +315,10 @@ class PlayerUriResolverTest {
                 mode = "PortraitLandscape",
                 portraitPublicTargetPath = "/storage/Movies/Rova/Rova_portrait.mp4",
                 landscapePublicTargetPath = "/storage/Movies/Rova/Rova_landscape.mp4",
-                segments = listOf(seg(5_000))
+                segments = listOf(
+                    seg(5_000, VideoSide.PORTRAIT),
+                    seg(5_000, VideoSide.LANDSCAPE),
+                )
             ),
             side = VideoSide.PORTRAIT
         )
@@ -325,7 +340,7 @@ class PlayerUriResolverTest {
                 mode = "PortraitLandscape",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
-                segments = listOf(seg(10_000))
+                segments = listOf(seg(10_000, VideoSide.PORTRAIT))
             ),
             side = null
         )
@@ -352,5 +367,107 @@ class PlayerUriResolverTest {
         )
         val ready = state as PlayerUiState.Ready
         assertEquals("content://media/single/canonical", ready.mediaUri)
+    }
+
+    // ─── Phase 6.1b smoke-fix #4 — P+L per-side segment filter ─────────
+    // RovaRecordingService.handleDualVideoEvent.Finalize appends ONE
+    // SegmentRecord per side per loop (line 2027). For a 2-loop P+L
+    // recording the manifest carries 4 SegmentRecords (2 PORTRAIT + 2
+    // LANDSCAPE). The player only plays one side's file — the timeline
+    // must filter to that side's segments or it shows the doubled count.
+
+    @Test
+    fun `P+L PORTRAIT filters interleaved manifest segments down to PORTRAIT only`() {
+        // 2-loop P+L recording: 4 segments tagged P/L/P/L, durations
+        // intentionally asymmetric so we can tell which side leaked
+        // through if the filter regressed.
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/p",
+                landscapePendingUri = "content://media/l",
+                segments = listOf(
+                    seg(10_000, VideoSide.PORTRAIT),
+                    seg(9_500, VideoSide.LANDSCAPE),
+                    seg(10_200, VideoSide.PORTRAIT),
+                    seg(9_700, VideoSide.LANDSCAPE),
+                )
+            ),
+            side = VideoSide.PORTRAIT
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals(2, ready.totalClips)
+        assertEquals(listOf(10_000L, 10_200L), ready.segmentDurationsMs)
+        assertEquals(20_200L, ready.totalDurationFromSegmentsMs)
+    }
+
+    @Test
+    fun `P+L LANDSCAPE filters interleaved manifest segments down to LANDSCAPE only`() {
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/p",
+                landscapePendingUri = "content://media/l",
+                segments = listOf(
+                    seg(10_000, VideoSide.PORTRAIT),
+                    seg(9_500, VideoSide.LANDSCAPE),
+                    seg(10_200, VideoSide.PORTRAIT),
+                    seg(9_700, VideoSide.LANDSCAPE),
+                )
+            ),
+            side = VideoSide.LANDSCAPE
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals(2, ready.totalClips)
+        assertEquals(listOf(9_500L, 9_700L), ready.segmentDurationsMs)
+        assertEquals(19_200L, ready.totalDurationFromSegmentsMs)
+    }
+
+    @Test
+    fun `P+L PORTRAIT with no PORTRAIT segments surfaces Recording incomplete`() {
+        // Degenerate manifest: P+L session where every PORTRAIT segment
+        // failed mid-mux (DualMuxer tolerant per-side failure path).
+        // The shared pointer fix-up still has a portrait artifact URI
+        // populated (recovery wrote a placeholder), but the segments
+        // list has only LANDSCAPE entries. The filter collapses to
+        // empty → existing `segmentDurations.isEmpty()` branch fires.
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "PortraitLandscape",
+                portraitPendingUri = "content://media/p_recovered",
+                landscapePendingUri = "content://media/l",
+                segments = listOf(
+                    seg(9_500, VideoSide.LANDSCAPE),
+                    seg(9_700, VideoSide.LANDSCAPE),
+                )
+            ),
+            side = VideoSide.PORTRAIT
+        )
+        assertTrue("expected Unavailable, got $state", state is PlayerUiState.Unavailable)
+        assertEquals("Recording incomplete", (state as PlayerUiState.Unavailable).reason)
+    }
+
+    @Test
+    fun `single-mode segments retain unfiltered durations regardless of side argument`() {
+        // Regression: the new P+L filter MUST NOT apply to single-mode
+        // sessions. Even if a single-mode session somehow carries a
+        // mix of side-tagged + untagged segments (a bug-mixed state),
+        // the resolver returns all of them unfiltered because the
+        // `isPlusL && side != null` guard requires P+L mode.
+        val state = PlayerUriResolver.resolve(
+            manifest(
+                tier = ExportTier.TIER1_API29_PLUS,
+                mode = "Portrait",
+                pendingUri = "content://media/single",
+                segments = listOf(seg(10_000), seg(10_000), seg(10_000))
+            ),
+            side = VideoSide.PORTRAIT
+        )
+        val ready = state as PlayerUiState.Ready
+        assertEquals(3, ready.totalClips)
+        assertEquals(30_000L, ready.totalDurationFromSegmentsMs)
     }
 }
