@@ -162,41 +162,52 @@ class AspectFitMathTest {
     // ─── buildCropMatrix composition tests ─────────────────────────
 
     @Test
-    fun `buildCropMatrix PORTRAIT at rotation 0 composes +90 portraitCorrection after sideAspectCrop and rotation`() {
-        // Phase 6.1c smoke-fix (2026-05-17): cropMatrix for PORTRAIT is now
-        //   sideAspectCrop[PORTRAIT] × displayRotationCorrection × portraitCorrection(+90° pivot)
-        // At displayRotation=0 (rot itself = R(+90°)):
-        //   = pivot-scale(9/16, 1, 1) × R(+90° pivot) × R(+90° pivot)
-        //   = pivot-scale(9/16, 1, 1) × R(+180° about (0.5, 0.5))
-        // R(+180° pivot) maps (u, v) → (1-u, 1-v); pivot-scale x-only by 9/16
-        // maps x → 0.5 + 9/16 * (x - 0.5).
+    fun `buildCropMatrix PORTRAIT at rotation 0 is pure sideAspectCrop after smokefix series`() {
+        // Phase 6.1c smoke-fix series (rounds 1 + 2, 2026-05-17): cropMatrix is now
+        //   sideAspectCrop[side] × displayRotationCorrection × sideCorrection[side]
+        // For PORTRAIT at displayRotation=0:
+        //   rot = R(+90°) ; sideCorrection = R(+270°) (via displayRotation=2)
+        //   R(+90° pivot) × R(+270° pivot) = R(+360° pivot) = identity
+        //   So cropMatrix collapses to pivot-scale(9/16, 1, 1) alone.
         val m = FloatArray(16)
         AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, m)
 
-        // Pivot (0.5, 0.5) is invariant under every factor.
+        // Pivot (0.5, 0.5) is invariant.
         val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
         assertEquals(0.5f, pivot[0], 1e-5f)
         assertEquals(0.5f, pivot[1], 1e-5f)
 
-        // (0, 0) → R(+180°): (1, 1) → pivot-scale x: 0.5 + 9/16 * 0.5 = 0.78125. y: 1.
-        val tl = applyMat4(m, floatArrayOf(0f, 0f, 0f, 1f))
-        assertEquals(0.78125f, tl[0], 1e-5f)
-        assertEquals(1f, tl[1], 1e-5f)
+        // Right-middle (1, 0.5) → pivot-scale x: 0.5 + 9/16 * 0.5 = 0.78125. y unchanged.
+        val rm = applyMat4(m, floatArrayOf(1f, 0.5f, 0f, 1f))
+        assertEquals(0.78125f, rm[0], 1e-5f)
+        assertEquals(0.5f, rm[1], 1e-5f)
 
-        // (1, 0) → R(+180°): (0, 1) → pivot-scale x: 0.5 - 9/32 = 0.21875. y: 1.
-        val tr = applyMat4(m, floatArrayOf(1f, 0f, 0f, 1f))
-        assertEquals(0.21875f, tr[0], 1e-5f)
-        assertEquals(1f, tr[1], 1e-5f)
+        // Left-middle (0, 0.5) → pivot-scale x: 0.5 - 9/32 = 0.21875. y unchanged.
+        val lm = applyMat4(m, floatArrayOf(0f, 0.5f, 0f, 1f))
+        assertEquals(0.21875f, lm[0], 1e-5f)
+        assertEquals(0.5f, lm[1], 1e-5f)
     }
 
     @Test
-    fun `buildCropMatrix LANDSCAPE at rotation 1 is identity`() {
-        // Both factors are identity for (rot=1, side=LANDSCAPE) → product is identity.
+    fun `buildCropMatrix LANDSCAPE at rotation 1 is +180 pivot rotate after smokefix series`() {
+        // Phase 6.1c smoke-fix series (round 2, 2026-05-17): cropMatrix is now
+        //   sideAspectCrop[side] × displayRotationCorrection × sideCorrection[side]
+        // For LANDSCAPE at displayRotation=1:
+        //   crop = identity ; rot = R(0°) ; sideCorrection = R(+180°) (via displayRotation=3)
+        //   cropMatrix = R(+180° pivot about (0.5, 0.5)).
+        // R(+180° pivot) maps (u, v) → (1-u, 1-v).
         val m = FloatArray(16)
         AspectFitMath.buildCropMatrix(1, VideoSide.LANDSCAPE, m)
+
+        // Pivot (0.5, 0.5) is invariant.
+        val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
+        assertEquals(0.5f, pivot[0], 1e-5f)
+        assertEquals(0.5f, pivot[1], 1e-5f)
+
+        // (0.25, 0.75) → R(+180° pivot): (1-0.25, 1-0.75) = (0.75, 0.25).
         val out = applyMat4(m, floatArrayOf(0.25f, 0.75f, 0f, 1f))
-        assertEquals(0.25f, out[0], 1e-5f)
-        assertEquals(0.75f, out[1], 1e-5f)
+        assertEquals(0.75f, out[0], 1e-5f)
+        assertEquals(0.25f, out[1], 1e-5f)
     }
 
     @Test
