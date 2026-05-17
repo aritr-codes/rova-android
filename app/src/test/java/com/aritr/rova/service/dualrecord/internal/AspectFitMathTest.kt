@@ -1,5 +1,6 @@
 package com.aritr.rova.service.dualrecord.internal
 
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -81,6 +82,110 @@ class AspectFitMathTest {
         }
         runCatching { AspectFitMath.computeFitViewport(100, 100, 0f) }.let {
             assertTrue("expected throw on contentAspect=0, got ${it.getOrNull()?.contentToString()}", it.isFailure)
+        }
+    }
+
+    // ─── sideAspectCrop tests (Task 2) ─────────────────────────────
+
+    @Test
+    fun `buildSideAspectCrop PORTRAIT produces center-crop scale 9 over 16 in x`() {
+        // Apply matrix to corner UV (1, 0.5, 0, 1) — right-middle of [0,1]² —
+        // and verify x maps to 0.5 + 9/32 = 0.78125 (the right edge of the
+        // center 9:16 column of a 16:9 source).
+        val m = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, m)
+        val out = applyMat4(m, floatArrayOf(1f, 0.5f, 0f, 1f))
+        assertEquals(0.78125f, out[0], 1e-5f)
+        assertEquals(0.5f, out[1], 1e-5f)
+    }
+
+    // Helper: apply a column-major mat4 to a vec4 (matches GLSL `mat4 * vec4`).
+    private fun applyMat4(m: FloatArray, v: FloatArray): FloatArray {
+        require(m.size == 16 && v.size == 4)
+        return floatArrayOf(
+            m[0]*v[0] + m[4]*v[1] + m[8]*v[2] + m[12]*v[3],
+            m[1]*v[0] + m[5]*v[1] + m[9]*v[2] + m[13]*v[3],
+            m[2]*v[0] + m[6]*v[1] + m[10]*v[2] + m[14]*v[3],
+            m[3]*v[0] + m[7]*v[1] + m[11]*v[2] + m[15]*v[3],
+        )
+    }
+
+    @Test
+    fun `buildSideAspectCrop LANDSCAPE is identity`() {
+        val m = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.LANDSCAPE, m)
+        val out = applyMat4(m, floatArrayOf(1f, 1f, 0f, 1f))
+        assertEquals(1f, out[0], 1e-5f)
+        assertEquals(1f, out[1], 1e-5f)
+        val out2 = applyMat4(m, floatArrayOf(0f, 0f, 0f, 1f))
+        assertEquals(0f, out2[0], 1e-5f)
+        assertEquals(0f, out2[1], 1e-5f)
+    }
+
+    // ─── displayRotationCorrection tests ───────────────────────────
+
+    @Test
+    fun `buildDisplayRotationCorrection 0 is plus 90 around UV center`() {
+        // displayRotation=0 (phone portrait) needs +90° UV rotation.
+        // Apply to (0.5, 0.5): pivot point is invariant under any rotation about it.
+        val m = FloatArray(16)
+        AspectFitMath.buildDisplayRotationCorrection(0, m)
+        val out = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
+        assertEquals(0.5f, out[0], 1e-5f)
+        assertEquals(0.5f, out[1], 1e-5f)
+        // Apply to (1, 0.5) — right-middle → after +90° CCW about (0.5, 0.5)
+        // becomes (0.5, 1) (top-middle in UV space, GL y-up convention).
+        val out2 = applyMat4(m, floatArrayOf(1f, 0.5f, 0f, 1f))
+        assertEquals(0.5f, out2[0], 1e-5f)
+        assertEquals(1f, out2[1], 1e-5f)
+    }
+
+    @Test
+    fun `buildDisplayRotationCorrection 1 is identity`() {
+        val m = FloatArray(16)
+        AspectFitMath.buildDisplayRotationCorrection(1, m)
+        val out = applyMat4(m, floatArrayOf(0.25f, 0.75f, 0f, 1f))
+        assertEquals(0.25f, out[0], 1e-5f)
+        assertEquals(0.75f, out[1], 1e-5f)
+    }
+
+    @Test
+    fun `buildDisplayRotationCorrection invalid throws`() {
+        runCatching { AspectFitMath.buildDisplayRotationCorrection(-1, FloatArray(16)) }.let {
+            assertTrue("expected throw on -1", it.isFailure)
+        }
+        runCatching { AspectFitMath.buildDisplayRotationCorrection(4, FloatArray(16)) }.let {
+            assertTrue("expected throw on 4", it.isFailure)
+        }
+    }
+
+    // ─── buildCropMatrix composition tests ─────────────────────────
+
+    @Test
+    fun `buildCropMatrix PORTRAIT at rotation 0 composes sideAspectCrop after rotation`() {
+        // cropMatrix = sideAspectCrop × displayRotationCorrection.
+        // Pivot (0.5, 0.5) is invariant under both factors → must be invariant under their product.
+        val m = FloatArray(16)
+        AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, m)
+        val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
+        assertEquals(0.5f, pivot[0], 1e-5f)
+        assertEquals(0.5f, pivot[1], 1e-5f)
+    }
+
+    @Test
+    fun `buildCropMatrix LANDSCAPE at rotation 1 is identity`() {
+        // Both factors are identity for (rot=1, side=LANDSCAPE) → product is identity.
+        val m = FloatArray(16)
+        AspectFitMath.buildCropMatrix(1, VideoSide.LANDSCAPE, m)
+        val out = applyMat4(m, floatArrayOf(0.25f, 0.75f, 0f, 1f))
+        assertEquals(0.25f, out[0], 1e-5f)
+        assertEquals(0.75f, out[1], 1e-5f)
+    }
+
+    @Test
+    fun `buildCropMatrix output length check`() {
+        runCatching { AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, FloatArray(15)) }.let {
+            assertTrue("expected throw on length 15 array", it.isFailure)
         }
     }
 }
