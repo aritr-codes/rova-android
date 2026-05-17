@@ -124,10 +124,15 @@ internal object AspectFitMath {
     }
 
     /**
-     * cropMatrix = sideAspectCrop[side] × displayRotationCorrection(displayRotation).
+     * cropMatrix per side:
+     *  - PORTRAIT:  sideAspectCrop[PORTRAIT] × displayRotationCorrection × portraitCorrection(+90° pivot)
+     *  - LANDSCAPE: sideAspectCrop[LANDSCAPE] × displayRotationCorrection
+     *
      * Composes the side's UV center-crop with the device-orientation
-     * correction. Built once at session start in [EglRouter.addTarget]
-     * and reused for every frame of that target's lifetime.
+     * correction (and, for PORTRAIT, an additional +90° UV pivot-rotate
+     * about (0.5, 0.5) — see [buildCropMatrix] body for the why).
+     * Built once at session start in [EglRouter.addTarget] and reused
+     * for every frame of that target's lifetime.
      *
      * `out` must be length 16; [displayRotation] must be in 0..3.
      *
@@ -142,8 +147,35 @@ internal object AspectFitMath {
         val crop = FloatArray(16)
         buildDisplayRotationCorrection(displayRotation, rot)
         buildSideAspectCrop(side, crop)
-        // out = crop × rot (so applied to UV right-to-left: rotate first, then crop).
-        multiplyMat4(out, crop, rot)
+
+        if (side == VideoSide.PORTRAIT) {
+            // Phase 6.1c on-device smoke-fix (2026-05-17, screenshot
+            // `Screenshot_20260517_213700.png`): PORTRAIT preview rendered
+            // 90°-CCW from natural on first device run. Right-multiply the
+            // cropMatrix by an additional +90° UV pivot-rotate about
+            // (0.5, 0.5) to undo it. LANDSCAPE side renders correctly and
+            // stays at the identity-extra-rotation `crop × rot` composition.
+            //
+            // The corrective rotation has the same closed form as
+            // [buildDisplayRotationCorrection] at displayRotation=0 (which
+            // encodes +90° about (0.5, 0.5)). Reusing the helper keeps the
+            // rotation math in one place — the semantic role here is per-
+            // side UV correction, not device-rotation compensation.
+            //
+            // If on a future device the PORTRAIT side appears 90°-CW from
+            // natural instead (i.e., over-rotated), the fix is to pass
+            // `displayRotation = 2` (which encodes +270° = -90°) below.
+            val portraitCorrection = FloatArray(16)
+            buildDisplayRotationCorrection(0, portraitCorrection)
+            val cropTimesRot = FloatArray(16)
+            multiplyMat4(cropTimesRot, crop, rot)
+            // out = (crop × rot) × portraitCorrection — right-to-left to UVs:
+            // (1) portraitCorrection first, (2) then rot, (3) then crop.
+            multiplyMat4(out, cropTimesRot, portraitCorrection)
+        } else {
+            // out = crop × rot (right-to-left to UVs: rotate first, then crop).
+            multiplyMat4(out, crop, rot)
+        }
     }
 
     /**

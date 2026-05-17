@@ -162,14 +162,31 @@ class AspectFitMathTest {
     // ─── buildCropMatrix composition tests ─────────────────────────
 
     @Test
-    fun `buildCropMatrix PORTRAIT at rotation 0 composes sideAspectCrop after rotation`() {
-        // cropMatrix = sideAspectCrop × displayRotationCorrection.
-        // Pivot (0.5, 0.5) is invariant under both factors → must be invariant under their product.
+    fun `buildCropMatrix PORTRAIT at rotation 0 composes +90 portraitCorrection after sideAspectCrop and rotation`() {
+        // Phase 6.1c smoke-fix (2026-05-17): cropMatrix for PORTRAIT is now
+        //   sideAspectCrop[PORTRAIT] × displayRotationCorrection × portraitCorrection(+90° pivot)
+        // At displayRotation=0 (rot itself = R(+90°)):
+        //   = pivot-scale(9/16, 1, 1) × R(+90° pivot) × R(+90° pivot)
+        //   = pivot-scale(9/16, 1, 1) × R(+180° about (0.5, 0.5))
+        // R(+180° pivot) maps (u, v) → (1-u, 1-v); pivot-scale x-only by 9/16
+        // maps x → 0.5 + 9/16 * (x - 0.5).
         val m = FloatArray(16)
         AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, m)
+
+        // Pivot (0.5, 0.5) is invariant under every factor.
         val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
         assertEquals(0.5f, pivot[0], 1e-5f)
         assertEquals(0.5f, pivot[1], 1e-5f)
+
+        // (0, 0) → R(+180°): (1, 1) → pivot-scale x: 0.5 + 9/16 * 0.5 = 0.78125. y: 1.
+        val tl = applyMat4(m, floatArrayOf(0f, 0f, 0f, 1f))
+        assertEquals(0.78125f, tl[0], 1e-5f)
+        assertEquals(1f, tl[1], 1e-5f)
+
+        // (1, 0) → R(+180°): (0, 1) → pivot-scale x: 0.5 - 9/32 = 0.21875. y: 1.
+        val tr = applyMat4(m, floatArrayOf(1f, 0f, 0f, 1f))
+        assertEquals(0.21875f, tr[0], 1e-5f)
+        assertEquals(1f, tr[1], 1e-5f)
     }
 
     @Test
