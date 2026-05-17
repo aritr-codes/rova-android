@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -194,8 +195,8 @@ fun RecordScreen(
     // Phase 4.1b — recompute the storage estimate whenever the clip
     // settings change (covers preset-select and every edit sheet) and on
     // first composition.
-    LaunchedEffect(duration, loopCount, resolution) {
-        rovaApp?.storageSignal?.recompute(duration, loopCount, resolution)
+    LaunchedEffect(duration, loopCount, resolution, mode) {
+        rovaApp?.storageSignal?.recompute(duration, loopCount, resolution, mode)
     }
 
     // Release camera when app goes to background (unless recording); on
@@ -219,7 +220,8 @@ fun RecordScreen(
                     it.storageSignal.recompute(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
-                        viewModel.resolution.value
+                        viewModel.resolution.value,
+                        viewModel.mode.value
                     )
                 }
                 else -> {}
@@ -436,10 +438,15 @@ fun RecordScreen(
             ) {
                 // Camera Preview
                 if (hasCapturePermissions) {
-                    AndroidView(
-                        factory = { _ -> previewView },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AndroidView(
+                            factory = { _ -> previewView },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        if (mode == "PortraitLandscape" && hudState is RecordHudState.Idle) {
+                            SplitPreviewOverlay()
+                        }
+                    }
                 }
 
                 // Loading Overlay — also held during the 1500 ms
@@ -528,7 +535,13 @@ fun RecordScreen(
                                 loopCount = loopCount,
                                 intervalMinutes = interval,
                                 quality = resolution,
-                                mode = mode,
+                                // Phase 6.1b smoke-fix #3 — display-only
+                                // map: the persisted "PortraitLandscape"
+                                // truncates to "PortraitLa..." inside the
+                                // chip. Mirror the canonical "P + L"
+                                // string used in SessionSettingsSheet's
+                                // P+L tab so the chip stays legible.
+                                mode = if (mode == "PortraitLandscape") "P + L" else mode,
                                 onOpenSheet = { viewModel.openSettingsSheet() },
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
@@ -586,11 +599,21 @@ fun RecordScreen(
                             .windowInsetsPadding(WindowInsets.statusBars)
                             .padding(start = 16.dp, top = 16.dp),
                     )
+                    // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
+                    // mode (rear-only by design — DualShot from one full-FOV
+                    // sensor frame; entry-level devices like Samsung A17
+                    // don't support concurrent rear+front streams either).
+                    // Gated INDEPENDENTLY of `enabled` so flash stays usable
+                    // in P+L; `onFlip` lambda also re-checks to prevent
+                    // accessibility-tool callers from bypassing the visual
+                    // disable.
+                    val flipAllowed = !isUiLocked && mode != "PortraitLandscape"
                     RecordCameraControls(
                         flashMode = flashMode,
                         onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
-                        onFlip = { if (!isUiLocked) viewModel.flipCamera() },
+                        onFlip = { if (flipAllowed) viewModel.flipCamera() },
                         enabled = !isUiLocked,
+                        flipEnabled = flipAllowed,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.statusBars)
@@ -728,4 +751,50 @@ fun formatDuration(seconds: Int): String {
 
 fun formatInterval(minutes: Int): String {
     return if (minutes == 0) "No wait" else "${minutes}m"
+}
+
+@Composable
+private fun SplitPreviewOverlay(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.45f))
+        )
+        ZoneTagChip(
+            text = "Portrait · 9:16",
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxHeight(0.5f)
+                .padding(top = 24.dp),
+            anchorBottom = true
+        )
+        ZoneTagChip(
+            text = "Landscape · 16:9",
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxHeight(0.5f)
+                .padding(bottom = 24.dp),
+            anchorBottom = false
+        )
+    }
+}
+
+@Composable
+private fun ZoneTagChip(text: String, modifier: Modifier = Modifier, anchorBottom: Boolean) {
+    Box(modifier = modifier, contentAlignment = if (anchorBottom) Alignment.BottomCenter else Alignment.TopCenter) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color.Black.copy(alpha = 0.55f)
+        ) {
+            Text(
+                text = text,
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+    }
 }

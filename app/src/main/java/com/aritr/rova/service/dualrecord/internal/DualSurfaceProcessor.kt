@@ -20,16 +20,30 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the impl LOGS and returns — does NOT throw (spec §1: safer pattern;
  * release()-before-rebind throwing risked an uncaught exception inside
  * CameraX's dispatcher). Impl-time verified against CameraX 1.4.2 behavior.
+ *
+ * Phase 6.1b smoke-fix:
+ *  - `attachEncoderInput` now takes `width`/`height` so EglRouter can set
+ *    `glViewport` per target.
+ *  - `onInputSurface` calls `router.setInputBufferSize` from the
+ *    `SurfaceRequest.resolution` BEFORE handing the camera the producer
+ *    Surface (Bug 2 fix — SurfaceTexture would otherwise default to
+ *    display density and starve frames).
+ *  - `onOutputSurface` passes `SurfaceOutput.size` through to
+ *    `router.addTarget` for the PREVIEW target's viewport.
  */
 internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
 
     private val router = EglRouter(lensFacing).also { it.setup() }
     private val released = AtomicBoolean(false)
 
-    /** Add an encoder input surface; `side` non-null. Must be called BEFORE the first frame arrives. */
-    fun attachEncoderInput(side: VideoSide, surface: Surface) {
+    /**
+     * Add an encoder input surface; `side` non-null. Must be called BEFORE
+     * the first frame arrives. `width`/`height` are the encoder's
+     * configured output dimensions (see `DualVideoRecorderConfig`).
+     */
+    fun attachEncoderInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
         if (released.get()) return
-        router.addTarget(side, surface)
+        router.addTarget(side, surface, width, height)
     }
 
     override fun onInputSurface(request: SurfaceRequest) {
@@ -37,6 +51,10 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
             RovaLog.w("DualSurfaceProcessor.onInputSurface after release — ignoring", null)
             return
         }
+        // Set the input SurfaceTexture's default buffer size from the
+        // camera-resolved resolution BEFORE provideSurface so the producer
+        // dequeues correctly-sized frames (Bug 2 of the 6.1b smoke-fix).
+        router.setInputBufferSize(request.resolution.width, request.resolution.height)
         val cameraSurface = router.inputSurface
         request.provideSurface(cameraSurface, /* executor */ Runnable::run, Consumer { result ->
             RovaLog.d("DualSurfaceProcessor input surface released (result=${result.resultCode})")
@@ -53,7 +71,8 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
         val previewSurface = output.getSurface(/* executor */ Runnable::run, Consumer { event ->
             RovaLog.d("DualSurfaceProcessor.onOutputSurface event (code=${event.eventCode})")
         })
-        router.addTarget(side = null, surface = previewSurface)
+        val size = output.size
+        router.addTarget(side = null, surface = previewSurface, width = size.width, height = size.height)
     }
 
     fun release() {

@@ -13,6 +13,7 @@ import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -55,7 +56,21 @@ data class VideoItem(
      * `videos/<sessionId>/` directory do not linger as invisible
      * disk waste once the gallery row is gone.
      */
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    /**
+     * Phase 6.1b smoke-fix #3 — which side of a P+L session this row
+     * represents. Non-null for P+L rows (one card per side, populated
+     * from [com.aritr.rova.ui.screens.HistoryArtifactMapper.PerSideArtifact.side]);
+     * null for single-mode rows and for legacy file-only entries.
+     *
+     * Threaded through the History card click → MainScreen nav arg →
+     * PlayerViewModel → PlayerUriResolver so the player picks the
+     * correct per-side `pendingUri` / `publicTargetPath` from the
+     * manifest. Without this field both cards for a P+L session would
+     * collide on the same shared (null) pointers and surface
+     * Unavailable.
+     */
+    val side: VideoSide? = null
 )
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -195,7 +210,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             thumbnail = cached?.first,
             resolution = cached?.second ?: VideoMetadataUtils.UNKNOWN_RESOLUTION,
             shareUri = rec.shareUri,
-            sessionId = rec.sessionId
+            sessionId = rec.sessionId,
+            side = rec.side
         )
     }
 
@@ -259,7 +275,11 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private data class ResolvedRecording(
         val file: File,
         val shareUri: Uri?,
-        val sessionId: String?
+        val sessionId: String?,
+        // Phase 6.1b smoke-fix #3 — non-null for P+L rows (one per
+        // side); null for single-mode rows and legacy file-only
+        // entries. Threaded into [VideoItem.side] via [buildItem].
+        val side: VideoSide? = null
     )
 
     private fun manifestDrivenArtifacts(
@@ -271,24 +291,50 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 runCatching { sessionStore.loadManifest(sid) }.getOrNull()
             }
         return HistoryArtifactMapper.finalizedManifests(manifests)
-            .mapNotNull { m ->
-                val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
-                    resolveMediaStoreUriToFile(resolver, uri)
-                } ?: return@mapNotNull null
-                // Tier 1 ships the canonical content URI in the manifest;
-                // Tier 2/3 only persist the path, so look the URI up by
-                // `_DATA` against MediaStore. A null result means the
-                // scan never registered (rare — recording not yet
-                // indexed); the share path then falls back to
-                // FileProvider, which the UI guards against
-                // IllegalArgumentException.
-                val shareUriString = HistoryArtifactMapper.resolveShareUri(m)
-                    ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
-                ResolvedRecording(
-                    file = file,
-                    shareUri = shareUriString?.let(Uri::parse),
-                    sessionId = m.sessionId
-                )
+            .flatMap { m ->
+                // Phase 6.1b T16 — branch on the persisted mode. P+L
+                // sessions fan out to per-side rows (0/1/2 cards per
+                // manifest); single-mode keeps the pre-T16 single-card
+                // shape byte-identically.
+                if (m.config.mode == "PortraitLandscape") {
+                    HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
+                        resolveMediaStoreUriToFile(resolver, uri)
+                    }.map { perSide ->
+                        // Tier 2/3 P+L: mapper returns null share URI,
+                        // same as single-mode resolveShareUri. Resolve
+                        // via _DATA against MediaStore so the share path
+                        // prefers the content URI over FileProvider
+                        // (which would throw on a Movies/Rova/... path).
+                        val shareUriString = perSide.shareUri
+                            ?: queryMediaStoreUriByPath(resolver, perSide.file.absolutePath)
+                        ResolvedRecording(
+                            file = perSide.file,
+                            shareUri = shareUriString?.let(Uri::parse),
+                            sessionId = m.sessionId,
+                            side = perSide.side
+                        )
+                    }
+                } else {
+                    val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
+                        resolveMediaStoreUriToFile(resolver, uri)
+                    } ?: return@flatMap emptyList()
+                    // Tier 1 ships the canonical content URI in the
+                    // manifest; Tier 2/3 only persist the path, so look
+                    // the URI up by `_DATA` against MediaStore. A null
+                    // result means the scan never registered (rare —
+                    // recording not yet indexed); the share path then
+                    // falls back to FileProvider, which the UI guards
+                    // against IllegalArgumentException.
+                    val shareUriString = HistoryArtifactMapper.resolveShareUri(m)
+                        ?: queryMediaStoreUriByPath(resolver, file.absolutePath)
+                    listOf(
+                        ResolvedRecording(
+                            file = file,
+                            shareUri = shareUriString?.let(Uri::parse),
+                            sessionId = m.sessionId
+                        )
+                    )
+                }
             }
             .filter { rec ->
                 // Drop entries whose artifact is no longer on disk —

@@ -46,4 +46,25 @@ class SessionConfigModeTest {
             assertEquals(mode, SessionConfig.fromJson(json).mode)
         }
     }
+
+    @Test
+    fun `SessionConfig mode PortraitLandscape round-trips`() {
+        val cfg = SessionConfig(durationSeconds = 10, intervalMinutes = 1, resolution = "FHD", loopCount = 5, mode = "PortraitLandscape")
+        val json = cfg.toJson()
+        val back = SessionConfig.fromJson(json)
+        assertEquals("PortraitLandscape", back.mode)
+    }
+
+    @Test
+    fun `SessionConfig mode display string P + L coerces to Portrait`() {
+        val json = JSONObject().apply {
+            put("durationSeconds", 10)
+            put("intervalMinutes", 1)
+            put("resolution", "FHD")
+            put("loopCount", 5)
+            put("mode", "P + L")
+        }
+        val cfg = SessionConfig.fromJson(json)
+        assertEquals("Portrait", cfg.mode)
+    }
 }

@@ -11,6 +11,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,6 +52,7 @@ import kotlinx.coroutines.withContext
 class PlayerViewModel(
     application: Application,
     private val sessionId: String,
+    private val side: VideoSide?,
     private val loadManifest: suspend (String) -> SessionManifest?
 ) : AndroidViewModel(application) {
 
@@ -96,7 +98,7 @@ class PlayerViewModel(
             val manifest = withContext(Dispatchers.IO) {
                 runCatching { loadManifest(sessionId) }.getOrNull()
             }
-            val resolved = PlayerUriResolver.resolve(manifest)
+            val resolved = PlayerUriResolver.resolve(manifest, side)
             // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
             // uiState to Ready. The screen's `update` block reads
             // `viewModel.getOrCreatePlayer()` on every recomposition; if
@@ -215,7 +217,11 @@ class PlayerViewModel(
          * pass a no-op loader so the VM falls cleanly into Unavailable
          * instead of NPE-ing on `app.sessionStore`.
          */
-        fun factory(app: RovaApp, sessionId: String): ViewModelProvider.Factory =
+        fun factory(
+            app: RovaApp,
+            sessionId: String,
+            side: VideoSide? = null
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -228,6 +234,7 @@ class PlayerViewModel(
                     return PlayerViewModel(
                         application = app,
                         sessionId = sessionId,
+                        side = side,
                         loadManifest = loader
                     ) as T
                 }

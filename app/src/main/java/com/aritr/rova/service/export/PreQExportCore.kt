@@ -55,15 +55,29 @@ internal class PreQExportCore(
         sessionId: String,
         segments: List<File>,
         privateTempFile: File,
-        publicTargetFile: File
+        publicTargetFile: File,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
     ): ExportResult {
-        // 1. Manifest commit point A.
-        manifestWrite("setExportPrivateTarget") {
-            sessionStore.setExportPrivateTarget(
-                sessionId,
-                privateTempFile.absolutePath,
-                publicTargetFile.absolutePath
-            )
+        // 1. Manifest commit point A. Phase 6.1b T12: when `side != null`,
+        //    route the private-temp pointer to the per-side mutator. The
+        //    per-side mutator does NOT touch `exportState` (T13's caller
+        //    writes the final shared `exportState` after both sides settle)
+        //    and does NOT carry the publicTargetPath (that field is
+        //    populated on per-side finalize).
+        manifestWrite(if (side == null) "setExportPrivateTarget" else "setExportPrivateTargetForSide") {
+            if (side == null) {
+                sessionStore.setExportPrivateTarget(
+                    sessionId,
+                    privateTempFile.absolutePath,
+                    publicTargetFile.absolutePath
+                )
+            } else {
+                sessionStore.setExportPrivateTargetForSide(
+                    sessionId,
+                    side,
+                    privateTempFile.absolutePath
+                )
+            }
         }?.let { return it }
 
         // 2. Mux to private temp.
@@ -76,24 +90,44 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.MuxFailed(t),
                 privateTempFile = privateTempFile,
-                partFile = partFileFor(publicTargetFile)
+                partFile = partFileFor(publicTargetFile),
+                side = side
             )
         }
 
         // 3-7. Publish-and-finalize (shared with recovery cases B/C).
-        return publishAndFinalize(sessionId, privateTempFile, publicTargetFile)
+        return publishAndFinalize(sessionId, privateTempFile, publicTargetFile, side)
     }
 
-    suspend fun recover(manifest: SessionManifest): RecoveryResult {
+    suspend fun recover(
+        manifest: SessionManifest,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): RecoveryResult {
         require(manifest.exportTier == expectedTier) {
             "$tag.recover called with tier ${manifest.exportTier} (expected $expectedTier)"
         }
         val sessionId = manifest.sessionId
-        val privateTempPath = manifest.privateTempPath
-        val publicTargetPath = manifest.publicTargetPath
+        // Phase 6.1b T14: when `side != null`, read the per-side
+        // privateTempPath / publicTargetPath pointers from the manifest.
+        // Single-mode (`side == null`) is byte-identical to pre-T14.
+        val privateTempPath: String?
+        val publicTargetPath: String?
+        if (side == null) {
+            privateTempPath = manifest.privateTempPath
+            publicTargetPath = manifest.publicTargetPath
+        } else when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> {
+                privateTempPath = manifest.portraitPrivateTempPath
+                publicTargetPath = manifest.portraitPublicTargetPath
+            }
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> {
+                privateTempPath = manifest.landscapePrivateTempPath
+                publicTargetPath = manifest.landscapePublicTargetPath
+            }
+        }
 
         if (privateTempPath == null || publicTargetPath == null) {
-            return abandon(sessionId, privateTempFile = null, partFile = null)
+            return abandon(sessionId, privateTempFile = null, partFile = null, side = side)
         }
 
         val privateTempFile = File(privateTempPath)
@@ -103,7 +137,9 @@ internal class PreQExportCore(
         // Case A: public target on disk with content.
         if (publicTargetFile.exists() && publicTargetFile.length() > 0L) {
             val scanCompleted = mediaScanWaiter.scanAndWait(publicTargetFile)
-            return RecoveryResult.Resumed(finalize(sessionId, privateTempFile, scanCompleted))
+            return RecoveryResult.Resumed(
+                finalize(sessionId, privateTempFile, publicTargetFile, scanCompleted, side)
+            )
         }
 
         // Case B: stale .part — best-effort delete, then fall through.
@@ -116,12 +152,12 @@ internal class PreQExportCore(
         // Case C: privateTempFile readable → resume publish-and-finalize.
         if (privateTempFile.exists() && privateTempFile.length() > 0L) {
             return RecoveryResult.Resumed(
-                publishAndFinalize(sessionId, privateTempFile, publicTargetFile)
+                publishAndFinalize(sessionId, privateTempFile, publicTargetFile, side)
             )
         }
 
         // Case D: nothing usable.
-        return abandon(sessionId, privateTempFile, partFile)
+        return abandon(sessionId, privateTempFile, partFile, side)
     }
 
     // ─── Shared core ────────────────────────────────────────────────
@@ -129,12 +165,20 @@ internal class PreQExportCore(
     private suspend fun publishAndFinalize(
         sessionId: String,
         privateTempFile: File,
-        publicTargetFile: File
+        publicTargetFile: File,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
     ): ExportResult {
-        // 3. exportState = COPYING.
-        manifestWrite("setExportCopying") {
-            sessionStore.setExportCopying(sessionId)
-        }?.let { return it }
+        // 3. exportState = COPYING. Phase 6.1b T12: when `side != null`,
+        //    SKIP the shared-state mutator — there is no per-side analog
+        //    of `setExportCopying` (per the OQ-C lock, side-state is
+        //    tracked via the pointer pair + scan flag, not a separate
+        //    state machine), and T13's caller writes the final shared
+        //    `exportState` after both sides settle.
+        if (side == null) {
+            manifestWrite("setExportCopying") {
+                sessionStore.setExportCopying(sessionId)
+            }?.let { return it }
+        }
 
         val partFile = partFileFor(publicTargetFile)
 
@@ -148,7 +192,8 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.CopyFailed(t),
                 privateTempFile = privateTempFile,
-                partFile = partFile
+                partFile = partFile,
+                side = side
             )
         }
 
@@ -162,7 +207,8 @@ internal class PreQExportCore(
                 sessionId,
                 naturalFailure = ExportResult.RenameFailed,
                 privateTempFile = privateTempFile,
-                partFile = partFile
+                partFile = partFile,
+                side = side
             )
         }
 
@@ -170,18 +216,48 @@ internal class PreQExportCore(
         val scanCompleted = mediaScanWaiter.scanAndWait(publicTargetFile)
 
         // 7. Finalize.
-        return finalize(sessionId, privateTempFile, scanCompleted)
+        return finalize(sessionId, privateTempFile, publicTargetFile, scanCompleted, side)
     }
 
     private suspend fun finalize(
         sessionId: String,
         privateTempFile: File,
-        scanCompleted: Boolean
+        publicTargetFile: File,
+        scanCompleted: Boolean,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
     ): ExportResult {
+        // Phase 6.1b T12: helper closures route the finalize / scan-
+        // completed writes to per-side mutators when `side != null`. The
+        // shared `exportState` is NOT advanced on the per-side path
+        // (T13's caller orchestrates the final shared write).
+        suspend fun writeFinalizedRetain() = if (side == null) {
+            sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
+        } else {
+            sessionStore.setExportFinalizedForSide(
+                sessionId = sessionId,
+                side = side,
+                publicTargetPath = publicTargetFile.absolutePath,
+                clearPrivateTempPath = false
+            )
+        }
+        suspend fun writeFinalizedClear() = if (side == null) {
+            sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = true)
+        } else {
+            sessionStore.setExportFinalizedForSide(
+                sessionId = sessionId,
+                side = side,
+                publicTargetPath = publicTargetFile.absolutePath,
+                clearPrivateTempPath = true
+            )
+        }
+        suspend fun writeScanCompleted() = if (side == null) {
+            sessionStore.setMediaScanCompleted(sessionId)
+        } else {
+            sessionStore.setMediaScanCompletedForSide(sessionId, side)
+        }
+
         if (!scanCompleted) {
-            manifestWrite("setExportFinalized(retain)") {
-                sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
-            }?.let { return it }
+            manifestWrite("setExportFinalized(retain)") { writeFinalizedRetain() }?.let { return it }
             return ExportResult.Success(mediaScanCompleted = false, privateTempRetained = true)
         }
 
@@ -192,17 +268,13 @@ internal class PreQExportCore(
                     "leaving manifest mediaScanCompleted=false for next-launch retry"
             )
             manifestWrite("setExportFinalized(retain-after-delete-fail)") {
-                sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = false)
+                writeFinalizedRetain()
             }?.let { return it }
             return ExportResult.Success(mediaScanCompleted = false, privateTempRetained = true)
         }
 
-        manifestWrite("setMediaScanCompleted") {
-            sessionStore.setMediaScanCompleted(sessionId)
-        }?.let { return it }
-        manifestWrite("setExportFinalized(clear)") {
-            sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = true)
-        }?.let { return it }
+        manifestWrite("setMediaScanCompleted") { writeScanCompleted() }?.let { return it }
+        manifestWrite("setExportFinalized(clear)") { writeFinalizedClear() }?.let { return it }
         return ExportResult.Success(mediaScanCompleted = true, privateTempRetained = false)
     }
 
@@ -225,6 +297,19 @@ internal class PreQExportCore(
         privateTempFile: File?,
         partFile: File?
     ): ExportMutationResult {
+        cleanupSideFiles(privateTempFile, partFile)
+        return sessionStore.setExportFailed(sessionId)
+    }
+
+    /**
+     * Phase 6.1b T12: file-system-only cleanup helper used by the
+     * per-side path. The on-disk deletes always run; the
+     * `setExportFailed` write is SKIPPED when `side != null` because
+     * T13's caller owns failure attribution after both sides settle
+     * (the shared `exportState` must not flip to FAILED while the
+     * other side may still be muxing).
+     */
+    private fun cleanupSideFiles(privateTempFile: File?, partFile: File?) {
         listOfNotNull(privateTempFile, partFile)
             .filter { it.exists() }
             .forEach { f ->
@@ -232,32 +317,55 @@ internal class PreQExportCore(
                     RovaLog.w("$tag.cleanupOnFailure: failed to delete ${f.absolutePath}")
                 }
             }
-        return sessionStore.setExportFailed(sessionId)
     }
 
     private suspend fun cleanupAndMap(
         sessionId: String,
         naturalFailure: ExportResult,
         privateTempFile: File?,
-        partFile: File?
-    ): ExportResult = when (
-        val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
-    ) {
-        is ExportMutationResult.Wrote -> naturalFailure
-        is ExportMutationResult.UnknownSession -> ExportResult.UnknownSession(r.sessionId)
-        is ExportMutationResult.Failed -> ExportResult.ManifestWriteFailed("setExportFailed", r.cause)
+        partFile: File?,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): ExportResult {
+        // Phase 6.1b T12: when `side != null` SKIP the shared
+        // `setExportFailed` write — T13's caller orchestrates failure
+        // attribution after both sides settle. The on-disk cleanup
+        // (private temp + .part) still runs unconditionally.
+        if (side != null) {
+            cleanupSideFiles(privateTempFile, partFile)
+            return naturalFailure
+        }
+        return when (
+            val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
+        ) {
+            is ExportMutationResult.Wrote -> naturalFailure
+            is ExportMutationResult.UnknownSession -> ExportResult.UnknownSession(r.sessionId)
+            is ExportMutationResult.Failed -> ExportResult.ManifestWriteFailed("setExportFailed", r.cause)
+        }
     }
 
     private suspend fun abandon(
         sessionId: String,
         privateTempFile: File?,
-        partFile: File?
-    ): RecoveryResult = when (
-        val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
-    ) {
-        is ExportMutationResult.Wrote -> RecoveryResult.Abandoned
-        is ExportMutationResult.UnknownSession -> RecoveryResult.UnknownSession(r.sessionId)
-        is ExportMutationResult.Failed -> RecoveryResult.ManifestWriteFailed(r.cause)
+        partFile: File?,
+        side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    ): RecoveryResult {
+        // Phase 6.1b T14: when `side != null`, SKIP the shared
+        // `setExportFailed` write — T13's caller owns failure attribution
+        // after both sides settle (the shared `exportState` must not flip
+        // to FAILED while the other side may still be muxing). On-disk
+        // side-file cleanup still runs unconditionally so stale per-side
+        // artifacts don't pile up.
+        if (side != null) {
+            cleanupSideFiles(privateTempFile, partFile)
+            return RecoveryResult.Abandoned
+        }
+        return when (
+            val r = cleanupOnFailure(sessionId, privateTempFile, partFile)
+        ) {
+            is ExportMutationResult.Wrote -> RecoveryResult.Abandoned
+            is ExportMutationResult.UnknownSession -> RecoveryResult.UnknownSession(r.sessionId)
+            is ExportMutationResult.Failed -> RecoveryResult.ManifestWriteFailed(r.cause)
+        }
     }
 
     private fun safeDelete(file: File): Boolean = try {

@@ -146,8 +146,10 @@ fun RecordCameraControls(
     onFlip: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    flipEnabled: Boolean = enabled,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
+    val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
         GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
             val (icon, contentTint) = when (flashMode) {
@@ -157,8 +159,15 @@ fun RecordCameraControls(
             }
             Icon(icon, contentDescription = "Flash", tint = contentTint)
         }
-        GlassCircleButton(onClick = onFlip, enabled = enabled) {
-            Icon(Icons.Default.FlipCameraIos, contentDescription = "Flip camera", tint = tint)
+        // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from
+        // [enabled] so P+L mode can disable JUST this button while
+        // flash stays usable. P+L is rear-only by design (DualShot needs
+        // a single full-FOV sensor frame, software-cropped to portrait
+        // AND landscape; the front camera path is not productionised
+        // and entry-level Samsung devices like the A17 don't support
+        // concurrent rear+front camera streams either).
+        GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
+            Icon(Icons.Default.FlipCameraIos, contentDescription = "Flip camera", tint = flipTint)
         }
     }
 }

@@ -474,6 +474,116 @@ open class SessionStore internal constructor(rootDirArg: File) {
         }
 
     /**
+     * Phase 6.1b T11 — per-side analog of [setExportPending] for P+L
+     * sessions. Routes to `portraitPendingUri` or `landscapePendingUri`
+     * based on [side]. Side-orthogonal: a portrait write never touches
+     * landscape fields and vice versa.
+     *
+     * Phase 6.1b T18 final-review remediation: floor-advances shared
+     * `exportState` from `NOT_STARTED` to `MUXING` on the first per-side
+     * write, mirroring single-mode [setExportPending]. Without this,
+     * `ExportRecoveryRunner.needsExportRecovery` (which gates on the
+     * shared `exportState`) skipped crashed mid-export P+L sessions —
+     * the per-side OQ-C lock means the Tier-1/2/3 exporters never call
+     * the shared `setExportPending` / `setExportCopying` writers, so a
+     * P+L session would otherwise remain at `NOT_STARTED` until T13's
+     * shared `setExportFinalized`. The transition is single-direction
+     * (only writes when `current == NOT_STARTED`); a later shared state
+     * — COPYING / FINALIZED / FAILED — is preserved untouched.
+     */
+    open suspend fun setExportPendingForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        uri: String
+    ): ExportMutationResult = mutateExport("setExportPendingForSide($side)", sessionId) { current ->
+        val nextState = floorAdvanceToMuxing(current.exportState)
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitPendingUri = uri, exportState = nextState)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapePendingUri = uri, exportState = nextState)
+        }
+    }
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setExportPrivateTarget] for
+     * the Tier 2/3 path of a P+L session. Caller may invoke this
+     * independently for each side (the two sides run separate mux
+     * pipelines). Side-orthogonal.
+     *
+     * Phase 6.1b T18 final-review remediation: floor-advances shared
+     * `exportState` from `NOT_STARTED` to `MUXING` on the first per-side
+     * write — see [setExportPendingForSide] for the rationale (the
+     * Tier 2/3 path enters via `setExportPrivateTargetForSide` instead
+     * of `setExportPendingForSide`, so the floor-advance lives on both
+     * entry points).
+     */
+    suspend fun setExportPrivateTargetForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        privateTempPath: String
+    ): ExportMutationResult = mutateExport("setExportPrivateTargetForSide($side)", sessionId) { current ->
+        val nextState = floorAdvanceToMuxing(current.exportState)
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitPrivateTempPath = privateTempPath, exportState = nextState)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapePrivateTempPath = privateTempPath, exportState = nextState)
+        }
+    }
+
+    /**
+     * Phase 6.1b T18 final-review remediation — floor-only advance from
+     * `NOT_STARTED` to `MUXING`. Returns the next state. Any later state
+     * (`COPYING`, `FINALIZED`, `FAILED`) is preserved verbatim.
+     */
+    private fun floorAdvanceToMuxing(current: ExportState): ExportState =
+        if (current == ExportState.NOT_STARTED) ExportState.MUXING else current
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setExportFinalized]. Writes
+     * the public target path for [side]; optionally clears that side's
+     * private temp path (Tier 2/3 happy path) or retains it (Tier 1, or
+     * Tier 2/3 with scan-callback timeout — recovery's deferred-scan
+     * branch needs it to re-fire `scanFile`). Side-orthogonal: the
+     * other side's pointers are untouched.
+     */
+    open suspend fun setExportFinalizedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        publicTargetPath: String,
+        clearPrivateTempPath: Boolean
+    ): ExportMutationResult = mutateExport("setExportFinalizedForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> current.copy(
+                portraitPublicTargetPath = publicTargetPath,
+                portraitPrivateTempPath = if (clearPrivateTempPath) null else current.portraitPrivateTempPath
+            )
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> current.copy(
+                landscapePublicTargetPath = publicTargetPath,
+                landscapePrivateTempPath = if (clearPrivateTempPath) null else current.landscapePrivateTempPath
+            )
+        }
+    }
+
+    /**
+     * Phase 6.1b T11 — per-side analog of [setMediaScanCompleted].
+     * Idempotent — second call writes the same `true` value. The other
+     * side's scan flag is untouched.
+     */
+    suspend fun setMediaScanCompletedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide
+    ): ExportMutationResult = mutateExport("setMediaScanCompletedForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitMediaScanCompleted = true)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapeMediaScanCompleted = true)
+        }
+    }
+
+    /**
      * Phase 1.3 cooperative-stop signal. Idempotent — once true, stays true.
      * Phase 1.2 only needs the field-shape; the writer is RovaStopReceiver in
      * Phase 1.3.

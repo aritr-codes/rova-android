@@ -673,4 +673,72 @@ class ExportRecoveryRunnerTest {
             report.referencedPendingUris.contains("")
         )
     }
+
+    // ─── Phase 6.1b T14 — combineRecoveryResults helper ─────────────
+
+    private val sampleSuccess = RecoveryResult.Resumed(
+        ExportResult.Success(mediaScanCompleted = true, privateTempRetained = false)
+    )
+    private val sampleAbandoned: RecoveryResult = RecoveryResult.Abandoned
+    private val sampleRetryable: RecoveryResult =
+        RecoveryResult.RetryableFailure("seam", IOException("boom"))
+    private val sampleManifestFail: RecoveryResult =
+        RecoveryResult.ManifestWriteFailed(IOException("write boom"))
+    private val sampleUnknown: RecoveryResult = RecoveryResult.UnknownSession("sid-99")
+
+    @Test
+    fun `combineRecoveryResults both Resumed Success returns Resumed Success`() {
+        val out = combineRecoveryResults(sampleSuccess, sampleSuccess)
+        assertTrue("expected Resumed got $out", out is RecoveryResult.Resumed)
+        val export = (out as RecoveryResult.Resumed).export
+        assertTrue(export is ExportResult.Success)
+    }
+
+    @Test
+    fun `combineRecoveryResults success plus abandoned returns success conservative`() {
+        // At least one side recovered; runner should treat as success.
+        val out1 = combineRecoveryResults(sampleSuccess, sampleAbandoned)
+        val out2 = combineRecoveryResults(sampleAbandoned, sampleSuccess)
+        assertTrue(out1 is RecoveryResult.Resumed)
+        assertTrue(out2 is RecoveryResult.Resumed)
+    }
+
+    @Test
+    fun `combineRecoveryResults retryable on either side propagates retryable`() {
+        val out1 = combineRecoveryResults(sampleSuccess, sampleRetryable)
+        val out2 = combineRecoveryResults(sampleRetryable, sampleSuccess)
+        assertTrue("expected RetryableFailure got $out1", out1 is RecoveryResult.RetryableFailure)
+        assertTrue("expected RetryableFailure got $out2", out2 is RecoveryResult.RetryableFailure)
+    }
+
+    @Test
+    fun `combineRecoveryResults manifest write failed on either side propagates manifest write failed`() {
+        val out1 = combineRecoveryResults(sampleSuccess, sampleManifestFail)
+        val out2 = combineRecoveryResults(sampleManifestFail, sampleSuccess)
+        assertTrue(out1 is RecoveryResult.ManifestWriteFailed)
+        assertTrue(out2 is RecoveryResult.ManifestWriteFailed)
+    }
+
+    @Test
+    fun `combineRecoveryResults both abandoned returns abandoned`() {
+        val out = combineRecoveryResults(sampleAbandoned, sampleAbandoned)
+        assertTrue("expected Abandoned got $out", out === RecoveryResult.Abandoned)
+    }
+
+    @Test
+    fun `combineRecoveryResults unknown session on either side propagates unknown session`() {
+        val out1 = combineRecoveryResults(sampleSuccess, sampleUnknown)
+        val out2 = combineRecoveryResults(sampleUnknown, sampleSuccess)
+        assertTrue(out1 is RecoveryResult.UnknownSession)
+        assertTrue(out2 is RecoveryResult.UnknownSession)
+    }
+
+    @Test
+    fun `combineRecoveryResults retryable beats manifest write failed`() {
+        // Both failure modes are conservative; retryable wins because it
+        // signals "transient — try again next launch" which is a strict
+        // superset of manifest-write-failed semantics for the runner.
+        val out = combineRecoveryResults(sampleRetryable, sampleManifestFail)
+        assertTrue("expected RetryableFailure got $out", out is RecoveryResult.RetryableFailure)
+    }
 }

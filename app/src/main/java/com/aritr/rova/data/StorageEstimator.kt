@@ -69,15 +69,22 @@ object StorageEstimator {
      * Indefinite-loop sessions (`loopCount == -1`) reserve
      * [INDEFINITE_LOOP_PREFLIGHT_HORIZON] loops; the per-segment gate is
      * the authoritative backstop beyond that horizon.
+     *
+     * When [mode] == `"PortraitLandscape"`, the peak doubles to account for
+     * 2 encoder outputs (portrait + landscape) running in parallel. Default
+     * [mode] = `"Portrait"` preserves the prior single-mode math for all
+     * existing callers.
      */
     fun estimatePeakBytes(
         durationSeconds: Long,
         loopCount: Int,
         resolution: String,
-        tier: ExportTier
+        tier: ExportTier,
+        mode: String = "Portrait"
     ): Long {
         val loops = if (loopCount == -1) INDEFINITE_LOOP_PREFLIGHT_HORIZON else loopCount.toLong()
-        val captureBytes = durationSeconds * loops * bytesPerSecondForResolution(resolution)
+        val sides = if (mode == "PortraitLandscape") 2L else 1L
+        val captureBytes = durationSeconds * loops * bytesPerSecondForResolution(resolution) * sides
         return captureBytes * tier.peakBudgetMultiplier
     }
 

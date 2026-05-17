@@ -48,6 +48,34 @@ internal class DualMuxer(
         sm.dispatch(DualMuxerStateMachine.Event.TracksOpened)
     }
 
+    /**
+     * Phase 6.1b smoke-fix #4 — set the MP4 composition-matrix rotation
+     * hint for [side]'s muxer. Must be called BEFORE the muxer starts
+     * (i.e. between `MediaMuxer` construction in this class's `init` and
+     * [maybeStart]). Per AOSP `MediaMuxer.setOrientationHint` docs the
+     * value MUST be one of 0/90/180/270; a non-conforming value throws.
+     *
+     * This replaces the previous reliance on `MediaFormat.KEY_ROTATION`
+     * in the encoder output format (which MP4 ignores at `addTrack` per
+     * the same docs, and which some Qualcomm encoders honor at the
+     * bitstream level — producing a double-rotation now that pixels are
+     * pre-oriented per side). The hint here is the SOLE rotation
+     * metadata; the encoder format no longer carries `KEY_ROTATION`.
+     *
+     * Side already-failed → no-op (matches the addTrack/writeSample
+     * tolerance pattern: the live side continues even if the other
+     * muxer raised on construction).
+     */
+    fun setOrientationHint(side: VideoSide, degrees: Int) {
+        val s = sides[side] ?: return
+        if (s.failed) return
+        try {
+            s.muxer.setOrientationHint(degrees)
+        } catch (e: Throwable) {
+            failSide(side, e)
+        }
+    }
+
     /** Returns the track index in that side's muxer; -1 if the side has failed. */
     fun addVideoTrack(side: VideoSide, format: MediaFormat): Int =
         addTrack(side) { it.muxer.addTrack(format).also { idx -> it.videoTrackIndex = idx } }

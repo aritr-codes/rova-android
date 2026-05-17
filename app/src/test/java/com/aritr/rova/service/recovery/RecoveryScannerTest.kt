@@ -10,10 +10,12 @@ import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
+import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.utils.MediaFileInspection
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -78,7 +80,8 @@ class RecoveryScannerTest {
         otherFiles: List<String> = emptyList(),
         exportState: ExportState = ExportState.NOT_STARTED,
         stopReason: StopReason = StopReason.NONE,
-        audioMode: AudioMode = AudioMode.VIDEO_ONLY
+        audioMode: AudioMode = AudioMode.VIDEO_ONLY,
+        mode: String = "Portrait"
     ) {
         val sessionDir = File(rootDir, sessionId).also { it.mkdirs() }
         diskSegmentNames.forEach { name -> File(sessionDir, name).writeBytes(byteArrayOf(0x00)) }
@@ -86,10 +89,44 @@ class RecoveryScannerTest {
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = startedAt,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0),
+            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, mode = mode),
             segments = manifestSegments.mapIndexed { i, name ->
                 SegmentRecord(filename = name, durationMs = 1_000L, sizeBytes = 1L, sha1 = "sha-$i")
             },
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            exportState = exportState,
+            terminated = terminated,
+            terminatedAt = terminated?.let { 1L },
+            stopRequested = stopRequested,
+            stopReason = stopReason,
+            audioMode = audioMode
+        )
+        File(sessionDir, "manifest.json").writeText(manifest.toJson().toString())
+    }
+
+    /**
+     * Variant of seedSession that supports explicit SegmentRecord objects (for P+L sessions
+     * where each record carries a side discriminator) and explicit disk file names.
+     */
+    private fun seedSessionWithRecords(
+        sessionId: String,
+        manifestRecords: List<SegmentRecord> = emptyList(),
+        diskSegmentNames: List<String> = manifestRecords.map { it.filename },
+        terminated: Terminated? = null,
+        stopRequested: Boolean = false,
+        startedAt: Long = SESSION_STARTED_AT,
+        exportState: ExportState = ExportState.NOT_STARTED,
+        stopReason: StopReason = StopReason.NONE,
+        audioMode: AudioMode = AudioMode.VIDEO_ONLY,
+        mode: String = "Portrait"
+    ) {
+        val sessionDir = File(rootDir, sessionId).also { it.mkdirs() }
+        diskSegmentNames.forEach { name -> File(sessionDir, name).writeBytes(byteArrayOf(0x00)) }
+        val manifest = SessionManifest(
+            sessionId = sessionId,
+            startedAt = startedAt,
+            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, mode = mode),
+            segments = manifestRecords,
             exportTier = ExportTier.TIER1_API29_PLUS,
             exportState = exportState,
             terminated = terminated,
@@ -703,6 +740,130 @@ class RecoveryScannerTest {
         )
         assertTrue("expected Failed; got $result", result is MarkTerminatedResult.Failed)
         assertEquals(0, (result as MarkTerminatedResult.Failed).attempts)
+    }
+
+    // -- SEGMENT_REGEX pinning tests (Phase 6.1b T6) -------------------------
+
+    @Test
+    fun `SEGMENT_REGEX matches single-mode segment_0001 mp4 with empty group 2`() {
+        val m = RecoveryScanner.SEGMENT_REGEX.matchEntire("segment_0001.mp4")
+        assertNotNull(m)
+        assertEquals("0001", m!!.groupValues[1])
+        assertEquals("", m.groupValues[2])
+    }
+
+    @Test
+    fun `SEGMENT_REGEX matches paired-suffix segment_0001_P mp4`() {
+        val m = RecoveryScanner.SEGMENT_REGEX.matchEntire("segment_0001_P.mp4")
+        assertNotNull(m)
+        assertEquals("0001", m!!.groupValues[1])
+        assertEquals("P", m.groupValues[2])
+    }
+
+    @Test
+    fun `SEGMENT_REGEX matches paired-suffix segment_0001_L mp4`() {
+        val m = RecoveryScanner.SEGMENT_REGEX.matchEntire("segment_0001_L.mp4")
+        assertNotNull(m)
+        assertEquals("0001", m!!.groupValues[1])
+        assertEquals("L", m.groupValues[2])
+    }
+
+    @Test
+    fun `SEGMENT_REGEX rejects malformed segment_0001_X mp4`() {
+        val m = RecoveryScanner.SEGMENT_REGEX.matchEntire("segment_0001_X.mp4")
+        assertNull(m)
+    }
+
+    @Test
+    fun `SEGMENT_REGEX rejects 3-digit index segment_001 mp4`() {
+        val m = RecoveryScanner.SEGMENT_REGEX.matchEntire("segment_001.mp4")
+        assertNull(m)
+    }
+
+    // -- P+L grouping / appendable-prefix tests (Phase 6.1b T6) -------------
+
+    @Test
+    fun `P+L pair at same index is not a duplicate anomaly`() = runBlocking {
+        val sid = "pl-pair-no-dup"
+        seedSessionWithRecords(
+            sessionId = sid,
+            manifestRecords = listOf(
+                SegmentRecord(filename = "segment_0001_P.mp4", durationMs = 1_000L, sizeBytes = 1L, sha1 = "a", side = VideoSide.PORTRAIT),
+                SegmentRecord(filename = "segment_0001_L.mp4", durationMs = 1_000L, sizeBytes = 1L, sha1 = "b", side = VideoSide.LANDSCAPE)
+            ),
+            diskSegmentNames = listOf("segment_0001_P.mp4", "segment_0001_L.mp4"),
+            terminated = Terminated.USER_STOPPED,
+            mode = "PortraitLandscape"
+        )
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertTrue(
+            "No DuplicateSegment anomaly expected for a P+L pair at same index; got ${classification.anomalies}",
+            classification.anomalies.none { it is Anomaly.DuplicateSegment }
+        )
+    }
+
+    @Test
+    fun `P+L appendable orphan requires both sides present`() = runBlocking {
+        val sid = "pl-half-orphan"
+        seedSessionWithRecords(
+            sessionId = sid,
+            manifestRecords = emptyList(),
+            diskSegmentNames = listOf("segment_0001_P.mp4"),  // _L missing
+            mode = "PortraitLandscape"
+        )
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertTrue(
+            "appendedSegmentFilenames must be empty when only one side present; got ${classification.appendedSegmentFilenames}",
+            classification.appendedSegmentFilenames.isEmpty()
+        )
+        assertTrue(
+            "OrphanSegment anomaly with index 1 expected for the lone _P file; got ${classification.anomalies}",
+            classification.anomalies.any { it is Anomaly.OrphanSegment && it.indices.contains(1) }
+        )
+    }
+
+    @Test
+    fun `P+L appendable orphan appends both sides when both present and valid`() = runBlocking {
+        val sid = "pl-both-orphan"
+        seedSessionWithRecords(
+            sessionId = sid,
+            manifestRecords = emptyList(),
+            diskSegmentNames = listOf("segment_0001_P.mp4", "segment_0001_L.mp4"),
+            mode = "PortraitLandscape"
+        )
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertEquals(
+            "appendedSegmentFilenames must contain both P and L files; got ${classification.appendedSegmentFilenames}",
+            2,
+            classification.appendedSegmentFilenames.size
+        )
+        assertTrue(classification.appendedSegmentFilenames.contains("segment_0001_P.mp4"))
+        assertTrue(classification.appendedSegmentFilenames.contains("segment_0001_L.mp4"))
+    }
+
+    @Test
+    fun `single-mode appendable orphan unchanged after regex extension`() = runBlocking {
+        val sid = "single-mode-orphan"
+        seedSession(
+            sessionId = sid,
+            manifestSegments = listOf("segment_0001.mp4"),
+            diskSegmentNames = listOf("segment_0001.mp4", "segment_0002.mp4"),
+            mode = "Portrait"
+        )
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertEquals(
+            "appendedSegmentFilenames must be [segment_0002.mp4] for single-mode; got ${classification.appendedSegmentFilenames}",
+            listOf("segment_0002.mp4"),
+            classification.appendedSegmentFilenames
+        )
     }
 
     companion object {

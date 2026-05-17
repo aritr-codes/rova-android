@@ -65,7 +65,22 @@ data class SessionManifest(
      * - system-driven terminals ([Terminated.KILLED_BY_SYSTEM] /
      *   [Terminated.KILLED_FORCE_STOP]).
      */
-    val stopReason: StopReason = StopReason.NONE
+    val stopReason: StopReason = StopReason.NONE,
+    // Phase 6.1b T11 — per-side export-state pointers for P+L sessions.
+    // Single-mode sessions leave all eight fields at their default
+    // (null / false). The existing `privateTempPath` / `pendingUri` /
+    // `publicTargetPath` / `mediaScanCompleted` quadruple remains the
+    // single-mode source of truth — the per-side fields are additive,
+    // never a replacement. See ADR 0003 §"Recovery routing" partner +
+    // Phase 6.1b T11 plan.
+    val portraitPrivateTempPath: String? = null,
+    val portraitPendingUri: String? = null,
+    val portraitPublicTargetPath: String? = null,
+    val portraitMediaScanCompleted: Boolean = false,
+    val landscapePrivateTempPath: String? = null,
+    val landscapePendingUri: String? = null,
+    val landscapePublicTargetPath: String? = null,
+    val landscapeMediaScanCompleted: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -84,13 +99,27 @@ data class SessionManifest(
         put("stopRequested", stopRequested)
         put("audioMode", audioMode.name)
         put("stopReason", stopReason.name)
+        // Phase 6.1b T11 — emit per-side fields only when non-null /
+        // non-default so v4 single-mode manifests keep their byte-shape
+        // (no extra keys appear in the JSON for sessions that never
+        // touched a per-side mutator).
+        portraitPrivateTempPath?.let { put("portraitPrivateTempPath", it) }
+        portraitPendingUri?.let { put("portraitPendingUri", it) }
+        portraitPublicTargetPath?.let { put("portraitPublicTargetPath", it) }
+        if (portraitMediaScanCompleted) put("portraitMediaScanCompleted", true)
+        landscapePrivateTempPath?.let { put("landscapePrivateTempPath", it) }
+        landscapePendingUri?.let { put("landscapePendingUri", it) }
+        landscapePublicTargetPath?.let { put("landscapePublicTargetPath", it) }
+        if (landscapeMediaScanCompleted) put("landscapeMediaScanCompleted", true)
     }
 
     companion object {
-        // v4 (Phase 6): added SessionConfig.mode. v1/v2/v3 manifests read with
-        // safe default ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
+        // v5 (Phase 6.1b): SegmentRecord.side optional discriminator for P+L
+        // sessions (null = legacy/single-mode). v4 (Phase 6): added
+        // SessionConfig.mode. v1/v2/v3 manifests read with safe default
+        // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -122,7 +151,18 @@ data class SessionManifest(
             } ?: AudioMode.VIDEO_ONLY,
             stopReason = json.optString("stopReason", "").ifEmpty { null }?.let {
                 runCatching { StopReason.valueOf(it) }.getOrNull()
-            } ?: StopReason.NONE
+            } ?: StopReason.NONE,
+            // Phase 6.1b T11 — read per-side fields with safe defaults.
+            // v4 (and earlier) manifests have none of these keys, so
+            // optString returns "" → null and optBoolean returns false.
+            portraitPrivateTempPath = json.optString("portraitPrivateTempPath", "").ifEmpty { null },
+            portraitPendingUri = json.optString("portraitPendingUri", "").ifEmpty { null },
+            portraitPublicTargetPath = json.optString("portraitPublicTargetPath", "").ifEmpty { null },
+            portraitMediaScanCompleted = json.optBoolean("portraitMediaScanCompleted", false),
+            landscapePrivateTempPath = json.optString("landscapePrivateTempPath", "").ifEmpty { null },
+            landscapePendingUri = json.optString("landscapePendingUri", "").ifEmpty { null },
+            landscapePublicTargetPath = json.optString("landscapePublicTargetPath", "").ifEmpty { null },
+            landscapeMediaScanCompleted = json.optBoolean("landscapeMediaScanCompleted", false)
         )
     }
 }
@@ -169,7 +209,7 @@ data class SessionConfig(
             resolution = json.getString("resolution"),
             loopCount = json.getInt("loopCount"),
             mode = json.optString("mode", "").ifEmpty { null }
-                ?.takeIf { it == "Portrait" || it == "Landscape" }
+                ?.takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" }
                 ?: "Portrait"
         )
     }
@@ -179,13 +219,15 @@ data class SegmentRecord(
     val filename: String,
     val durationMs: Long,
     val sizeBytes: Long,
-    val sha1: String
+    val sha1: String,
+    val side: com.aritr.rova.service.dualrecord.VideoSide? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("filename", filename)
         put("durationMs", durationMs)
         put("sizeBytes", sizeBytes)
         put("sha1", sha1)
+        side?.let { put("side", it.name) }
     }
 
     companion object {
@@ -193,7 +235,10 @@ data class SegmentRecord(
             filename = json.getString("filename"),
             durationMs = json.getLong("durationMs"),
             sizeBytes = json.getLong("sizeBytes"),
-            sha1 = json.getString("sha1")
+            sha1 = json.getString("sha1"),
+            side = json.optString("side", "").ifEmpty { null }?.let {
+                runCatching { com.aritr.rova.service.dualrecord.VideoSide.valueOf(it) }.getOrNull()
+            }
         )
     }
 }

@@ -11,6 +11,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Phase 6.1a — active recording handle returned by `DualVideoRecorder.start()`.
  * One per session segment. Owns the lifecycle of the encoders + muxer +
  * audio for that segment. Idempotent stop().
+ *
+ * Phase 6.1b smoke-fix: ctor accepts `onStopped` callback so the owning
+ * `DualVideoRecorder` can clear its `activeRecording` reference after stop,
+ * enabling per-segment reuse without `release()`/reconstruct cycles.
  */
 class DualRecording internal constructor(
     private val portraitEncoder: EncoderSurface,
@@ -19,6 +23,7 @@ class DualRecording internal constructor(
     private val muxer: DualMuxer,
     private val callback: (DualRecordEvent) -> Unit,
     private val callbackExecutor: Executor,
+    private val onStopped: () -> Unit = {},
 ) {
 
     private val stopped = AtomicBoolean(false)
@@ -47,5 +52,9 @@ class DualRecording internal constructor(
             error = error,
         )
         callbackExecutor.execute { callback(event) }
+        // Phase 6.1b smoke-fix: unconditionally clear recorder's activeRecording
+        // reference so the recorder can be reused for the next loop segment.
+        // Wrapped in its own try/catch — must run even if finalize partially failed.
+        try { onStopped() } catch (e: Throwable) { RovaLog.w("DualRecording.stop onStopped", e) }
     }
 }

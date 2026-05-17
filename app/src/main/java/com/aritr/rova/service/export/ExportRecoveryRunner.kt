@@ -325,6 +325,63 @@ data class ExportRecoveryReport(
 )
 
 /**
+ * Phase 6.1b T14 — combine two per-side [RecoveryResult]s into a
+ * single conservative outcome. Used by [RovaApp]'s `recoverSession`
+ * lambda when dispatching P+L (PortraitLandscape) recovery: the lambda
+ * calls the tier-correct exporter's `recover(m, side = PORTRAIT)` and
+ * `recover(m, side = LANDSCAPE)`, then folds the two results through
+ * this helper before returning a single [RecoveryResult] to
+ * [ExportRecoveryRunner].
+ *
+ * Precedence (most-conservative wins) — see the test cases in
+ * `ExportRecoveryRunnerTest` for the canonical truth table:
+ *
+ * 1. **[RecoveryResult.RetryableFailure]** — "transient, try again next
+ *    cold launch". Strongest signal because it asks the runner to leave
+ *    the on-disk row untouched and skip cleanup gating; any side
+ *    asking for a retry wins.
+ * 2. **[RecoveryResult.ManifestWriteFailed]** — "manifest mutation
+ *    failed". The runner leaves the session in place; next cold launch
+ *    retries. Beats success/abandoned but not retryable.
+ * 3. **[RecoveryResult.UnknownSession]** — "manifest disappeared
+ *    mid-recovery". Treated as a failure mode for the combined session
+ *    so cleanup gating sees a failure signal and skips physical
+ *    deletion; beats success/abandoned.
+ * 4. **[RecoveryResult.Resumed]** — at least one side recovered.
+ *    Returned when no failure mode is present and at least one input
+ *    is Resumed. If both are Resumed, the first input wins (the wrapped
+ *    [ExportResult] semantics are identical when both succeed).
+ * 5. **[RecoveryResult.Abandoned]** — both sides had nothing usable
+ *    and neither side's per-side cleanup hit a manifest write error.
+ *
+ * The combinator never inspects the wrapped [ExportResult] payloads —
+ * per-side details remain in the manifest (per-side fields populated by
+ * T11 + T12) and are recoverable from disk by the next cold launch if
+ * needed. Single-mode recovery never calls this combinator; it stays
+ * byte-identical to the pre-T14 path.
+ */
+internal fun combineRecoveryResults(
+    portrait: RecoveryResult,
+    landscape: RecoveryResult
+): RecoveryResult {
+    // 1 — RetryableFailure wins over everything (most conservative:
+    //     ask the runner to leave the row and try again next launch).
+    if (portrait is RecoveryResult.RetryableFailure) return portrait
+    if (landscape is RecoveryResult.RetryableFailure) return landscape
+    // 2 — ManifestWriteFailed: leave session in place; next launch retry.
+    if (portrait is RecoveryResult.ManifestWriteFailed) return portrait
+    if (landscape is RecoveryResult.ManifestWriteFailed) return landscape
+    // 3 — UnknownSession: surface as a non-success outcome.
+    if (portrait is RecoveryResult.UnknownSession) return portrait
+    if (landscape is RecoveryResult.UnknownSession) return landscape
+    // 4 — Resumed: at least one side succeeded. Portrait first if both.
+    if (portrait is RecoveryResult.Resumed) return portrait
+    if (landscape is RecoveryResult.Resumed) return landscape
+    // 5 — Both Abandoned (the only remaining case).
+    return RecoveryResult.Abandoned
+}
+
+/**
  * Phase 1.7 commit-6 — outcome of the late-terminal reconciliation
  * pass for a single session. Distinct from [RecoveryResult] because
  * the late-terminal pass is a runner-level write, not an exporter

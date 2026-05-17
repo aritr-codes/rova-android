@@ -28,6 +28,7 @@ import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -127,6 +128,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private var preview: Preview? = null
     private var videoCapture: VideoCapture<Recorder>? = null
+    // Phase 6.1b — dual recorder + dual recording handle for P+L mode.
+    // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
+    // path. Released on service teardown.
+    private var currentDualRecorder: com.aritr.rova.service.dualrecord.DualVideoRecorder? = null
+    private var currentDualRecording: com.aritr.rova.service.dualrecord.DualRecording? = null
     private var camera: androidx.camera.core.Camera? = null
     // Phase 3.5 — observer on `camera`'s cameraState LiveData; re-made on bind, nulled on unbind.
     private var cameraStateObserver: Observer<CameraState>? = null
@@ -362,6 +368,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
         RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
+        currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+        currentDualRecording = null
+        currentDualRecorder?.release()
+        currentDualRecorder = null
         markCameraUnbound()  // Phase 3.5
         releaseDummySurface()
         preview = null
@@ -1046,6 +1056,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         setupMutex.withLock {
             RovaLog.d("forceReconfigureCamera: Unbinding for fresh setup")
             try { cameraProvider?.unbindAll() } catch (e: Exception) {}
+            currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+            currentDualRecording = null
+            currentDualRecorder?.release()
+            currentDualRecorder = null
             markCameraUnbound()  // Phase 3.5
             preview = null
             videoCapture = null
@@ -1057,6 +1071,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private suspend fun setupCamera() {
+        if (currentMode == "PortraitLandscape") {
+            setupDualCamera()
+        } else {
+            setupSingleCamera()
+        }
+    }
+
+    private suspend fun setupSingleCamera() {
+        // BODY: verbatim move of the prior setupCamera() launch block.
+        // Every line preserved character-for-character including comments,
+        // whitespace, log statements, and the serviceScope.launch + mutex
+        // structure. Do NOT modify any line of the extracted body.
         setupMutex.withLock {
             RovaLog.d("setupCamera: Starting setup workflow")
 
@@ -1146,6 +1172,85 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    private suspend fun setupDualCamera() {
+        setupMutex.withLock {
+            if (_serviceState.value.isCameraActive) {
+                RovaLog.d("setupDualCamera: camera already active, short-circuit")
+                return@withLock
+            }
+
+            if (cameraProvider == null) {
+                val provider = withContext(Dispatchers.IO) {
+                    ProcessCameraProvider.getInstance(this@RovaRecordingService).get()
+                }
+                cameraProvider = provider
+            }
+
+            val provider = cameraProvider ?: return@withLock
+
+            RovaLog.d("setupDualCamera: Initializing UseCases (Preview + CameraEffect)")
+
+            val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+                ?: android.view.Surface.ROTATION_0
+
+            val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                com.aritr.rova.service.dualrecord.LensFacing.FRONT
+            } else {
+                com.aritr.rova.service.dualrecord.LensFacing.BACK
+            }
+
+            // 6.1b consumer config — FHD-locked for v1; 6.1c may lookup BitrateTable per resolution.
+            val portraitSize = android.util.Size(1080, 1920)
+            val landscapeSize = android.util.Size(1920, 1080)
+            val config = com.aritr.rova.service.dualrecord.DualVideoRecorderConfig(
+                cameraInputSize = android.util.Size(1920, 1080),
+                portraitOutputSize = portraitSize,
+                landscapeOutputSize = landscapeSize,
+                portraitBitrate = 8_000_000,
+                landscapeBitrate = 8_000_000,
+                videoCodec = com.aritr.rova.service.dualrecord.VideoCodec.H264,
+                audioBitrate = 128_000,
+                audioSampleRate = 48_000,
+                lensFacing = lensFacing,
+                displayRotation = displayRotation,
+                fps = 30
+            )
+            currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
+
+            preview = Preview.Builder().setTargetRotation(displayRotation).build()
+            val useDummy = currentSurfaceProvider == null
+            val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
+            preview?.setSurfaceProvider(surfaceProvider)
+            RovaLog.d("setupDualCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}")
+
+            val ucg = UseCaseGroup.Builder()
+                .addUseCase(preview!!)
+                .addEffect(currentDualRecorder!!.asCameraEffect())
+                .build()
+
+            try {
+                provider.unbindAll()
+                RovaLog.d("setupDualCamera: Binding to lifecycle (UseCaseGroup)")
+                camera = provider.bindToLifecycle(
+                    this@RovaRecordingService,
+                    currentCameraSelector,
+                    ucg
+                )
+                camera?.let { observeCameraState(it) }
+                configuredResolution = "FHD"
+                boundToDummy = useDummy
+                _serviceState.update { it.copy(isCameraActive = true) }
+                RovaLog.d("setupDualCamera: Camera binding COMPLETED. boundToDummy=$boundToDummy")
+                applyFlashState()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                RovaLog.e("setupDualCamera: Binding failed", e)
+                _serviceState.update { it.copy(isCameraActive = false) }
+            }
+        }
+    }
+
     // Phase 3.5 — attach a fresh cameraState observer after each bind. Each
     // bindToLifecycle yields a new Camera/LiveData; removeObserver here is a
     // harmless no-op vs. the old camera's LiveData. The observer is
@@ -1205,6 +1310,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return
         }
         currentMode = mode
+        // Phase 6.1b smoke-fix #6 — P+L is rear-only. If the user was on
+        // the front camera and selects P+L, snap back to rear here so
+        // forceReconfigureCamera below rebinds with the correct selector.
+        // The RecordScreen flip button is also disabled in P+L mode
+        // (RecordCameraControls.flipEnabled) so the user can't re-enter
+        // the front-cam state until they leave P+L.
+        if (mode == "PortraitLandscape" &&
+            currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+        ) {
+            RovaLog.d("setMode: P+L selected on front camera — auto-snapping to rear")
+            currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+        }
         serviceScope.launch { forceReconfigureCamera() }
     }
 
@@ -1441,6 +1558,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 stopPeriodicRecordingAndMerge()
                 return SegmentResult.Terminated
             }
+        }
+
+        // Phase 6.1b — dual dispatch: P+L mode uses DualVideoRecorder path.
+        if (currentMode == "PortraitLandscape") {
+            return recordSegmentDual()
         }
 
         var videoFile: File? = null
@@ -1730,6 +1852,242 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * Phase 6.1b — dual-recording path for [recordSegment] when
+     * `currentMode == "PortraitLandscape"`. Mirrors the single-mode path
+     * structure 1:1 (watchdog, recordingFinalized deferred,
+     * CancellationException / Exception catch blocks) so all existing
+     * cancellation-safety and recovery invariants apply equally to dual.
+     *
+     * Per-side failure tolerance: if [DualRecordEvent.Finalize] delivers a
+     * null file for one side (side failed mid-write per 6.1a DualMuxer
+     * contract), only the present side is persisted. The error field is
+     * logged but does NOT abort the segment — [DualMuxer] has already
+     * handled the side gracefully.
+     *
+     * Duration: uses `nSeconds * 1000L` (configured clip length) as the
+     * fallback. Unlike CameraX's [VideoRecordEvent.Finalize] which carries
+     * `recordingStats.recordedDurationNanos`, [DualRecordEvent.Finalize]
+     * carries no timing stats. This matches the `configuredFallbackMs`
+     * argument that the single-mode path would use for an early-stopped clip
+     * — acceptable for dual until MediaMuxer stats are exposed.
+     */
+    private suspend fun recordSegmentDual(): SegmentResult {
+        val recorder = currentDualRecorder
+        val sessionId = currentSessionId
+        val sessionDir = currentSessionDir
+        if (recorder == null || sessionId == null || sessionDir == null) {
+            RovaLog.w("recordSegmentDual: dual recorder / session missing; aborting segment")
+            return SegmentResult.RetryableFailure
+        }
+        if (!sessionDir.exists()) sessionDir.mkdirs()
+
+        // sequence = segmentCount + 1 (pre-increment for this segment's
+        // filenames; the outer loop increments segmentCount after Success).
+        val seq = segmentCount + 1
+        val portraitFile = com.aritr.rova.service.dualrecord.internal.SegmentPathBuilder.build(
+            sessionDir, seq, com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+        )
+        val landscapeFile = com.aritr.rova.service.dualrecord.internal.SegmentPathBuilder.build(
+            sessionDir, seq, com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+        )
+        val output = com.aritr.rova.service.dualrecord.DualOutput(portraitFile, landscapeFile)
+        val durationMs = nSeconds * 1000L
+
+        // R2: Fresh deferreds for this segment's finalize event — same
+        // coordination pattern as single-mode so catch blocks work.
+        recordingFinalized = CompletableDeferred()
+        val recordingResult = CompletableDeferred<Boolean>()
+
+        var watchdogSid: String? = null
+        var watchdogArmed = false
+
+        try {
+            currentDualRecording = recorder.start(
+                outputs = output,
+                executor = ContextCompat.getMainExecutor(this),
+            ) { event ->
+                handleDualVideoEvent(
+                    event = event,
+                    sessionId = sessionId,
+                    portraitFile = portraitFile,
+                    landscapeFile = landscapeFile,
+                    durationMs = durationMs,
+                    recordingResult = recordingResult,
+                )
+            }
+
+            RovaLog.d("recordSegmentDual: Recording initialized, waiting ${nSeconds}s")
+
+            // Watchdog — same arm pattern as single-mode.
+            watchdogSid = currentSessionId
+            if (watchdogSid != null) {
+                val watchdogSeq = nextTickSeq++
+                val watchdogTriggerAt =
+                    System.currentTimeMillis() + durationMs + WATCHDOG_GRACE_MS
+                try {
+                    AlarmScheduler.arm(this, watchdogSid, watchdogSeq, watchdogTriggerAt, TickKind.WATCHDOG)
+                    watchdogArmed = true
+                } catch (e: Exception) {
+                    RovaLog.w("recordSegmentDual: watchdog arm failed for $watchdogSid", e)
+                }
+            }
+
+            delay(durationMs)
+
+            RovaLog.d("recordSegmentDual: Stopping recording normally")
+            currentDualRecording?.stop()
+            currentDualRecording = null
+
+            // Wait for DualRecordEvent.Finalize — same bounded-timeout
+            // pattern as single-mode.
+            val success = withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingResult.await() }
+            if (success == null) {
+                RovaLog.w("recordSegmentDual: segment did not finalize within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+                stopNeedsRecovery = true
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+                return SegmentResult.Terminated
+            }
+            return if (success) SegmentResult.Success else SegmentResult.RetryableFailure
+
+        } catch (e: CancellationException) {
+            RovaLog.d("recordSegmentDual: Cancelled")
+            try { currentDualRecording?.stop() } catch (e2: Exception) {}
+            currentDualRecording = null
+
+            val finalizedInTime = withContext(NonCancellable) {
+                withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingFinalized.await() }
+            }
+            if (finalizedInTime == null) {
+                RovaLog.w("recordSegmentDual: cancelled segment did not finalize within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+                stopNeedsRecovery = true
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+            }
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+            RovaLog.e("recordSegmentDual: Exception: ${e.message}", e)
+
+            val finalizedInTime = withContext(NonCancellable) {
+                withTimeoutOrNull(FINALIZE_TIMEOUT_MS) { recordingFinalized.await() }
+            }
+            if (finalizedInTime == null) {
+                if (!recordingFinalized.isCompleted) recordingFinalized.complete(Unit)
+                RovaLog.w("recordSegmentDual: exception with no finalize callback within ${FINALIZE_TIMEOUT_MS}ms; deferring to recovery")
+            } else {
+                RovaLog.w("recordSegmentDual: exception after finalize callback; deferring to recovery")
+            }
+            stopNeedsRecovery = true
+            val msg = e.message ?: "Dual recording failed unexpectedly"
+            updateNotification(msg)
+            _serviceState.update { it.copy(recordingError = msg) }
+            return SegmentResult.Terminated
+        } finally {
+            if (watchdogArmed && watchdogSid != null) {
+                try {
+                    AlarmScheduler.cancel(this, watchdogSid, TickKind.WATCHDOG)
+                } catch (e: Exception) {
+                    RovaLog.w("recordSegmentDual: watchdog cancel failed for $watchdogSid", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 6.1b — [DualRecordEvent] callback for [recordSegmentDual].
+     * Invoked on the executor thread provided to [DualVideoRecorder.start].
+     *
+     * On [DualRecordEvent.Finalize]: persists up to 2 [SegmentRecord]s (one
+     * per side present) via [SessionStore.appendSegment] on [Dispatchers.IO].
+     * Each persist job is wrapped in [serviceScope].async and added to
+     * [pendingPersistJobs] so that [stopPeriodicRecordingAndMerge]'s
+     * `awaitAll` fence covers both sides — matching the single-mode fix from
+     * Phase 1.2 (documented at lines 1765-1769).
+     *
+     * Note: [SessionStore.submitPersistFinalizedSegment] is not used here
+     * because it does not accept a [com.aritr.rova.service.dualrecord.VideoSide]
+     * field. Each async block builds the [SegmentRecord] inline (sha1 + length
+     * on IO) and calls [SessionStore.appendSegment], returning the record so
+     * the Deferred carries [SegmentRecord] to match [pendingPersistJobs]'s type.
+     *
+     * Per-side failure tolerance: a null file means that side failed
+     * mid-write (per 6.1a DualMuxer contract); only non-null sides are
+     * persisted. A non-null [DualRecordEvent.Finalize.error] is logged but
+     * does not abort — [DualMuxer] has already handled the side gracefully.
+     *
+     * Both-null + error: treated as [SegmentResult.RetryableFailure] (success=false)
+     * so the per-segment retry budget eventually terminates the session.
+     * The service's "tolerant" dual-record theme intentionally avoids
+     * immediately setting [stopNeedsRecovery] for a single-segment mux failure.
+     */
+    private fun handleDualVideoEvent(
+        event: com.aritr.rova.service.dualrecord.DualRecordEvent,
+        sessionId: String,
+        portraitFile: java.io.File,
+        landscapeFile: java.io.File,
+        durationMs: Long,
+        recordingResult: CompletableDeferred<Boolean>,
+    ) {
+        when (event) {
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Start -> {
+                RovaLog.d("recordSegmentDual: DualRecord Start")
+            }
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Status -> {
+                // Reserved — currently no status display for dual recording bytes
+                // (matches existing single-mode VideoRecordEvent.Status no-op).
+            }
+            is com.aritr.rova.service.dualrecord.DualRecordEvent.Finalize -> {
+                // Persist up to 2 SegmentRecords (one per side present); single-side
+                // failure tolerance per 6.1a DualMuxer contract.
+                //
+                // T9b fix: each side's persist is wrapped in serviceScope.async so
+                // stopPeriodicRecordingAndMerge's pendingPersistJobs.awaitAll() fence
+                // covers both sides. A bare launch would not be tracked, silently
+                // dropping in-flight dual persists if the service stops mid-write.
+                val success = event.portraitFile != null || event.landscapeFile != null
+                val pFile = event.portraitFile
+                if (pFile != null) {
+                    val portraitDeferred = serviceScope.async(Dispatchers.IO) {
+                        val rec = com.aritr.rova.data.SegmentRecord(
+                            filename = pFile.name,
+                            durationMs = durationMs,
+                            sizeBytes = pFile.length(),
+                            sha1 = com.aritr.rova.data.SessionStore.sha1Of(pFile),
+                            side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                        )
+                        sessionStore.appendSegment(sessionId, rec)
+                        rec
+                    }
+                    pendingPersistJobs.add(portraitDeferred)
+                }
+                val lFile = event.landscapeFile
+                if (lFile != null) {
+                    val landscapeDeferred = serviceScope.async(Dispatchers.IO) {
+                        val rec = com.aritr.rova.data.SegmentRecord(
+                            filename = lFile.name,
+                            durationMs = durationMs,
+                            sizeBytes = lFile.length(),
+                            sha1 = com.aritr.rova.data.SessionStore.sha1Of(lFile),
+                            side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                        )
+                        sessionStore.appendSegment(sessionId, rec)
+                        rec
+                    }
+                    pendingPersistJobs.add(landscapeDeferred)
+                }
+                if (event.error != null) {
+                    RovaLog.w("recordSegmentDual: DualRecord Finalize error: ${event.error}", event.error)
+                }
+                if (!recordingResult.isCompleted) {
+                    recordingResult.complete(success)
+                }
+                if (!recordingFinalized.isCompleted) {
+                    recordingFinalized.complete(Unit)
+                }
+            }
+        }
+    }
+
     private fun describeRecordingError(errorCode: Int): String = when (errorCode) {
         VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> "Not enough storage space"
         VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> "Camera was disconnected"
@@ -1851,6 +2209,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         stopAndMergeJob?.cancel()
         try { currentRecording?.stop() } catch (e: Exception) {}
         currentRecording = null
+        currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+        currentDualRecording = null
+        currentDualRecorder?.release()
+        currentDualRecorder = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
         markCameraUnbound()  // Phase 3.5 — service teardown
         releaseDummySurface()
@@ -2021,23 +2383,93 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val sessionId = currentSessionId
             val sessionDir = currentSessionDir
-            val segments: List<File> = if (sessionId != null && sessionDir != null) {
-                val manifest = withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
-                manifest?.segments
-                    ?.map { File(sessionDir, it.filename) }
-                    ?.filter { it.exists() && it.length() > 0 }
-                    ?: emptyList()
-            } else emptyList()
+            // Phase 6.1b T13: load the manifest once and branch on the
+            // session mode. P+L (mode == "PortraitLandscape") goes through
+            // performMergeDual, which runs ExportPipeline.export twice (once
+            // per side) with independent atomicity per D12. Single-mode
+            // (Portrait / Landscape) falls back to the pre-T13 single
+            // performMerge call — semantically byte-identical to the prior
+            // implementation (same `segments` filter, same call site).
+            val manifest: com.aritr.rova.data.SessionManifest? = if (sessionId != null) {
+                withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
+            } else null
 
-            if (segments.isNotEmpty()) {
-                performMerge(segments)
+            if (manifest != null && sessionDir != null && manifest.config.mode == "PortraitLandscape") {
+                val portraitSegments = manifest.segments
+                    .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT }
+                    .map { File(sessionDir, it.filename) }
+                    .filter { it.exists() && it.length() > 0 }
+                val landscapeSegments = manifest.segments
+                    .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE }
+                    .map { File(sessionDir, it.filename) }
+                    .filter { it.exists() && it.length() > 0 }
+
+                if (portraitSegments.isNotEmpty() || landscapeSegments.isNotEmpty()) {
+                    performMergeDual(portraitSegments, landscapeSegments)
+                } else {
+                    cancelAlarmsAndUnregister()
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                    stopSelf()
+                }
             } else {
-                cancelAlarmsAndUnregister()
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-                stopSelf()
+                // Single-mode path — semantically unchanged from prior impl.
+                // Re-uses the `manifest` loaded above (DRY, no second
+                // loadManifest call); produces the same `segments` content
+                // and the same call to performMerge as before T13.
+                val segments: List<File> = if (sessionId != null && sessionDir != null) {
+                    manifest?.segments
+                        ?.map { File(sessionDir, it.filename) }
+                        ?.filter { it.exists() && it.length() > 0 }
+                        ?: emptyList()
+                } else emptyList()
+
+                if (segments.isNotEmpty()) {
+                    performMerge(segments)
+                } else {
+                    cancelAlarmsAndUnregister()
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                    stopSelf()
+                }
             }
         }
+    }
+
+    /**
+     * Phase 6.1b T13 — sole call-shape wrapper around
+     * [ExportPipeline.export]. The Phase-1.7 single-entry gate
+     * (`checkExportPipelineSingleEntry`, `app/build.gradle.kts`) requires
+     * exactly one literal `ExportPipeline.export(` occurrence across
+     * `app/src/main/java/com/aritr/rova/`; this helper holds that sole
+     * site so [performMerge] (single-mode) and [performMergeDual]
+     * (P+L, two passes) both route through one definition.
+     *
+     * Call shape MUST match the single-mode invocation byte-for-byte
+     * (modulo the [side] arg and the per-call [onProgress] lambda) — the
+     * single-mode path's behavior is invariant per the Phase 6.1b
+     * "byte-identical single-mode semantics" contract: `context` is
+     * `this@RovaRecordingService`, `sessionStore` is the service-injected
+     * store, `mediaScanWaiter` uses the default ([AndroidMediaScanWaiter]
+     * built from `context`), and the trailing-lambda binding is preserved
+     * by the caller's lambda body.
+     */
+    private suspend fun runExportPipeline(
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        onProgress: (Float) -> Unit
+    ): ExportResult {
+        return ExportPipeline.export(
+            context = this@RovaRecordingService,
+            sessionStore = sessionStore,
+            sessionId = sessionId,
+            sessionDir = sessionDir,
+            segments = segments,
+            side = side,
+            onProgress = onProgress
+        )
     }
 
     private suspend fun performMerge(segments: List<File>) {
@@ -2062,12 +2494,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
             if (!sessionDir.exists()) sessionDir.mkdirs()
 
-            val result = ExportPipeline.export(
-                context = this@RovaRecordingService,
-                sessionStore = sessionStore,
+            val result = runExportPipeline(
                 sessionId = sid,
                 sessionDir = sessionDir,
-                segments = segments
+                segments = segments,
+                side = null
             ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
                 updateNotification(NotificationState.Merging((progress * segments.size).toInt(), segments.size))
@@ -2190,6 +2621,231 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * Phase 6.1b T13 — P+L variant of [performMerge]. Drives two
+     * independent [ExportPipeline.export] passes (PORTRAIT then LANDSCAPE)
+     * and writes the single terminal record once both sides settle.
+     *
+     * Independent atomicity per D12: the LANDSCAPE pass runs even when
+     * PORTRAIT failed (and vice versa). Per-side success/failure routes
+     * through the per-side mutators (T11/T12); the shared `exportState`
+     * is advanced to `FINALIZED` here only when at least one side
+     * succeeded — calling `setExportFailed` would wipe the per-side
+     * pointers needed by Task 14 recovery, so the both-sides-failed case
+     * leaves shared `exportState` untouched and defers to recovery
+     * (TODO T17: explicit shared-FAILED write that preserves per-side
+     * fields, or per-side `exportState` split).
+     *
+     * Progress is split 0–50% portrait / 50–100% landscape.
+     *
+     * The terminal markTerminated write fires once per session regardless
+     * of per-side outcome, mirroring [performMerge]'s contract — partial
+     * success is allowed (manifest reflects it via the per-side fields).
+     * On both-sides-failure no terminal write is performed; recovery on
+     * next launch picks up the failed sides per Task 14.
+     */
+    private suspend fun performMergeDual(
+        portraitSegments: List<File>,
+        landscapeSegments: List<File>
+    ) {
+        var portraitOk = false
+        var landscapeOk = false
+        try {
+            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            // Phase 6.1b smoke-fix #5 — notification clip count is the
+            // user-facing per-side count (the loop count), NOT the sum of
+            // both sides. Owner reported "Merging 4 clips" for a 2-loop
+            // P+L recording — the 4 was portrait(2) + landscape(2). Both
+            // sides have the same loop count in practice; `max` is
+            // defensive against degenerate tolerant-mode cases where one
+            // side has all-failed segments and the count is asymmetric.
+            // Mirrors the single-mode "X clips saved" semantic
+            // (NotificationCopy "$clipCount clips saved to Library"):
+            // X always means "clips within the saved content", not "raw
+            // segments across all output streams."
+            val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
+            updateNotification(NotificationState.Merging(done = 0, total = userClipCount))
+
+            val sid = currentSessionId
+            val sessionDir = currentSessionDir
+            if (sid == null || sessionDir == null) {
+                RovaLog.w("performMergeDual: no active session; skipping export")
+                _serviceState.update { it.copy(mergeError = "No active session") }
+                return
+            }
+            if (!sessionDir.exists()) sessionDir.mkdirs()
+
+            // Portrait pass
+            if (portraitSegments.isNotEmpty()) {
+                val portraitResult = runExportPipeline(
+                    sessionId = sid,
+                    sessionDir = sessionDir,
+                    segments = portraitSegments,
+                    side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+                ) { progress ->
+                    _serviceState.update { it.copy(mergeProgress = progress * 0.5f) }
+                    // Notification `done` tracks OVERALL merge progress
+                    // (0..userClipCount) so the count advances smoothly
+                    // across the portrait→landscape boundary. Portrait
+                    // owns the 0..50% slice → done in 0..userClipCount/2.
+                    val overall = progress * 0.5f
+                    updateNotification(
+                        NotificationState.Merging(
+                            done = (overall * userClipCount).toInt(),
+                            total = userClipCount
+                        )
+                    )
+                }
+                portraitOk = portraitResult is ExportResult.Success
+                if (!portraitOk) RovaLog.e("performMergeDual: portrait export failed: $portraitResult")
+            }
+
+            // Landscape pass — runs even if portrait failed (independent
+            // atomicity per D12). Progress: 50–100%.
+            if (landscapeSegments.isNotEmpty()) {
+                val landscapeResult = runExportPipeline(
+                    sessionId = sid,
+                    sessionDir = sessionDir,
+                    segments = landscapeSegments,
+                    side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+                ) { progress ->
+                    _serviceState.update { it.copy(mergeProgress = 0.5f + progress * 0.5f) }
+                    // Landscape owns 50..100% → done in userClipCount/2..userClipCount.
+                    val overall = 0.5f + progress * 0.5f
+                    updateNotification(
+                        NotificationState.Merging(
+                            done = (overall * userClipCount).toInt(),
+                            total = userClipCount
+                        )
+                    )
+                }
+                landscapeOk = landscapeResult is ExportResult.Success
+                if (!landscapeOk) RovaLog.e("performMergeDual: landscape export failed: $landscapeResult")
+            }
+
+            // Cleanup successful-side raw segments only; failed-side raws
+            // stay on disk for Task 14 recovery to consume.
+            withContext(Dispatchers.IO) {
+                if (portraitOk) {
+                    portraitSegments.forEach {
+                        if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
+                        try { it.delete() } catch (_: Exception) {}
+                    }
+                }
+                if (landscapeOk) {
+                    landscapeSegments.forEach {
+                        if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
+                        try { it.delete() } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            if (portraitOk || landscapeOk) {
+                // Phase 6.1b T13 — OQ-C lock: T12's per-side exporters skip
+                // the shared setExportFinalized; advance it here so consumers
+                // observing the shared exportState see FINALIZED on at least
+                // one-side success. setExportFinalized only touches
+                // exportState (and optionally privateTempPath, kept here),
+                // so the per-side pointers populated by T11/T12 are
+                // preserved.
+                val sidForFinalize = currentSessionId
+                if (sidForFinalize != null) {
+                    try {
+                        withContext(NonCancellable) {
+                            sessionStore.setExportFinalized(sidForFinalize, clearPrivateTempPath = false)
+                        }
+                    } catch (e: Exception) {
+                        RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
+                    }
+                }
+                updateNotification(NotificationState.MergeComplete(clipCount = userClipCount))
+                delay(1000)
+            } else {
+                // TODO T17: when both sides failed, advance shared
+                // exportState to FAILED without wiping the per-side
+                // pointers (current setExportFailed nulls publicTargetPath /
+                // pendingUri / privateTempPath, which kills Task 14
+                // diagnostics). Either add a new mutator that flips
+                // exportState only, or split exportState per side.
+                _serviceState.update { it.copy(mergeError = "Both sides failed") }
+                updateNotification("Merge failed")
+                delay(3000)
+            }
+
+        } catch (ce: CancellationException) {
+            // C6 mirror: keep cancellation semantics intact — must not be
+            // converted into a merge-failure UI state. finally still tears
+            // the service down.
+            throw ce
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _serviceState.update { it.copy(mergeError = e.message) }
+            updateNotification("Merge failed: ${e.message}")
+            delay(3000)
+        } finally {
+            _serviceState.update { it.copy(isMerging = false) }
+            // Phase 1.2 / 1.3 / 6.1b T13: write the terminal record before
+            // unregister and stopForeground/stopSelf. For P+L, the terminal
+            // write fires when at least one side succeeded (mirroring the
+            // single-mode `mergeSucceeded` gate in performMerge — partial
+            // success is acceptable; the manifest reflects the partial
+            // outcome via the per-side fields). On both-sides failure no
+            // terminal write is performed; ExportRecoveryRunner picks up
+            // the failed sides on next launch per Task 14.
+            //
+            // Discriminator (Phase 1.3): userStopRequested distinguishes
+            // user-driven stop (USER_STOPPED) from natural completion
+            // (COMPLETED). markTerminated runs in NonCancellable on the
+            // SessionStore persist dispatcher and is first-writer-wins.
+            if (portraitOk || landscapeOk) {
+                val sid = currentSessionId
+                if (sid != null) {
+                    val reason: Terminated
+                    val stopReason: com.aritr.rova.data.StopReason
+                    if (userStopRequested) {
+                        reason = Terminated.USER_STOPPED
+                        stopReason = com.aritr.rova.data.StopReason.USER
+                    } else {
+                        reason = Terminated.COMPLETED
+                        stopReason = com.aritr.rova.data.StopReason.NONE
+                    }
+                    try {
+                        withContext(NonCancellable) {
+                            when (val result = sessionStore.markTerminated(sid, reason, stopReason)) {
+                                is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
+                                    RovaLog.d("performMergeDual: wrote $reason / $stopReason for $sid")
+                                }
+                                is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
+                                    RovaLog.d(
+                                        "performMergeDual: $sid already" +
+                                            " ${result.existingTerminated}/${result.existingStopReason};" +
+                                            " merge-success suppressed"
+                                    )
+                                }
+                                is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
+                                    RovaLog.e(
+                                        "performMergeDual: markTerminated($reason) FAILED" +
+                                            " for $sid (attempts=${result.attempts})", result.cause
+                                    )
+                                    updateNotification(
+                                        "Recording finished but state save failed —" +
+                                            " will reconcile on next launch."
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        RovaLog.e("performMergeDual: markTerminated($reason) threw for $sid", e)
+                    }
+                }
+            }
+            cancelAlarmsAndUnregister()
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+            stopSelf()
+        }
+    }
+
     // Q3: short beep on recording start/stop using rova_beep.mp3.
     //
     // Beta-smoke fix v2: bleed-prevention is now timing, not blanket
@@ -2293,7 +2949,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             durationSeconds = nSeconds,
             loopCount = limitLoops,
             resolution = resolutionStr,
-            tier = tier
+            tier = tier,
+            mode = currentMode
         )
 
     private fun hasEnoughStorage(peakBytesRequired: Long): Boolean {

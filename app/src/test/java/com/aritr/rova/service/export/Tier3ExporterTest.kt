@@ -452,6 +452,124 @@ class Tier3ExporterTest {
         }
     }
 
+    // ─── Phase 6.1b T12 — per-side routing ──────────────────────────
+
+    /**
+     * Phase 6.1b T12 — when `side` is non-null on the Tier 3 path, the
+     * four manifest writes route to the per-side mutators:
+     *   `setExportPrivateTargetForSide` → `(setExportCopying SKIPPED)`
+     *   → `setMediaScanCompletedForSide`
+     *   → `setExportFinalizedForSide(clearPrivateTempPath=true)`.
+     * The shared `exportState` MUST stay at its initial NOT_STARTED — T13
+     * orchestrates the final shared write after both sides settle. The
+     * shared `privateTempPath` / `publicTargetPath` MUST NOT be touched
+     * (those are single-mode pointers). Per-side fields must reflect the
+     * write.
+     */
+    @Test
+    fun `export with side PORTRAIT routes to per-side mutators leaving shared exportState NOT_STARTED`() {
+        val exporter = newExporter()
+
+        val result = runBlocking {
+            exporter.export(
+                sessionId,
+                emptyList(),
+                privateTempFile,
+                publicTargetFile,
+                com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Success, got $result", result is ExportResult.Success)
+        assertTrue("public artifact must exist", publicTargetFile.exists())
+        assertFalse("private temp deleted on happy path", privateTempFile.exists())
+
+        val m = reload()
+        // Phase 6.1b T18 final-review remediation: per-side mutators
+        // floor-advance shared exportState NOT_STARTED -> MUXING on the
+        // first write. T13's caller still owns the final FINALIZED
+        // transition after both sides settle.
+        assertEquals(ExportState.MUXING, m.exportState)
+        assertNull("shared privateTempPath must not be touched by per-side path", m.privateTempPath)
+        assertNull("shared publicTargetPath must not be touched by per-side path", m.publicTargetPath)
+        assertFalse("shared mediaScanCompleted must not be touched", m.mediaScanCompleted)
+        // Per-side fields populated.
+        assertEquals(publicTargetFile.absolutePath, m.portraitPublicTargetPath)
+        assertNull("portrait privateTempPath cleared on happy path", m.portraitPrivateTempPath)
+        assertTrue("portrait scan completed", m.portraitMediaScanCompleted)
+        // Other side untouched.
+        assertNull(m.landscapePublicTargetPath)
+        assertNull(m.landscapePrivateTempPath)
+        assertFalse(m.landscapeMediaScanCompleted)
+    }
+
+    @Test
+    fun `export with side null preserves single-mode shared mutator writes`() {
+        val exporter = newExporter()
+
+        // side defaults to null
+        val result = runBlocking {
+            exporter.export(sessionId, emptyList(), privateTempFile, publicTargetFile)
+        }
+
+        assertTrue(result is ExportResult.Success)
+        val m = reload()
+        // Shared state advanced (FINALIZED) — single-mode path unchanged.
+        assertEquals(ExportState.FINALIZED, m.exportState)
+        assertEquals(publicTargetFile.absolutePath, m.publicTargetPath)
+        assertTrue(m.mediaScanCompleted)
+        // Per-side fields stay at defaults.
+        assertNull(m.portraitPublicTargetPath)
+        assertNull(m.landscapePublicTargetPath)
+    }
+
+    /**
+     * Phase 6.1b T12 — mux failure on the per-side path must NOT advance
+     * the shared `exportState` to FAILED (T13's caller owns failure
+     * attribution after both sides settle). The on-disk cleanup still
+     * runs unconditionally.
+     */
+    @Test
+    fun `mux failure with side LANDSCAPE skips shared setExportFailed write but cleans up files`() {
+        val cause = IOException("mux died")
+        val exporter = newExporter(mux = { _, _ -> throw cause })
+
+        val result = runBlocking {
+            exporter.export(
+                sessionId,
+                emptyList(),
+                privateTempFile,
+                publicTargetFile,
+                com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+            )
+        }
+
+        assertTrue(result is ExportResult.MuxFailed)
+        assertEquals(cause, (result as ExportResult.MuxFailed).cause)
+        // On-disk cleanup ran.
+        assertFalse(privateTempFile.exists())
+        assertFalse(partFile.exists())
+        assertFalse(publicTargetFile.exists())
+
+        val m = reload()
+        // Shared state NOT flipped to FAILED — T13 owns that decision.
+        // Phase 6.1b T18 final-review remediation: per-side commit-point-A
+        // floor-advanced shared exportState NOT_STARTED -> MUXING BEFORE
+        // mux ran, so the post-mux-failure state is MUXING (not
+        // NOT_STARTED). The key invariant is "not FAILED" — that decision
+        // still belongs to T13's caller after both sides settle.
+        assertEquals(
+            "shared exportState must not flip to FAILED on per-side cleanup",
+            ExportState.MUXING,
+            m.exportState
+        )
+        // Landscape private-temp pointer remains (set on commit point A,
+        // not cleared — T13 reads it for forensics).
+        assertEquals(privateTempFile.absolutePath, m.landscapePrivateTempPath)
+        // Portrait fields untouched.
+        assertNull(m.portraitPrivateTempPath)
+    }
+
     // ─── Result contract under cleanup-write failures (no swallowing) ───
 
     /**

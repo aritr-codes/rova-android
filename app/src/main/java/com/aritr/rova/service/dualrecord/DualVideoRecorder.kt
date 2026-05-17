@@ -84,13 +84,27 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
         val portraitRot = RotationCalculator.tag(config.displayRotation, VideoSide.PORTRAIT)
         val landscapeRot = RotationCalculator.tag(config.displayRotation, VideoSide.LANDSCAPE)
 
+        // Phase 6.1b smoke-fix #4 — set the per-side MP4 composition-matrix
+        // rotation hint on each muxer BEFORE addTrack/start. This is the
+        // sole rotation metadata; the encoder format no longer carries
+        // KEY_ROTATION (MP4 ignores it on addTrack; some Qualcomm encoders
+        // honor it at bitstream level → double-rotation now that the
+        // EglRouter pre-rotates per-side pixels). See DualMuxer
+        // setOrientationHint KDoc.
+        muxer.setOrientationHint(VideoSide.PORTRAIT, portraitRot)
+        muxer.setOrientationHint(VideoSide.LANDSCAPE, landscapeRot)
+
         val portraitEnc = EncoderSurface(
             side = VideoSide.PORTRAIT,
             outputSize = config.portraitOutputSize,
             bitrateBps = portraitBps,
             fps = config.fps,
             onFormatReady = { fmt ->
-                fmt.setInteger(android.media.MediaFormat.KEY_ROTATION, portraitRot)
+                // KEY_ROTATION intentionally NOT set: MP4 muxer reads from
+                // setOrientationHint, and some hw encoders rotate pixels
+                // when KEY_ROTATION is present (would conflict with the
+                // EglRouter pre-rotation for landscape and is unnecessary
+                // for portrait).
                 muxer.addVideoTrack(VideoSide.PORTRAIT, fmt); muxer.maybeStart()
             },
             onSample = { buf, info -> muxer.writeVideo(VideoSide.PORTRAIT, buf, info) },
@@ -102,15 +116,28 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
             bitrateBps = landscapeBps,
             fps = config.fps,
             onFormatReady = { fmt ->
-                fmt.setInteger(android.media.MediaFormat.KEY_ROTATION, landscapeRot)
+                // KEY_ROTATION intentionally NOT set — see PORTRAIT branch.
                 muxer.addVideoTrack(VideoSide.LANDSCAPE, fmt); muxer.maybeStart()
             },
             onSample = { buf, info -> muxer.writeVideo(VideoSide.LANDSCAPE, buf, info) },
             onSideFailure = { e -> RovaLog.w("EncoderSurface LANDSCAPE failure", e) },
         )
 
-        processor.attachEncoderInput(VideoSide.PORTRAIT, portraitEnc.inputSurface)
-        processor.attachEncoderInput(VideoSide.LANDSCAPE, landscapeEnc.inputSurface)
+        // Phase 6.1b smoke-fix: pass encoder output dims so EglRouter can
+        // set glViewport per target (the GL pump can't query a Surface's
+        // intrinsic size, so the dims must travel through the registration).
+        processor.attachEncoderInput(
+            VideoSide.PORTRAIT,
+            portraitEnc.inputSurface,
+            config.portraitOutputSize.width,
+            config.portraitOutputSize.height,
+        )
+        processor.attachEncoderInput(
+            VideoSide.LANDSCAPE,
+            landscapeEnc.inputSurface,
+            config.landscapeOutputSize.width,
+            config.landscapeOutputSize.height,
+        )
 
         val audio = AudioFanOut(
             sampleRate = config.audioSampleRate,
@@ -123,7 +150,16 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
         portraitEnc.start(); landscapeEnc.start(); audio.start()
         executor.execute { callback(DualRecordEvent.Start) }
 
-        return DualRecording(portraitEnc, landscapeEnc, audio, muxer, callback, executor).also {
+        return DualRecording(
+            portraitEncoder = portraitEnc,
+            landscapeEncoder = landscapeEnc,
+            audio = audio,
+            muxer = muxer,
+            callback = callback,
+            callbackExecutor = executor,
+            // Phase 6.1b smoke-fix — allow recorder reuse across segments.
+            onStopped = { activeRecording = null },
+        ).also {
             activeRecording = it
         }
     }

@@ -338,4 +338,152 @@ class Tier1RecoveryTest {
             // expected
         }
     }
+
+    // ─── Phase 6.1b T14 — per-side recovery (side != null) ──────────
+
+    /**
+     * Phase 6.1b T14 — per-side Tier 1 recovery happy path. `recover(m,
+     * side = PORTRAIT)` reads `m.portraitPendingUri` (NOT the shared
+     * `pendingUri`), validates it, finalizes, then writes
+     * `setExportFinalizedForSide(PORTRAIT, ...)` and NOT shared
+     * `setExportFinalized`. The shared `exportState` stays untouched —
+     * T13's caller owns the final shared write after both sides settle.
+     */
+    @Test
+    fun `recover with side PORTRAIT reads portrait pendingUri and writes per-side finalized`() {
+        val r = Recorder().apply {
+            validateReturn = true
+            finalizeResult = Tier1FinalizeResult.Finalized
+        }
+        val portraitUri = "content://media/external/video/media/PORTRAIT_77"
+        // P+L manifest: portrait pending populated; shared pendingUri null.
+        val pre = initial.copy(
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            pendingUri = null,
+            portraitPendingUri = portraitUri,
+            exportState = ExportState.MUXING
+        )
+        writePreState(pre)
+
+        val result = runBlocking {
+            newExporter(r).recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Resumed(Success), got $result", result is RecoveryResult.Resumed)
+        val export = (result as RecoveryResult.Resumed).export
+        assertTrue("expected ExportResult.Success, got $export", export is ExportResult.Success)
+        // Validate + finalize seams ran against the portrait URI.
+        assertTrue(
+            "validate(portrait) must be invoked, events=${r.events}",
+            r.events.contains("validate($portraitUri)")
+        )
+        assertTrue(
+            "finalize(portrait) must be invoked, events=${r.events}",
+            r.events.contains("finalize($portraitUri)")
+        )
+        // Per-side mutator called; shared NOT called.
+        assertEquals(1, store.setExportFinalizedForSideCalls)
+        assertEquals(
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+            store.lastSetExportFinalizedForSide
+        )
+        assertEquals(0, store.setExportFinalizedCalls)
+        // Manifest reflects per-side write; shared exportState untouched
+        // (stays MUXING — T13's caller advances it).
+        val m = reload()
+        assertEquals(ExportState.MUXING, m.exportState)
+        assertEquals(portraitUri, m.portraitPublicTargetPath)
+        // Landscape untouched.
+        assertNull(m.landscapePublicTargetPath)
+    }
+
+    @Test
+    fun `recover with side LANDSCAPE reads landscape pendingUri and writes per-side finalized`() {
+        val r = Recorder().apply {
+            validateReturn = true
+            finalizeResult = Tier1FinalizeResult.Finalized
+        }
+        val landscapeUri = "content://media/external/video/media/LANDSCAPE_88"
+        val pre = initial.copy(
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            pendingUri = null,
+            landscapePendingUri = landscapeUri,
+            exportState = ExportState.MUXING
+        )
+        writePreState(pre)
+
+        val result = runBlocking {
+            newExporter(r).recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+            )
+        }
+
+        assertTrue("expected Resumed(Success), got $result", result is RecoveryResult.Resumed)
+        assertTrue(r.events.contains("validate($landscapeUri)"))
+        assertTrue(r.events.contains("finalize($landscapeUri)"))
+        assertEquals(1, store.setExportFinalizedForSideCalls)
+        assertEquals(
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+            store.lastSetExportFinalizedForSide
+        )
+        assertEquals(0, store.setExportFinalizedCalls)
+
+        val m = reload()
+        assertEquals(landscapeUri, m.landscapePublicTargetPath)
+        assertNull(m.portraitPublicTargetPath)
+    }
+
+    /**
+     * Phase 6.1b T14 — null per-side pendingUri abandons WITHOUT flipping
+     * shared `exportState` to FAILED (OQ-C lock: T13 owns failure
+     * attribution). The per-side row deletion still runs (none here —
+     * pointer is null).
+     */
+    @Test
+    fun `recover with side PORTRAIT and null portrait pendingUri abandons without shared setExportFailed`() {
+        val r = Recorder()
+        val pre = initial.copy(
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            pendingUri = null,
+            portraitPendingUri = null,
+            exportState = ExportState.MUXING
+        )
+        writePreState(pre)
+
+        val result = runBlocking {
+            newExporter(r).recover(
+                pre,
+                side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+            )
+        }
+
+        assertTrue("expected Abandoned, got $result", result === RecoveryResult.Abandoned)
+        // Shared setExportFailed must NOT be called on the per-side path.
+        assertEquals(0, store.setExportFailedCalls)
+        // Shared exportState stays MUXING — T13 owns the final write.
+        val m = reload()
+        assertEquals(ExportState.MUXING, m.exportState)
+    }
+
+    /**
+     * Phase 6.1b T14 — single-mode recover (side = null) preserves the
+     * pre-T14 byte-identical behavior. The shared `setExportFinalized`
+     * is called; per-side mutators are NOT touched.
+     */
+    @Test
+    fun `recover with side null preserves single-mode shared setExportFinalized`() {
+        val r = Recorder().apply { validateReturn = true; finalizeResult = Tier1FinalizeResult.Finalized }
+        val pre = tier1Manifest()
+        writePreState(pre)
+
+        val result = runBlocking { newExporter(r).recover(pre) }
+
+        assertTrue(result is RecoveryResult.Resumed)
+        assertEquals(1, store.setExportFinalizedCalls)
+        assertEquals(0, store.setExportFinalizedForSideCalls)
+    }
 }

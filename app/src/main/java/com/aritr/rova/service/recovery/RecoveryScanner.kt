@@ -117,7 +117,11 @@ class RecoveryScanner(
         val segmentRegex = SEGMENT_REGEX
         val diskSegments: List<DiskSegment> = files.mapNotNull { f ->
             val match = segmentRegex.matchEntire(f.name) ?: return@mapNotNull null
-            DiskSegment(file = f, index = match.groupValues[1].toInt())
+            DiskSegment(
+                file = f,
+                index = match.groupValues[1].toInt(),
+                side = parseSide(match.groupValues[2])
+            )
         }
         val unknownFilenames: List<String> = files
             .filter { f ->
@@ -136,9 +140,11 @@ class RecoveryScanner(
         // index) are also detected here. With canonical records, the
         // schema permits this even though it's nonsensical; the scan
         // reports rather than silently keeping the last-wins entry.
-        val canonicalRecords = mutableListOf<Pair<Int, SegmentRecord>>()
+        // Key = (parsedIndex, record.side). A P+L pair at the same ordinal
+        // has different sides so it maps to TWO distinct keys — not a dup.
+        val canonicalRecords = mutableListOf<Pair<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>, SegmentRecord>>()
         val malformedManifestFilenames = mutableListOf<String>()
-        val manifestIndexCounts = mutableMapOf<Int, Int>()
+        val manifestKeyCounts = mutableMapOf<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>, Int>()
         for (rec in manifest.segments) {
             val match = segmentRegex.matchEntire(rec.filename)
             if (match == null) {
@@ -146,66 +152,77 @@ class RecoveryScanner(
                 continue
             }
             val idx = match.groupValues[1].toInt()
-            canonicalRecords += idx to rec
-            manifestIndexCounts[idx] = (manifestIndexCounts[idx] ?: 0) + 1
+            val key = idx to rec.side
+            canonicalRecords += key to rec
+            manifestKeyCounts[key] = (manifestKeyCounts[key] ?: 0) + 1
         }
-        val manifestInternalDuplicateIndices: List<Int> = manifestIndexCounts
-            .filter { it.value > 1 }
-            .keys
-            .sorted()
+        val manifestInternalDuplicateKeys: List<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>> =
+            manifestKeyCounts.filter { it.value > 1 }.keys.toList()
+        // Flatten to distinct sorted indices for Anomaly.DuplicateSegment.
+        val manifestInternalDuplicateIndices: List<Int> = manifestInternalDuplicateKeys
+            .map { it.first }.distinct().sorted()
         // For lookups, last-write-wins is fine — duplicates are reported
         // separately, and validation/missing decisions for the duplicate
-        // index produce the same answer regardless of which record is kept.
-        val manifestByIndex: Map<Int, SegmentRecord> = canonicalRecords.toMap()
-        val idxMaxManifest: Int = manifestByIndex.keys.maxOrNull() ?: 0
+        // key produce the same answer regardless of which record is kept.
+        val manifestByKey: Map<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>, SegmentRecord> =
+            canonicalRecords.toMap()
+        val idxMaxManifest: Int = manifestByKey.keys.maxOfOrNull { it.first } ?: 0
 
         // Inspect every segment file we'll touch. One inspect call per file —
         // results cached in this map for both validity and duration.
         val inspections: Map<File, MediaFileInspection> = diskSegments
             .associate { it.file to inspect(it.file) }
 
-        // Manifest-segment evaluation.
-        val missingIndices = mutableListOf<Int>()
-        val invalidManifestIndices = mutableListOf<Int>()
-        for ((idx, rec) in manifestByIndex) {
-            val onDiskAtIdx = diskSegments.filter { it.index == idx }
-            if (onDiskAtIdx.isEmpty()) {
-                missingIndices += idx
+        // Manifest-segment evaluation keyed by (index, side).
+        // A P+L pair occupies two distinct keys; each is independently
+        // evaluated for missing/invalid status.
+        val missingKeys = mutableListOf<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>>()
+        val invalidManifestKeys = mutableListOf<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>>()
+        for ((key, rec) in manifestByKey) {
+            val (idx, side) = key
+            val onDiskAtKey = diskSegments.filter { it.index == idx && it.side == side }
+            if (onDiskAtKey.isEmpty()) {
+                missingKeys += key
                 continue
             }
             // Choose the file matching the manifest filename if present;
             // otherwise the first disk match (duplicate detection runs
             // separately).
-            val canonical = onDiskAtIdx.firstOrNull { it.file.name == rec.filename }
-                ?: onDiskAtIdx.first()
+            val canonical = onDiskAtKey.firstOrNull { it.file.name == rec.filename }
+                ?: onDiskAtKey.first()
             val ok = inspections[canonical.file]?.isValid == true
-            if (!ok) invalidManifestIndices += idx
+            if (!ok) invalidManifestKeys += key
         }
+        // Flatten keys to indices for anomaly reporting.
+        val missingIndices: List<Int> = missingKeys.map { it.first }.distinct().sorted()
+        val invalidManifestIndices: List<Int> = invalidManifestKeys.map { it.first }.distinct().sorted()
 
         // Duplicate detection — three sources:
-        // 1. Two or more disk files at the same parsed index (filesystem
-        //    naming makes this impossible with the canonical regex, but a
-        //    future regex relax would surface it).
-        // 2. Disk file at an index where the manifest record's filename is
-        //    different — only reachable for non-canonical manifest records,
-        //    which are now caught upstream as MalformedManifestRecord.
-        // 3. Two manifest records with the same parsed canonical index
+        // 1. Two or more disk files at the same (index, side) key. A P+L pair
+        //    at (1, PORTRAIT) + (1, LANDSCAPE) occupies two distinct keys and
+        //    is NOT a duplicate. Two segment_0001.mp4 files at (1, null) ARE.
+        // 2. Disk file at a (index, side) key where the manifest record's
+        //    filename is different — only reachable for non-canonical manifest
+        //    records, caught upstream as MalformedManifestRecord.
+        // 3. Two manifest records with the same (index, side) key
         //    (manifestInternalDuplicateIndices, computed during partition).
-        val diskDuplicateIndices: List<Int> = diskSegments
-            .groupBy { it.index }
-            .filter { (idx, group) ->
-                if (group.size > 1) return@filter true
-                val rec = manifestByIndex[idx] ?: return@filter false
-                group.first().file.name != rec.filename
-            }
-            .keys
-            .toList()
+        val diskDuplicateKeys: List<Pair<Int, com.aritr.rova.service.dualrecord.VideoSide?>> =
+            diskSegments
+                .groupBy { it.index to it.side }
+                .filter { (key, group) ->
+                    if (group.size > 1) return@filter true
+                    val rec = manifestByKey[key] ?: return@filter false
+                    group.first().file.name != rec.filename
+                }
+                .keys
+                .toList()
+        val diskDuplicateIndices: List<Int> = diskDuplicateKeys.map { it.first }.distinct().sorted()
         val duplicateIndices: List<Int> =
             (diskDuplicateIndices + manifestInternalDuplicateIndices).distinct().sorted()
 
         // Candidate orphans: disk segments whose filename does not appear
         // in manifest.segments. Sorted by parsed index for prefix logic.
-        val manifestFilenames: Set<String> = manifestByIndex.values.map { it.filename }.toSet()
+        val manifestFilenames: Set<String> = manifestByKey.values.map { it.filename }.toSet()
         val candidateOrphans: List<DiskSegment> = diskSegments
             .filter { it.file.name !in manifestFilenames }
             .sortedBy { it.index }
@@ -214,17 +231,45 @@ class RecoveryScanner(
             .map { it.file.name }
 
         // Longest contiguous valid prefix starting at idxMaxManifest + 1.
+        // For P+L sessions (mode == "PortraitLandscape"): OQ-6 default —
+        // require BOTH sides present and valid at each ordinal before
+        // appending. A missing or invalid side breaks the prefix walk;
+        // the half-clip surfaces as an orphan/invalid anomaly.
+        // For single-mode sessions: unchanged — walk one file per ordinal.
         val orphansAboveManifest: List<DiskSegment> = candidateOrphans
             .filter { it.index > idxMaxManifest }
             .sortedBy { it.index }
+        val isPortraitLandscape = manifest.config.mode == "PortraitLandscape"
         val appendablePrefix: List<DiskSegment> = run {
             val prefix = mutableListOf<DiskSegment>()
             var expected = idxMaxManifest + 1
-            for (ds in orphansAboveManifest) {
-                if (ds.index != expected) break
-                if (inspections[ds.file]?.isValid != true) break
-                prefix += ds
-                expected += 1
+            if (isPortraitLandscape) {
+                // Group orphans above manifest by index for pair lookup.
+                val orphansByIndex: Map<Int, List<DiskSegment>> =
+                    orphansAboveManifest.groupBy { it.index }
+                while (true) {
+                    val group = orphansByIndex[expected] ?: break
+                    val portrait = group.firstOrNull {
+                        it.side == com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+                    }
+                    val landscape = group.firstOrNull {
+                        it.side == com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+                    }
+                    // Require both sides present and valid.
+                    if (portrait == null || landscape == null) break
+                    if (inspections[portrait.file]?.isValid != true) break
+                    if (inspections[landscape.file]?.isValid != true) break
+                    prefix += portrait
+                    prefix += landscape
+                    expected += 1
+                }
+            } else {
+                for (ds in orphansAboveManifest) {
+                    if (ds.index != expected) break
+                    if (inspections[ds.file]?.isValid != true) break
+                    prefix += ds
+                    expected += 1
+                }
             }
             prefix
         }
@@ -288,7 +333,8 @@ class RecoveryScanner(
                     filename = ds.file.name,
                     durationMs = durationMs,
                     sizeBytes = ds.file.length(),
-                    sha1 = computeSha1(ds.file)
+                    sha1 = computeSha1(ds.file),
+                    side = ds.side
                 )
                 sessionStore.appendSegment(sessionId, record)
                 appendedFilenames += ds.file.name
@@ -315,7 +361,7 @@ class RecoveryScanner(
 
         // Eligibility from final state.
         val survivingManifestSegmentCount =
-            manifestByIndex.size - missingIndices.size - invalidManifestIndices.size + appendedFilenames.size
+            manifestByKey.size - missingKeys.size - invalidManifestKeys.size + appendedFilenames.size
         val survivingOrphanCount = candidateOrphans.size - appendedFilenames.size
         val anySurvivors = survivingManifestSegmentCount > 0 ||
             survivingOrphanCount > 0 ||
@@ -350,7 +396,17 @@ class RecoveryScanner(
         appendedSegmentFilenames = emptyList()
     )
 
-    private data class DiskSegment(val file: File, val index: Int)
+    private data class DiskSegment(
+        val file: File,
+        val index: Int,
+        val side: com.aritr.rova.service.dualrecord.VideoSide?
+    )
+
+    private fun parseSide(group2: String): com.aritr.rova.service.dualrecord.VideoSide? = when (group2) {
+        "P" -> com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
+        "L" -> com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
+        else -> null
+    }
 
     companion object {
         /**
@@ -358,7 +414,7 @@ class RecoveryScanner(
          * shape. Matches [SessionStore.nextSegmentFilename]. Phase 1.5
          * acceptance includes a static check that no `seg_` variant slips in.
          */
-        val SEGMENT_REGEX = Regex("""^segment_(\d{4})\.mp4$""")
+        val SEGMENT_REGEX = Regex("""^segment_(\d{4})(?:_([PL]))?\.mp4$""")
 
         /**
          * ADR 0005 §"Concurrency Invariants" item 6 — age filter window.
