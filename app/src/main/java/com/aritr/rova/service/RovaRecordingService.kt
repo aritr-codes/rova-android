@@ -2640,8 +2640,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var landscapeOk = false
         try {
             _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
-            val totalSegments = portraitSegments.size + landscapeSegments.size
-            updateNotification(NotificationState.Merging(done = 0, total = totalSegments))
+            // Phase 6.1b smoke-fix #5 — notification clip count is the
+            // user-facing per-side count (the loop count), NOT the sum of
+            // both sides. Owner reported "Merging 4 clips" for a 2-loop
+            // P+L recording — the 4 was portrait(2) + landscape(2). Both
+            // sides have the same loop count in practice; `max` is
+            // defensive against degenerate tolerant-mode cases where one
+            // side has all-failed segments and the count is asymmetric.
+            // Mirrors the single-mode "X clips saved" semantic
+            // (NotificationCopy "$clipCount clips saved to Library"):
+            // X always means "clips within the saved content", not "raw
+            // segments across all output streams."
+            val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
+            updateNotification(NotificationState.Merging(done = 0, total = userClipCount))
 
             val sid = currentSessionId
             val sessionDir = currentSessionDir
@@ -2661,10 +2672,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT
                 ) { progress ->
                     _serviceState.update { it.copy(mergeProgress = progress * 0.5f) }
+                    // Notification `done` tracks OVERALL merge progress
+                    // (0..userClipCount) so the count advances smoothly
+                    // across the portrait→landscape boundary. Portrait
+                    // owns the 0..50% slice → done in 0..userClipCount/2.
+                    val overall = progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = (progress * portraitSegments.size).toInt(),
-                            total = totalSegments
+                            done = (overall * userClipCount).toInt(),
+                            total = userClipCount
                         )
                     )
                 }
@@ -2682,10 +2698,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE
                 ) { progress ->
                     _serviceState.update { it.copy(mergeProgress = 0.5f + progress * 0.5f) }
+                    // Landscape owns 50..100% → done in userClipCount/2..userClipCount.
+                    val overall = 0.5f + progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = portraitSegments.size + (progress * landscapeSegments.size).toInt(),
-                            total = totalSegments
+                            done = (overall * userClipCount).toInt(),
+                            total = userClipCount
                         )
                     )
                 }
@@ -2728,7 +2746,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
                     }
                 }
-                updateNotification(NotificationState.MergeComplete(clipCount = totalSegments))
+                updateNotification(NotificationState.MergeComplete(clipCount = userClipCount))
                 delay(1000)
             } else {
                 // TODO T17: when both sides failed, advance shared
