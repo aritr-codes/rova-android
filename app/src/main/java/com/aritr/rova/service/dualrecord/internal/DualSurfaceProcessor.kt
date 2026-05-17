@@ -43,7 +43,7 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
      */
     fun attachEncoderInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
         if (released.get()) return
-        router.addTarget(side, surface, width, height)
+        router.addTarget(side, TargetKind.ENCODER, surface, width, height)
     }
 
     override fun onInputSurface(request: SurfaceRequest) {
@@ -72,7 +72,7 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
             RovaLog.d("DualSurfaceProcessor.onOutputSurface event (code=${event.eventCode})")
         })
         val size = output.size
-        router.addTarget(side = null, surface = previewSurface, width = size.width, height = size.height)
+        router.addTarget(side = null, kind = TargetKind.PREVIEW, surface = previewSurface, width = size.width, height = size.height)
     }
 
     fun release() {

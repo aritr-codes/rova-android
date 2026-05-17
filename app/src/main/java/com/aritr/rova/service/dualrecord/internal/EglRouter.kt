@@ -63,6 +63,17 @@ import java.nio.FloatBuffer
  *
  * Runtime layer — no unit tests.
  */
+/**
+ * Phase 6.1c — render target classification. Lives next to EglRouter
+ * because both [DualSurfaceProcessor] and EglRouter consume it.
+ *
+ *  - [ENCODER]: MediaCodec input surface; recording output.
+ *  - [PREVIEW]: visible UI surface (TextureView in P+L mode); or the
+ *    legacy CameraEffect Preview output (registered with side=null,
+ *    skipped in renderFrame).
+ */
+internal enum class TargetKind { ENCODER, PREVIEW }
+
 internal class EglRouter(private val lensFacing: LensFacing) {
 
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -106,13 +117,21 @@ internal class EglRouter(private val lensFacing: LensFacing) {
         .apply { put(QUAD_VERTS).position(0) }
 
     private data class RenderTarget(
-        val side: VideoSide?,            // null = PREVIEW
+        val side: VideoSide?,            // null = legacy CameraEffect Preview output (no-draw)
+        val kind: TargetKind,
         val surface: Surface,
         val eglSurface: EGLSurface,
         val width: Int,
         val height: Int,
         val cropMatrix: FloatArray,
         val mirrorMatrix: FloatArray,
+        // Phase 6.1c — per-target aspect-fit viewport. Encoder targets
+        // get viewport == full surface; preview targets letterbox the
+        // side's content aspect inside the TextureView surface dims.
+        var viewportX: Int,
+        var viewportY: Int,
+        var viewportW: Int,
+        var viewportH: Int,
     )
 
     val inputSurface: Surface
@@ -223,7 +242,7 @@ internal class EglRouter(private val lensFacing: LensFacing) {
      * target. If a future case shows upside-down, flip
      * [UV_ORIENTATION_ROT_DEG].
      */
-    fun addTarget(side: VideoSide?, surface: Surface, width: Int, height: Int) {
+    fun addTarget(side: VideoSide?, kind: TargetKind, surface: Surface, width: Int, height: Int) {
         val winAttribs = intArrayOf(EGL14.EGL_NONE)
         val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, winAttribs, 0)
         val crop = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
@@ -231,7 +250,12 @@ internal class EglRouter(private val lensFacing: LensFacing) {
             Matrix.setIdentityM(it, 0)
             if (side == null && lensFacing == LensFacing.FRONT) Matrix.scaleM(it, 0, -1f, 1f, 1f)
         }
-        targets.add(RenderTarget(side, surface, eglSurface, width, height, crop, mirror))
+        targets.add(
+            RenderTarget(
+                side, kind, surface, eglSurface, width, height, crop, mirror,
+                viewportX = 0, viewportY = 0, viewportW = width, viewportH = height,
+            )
+        )
     }
 
     /**
