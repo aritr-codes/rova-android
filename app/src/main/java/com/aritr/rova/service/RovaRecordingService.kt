@@ -1342,11 +1342,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 com.aritr.rova.service.dualrecord.LensFacing.BACK
             }
 
+            // Render-audit (Task 11) — intrinsics + debug-flag reads MUST happen
+            // before config construction so cameraInputSize/sensorOrientation/flags
+            // are all available. Single CameraManager round-trip (resolveDualCamera-
+            // Intrinsics already coalesces the size + sensorOrientation query).
+            val intrinsics = resolveDualCameraIntrinsics()
+            val cameraInputSize = intrinsics.size
+            val useFirstPrinciplesRender = readUseFirstPrinciplesRender()
+            val enableMatrixSnapshots = readEnableMatrixSnapshots()
+
             // 6.1b consumer config — FHD-locked for v1; 6.1c may lookup BitrateTable per resolution.
             val portraitSize = android.util.Size(1080, 1920)
             val landscapeSize = android.util.Size(1920, 1080)
             val config = com.aritr.rova.service.dualrecord.DualVideoRecorderConfig(
-                cameraInputSize = android.util.Size(1920, 1080),
+                cameraInputSize = intrinsics.size,
                 portraitOutputSize = portraitSize,
                 landscapeOutputSize = landscapeSize,
                 portraitBitrate = 8_000_000,
@@ -1356,8 +1365,27 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 audioSampleRate = 48_000,
                 lensFacing = lensFacing,
                 displayRotation = displayRotation,
-                fps = 30
+                fps = 30,
+                sensorOrientation = intrinsics.sensorOrientation,
+                useFirstPrinciplesRender = useFirstPrinciplesRender,
+                enableMatrixSnapshots = enableMatrixSnapshots,
             )
+
+            // Spec §4.4 — QA-correlation log line at session-start. Flag-state
+            // is observable in logcat regardless of render-path active. Same
+            // line in release (both flags forced false) confirms by absence
+            // that observed behavior is legacy + stable.
+            // NOTE: RovaLog has no .i() — use .d() (same D-deviation as Phase 6.1a).
+            RovaLog.d(
+                "DualShot renderer mode: " +
+                    "path=${if (config.useFirstPrinciplesRender) "v2-first-principles" else "legacy"}, " +
+                    "snapshots=${if (config.enableMatrixSnapshots) "ENABLED" else "disabled"}, " +
+                    "sensorOrientation=${config.sensorOrientation}, " +
+                    "displayRotation=${config.displayRotation}, " +
+                    "lensFacing=${config.lensFacing}, " +
+                    "sourceSize=${config.cameraInputWidth}x${config.cameraInputHeight}"
+            )
+
             currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
             // Phase 6.1c — replay any UI-registered preview surfaces onto
             // the new recorder. Survives camera flip / mode change without
@@ -1386,8 +1414,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // setTargetRotation(ROTATION_0) keeps the camera producing
             // sensor-native landscape orientation — we own rotation
             // correction in the EglRouter/AspectFitMath pipeline.
-            val intrinsics = resolveDualCameraIntrinsics()
-            val cameraInputSize = intrinsics.size
             val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
                 .setResolutionStrategy(
                     androidx.camera.core.resolutionselector.ResolutionStrategy(
