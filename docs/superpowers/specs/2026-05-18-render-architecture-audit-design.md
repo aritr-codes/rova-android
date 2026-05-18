@@ -17,15 +17,15 @@ The owner's 2026-05-18 review challenged the **architectural correctness** of th
 
 ### Audit findings (verified against branch tip `84c1d16`)
 
-The hypothesis is **NOT borne out** by the code:
+**The renderer is already structurally independent per target**, but hidden orientation normalization coupling and empirical transform composition created artifacts resembling derived-orientation behavior. Concretely:
 
 - ✅ Single shared OES texture (`EglRouter.inputTextureId`, created once at `setup()`)
 - ✅ Both render paths bind the SAME OES texture (`glBindTexture(GL_TEXTURE_EXTERNAL_OES, inputTextureId)` per target in `renderFrame.forEach`)
-- ✅ Independent per-target `cropMatrix` built at `addTarget()` time — no cross-side derivation
+- ✅ Independent per-target uvTransform built at `addTarget()` time — no cross-side derivation in the data flow
 - ✅ Independent per-target `glViewport` (encoder targets full surface; preview targets letterbox)
 - ✅ Independent per-target encoder `eglSurface` via own `eglCreateWindowSurface`
 
-**The earlier visual artifacts came from wrong math (16:9 source center-crop into 9:16 encoder = 1.78× stretch) — NOT from architectural coupling.** PR #25's ADR-0009 4:3-source fix resolves the math; the architecture was already sound.
+**The earlier visual artifacts came from wrong math (16:9 source center-crop into 9:16 encoder = 1.78× stretch) + empirical `+270°` sideCorrection masking an upstream orientation-normalization gap — NOT from a structural Portrait→Landscape derivation chain.** PR #25's ADR-0009 4:3-source fix resolves the source-aspect math; this sub-project resolves the upstream normalization gap by re-deriving the UV pipeline from first principles.
 
 ### What the audit DID surface (this sub-project's scope)
 
@@ -225,16 +225,22 @@ internal data class DualShotMatrixDebugInfo(
     val sensorOrientation: Int,
     val displayRotation: Int,
     val lensFacing: LensFacing,
-    val texMatrix: FloatArray,           // last frame's SurfaceTexture.getTransformMatrix
-    val normalizationMatrix: FloatArray,
-    val displayRotationMatrix: FloatArray,
-    val cropMatrix: FloatArray,           // sideAspectCrop output (NOT uvTransform)
-    val finalMatrix: FloatArray,          // composed uTexMatrix from last frame
-    val viewport: IntArray,               // [x, y, w, h]
+    val texMatrix: FloatArray,                // last frame's SurfaceTexture.getTransformMatrix
+    val normalizationMatrix: FloatArray,      // buildTextureNormalization output (component)
+    val displayRotationMatrix: FloatArray,    // buildDisplayRotationCorrection output (component)
+    val sideAspectCropMatrix: FloatArray,     // buildSideAspectCrop output (component)
+    val uvTransform: FloatArray,              // composed: sideAspectCrop × displayRotation × normalization (target.uvTransform)
+    val finalMatrix: FloatArray,              // composed uTexMatrix from last frame: uvTransform × texMatrix × mirror
+    val viewport: IntArray,                   // [x, y, w, h]
     val encoderSize: Pair<Int, Int>,
-    val timestampNs: Long,                // System.nanoTime() at snapshot write
+    val timestampNs: Long,                    // System.nanoTime() at snapshot write
 )
 ```
+
+**Field semantics — three component matrices + two composed matrices:**
+- Components (raw helper outputs, useful for debugging which factor went wrong): `normalizationMatrix`, `displayRotationMatrix`, `sideAspectCropMatrix`
+- Composed: `uvTransform` (the pinned `target.uvTransform` — the result of `buildUvTransformV2`); `finalMatrix` (the per-frame composed `uTexMatrix` actually uploaded to the shader)
+- The legacy field name `cropMatrix` is GONE from this struct — it carried muddled semantics (component or composed?). Replaced by the explicit pair.
 
 **Consumers:** sub-project 2's debug overlay, logcat dump, screenshot metadata. **This sub-project ships the plumbing inert; sub-project 2 enables it.**
 
@@ -593,7 +599,7 @@ Worst-case impact is **limited to sessions explicitly using the debug-only first
 
 #### `AspectFitMathV2Test.kt`
 
-- `buildTextureNormalization` × 4 legal sensorOrientation values × 1 pinned-matrix assertion each — **4 tests**
+- `buildTextureNormalization` × 4 legal sensorOrientation values × **canonical UV invariant assertion** each — **4 tests**. NOT pinned-matrix-bytes (would contradict §2.1's softer contract). Instead: apply the output matrix to the 4 UV unit-square corners and assert the resulting positions match the expected canonical orientation (e.g., for `sensorOrientation=90`, applying to UV (0,0) yields canonical (1,0); applying to (1,0) yields (1,1); etc — a +90° CCW pivot around (0.5,0.5)). Future texMatrix-convention refinements can change the matrix internally without breaking these tests as long as the canonical-frame guarantee holds.
 - `buildTextureNormalization` negative paths (illegal sensorOrientation, wrong-size out) — **2 tests**
 - `buildUvTransformV2` per-side path independence asserts — **2 tests** (PORTRAIT invariant under LANDSCAPE-only input variation; LANDSCAPE invariant under PORTRAIT-only)
 - `buildUvTransformV2` component-equivalence (manual `sideAspectCrop × displayRotationCorrection × textureNormalization` matches helper output) — **1 test**
