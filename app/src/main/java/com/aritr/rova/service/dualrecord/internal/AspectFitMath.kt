@@ -392,3 +392,47 @@ internal object AspectFitMath {
         }
     }
 }
+
+/**
+ * Phase: render-architecture audit. Carries one render-target's complete
+ * matrix state for debug instrumentation. Consumed by sub-project 2's debug
+ * overlay, logcat dump, and screenshot metadata.
+ *
+ * **Field semantics — three component matrices + two composed matrices:**
+ *  - Components (raw helper outputs, useful for debugging which factor went
+ *    wrong): [normalizationMatrix], [displayRotationMatrix],
+ *    [sideAspectCropMatrix]
+ *  - Composed:
+ *      - [uvTransform] = pinned `target.uvTransform` (result of
+ *        [AspectFitMath.buildUvTransformV2])
+ *      - [finalMatrix] = per-frame composed `uTexMatrix` actually uploaded
+ *        to the shader: `uvTransform × texMatrix × mirrorMatrix`
+ *
+ * The legacy field name `cropMatrix` is GONE from this struct — it carried
+ * muddled semantics (component or composed?). Replaced by the explicit
+ * `sideAspectCropMatrix` (component) + `uvTransform` (composed) pair.
+ *
+ * [texMatrix] is frame-local — SurfaceTexture.getTransformMatrix() may
+ * return different values frame-to-frame. The snapshot captures THIS
+ * frame's value. NEVER cache globally.
+ *
+ * [timestampNs] is `System.nanoTime()` at snapshot write — correlates with
+ * dropped frames, orientation changes, encoder timing, frame captures.
+ *
+ * See `docs/superpowers/specs/2026-05-18-render-architecture-audit-design.md` §2.3.
+ */
+internal data class DualShotMatrixDebugInfo(
+    val side: com.aritr.rova.service.dualrecord.VideoSide,
+    val sensorOrientation: Int,
+    val displayRotation: Int,
+    val lensFacing: com.aritr.rova.service.dualrecord.LensFacing,
+    val texMatrix: FloatArray,
+    val normalizationMatrix: FloatArray,
+    val displayRotationMatrix: FloatArray,
+    val sideAspectCropMatrix: FloatArray,
+    val uvTransform: FloatArray,
+    val finalMatrix: FloatArray,
+    val viewport: IntArray,
+    val encoderSize: Pair<Int, Int>,
+    val timestampNs: Long,
+)
