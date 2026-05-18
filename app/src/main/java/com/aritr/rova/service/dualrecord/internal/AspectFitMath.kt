@@ -121,6 +121,54 @@ internal object AspectFitMath {
     }
 
     /**
+     * Phase: render-architecture audit (first-principles UV pipeline).
+     *
+     * Produces the canonical UV alignment transform derived from
+     * SENSOR_ORIENTATION relative to the current OES texture basis. Maps
+     * the effective OES UV basis into the canonical UV frame (+U=screen-
+     * right, +V=screen-down, origin=top-left, rear-camera-unmirrored,
+     * device-natural-aligned).
+     *
+     * The current implementation reduces to a pivot-rotate around
+     * (0.5, 0.5) by [sensorOrientation] degrees CCW. **This is an
+     * implementation detail, NOT a permanent contract.** Future
+     * revisions may incorporate texMatrix-convention adjustments or
+     * per-OEM compensations without API breakage as long as the
+     * canonical-UV-frame guarantee holds.
+     *
+     * Input: [sensorOrientation] ∈ {0, 90, 180, 270} (per Camera2 spec,
+     * `CameraCharacteristics.SENSOR_ORIENTATION` returns multiples of
+     * 90). [out] must be length 16; contents overwritten.
+     *
+     * Hybrid coexistence: this helper is invoked from
+     * [buildUvTransformV2]; legacy [buildCropMatrix] does NOT call it.
+     * See `docs/superpowers/specs/2026-05-18-render-architecture-audit-design.md` §2.1.
+     */
+    fun buildTextureNormalization(sensorOrientation: Int, out: FloatArray) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
+        // Identity baseline.
+        for (i in 0..15) out[i] = 0f
+        out[0] = 1f; out[5] = 1f; out[10] = 1f; out[15] = 1f
+        if (sensorOrientation == 0) return
+        // Pivot-rotate around (0.5, 0.5) about z-axis by `sensorOrientation` degrees CCW.
+        // Column-major closed form (same as buildDisplayRotationCorrection):
+        //   col 0 = (c, s, 0, 0)
+        //   col 1 = (-s, c, 0, 0)
+        //   col 3 = (0.5 - 0.5c + 0.5s, 0.5 - 0.5s - 0.5c, 0, 1)
+        val rad = sensorOrientation.toFloat() * Math.PI.toFloat() / 180f
+        val c = kotlin.math.cos(rad)
+        val s = kotlin.math.sin(rad)
+        out[0] = c;  out[1] = s
+        out[4] = -s; out[5] = c
+        out[12] = 0.5f - 0.5f * c + 0.5f * s
+        out[13] = 0.5f - 0.5f * s - 0.5f * c
+    }
+
+    /**
      * Builds the displayRotation correction matrix into [out]. Aligns the
      * landscape consumer surface's content with the device's "up"
      * direction so per-side aspect crops produce upright outputs.
