@@ -96,6 +96,42 @@ data class RovaServiceState(
     val isCameraActive: Boolean = false
 )
 
+/**
+ * Phase: render-architecture audit. Container for the two intrinsics
+ * queried from `CameraCharacteristics` at `setupDualCamera` time. Spec §2.6.
+ */
+internal data class DualCameraIntrinsics(
+    val size: android.util.Size,
+    val sensorOrientation: Int,
+)
+
+/**
+ * SAFE ASSUMPTION for portrait-natural phones (typical rear-camera mount).
+ * NOT universally correct — some tablets/foldables have 0 or 180. Hit only
+ * when CameraManager query fails or SENSOR_ORIENTATION is null
+ * (Camera2 spec guarantees non-null per CameraCharacteristics docs, but
+ * defensive).
+ */
+internal const val SENSOR_ORIENTATION_FALLBACK = 90
+
+/**
+ * Per spec §4.1 — RELEASE soft-fallback for OEM-bug SENSOR_ORIENTATION
+ * values. DEBUG ctor `require` in EglRouter will fail-fast on illegal
+ * values reaching it; RELEASE pre-sanitizes via this function to avoid
+ * camera-startup crash.
+ *
+ * Logs WARN on fallback so QA + crash analytics surface the OEM quirk.
+ */
+internal fun sanitizeSensorOrientation(raw: Int): Int = when (raw) {
+    0, 90, 180, 270 -> raw
+    else -> {
+        com.aritr.rova.utils.RovaLog.w(
+            "SENSOR_ORIENTATION out-of-spec ($raw); falling back to $SENSOR_ORIENTATION_FALLBACK"
+        )
+        SENSOR_ORIENTATION_FALLBACK
+    }
+}
+
 class RovaRecordingService : Service(), LifecycleOwner {
 
     private lateinit var lifecycleRegistry: LifecycleRegistry
@@ -1183,23 +1219,24 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
-     * Phase: ADR-0009 4:3-source fix. Queries CameraManager directly for
-     * the StreamConfigurationMap of the currently-selected lens and
-     * delegates to [DualCameraSizeResolver] to pick the best 4:3 source
-     * mode. Falls back to Size(1920, 1440) on any failure (CameraManager
-     * unavailable, no matching cameraId, characteristics-read throw, null
-     * map) — the service's existing CAMERA_BIND_ERROR path catches the
-     * subsequent session-creation throw if the chosen size is truly
-     * unsupported. Called once per setupDualCamera invocation; bypasses
-     * the CameraX-bound camera so the size is known BEFORE Preview.Builder
-     * is built.
+     * Phase: render-architecture audit (extends ADR-0009 query). Queries
+     * BOTH the device's preferred 4:3 source size AND SENSOR_ORIENTATION
+     * for the active lens, in a single CameraManager round-trip. Returns
+     * a [DualCameraIntrinsics] container. Defensive fallback on any
+     * failure step: `DualCameraIntrinsics(Size(1920, 1440), 90)`.
+     *
+     * Called once per setupDualCamera invocation; bypasses the CameraX-
+     * bound camera so the intrinsics are known BEFORE Preview.Builder.
+     *
+     * The fallback `sensorOrientation = 90` is the SAFE ASSUMPTION for
+     * portrait-natural phones (see [SENSOR_ORIENTATION_FALLBACK] KDoc).
      */
-    private fun resolveDualSourceSize(): android.util.Size {
+    private fun resolveDualCameraIntrinsics(): DualCameraIntrinsics {
         val cameraManager = getSystemService(Context.CAMERA_SERVICE)
             as? android.hardware.camera2.CameraManager
             ?: run {
-                RovaLog.w("resolveDualSourceSize: CameraManager unavailable — fallback 1920×1440")
-                return android.util.Size(1920, 1440)
+                RovaLog.w("resolveDualCameraIntrinsics: CameraManager unavailable — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
             }
         val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
             android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
@@ -1212,22 +1249,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     android.hardware.camera2.CameraCharacteristics.LENS_FACING
                 ) == lensFacing
             } ?: run {
-                RovaLog.w("resolveDualSourceSize: no cameraId for lensFacing=$lensFacing — fallback 1920×1440")
-                return android.util.Size(1920, 1440)
+                RovaLog.w("resolveDualCameraIntrinsics: no cameraId for lensFacing=$lensFacing — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
             }
-            val map = cameraManager.getCameraCharacteristics(cameraId).get(
+            val chars = cameraManager.getCameraCharacteristics(cameraId)
+            val map = chars.get(
                 android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
             ) ?: run {
-                RovaLog.w("resolveDualSourceSize: null StreamConfigurationMap — fallback 1920×1440")
-                return android.util.Size(1920, 1440)
+                RovaLog.w("resolveDualCameraIntrinsics: null StreamConfigurationMap — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
             }
-            val chosen = com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver
+            val rawSensorOrientation = chars.get(
+                android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION
+            ) ?: SENSOR_ORIENTATION_FALLBACK
+            val sanitized = sanitizeSensorOrientation(rawSensorOrientation)
+            val chosenSize = com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver
                 .resolveDualCameraSize(map)
-            RovaLog.d("resolveDualSourceSize: chosen=${chosen.width}×${chosen.height} (lensFacing=$lensFacing)")
-            chosen
+            RovaLog.d(
+                "resolveDualCameraIntrinsics: size=${chosenSize.width}×${chosenSize.height} " +
+                    "sensorOrientation=$sanitized (raw=$rawSensorOrientation, lensFacing=$lensFacing)"
+            )
+            DualCameraIntrinsics(chosenSize, sanitized)
         } catch (e: Exception) {
-            RovaLog.w("resolveDualSourceSize: $e — fallback 1920×1440")
-            android.util.Size(1920, 1440)
+            RovaLog.w("resolveDualCameraIntrinsics: $e — fallback")
+            DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
         }
     }
 
@@ -1303,11 +1348,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // setTargetRotation(ROTATION_0) keeps the camera producing
             // sensor-native landscape orientation — we own rotation
             // correction in the EglRouter/AspectFitMath pipeline.
-            val sourceSize = resolveDualSourceSize()
+            val intrinsics = resolveDualCameraIntrinsics()
+            val cameraInputSize = intrinsics.size
             val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
                 .setResolutionStrategy(
                     androidx.camera.core.resolutionselector.ResolutionStrategy(
-                        sourceSize,
+                        cameraInputSize,
                         androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
                     )
                 )
