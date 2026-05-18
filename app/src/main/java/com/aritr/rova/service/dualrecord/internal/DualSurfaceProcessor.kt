@@ -34,9 +34,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class DualSurfaceProcessor(
     lensFacing: LensFacing,
     displayRotation: Int,
+    sensorOrientation: Int = 90,
+    useFirstPrinciplesRender: Boolean = false,
+    enableMatrixSnapshots: Boolean = false,
 ) : SurfaceProcessor {
 
-    private val router = EglRouter(lensFacing, displayRotation).also { it.setup() }
+    private val router = EglRouter(
+        lensFacing,
+        displayRotation,
+        sensorOrientation,
+        useFirstPrinciplesRender,
+        enableMatrixSnapshots,
+    ).also { it.setup() }
     private val released = AtomicBoolean(false)
 
     /**
