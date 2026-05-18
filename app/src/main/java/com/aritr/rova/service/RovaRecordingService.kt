@@ -1182,6 +1182,55 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * Phase: ADR-0009 4:3-source fix. Queries CameraManager directly for
+     * the StreamConfigurationMap of the currently-selected lens and
+     * delegates to [DualCameraSizeResolver] to pick the best 4:3 source
+     * mode. Falls back to Size(1920, 1440) on any failure (CameraManager
+     * unavailable, no matching cameraId, characteristics-read throw, null
+     * map) — the service's existing CAMERA_BIND_ERROR path catches the
+     * subsequent session-creation throw if the chosen size is truly
+     * unsupported. Called once per setupDualCamera invocation; bypasses
+     * the CameraX-bound camera so the size is known BEFORE Preview.Builder
+     * is built.
+     */
+    private fun resolveDualSourceSize(): android.util.Size {
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE)
+            as? android.hardware.camera2.CameraManager
+            ?: run {
+                RovaLog.w("resolveDualSourceSize: CameraManager unavailable — fallback 1920×1440")
+                return android.util.Size(1920, 1440)
+            }
+        val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+            android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+        } else {
+            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+        }
+        return try {
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id).get(
+                    android.hardware.camera2.CameraCharacteristics.LENS_FACING
+                ) == lensFacing
+            } ?: run {
+                RovaLog.w("resolveDualSourceSize: no cameraId for lensFacing=$lensFacing — fallback 1920×1440")
+                return android.util.Size(1920, 1440)
+            }
+            val map = cameraManager.getCameraCharacteristics(cameraId).get(
+                android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+            ) ?: run {
+                RovaLog.w("resolveDualSourceSize: null StreamConfigurationMap — fallback 1920×1440")
+                return android.util.Size(1920, 1440)
+            }
+            val chosen = com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver
+                .resolveDualCameraSize(map)
+            RovaLog.d("resolveDualSourceSize: chosen=${chosen.width}×${chosen.height} (lensFacing=$lensFacing)")
+            chosen
+        } catch (e: Exception) {
+            RovaLog.w("resolveDualSourceSize: $e — fallback 1920×1440")
+            android.util.Size(1920, 1440)
+        }
+    }
+
     private suspend fun setupDualCamera() {
         setupMutex.withLock {
             if (_serviceState.value.isCameraActive) {
@@ -1239,23 +1288,31 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 currentDualRecorder?.attachPreviewInput(side, triple.first, triple.second, triple.third)
             }
 
-            // Phase 6.1c — force landscape 1920×1080 consumer for full
-            // sensor FOV. Without this, CameraX picks portrait dims
-            // based on PreviewView size and center-crops the sensor to
-            // 9:16 before our shader sees it (loses ~44% horizontal FOV
-            // → both encoder outputs forced to share a portrait crop).
+            // ADR-0009 (PORTRAIT-stretch architectural fix) — pick the
+            // largest 4:3 landscape source mode the device exposes
+            // (PORTRAIT pixel-perfect when shortEdge ≥ 1920; PORTRAIT
+            // upscales otherwise — both no-stretch, no-bars). The 4:3
+            // source feeds AspectFitMath.buildSideAspectCrop's re-derived
+            // per-side crops (PORTRAIT pivot-scale(27/64, 1, 1) +
+            // LANDSCAPE pivot-scale(1, 3/4, 1) — see ADR-0009). Pre-fix
+            // this block forced 1920×1080 (16:9) to dodge CameraX's
+            // ~44% FOV center-crop default; the 4:3 strategy now dodges
+            // it differently while also giving PORTRAIT a true 9:16
+            // crop instead of a 1:1 square stretched into 9:16.
+            //
             // setTargetRotation(ROTATION_0) keeps the camera producing
-            // sensor-native landscape — we own rotation correction in
-            // the EglRouter/AspectFitMath pipeline.
+            // sensor-native landscape orientation — we own rotation
+            // correction in the EglRouter/AspectFitMath pipeline.
+            val sourceSize = resolveDualSourceSize()
             val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
                 .setResolutionStrategy(
                     androidx.camera.core.resolutionselector.ResolutionStrategy(
-                        android.util.Size(1920, 1080),
+                        sourceSize,
                         androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
                     )
                 )
                 .setAspectRatioStrategy(
-                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
                 )
                 .build()
             preview = Preview.Builder()
