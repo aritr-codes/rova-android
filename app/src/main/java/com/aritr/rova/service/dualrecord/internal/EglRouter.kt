@@ -133,6 +133,14 @@ internal class EglRouter(
     private val scratchC = FloatArray(16)
     private val scratchD = FloatArray(16)
 
+    // Phase: render-architecture audit. Session-pinned component matrices
+    // for DualShotMatrixDebugInfo snapshots. Built once in setup() — texture
+    // normalization + display rotation depend only on ctor-pinned params, so
+    // they're cached. Per-side sideAspectCrop is read from target.uvTransform's
+    // composition at snapshot time (or recomputed; cheap).
+    private val cachedNormalizationMatrix = FloatArray(16)
+    private val cachedDisplayRotationMatrix = FloatArray(16)
+
     // Phase: render-architecture audit. Per-side debug snapshot map.
     // Written by renderFrame when enableMatrixSnapshots=true (Task 13).
     // Read by debugSnapshot() under synchronized(targets). Size capped
@@ -244,6 +252,12 @@ internal class EglRouter(
         inputTextureId = createOesTexture()
         inputSurfaceTexture = SurfaceTexture(inputTextureId)
         Matrix.setIdentityM(mvpMatrix, 0)
+
+        // Phase: render-architecture audit. Populate session-pinned debug
+        // snapshot caches. Cheap one-time cost; only meaningful when
+        // enableMatrixSnapshots is on.
+        AspectFitMath.buildTextureNormalization(sensorOrientation, cachedNormalizationMatrix)
+        AspectFitMath.buildDisplayRotationCorrection(displayRotation, cachedDisplayRotationMatrix)
     }
 
     fun setOnFrameAvailableListener(listener: SurfaceTexture.OnFrameAvailableListener) {
@@ -417,6 +431,33 @@ internal class EglRouter(
                 )
 
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+
+                // Phase: render-architecture audit. Per-frame debug snapshot
+                // write — gated on enableMatrixSnapshots (default false → zero
+                // overhead). Inside the synchronized(targets) block already.
+                // Per-side map cap at 2; writes overwrite.
+                if (enableMatrixSnapshots && target.side != null) {
+                    val sideAspectCropMatrix = FloatArray(16)
+                    AspectFitMath.buildSideAspectCrop(target.side, sideAspectCropMatrix)
+                    debugInfoBySide[target.side] = DualShotMatrixDebugInfo(
+                        side = target.side,
+                        sensorOrientation = sensorOrientation,
+                        displayRotation = displayRotation,
+                        lensFacing = lensFacing,
+                        texMatrix = texMatrix.copyOf(),
+                        normalizationMatrix = cachedNormalizationMatrix.copyOf(),
+                        displayRotationMatrix = cachedDisplayRotationMatrix.copyOf(),
+                        sideAspectCropMatrix = sideAspectCropMatrix,
+                        uvTransform = target.uvTransform.copyOf(),
+                        finalMatrix = finalMatrix.copyOf(),
+                        viewport = intArrayOf(
+                            target.viewportX, target.viewportY,
+                            target.viewportW, target.viewportH,
+                        ),
+                        encoderSize = target.width to target.height,
+                        timestampNs = System.nanoTime(),
+                    )
+                }
 
                 GLES20.glDisableVertexAttribArray(aPositionLoc)
                 GLES20.glDisableVertexAttribArray(aUvLoc)
