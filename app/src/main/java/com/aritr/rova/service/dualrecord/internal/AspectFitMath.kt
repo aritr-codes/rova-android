@@ -295,6 +295,67 @@ internal object AspectFitMath {
     }
 
     /**
+     * Phase: render-architecture audit (first-principles UV pipeline).
+     *
+     * Composes the canonical UV pipeline from first-principles components:
+     *
+     *   out = sideAspectCrop × displayRotationCorrection × textureNormalization
+     *
+     * Right-to-left UV application: textureNormalization first (OES →
+     * canonical UV frame), then displayRotationCorrection (device-tilt
+     * compensation), then sideAspectCrop (terminal transform in
+     * canonical UV space). NO empirical sideCorrection — the
+     * canonical-UV-frame invariant (see
+     * [buildTextureNormalization]) replaces the legacy
+     * [buildCropMatrix]'s per-side `+270°` hack.
+     *
+     * **Caller-owned scratch buffers**: [scratchA]/[scratchB]/[scratchC]/
+     * [scratchD] must each be length 16 AND PAIRWISE-DISTINCT array
+     * instances (also distinct from [out]). Caller (EglRouter) holds
+     * these as instance fields, reused across all `addTarget` calls.
+     * [multiplyMat4]'s no-alias contract requires the distinctness.
+     *
+     * **Hybrid coexistence**: this helper is parallel dead-code at runtime
+     * until `EglRouter.useFirstPrinciplesRender` flag flips true. Bridge-
+     * tested against legacy [buildCropMatrix] in `AspectFitMathBridgeTest`.
+     *
+     * See `docs/superpowers/specs/2026-05-18-render-architecture-audit-design.md` §2.2.
+     */
+    fun buildUvTransformV2(
+        displayRotation: Int,
+        sensorOrientation: Int,
+        side: VideoSide,
+        out: FloatArray,
+        scratchA: FloatArray,
+        scratchB: FloatArray,
+        scratchC: FloatArray,
+        scratchD: FloatArray,
+    ) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        require(scratchA.size == 16 && scratchB.size == 16 && scratchC.size == 16 && scratchD.size == 16) {
+            "scratch buffers must each be length 16; were " +
+                "${scratchA.size}/${scratchB.size}/${scratchC.size}/${scratchD.size}"
+        }
+        // Pairwise distinctness — required by multiplyMat4's no-alias contract.
+        require(scratchA !== scratchB) { "scratchA must not alias scratchB" }
+        require(scratchA !== scratchC) { "scratchA must not alias scratchC" }
+        require(scratchA !== scratchD) { "scratchA must not alias scratchD" }
+        require(scratchB !== scratchC) { "scratchB must not alias scratchC" }
+        require(scratchB !== scratchD) { "scratchB must not alias scratchD" }
+        require(scratchC !== scratchD) { "scratchC must not alias scratchD" }
+        require(out !== scratchA) { "out must not alias scratchA" }
+        require(out !== scratchB) { "out must not alias scratchB" }
+        require(out !== scratchC) { "out must not alias scratchC" }
+        require(out !== scratchD) { "out must not alias scratchD" }
+
+        buildSideAspectCrop(side, scratchA)                       // scratchA = sideAspectCrop
+        buildDisplayRotationCorrection(displayRotation, scratchB) // scratchB = displayRotationCorrection
+        buildTextureNormalization(sensorOrientation, scratchC)    // scratchC = textureNormalization
+        multiplyMat4(scratchD, scratchB, scratchC)                // scratchD = rotTimesNorm
+        multiplyMat4(out, scratchA, scratchD)                     // out = sideAspectCrop × rotTimesNorm
+    }
+
+    /**
      * Column-major 4×4 matrix multiply: `out = lhs × rhs`. Mirrors
      * `android.opengl.Matrix.multiplyMM(out, 0, lhs, 0, rhs, 0)` for
      * length-16 column-major matrices. Phase 6.1c — used so [AspectFitMath]

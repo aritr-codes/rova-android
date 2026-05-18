@@ -1,8 +1,10 @@
 package com.aritr.rova.service.dualrecord.internal
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.aritr.rova.service.dualrecord.VideoSide
 
 class AspectFitMathV2Test {
 
@@ -126,5 +128,191 @@ class AspectFitMathV2Test {
         runCatching { AspectFitMath.buildTextureNormalization(90, FloatArray(15)) }.let {
             assertTrue("expected throw on length-15 out", it.isFailure)
         }
+    }
+
+    // ─── buildUvTransformV2 — composition tests ────────────────────
+
+    @Test
+    fun `buildUvTransformV2 PORTRAIT path-independent of LANDSCAPE inputs`() {
+        // Per spec §5.2: PORTRAIT's uvTransform must NOT vary when only
+        // LANDSCAPE-relevant inputs change. (sensorOrientation is shared,
+        // so just confirm side-switching independence.)
+        val outP = FloatArray(16)
+        val outL = FloatArray(16)
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+
+        AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, outP, a, b, c, d)
+        AspectFitMath.buildUvTransformV2(0, 90, VideoSide.LANDSCAPE, outL, a, b, c, d)
+
+        // Computing LANDSCAPE must not have mutated PORTRAIT's output.
+        val outP2 = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, outP2, a, b, c, d)
+        assertArrayEquals(outP, outP2, 1e-6f)
+
+        // PORTRAIT and LANDSCAPE outputs MUST differ (sanity check that the
+        // independence assert isn't trivially passing on identical arrays).
+        var anyDiff = false
+        for (i in 0..15) if (kotlin.math.abs(outP[i] - outL[i]) > 1e-3f) { anyDiff = true; break }
+        assertTrue("PORTRAIT and LANDSCAPE uvTransforms must differ", anyDiff)
+    }
+
+    @Test
+    fun `buildUvTransformV2 LANDSCAPE path-independent of PORTRAIT inputs`() {
+        val outL = FloatArray(16)
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+
+        AspectFitMath.buildUvTransformV2(1, 270, VideoSide.LANDSCAPE, outL, a, b, c, d)
+        // Compute PORTRAIT into a different out; verify outL unaffected.
+        val portraitOut = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(1, 270, VideoSide.PORTRAIT, portraitOut, a, b, c, d)
+        val outL2 = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(1, 270, VideoSide.LANDSCAPE, outL2, a, b, c, d)
+        assertArrayEquals(outL, outL2, 1e-6f)
+    }
+
+    @Test
+    fun `buildUvTransformV2 composition matches manual sideAspectCrop x rot x normalization`() {
+        // For displayRotation=0, sensorOrientation=90, PORTRAIT:
+        //   crop = buildSideAspectCrop(PORTRAIT) ; pivot-scale(27/64, 1, 1)
+        //   rot  = buildDisplayRotationCorrection(0) ; +90° pivot rotate
+        //   norm = buildTextureNormalization(90) ; +90° pivot rotate
+        // Composition: out = crop × rot × norm (right-to-left UV)
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+        val out = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, out, a, b, c, d)
+
+        // Manually recompute via the same helpers — verify equality.
+        val crop = FloatArray(16); val rot = FloatArray(16); val norm = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, crop)
+        AspectFitMath.buildDisplayRotationCorrection(0, rot)
+        AspectFitMath.buildTextureNormalization(90, norm)
+        val rotTimesNorm = FloatArray(16)
+        val manualOut = FloatArray(16)
+        multiplyMat4ForTest(rotTimesNorm, rot, norm)
+        multiplyMat4ForTest(manualOut, crop, rotTimesNorm)
+        assertArrayEquals(manualOut, out, 1e-6f)
+    }
+
+    // Test-local mat4 multiply matching AspectFitMath.multiplyMat4's contract:
+    // out = lhs × rhs, column-major, no in-place aliasing supported.
+    private fun multiplyMat4ForTest(out: FloatArray, lhs: FloatArray, rhs: FloatArray) {
+        require(out.size == 16 && lhs.size == 16 && rhs.size == 16)
+        for (col in 0..3) {
+            for (row in 0..3) {
+                var sum = 0f
+                for (k in 0..3) sum += lhs[k * 4 + row] * rhs[col * 4 + k]
+                out[col * 4 + row] = sum
+            }
+        }
+    }
+
+    // ─── buildUvTransformV2 — negative paths ───────────────────────
+
+    @Test
+    fun `buildUvTransformV2 rejects wrong-size out`() {
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+        runCatching {
+            AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, FloatArray(15), a, b, c, d)
+        }.let { assertTrue("expected throw on out length 15", it.isFailure) }
+    }
+
+    @Test
+    fun `buildUvTransformV2 rejects aliased scratchA equals scratchB`() {
+        val shared = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+        val out = FloatArray(16)
+        runCatching {
+            AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, out, shared, shared, c, d)
+        }.let { assertTrue("expected throw on scratchA===scratchB", it.isFailure) }
+    }
+
+    @Test
+    fun `buildUvTransformV2 rejects aliased scratchB equals scratchC`() {
+        val a = FloatArray(16)
+        val shared = FloatArray(16)
+        val d = FloatArray(16)
+        val out = FloatArray(16)
+        runCatching {
+            AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, out, a, shared, shared, d)
+        }.let { assertTrue("expected throw on scratchB===scratchC", it.isFailure) }
+    }
+
+    @Test
+    fun `buildUvTransformV2 rejects aliased scratchA equals out`() {
+        val sharedOut = FloatArray(16)
+        val b = FloatArray(16); val c = FloatArray(16); val d = FloatArray(16)
+        runCatching {
+            AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, sharedOut, sharedOut, b, c, d)
+        }.let { assertTrue("expected throw on out===scratchA", it.isFailure) }
+    }
+
+    @Test
+    fun `buildUvTransformV2 rejects aliased scratchC equals scratchD`() {
+        val a = FloatArray(16); val b = FloatArray(16)
+        val shared = FloatArray(16)
+        val out = FloatArray(16)
+        runCatching {
+            AspectFitMath.buildUvTransformV2(0, 90, VideoSide.PORTRAIT, out, a, b, shared, shared)
+        }.let { assertTrue("expected throw on scratchC===scratchD", it.isFailure) }
+    }
+
+    // ─── Aspect-ratio preservation invariants (spec §5.4) ──────────
+    // Original bug class coverage: the 1.78× vertical stretch bug came from
+    // pivot-scale(9/16, 1, 1) of a 16:9 source producing a 1:1 square then
+    // forced into a 9:16 encoder. These tests assert the V2 composition for
+    // each side has no non-uniform X/Y scaling beyond the intended pivot-
+    // scale signature.
+
+    @Test
+    fun `buildUvTransformV2 PORTRAIT preserves crop signature (X-axis pivot-scale 27 over 64)`() {
+        // For sensorOrientation=0 + displayRotation=1 (identity rot) +
+        // textureNormalization=0 (identity), the composition collapses to
+        // pure sideAspectCrop = pivot-scale(27/64, 1, 1) around (0.5, 0.5).
+        //
+        // Asserts:
+        //  - X-axis: right-middle (1, 0.5) → (0.5 + (27/64)*0.5, 0.5) =
+        //                                    (0.7109375, 0.5)
+        //  - Y-axis: top-middle  (0.5, 1) → (0.5, 1) — identity
+        //  - NO non-uniform stretch beyond the intended pivot-scale
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+        val out = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(1, 0, VideoSide.PORTRAIT, out, a, b, c, d)
+
+        val rm = applyMat4(out, floatArrayOf(1f, 0.5f, 0f, 1f))
+        assertEquals(0.7109375f, rm[0], 1e-5f)
+        assertEquals(0.5f, rm[1], 1e-5f)
+
+        val tm = applyMat4(out, floatArrayOf(0.5f, 1f, 0f, 1f))
+        assertEquals(0.5f, tm[0], 1e-5f)
+        assertEquals(1f, tm[1], 1e-5f)
+    }
+
+    @Test
+    fun `buildUvTransformV2 LANDSCAPE preserves crop signature (Y-axis pivot-scale 3 over 4)`() {
+        // For sensorOrientation=0 + displayRotation=1 (identity rot) +
+        // textureNormalization=0 (identity), the composition collapses to
+        // pure sideAspectCrop = pivot-scale(1, 3/4, 1) around (0.5, 0.5).
+        //
+        // Asserts:
+        //  - X-axis: right-middle (1, 0.5) → (1, 0.5) — identity
+        //  - Y-axis: top-middle   (0.5, 1) → (0.5, 0.5 + (3/4)*0.5) =
+        //                                    (0.5, 0.875)
+        val a = FloatArray(16); val b = FloatArray(16)
+        val c = FloatArray(16); val d = FloatArray(16)
+        val out = FloatArray(16)
+        AspectFitMath.buildUvTransformV2(1, 0, VideoSide.LANDSCAPE, out, a, b, c, d)
+
+        val rm = applyMat4(out, floatArrayOf(1f, 0.5f, 0f, 1f))
+        assertEquals(1f, rm[0], 1e-5f)
+        assertEquals(0.5f, rm[1], 1e-5f)
+
+        val tm = applyMat4(out, floatArrayOf(0.5f, 1f, 0f, 1f))
+        assertEquals(0.5f, tm[0], 1e-5f)
+        assertEquals(0.875f, tm[1], 1e-5f)
     }
 }
