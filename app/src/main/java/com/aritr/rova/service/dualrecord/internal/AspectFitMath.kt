@@ -232,6 +232,12 @@ internal object AspectFitMath {
      * [multiplyMat4] below. Result mathematically identical to the
      * plan's `Matrix.multiplyMM(out, 0, crop, 0, rot, 0)` call.
      */
+    @Deprecated(
+        "Empirical +270° sideCorrection. Use buildUvTransformV2 once " +
+            "useFirstPrinciplesRender migration completes. See spec " +
+            "docs/superpowers/specs/2026-05-18-render-architecture-audit-design.md §5.5 retirement plan.",
+        ReplaceWith("buildUvTransformV2(displayRotation, sensorOrientation, side, out, scratchA, scratchB, scratchC, scratchD)"),
+    )
     fun buildCropMatrix(displayRotation: Int, side: VideoSide, out: FloatArray) {
         require(out.size == 16) { "out must be length 16, was ${out.size}" }
         val rot = FloatArray(16)

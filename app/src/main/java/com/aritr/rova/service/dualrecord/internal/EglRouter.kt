@@ -282,7 +282,22 @@ internal class EglRouter(
             // side's content aspect inside the surface dims (encoder
             // surfaces are aspect-matched → full viewport; preview
             // TextureView surfaces letterbox).
-            AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+            if (useFirstPrinciplesRender) {
+                // V2 first-principles path — canonical UV transform from
+                // sideAspectCrop × displayRotationCorrection × textureNormalization.
+                // Active only when SharedPreferences pref.dev.useFirstPrinciplesRender
+                // is true AND BuildConfig.DEBUG (release short-circuits to false).
+                AspectFitMath.buildUvTransformV2(
+                    displayRotation, sensorOrientation, side,
+                    crop, scratchA, scratchB, scratchC, scratchD,
+                )
+            } else {
+                // Legacy path — buildCropMatrix with empirical +270° sideCorrection.
+                // Default for all callers. Bridge-tested against V2 at
+                // sensorOrientation=270 (see AspectFitMathBridgeTest).
+                @Suppress("DEPRECATION")
+                AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+            }
             val contentAspect = when (side) {
                 VideoSide.PORTRAIT -> 9f / 16f
                 VideoSide.LANDSCAPE -> 16f / 9f
