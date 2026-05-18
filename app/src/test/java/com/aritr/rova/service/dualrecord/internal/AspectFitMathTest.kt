@@ -124,15 +124,33 @@ class AspectFitMathTest {
     }
 
     @Test
-    fun `buildSideAspectCrop LANDSCAPE is identity`() {
+    fun `buildSideAspectCrop LANDSCAPE matches 4 to 3 source pivot-scale 1 by 3 over 4`() {
+        // Phase: 4:3-source fix (PORTRAIT-stretch). Pinned regression-lock —
+        // asserts the exact 16-element column-major matrix matches
+        // pivot-scale(1, 3/4, 1) around (0.5, 0.5).
+        //
+        //   source_aspect / target_aspect = (4/3) / (16/9) = 36/48 = 3/4
+        //   col 1 = (0, 3/4, 0, 0)
+        //   col 3 = (0, 0.5 - 0.5*3/4, 0, 1) = (0, 1/8, 0, 1)
+        //
+        // Pre-4:3-source fix this branch was identity (16:9 source flowed
+        // straight into the 16:9 encoder pixel-perfect). After the fix the
+        // 4:3 source is center-cropped top+bottom — LANDSCAPE accepts a
+        // 1.33× downscale as the documented tradeoff (ADR-0009).
+        //
+        // If this fails, the source-aspect constant in
+        // [AspectFitMath.buildSideAspectCrop] LANDSCAPE branch has drifted.
         val m = FloatArray(16)
         AspectFitMath.buildSideAspectCrop(VideoSide.LANDSCAPE, m)
-        val out = applyMat4(m, floatArrayOf(1f, 1f, 0f, 1f))
-        assertEquals(1f, out[0], 1e-5f)
-        assertEquals(1f, out[1], 1e-5f)
-        val out2 = applyMat4(m, floatArrayOf(0f, 0f, 0f, 1f))
-        assertEquals(0f, out2[0], 1e-5f)
-        assertEquals(0f, out2[1], 1e-5f)
+
+        val s = 3f / 4f
+        val expected = floatArrayOf(
+            1f,  0f,  0f,  0f,   // col 0
+            0f,  s,   0f,  0f,   // col 1
+            0f,  0f,  1f,  0f,   // col 2
+            0f,  0.5f - 0.5f * s, 0f, 1f,   // col 3
+        )
+        assertArrayEquals(expected, m, 1e-6f)
     }
 
     // ─── displayRotationCorrection tests ───────────────────────────
@@ -203,26 +221,30 @@ class AspectFitMathTest {
     }
 
     @Test
-    fun `buildCropMatrix LANDSCAPE at rotation 1 is +270 pivot rotate after smokefix series`() {
-        // Phase 6.1c smoke-fix series (round 3, 2026-05-17): cropMatrix is now
+    fun `buildCropMatrix LANDSCAPE at rotation 1 is +270 pivot rotate then scale y by 3 over 4`() {
+        // Phase 6.1c smoke-fix series (round 3, 2026-05-17) + ADR-0009 4:3-
+        // source fix: cropMatrix is
         //   sideAspectCrop[side] × displayRotationCorrection × sideCorrection[side]
         // For LANDSCAPE at displayRotation=1:
-        //   crop = identity ; rot = R(0°) ; sideCorrection = R(+270°) (via displayRotation=2)
-        //   cropMatrix = R(+270° pivot about (0.5, 0.5)).
-        // R(+270° pivot) in GL y-up convention maps (u, v) → (v, 1-u).
+        //   crop = pivot-scale(1, 3/4, 1) ;  rot = R(0°)  ;  sideCorrection = R(+270°)
+        //   cropMatrix = pivot-scale(1, 3/4, 1) × R(+270° pivot about (0.5, 0.5)).
+        //
+        // R(+270° pivot) maps (u, v) → (v, 1-u) in GL y-up convention.
+        // Then pivot-scale(1, 3/4, 1) maps (x, y) → (x, 0.5 + (3/4)*(y - 0.5)).
         val m = FloatArray(16)
         AspectFitMath.buildCropMatrix(1, VideoSide.LANDSCAPE, m)
 
-        // Pivot (0.5, 0.5) is invariant.
+        // Pivot (0.5, 0.5) is invariant under both ops.
         val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
         assertEquals(0.5f, pivot[0], 1e-5f)
         assertEquals(0.5f, pivot[1], 1e-5f)
 
         // (0.25, 0.75) → R(+270° pivot about (0.5, 0.5)):
         //   relative: (-0.25, 0.25) → R(+270° y-up): (0.25, 0.25) → add pivot: (0.75, 0.75).
+        // Then pivot-scale(1, 3/4, 1): x stays 0.75; y = 0.5 + (3/4)*(0.75 - 0.5) = 0.6875.
         val out = applyMat4(m, floatArrayOf(0.25f, 0.75f, 0f, 1f))
         assertEquals(0.75f, out[0], 1e-5f)
-        assertEquals(0.75f, out[1], 1e-5f)
+        assertEquals(0.6875f, out[1], 1e-5f)
     }
 
     @Test

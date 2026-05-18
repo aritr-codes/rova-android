@@ -52,19 +52,32 @@ internal object AspectFitMath {
     }
 
     /**
-     * Builds the side-specific UV center-crop matrix into [out].
-     *  - [VideoSide.PORTRAIT]: pivot-scale around (0.5, 0.5) by ((9/16)/(4/3) = 27/64, 1, 1)
-     *    — center-crop a vertical 9:16 column from a 4:3 source (ADR-0009).
-     *  - [VideoSide.LANDSCAPE]: identity (full 16:9 source used as-is).
+     * Builds the side-specific UV center-crop matrix into [out]. Assumes a
+     * 4:3 source aspect (pinned by [SOURCE_ASPECT_W] / [SOURCE_ASPECT_H]
+     * + [com.aritr.rova.service.RovaRecordingService.setupDualCamera]'s
+     * `ResolutionSelector`). If the source aspect ever changes, both
+     * branches below must be re-derived in lockstep.
+     *
+     *  - [VideoSide.PORTRAIT]: pivot-scale around (0.5, 0.5) by
+     *    `((9/16) / (4/3), 1, 1) = (27/64, 1, 1)` — center-crop a vertical
+     *    9:16 column from a 4:3 source. Fills the 1080×1920 PORTRAIT
+     *    encoder with no stretch and no bars.
+     *  - [VideoSide.LANDSCAPE]: pivot-scale around (0.5, 0.5) by
+     *    `(1, (4/3) / (16/9), 1) = (1, 3/4, 1)` — center-crop top+bottom
+     *    of a 4:3 source to a 16:9 strip. Fills the 1920×1080 LANDSCAPE
+     *    encoder with no stretch and no bars; accepts a 1.33× downscale.
      *
      * `out` must be a length-16 float array; contents are overwritten.
      *
-     * Phase 6.1c D-deviation from plan Task 2: inline pure-Kotlin mat4
-     * math (no `android.opengl.Matrix.*`) per spec §5.4 "no Android
-     * dependencies" — plan's choice silently no-ops under
+     * Phase 6.1c D-deviation from plan Task 2 (preserved): inline pure-
+     * Kotlin mat4 math (no `android.opengl.Matrix.*`) per spec §5.4 "no
+     * Android dependencies" — plan's choice silently no-ops under
      * `testOptions.unitTests.isReturnDefaultValues = true`. Matrix
-     * constants derived directly from the pivot-scale composition
-     * `T(0.5,0.5,0) × S(9/16,1,1) × T(-0.5,-0.5,0)`.
+     * constants derived from the pivot-scale composition
+     * `T(0.5,0.5,0) × S(...) × T(-0.5,-0.5,0)`.
+     *
+     * See `docs/adr/0009-dualshot-4-3-source-aspect.md` for the rationale
+     * behind the 4:3 source-aspect decision and the rejected alternatives.
      */
     fun buildSideAspectCrop(side: VideoSide, out: FloatArray) {
         require(out.size == 16) { "out must be length 16, was ${out.size}" }
@@ -73,7 +86,21 @@ internal object AspectFitMath {
         out[0] = 1f; out[5] = 1f; out[10] = 1f; out[15] = 1f
         when (side) {
             VideoSide.LANDSCAPE -> {
-                // Identity — landscape sources the full source rectangle.
+                // Pivot-scale around (0.5, 0.5) by (1, (4/3) / (16/9), 1) =
+                // (1, 3/4, 1). Center-crops top+bottom of a 4:3 source to a
+                // 16:9 strip — fills the 1920×1080 LANDSCAPE encoder with no
+                // stretch and no bars. Pre-4:3-source fix this branch was
+                // identity (16:9 source flowed straight to the 16:9 encoder
+                // pixel-perfect). The 4:3-source fix accepts a 1.33×
+                // downscale on LANDSCAPE as the documented tradeoff vs the
+                // rejected dual-capture-session alternative — see ADR-0009.
+                //
+                // Column-major closed form:
+                //   col 1 = (0, 3/4, 0, 0)
+                //   col 3 = (0, 0.5 - 0.5*3/4, 0, 1) = (0, 1/8, 0, 1)
+                val s = (SOURCE_ASPECT_W / SOURCE_ASPECT_H) / (16f / 9f)
+                out[5] = s
+                out[13] = 0.5f - 0.5f * s
             }
             VideoSide.PORTRAIT -> {
                 // Pivot-scale around (0.5, 0.5) by ((9/16) / (4/3), 1, 1) =
