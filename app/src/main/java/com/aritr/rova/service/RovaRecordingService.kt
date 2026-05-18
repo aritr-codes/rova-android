@@ -1276,6 +1276,44 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * Phase: render-architecture audit. DEBUG-only SharedPreferences read
+     * for the first-principles render-path flag. RELEASE returns false
+     * unconditionally (BuildConfig.DEBUG short-circuit).
+     *
+     * ClassCastException-safe: if a corrupt prefs file has a non-boolean
+     * value at the key, swallow + WARN + return false (spec §4.1 row #3).
+     *
+     * Per spec §1.6: prefs key = "pref.dev.useFirstPrinciplesRender",
+     * prefs file = "rova_dev_flags", default = false.
+     */
+    private fun readUseFirstPrinciplesRender(): Boolean {
+        if (!com.aritr.rova.BuildConfig.DEBUG) return false
+        return try {
+            getSharedPreferences("rova_dev_flags", Context.MODE_PRIVATE)
+                .getBoolean("pref.dev.useFirstPrinciplesRender", false)
+        } catch (e: ClassCastException) {
+            RovaLog.w("useFirstPrinciplesRender prefs type mismatch; defaulting false", e)
+            false
+        }
+    }
+
+    /**
+     * Phase: render-architecture audit. DEBUG-only SharedPreferences read
+     * for the debug snapshot flag. Same contract + safety as
+     * [readUseFirstPrinciplesRender].
+     */
+    private fun readEnableMatrixSnapshots(): Boolean {
+        if (!com.aritr.rova.BuildConfig.DEBUG) return false
+        return try {
+            getSharedPreferences("rova_dev_flags", Context.MODE_PRIVATE)
+                .getBoolean("pref.dev.enableMatrixSnapshots", false)
+        } catch (e: ClassCastException) {
+            RovaLog.w("enableMatrixSnapshots prefs type mismatch; defaulting false", e)
+            false
+        }
+    }
+
     private suspend fun setupDualCamera() {
         setupMutex.withLock {
             if (_serviceState.value.isCameraActive) {
