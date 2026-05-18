@@ -6,7 +6,6 @@ import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -439,12 +438,42 @@ fun RecordScreen(
                 // Camera Preview
                 if (hasCapturePermissions) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        AndroidView(
-                            factory = { _ -> previewView },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        if (mode == "PortraitLandscape" && hudState is RecordHudState.Idle) {
-                            SplitPreviewOverlay()
+                        if (mode == "PortraitLandscape") {
+                            // Phase 6.1c — P+L mode renders via two
+                            // dedicated TextureView zones; the
+                            // PreviewView is bound by CameraX but covered
+                            // visually by the DualPreviewZone. Shown in
+                            // BOTH idle and recording states (per spec
+                            // §4.2 — live preview throughout recording).
+                            // Callbacks wrapped in remember(viewModel) so
+                            // the TextureView's SurfaceTextureListener
+                            // closures stay stable across recomposition
+                            // (Task 11 code-review concern).
+                            val registerPreview = remember(viewModel) {
+                                { side: com.aritr.rova.service.dualrecord.VideoSide,
+                                  surface: android.view.Surface,
+                                  w: Int,
+                                  h: Int ->
+                                    viewModel.attachDualPreview(side, surface, w, h)
+                                }
+                            }
+                            val unregisterPreview = remember(viewModel) {
+                                { side: com.aritr.rova.service.dualrecord.VideoSide ->
+                                    viewModel.detachDualPreview(side)
+                                }
+                            }
+                            DualPreviewZone(
+                                registerPreviewSurface = registerPreview,
+                                unregisterPreviewSurface = unregisterPreview,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            // Single Portrait / Landscape modes — existing
+                            // PreviewView path, unchanged.
+                            AndroidView(
+                                factory = { _ -> previewView },
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 }
@@ -753,48 +782,3 @@ fun formatInterval(minutes: Int): String {
     return if (minutes == 0) "No wait" else "${minutes}m"
 }
 
-@Composable
-private fun SplitPreviewOverlay(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(Color.White.copy(alpha = 0.45f))
-        )
-        ZoneTagChip(
-            text = "Portrait · 9:16",
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxHeight(0.5f)
-                .padding(top = 24.dp),
-            anchorBottom = true
-        )
-        ZoneTagChip(
-            text = "Landscape · 16:9",
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.5f)
-                .padding(bottom = 24.dp),
-            anchorBottom = false
-        )
-    }
-}
-
-@Composable
-private fun ZoneTagChip(text: String, modifier: Modifier = Modifier, anchorBottom: Boolean) {
-    Box(modifier = modifier, contentAlignment = if (anchorBottom) Alignment.BottomCenter else Alignment.TopCenter) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = Color.Black.copy(alpha = 0.55f)
-        ) {
-            Text(
-                text = text,
-                color = Color.White.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        }
-    }
-}

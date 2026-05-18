@@ -132,6 +132,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
     // path. Released on service teardown.
     private var currentDualRecorder: com.aritr.rova.service.dualrecord.DualVideoRecorder? = null
+    // Phase 6.1c — preview surfaces registered by DualPreviewZone. Survives
+    // forceReconfigureCamera() (camera flip / mode change) by being replayed
+    // onto the new DualVideoRecorder in setupDualCamera. Keyed by side;
+    // re-registering the same side replaces the prior entry (TextureView
+    // size-changed path).
+    // Thread-safety: all access guarded by synchronized(pendingPreviewSurfaces).
+    // UI thread (TextureView callbacks) mutates via attach/detachDualPreview;
+    // service thread reads via setupDualCamera replay (snapshot-then-iterate).
+    private val pendingPreviewSurfaces =
+        mutableMapOf<com.aritr.rova.service.dualrecord.VideoSide, Triple<android.view.Surface, Int, Int>>()
     private var currentDualRecording: com.aritr.rova.service.dualrecord.DualRecording? = null
     private var camera: androidx.camera.core.Camera? = null
     // Phase 3.5 — observer on `camera`'s cameraState LiveData; re-made on bind, nulled on unbind.
@@ -1217,8 +1227,41 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 fps = 30
             )
             currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
+            // Phase 6.1c — replay any UI-registered preview surfaces onto
+            // the new recorder. Survives camera flip / mode change without
+            // re-creating the TextureViews in the UI. Snapshot inside
+            // the synchronized block to avoid ConcurrentModificationException
+            // if a TextureView callback fires during the replay iteration.
+            val snapshot = synchronized(pendingPreviewSurfaces) {
+                pendingPreviewSurfaces.toMap()
+            }
+            snapshot.forEach { (side, triple) ->
+                currentDualRecorder?.attachPreviewInput(side, triple.first, triple.second, triple.third)
+            }
 
-            preview = Preview.Builder().setTargetRotation(displayRotation).build()
+            // Phase 6.1c — force landscape 1920×1080 consumer for full
+            // sensor FOV. Without this, CameraX picks portrait dims
+            // based on PreviewView size and center-crops the sensor to
+            // 9:16 before our shader sees it (loses ~44% horizontal FOV
+            // → both encoder outputs forced to share a portrait crop).
+            // setTargetRotation(ROTATION_0) keeps the camera producing
+            // sensor-native landscape — we own rotation correction in
+            // the EglRouter/AspectFitMath pipeline.
+            val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    androidx.camera.core.resolutionselector.ResolutionStrategy(
+                        android.util.Size(1920, 1080),
+                        androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                    )
+                )
+                .setAspectRatioStrategy(
+                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                )
+                .build()
+            preview = Preview.Builder()
+                .setResolutionSelector(resolutionSelector)
+                .setTargetRotation(android.view.Surface.ROTATION_0)
+                .build()
             val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
@@ -1280,6 +1323,35 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // so the unbind / clear / setupCamera sequence runs end-to-end with the
     // new selector. Mirrors the rebind path already used by the recording
     // start flow (see call sites in startPeriodicRecording).
+    /**
+     * Phase 6.1c — DualPreviewZone TextureView attached. Caches the
+     * surface in [pendingPreviewSurfaces] so it survives a camera
+     * rebind, AND immediately forwards to the live DualVideoRecorder
+     * if present.
+     */
+    fun attachDualPreview(
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        surface: android.view.Surface,
+        width: Int,
+        height: Int,
+    ) {
+        synchronized(pendingPreviewSurfaces) {
+            pendingPreviewSurfaces[side] = Triple(surface, width, height)
+        }
+        currentDualRecorder?.attachPreviewInput(side, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — DualPreviewZone TextureView detached. Drops the
+     * cached surface AND tells the live recorder to remove its target.
+     */
+    fun detachDualPreview(side: com.aritr.rova.service.dualrecord.VideoSide) {
+        synchronized(pendingPreviewSurfaces) {
+            pendingPreviewSurfaces.remove(side)
+        }
+        currentDualRecorder?.detachPreviewInput(side)
+    }
+
     fun flipCamera() {
         if (_serviceState.value.isRecording) {
             RovaLog.d("flipCamera: Ignored — recording in progress")

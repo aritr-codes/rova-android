@@ -31,9 +31,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - `onOutputSurface` passes `SurfaceOutput.size` through to
  *    `router.addTarget` for the PREVIEW target's viewport.
  */
-internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
+internal class DualSurfaceProcessor(
+    lensFacing: LensFacing,
+    displayRotation: Int,
+) : SurfaceProcessor {
 
-    private val router = EglRouter(lensFacing).also { it.setup() }
+    private val router = EglRouter(lensFacing, displayRotation).also { it.setup() }
     private val released = AtomicBoolean(false)
 
     /**
@@ -43,7 +46,28 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
      */
     fun attachEncoderInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
         if (released.get()) return
-        router.addTarget(side, surface, width, height)
+        router.addTarget(side, TargetKind.ENCODER, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — register a UI-side TextureView surface as a preview
+     * render target. Called from [RovaRecordingService.attachDualPreview]
+     * when a [DualPreviewZone] TextureView attaches. Must be called
+     * BEFORE the first frame arrives for the target to render.
+     */
+    fun attachPreviewInput(side: VideoSide, surface: Surface, width: Int, height: Int) {
+        if (released.get()) return
+        router.addTarget(side, TargetKind.PREVIEW, surface, width, height)
+    }
+
+    /**
+     * Phase 6.1c — un-register a previously-attached preview target.
+     * Called from [RovaRecordingService.detachDualPreview] when the
+     * TextureView detaches. Idempotent.
+     */
+    fun detachPreviewInput(side: VideoSide) {
+        if (released.get()) return
+        router.removeTarget(side, TargetKind.PREVIEW)
     }
 
     override fun onInputSurface(request: SurfaceRequest) {
@@ -72,7 +96,7 @@ internal class DualSurfaceProcessor(lensFacing: LensFacing) : SurfaceProcessor {
             RovaLog.d("DualSurfaceProcessor.onOutputSurface event (code=${event.eventCode})")
         })
         val size = output.size
-        router.addTarget(side = null, surface = previewSurface, width = size.width, height = size.height)
+        router.addTarget(side = null, kind = TargetKind.PREVIEW, surface = previewSurface, width = size.width, height = size.height)
     }
 
     fun release() {
