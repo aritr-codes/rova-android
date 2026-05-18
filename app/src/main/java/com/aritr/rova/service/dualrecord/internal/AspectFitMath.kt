@@ -356,14 +356,29 @@ internal object AspectFitMath {
     }
 
     /**
-     * Column-major 4×4 matrix multiply: `out = lhs × rhs`. Mirrors
+     * Column-major 4×4 matrix multiply.
+     *
+     *     out = lhs × rhs
+     *
+     * **MULTIPLICATION ORDER IS LOAD-BEARING.** Reversing operands inverts
+     * UV-application semantics and destroys the pipeline. Mirrors
      * `android.opengl.Matrix.multiplyMM(out, 0, lhs, 0, rhs, 0)` for
-     * length-16 column-major matrices. Phase 6.1c — used so [AspectFitMath]
-     * is JVM-pure (spec §5.4) instead of depending on the Android
-     * SDK's stubbed-out `Matrix` class.
+     * length-16 column-major matrices.
+     *
+     * **In-place aliasing NOT supported.** `out !== lhs` AND `out !== rhs`
+     * required. The inner loop reads `lhs[k*4+row]` for `k=0..3` while
+     * writing `out[col*4+row]` — aliasing corrupts those reads. Caller
+     * must ensure `out` is a distinct array. (Use a scratch buffer and
+     * copy if aliasing is needed.)
+     *
+     * Phase 6.1c — used so [AspectFitMath] is JVM-pure (spec §5.4)
+     * instead of depending on the Android SDK's stubbed-out `Matrix`
+     * class.
      */
     private fun multiplyMat4(out: FloatArray, lhs: FloatArray, rhs: FloatArray) {
         require(out.size == 16 && lhs.size == 16 && rhs.size == 16)
+        require(out !== lhs) { "multiplyMat4: out must not alias lhs" }
+        require(out !== rhs) { "multiplyMat4: out must not alias rhs" }
         // Column-major: m[col * 4 + row] = element at (row, col).
         // (lhs × rhs)[col, row] = Σ_k lhs[k, row] * rhs[col, k].
         for (col in 0..3) {
