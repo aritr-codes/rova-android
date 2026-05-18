@@ -15,6 +15,19 @@ import com.aritr.rova.service.dualrecord.VideoSide
 internal object AspectFitMath {
 
     /**
+     * Source-aspect numerator/denominator for the dual-camera capture.
+     * Pinned by [com.aritr.rova.service.RovaRecordingService.setupDualCamera]'s
+     * `ResolutionSelector`, which requests a 4:3 sensor output via
+     * [com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver].
+     * See `docs/adr/0009-dualshot-4-3-source-aspect.md`.
+     *
+     * If the source aspect ever changes, both branches of
+     * [buildSideAspectCrop] must be re-derived in lockstep.
+     */
+    internal const val SOURCE_ASPECT_W = 4f
+    internal const val SOURCE_ASPECT_H = 3f
+
+    /**
      * Aspect-fit viewport inside a surface of [surfaceW] × [surfaceH]
      * for content of aspect [contentAspect] (= width/height). Returns
      * `[x, y, w, h]` for `glViewport`. Pillar-box bars when content is
@@ -40,8 +53,8 @@ internal object AspectFitMath {
 
     /**
      * Builds the side-specific UV center-crop matrix into [out].
-     *  - [VideoSide.PORTRAIT]: pivot-scale around (0.5, 0.5) by (9/16, 1, 1)
-     *    — center-crop a vertical 9:16 column from a 16:9 source.
+     *  - [VideoSide.PORTRAIT]: pivot-scale around (0.5, 0.5) by ((9/16)/(4/3) = 27/64, 1, 1)
+     *    — center-crop a vertical 9:16 column from a 4:3 source (ADR-0009).
      *  - [VideoSide.LANDSCAPE]: identity (full 16:9 source used as-is).
      *
      * `out` must be a length-16 float array; contents are overwritten.
@@ -63,11 +76,17 @@ internal object AspectFitMath {
                 // Identity — landscape sources the full source rectangle.
             }
             VideoSide.PORTRAIT -> {
-                // Pivot-scale around (0.5, 0.5) by (9/16, 1, 1).
+                // Pivot-scale around (0.5, 0.5) by ((9/16) / (4/3), 1, 1) =
+                // (27/64, 1, 1). Center-crops a vertical 9:16 column from a
+                // 4:3 source — fills the 1080×1920 PORTRAIT encoder with no
+                // stretch and no bars. Pre-4:3-source fix this branch sampled
+                // 9/16 of a 16:9 source = a 1:1 square (stretched 1.78× into
+                // the 9:16 encoder — the bug ADR-0009 fixes).
+                //
                 // Column-major closed form:
-                //   col 0 = (9/16, 0, 0, 0)
-                //   col 3 = (0.5 - 0.5*9/16, 0, 0, 1)
-                val s = 9f / 16f
+                //   col 0 = (27/64, 0, 0, 0)
+                //   col 3 = (0.5 - 0.5*27/64, 0, 0, 1) = (37/128, 0, 0, 1)
+                val s = (9f / 16f) / (SOURCE_ASPECT_W / SOURCE_ASPECT_H)
                 out[0] = s
                 out[12] = 0.5f - 0.5f * s
             }
