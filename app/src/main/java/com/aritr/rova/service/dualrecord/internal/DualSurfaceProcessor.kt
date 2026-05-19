@@ -88,6 +88,21 @@ internal class DualSurfaceProcessor(
         // camera-resolved resolution BEFORE provideSurface so the producer
         // dequeues correctly-sized frames (Bug 2 of the 6.1b smoke-fix).
         router.setInputBufferSize(request.resolution.width, request.resolution.height)
+        // Diagnostic — capture the resolution CameraX actually delivers so
+        // we can compare against AspectFitMath.SOURCE_ASPECT_W/_H (4:3). If
+        // these disagree, the per-side crop math operates on a wrong-aspect
+        // OES texture and produces the PORTRAIT-pinched / LANDSCAPE-squished
+        // deformation seen in the 2026-05-19 on-device smoke. PR #25 set a
+        // 4:3 ResolutionSelector hint with auto-fallback; this line confirms
+        // whether the fallback engaged silently.
+        val rw = request.resolution.width
+        val rh = request.resolution.height
+        val matches4to3 = rw > 0 && rh > 0 && rw * 3 == rh * 4
+        RovaLog.d(
+            "DualSurfaceProcessor.onInputSurface: deliveredSourceSize=${rw}x${rh} " +
+                "aspect=${if (rh > 0) rw.toFloat() / rh.toFloat() else 0f} " +
+                "matches4:3=$matches4to3"
+        )
         val cameraSurface = router.inputSurface
         request.provideSurface(cameraSurface, /* executor */ Runnable::run, Consumer { result ->
             RovaLog.d("DualSurfaceProcessor input surface released (result=${result.resultCode})")
