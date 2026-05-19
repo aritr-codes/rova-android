@@ -10,17 +10,23 @@ import android.util.Size
  * and a 16:9 LANDSCAPE crop without stretching, without bars, and (for
  * PORTRAIT) at the encoder's native 1080×1920 resolution.
  *
- * Strategy (in order):
- *   1. Largest 4:3 landscape mode with shortEdge ≥ 1920 (PORTRAIT pixel-
- *      perfect — short edge ≥ 1920 means the PORTRAIT vertical strip
- *      after `pivot-scale(27/64, 1, 1)` covers the full 1920-pixel
- *      encoder height).
- *   2. Largest 4:3 landscape mode below the threshold (PORTRAIT upscales
- *      — soft but acceptable; the iOS DualShot pattern accepts mild
- *      quality degradation over bars).
- *   3. Hint `Size(1920, 1440)` to CameraX when no 4:3 modes exist (≤ ~1 %
- *      of devices per the competitive brief) — CameraX picks closest and
- *      we accept a subtle under-fill / over-crop on those devices.
+ * Contract (no soft-degrade — see ADR-0009):
+ *   1. Pick the largest landscape-oriented 4:3 mode whose short edge is
+ *      ≥ 1920. This guarantees PORTRAIT pixel-perfectness — the
+ *      `pivot-scale(27/64, 1, 1)` crop covers the full 1920-pixel encoder
+ *      height with no upscale.
+ *   2. Otherwise hint `Size(1920, 1440)` to CameraX. CameraX selects the
+ *      device's closest available mode. On the rare device with no
+ *      landscape 4:3 modes at all (≤ ~1 % per the competitive brief) and
+ *      on devices whose only landscape 4:3 modes are below the
+ *      pixel-perfect threshold (e.g. max 1280×960), this defers the choice
+ *      to CameraX — never returning a sub-threshold size from the
+ *      resolver itself.
+ *
+ * No 4:3 aspect-rounding tolerance: integer 4:3 sensor modes do not
+ * produce off-by-one outputs in practice, so the eligibility check is
+ * exact integer equality. Sub-pixel sizes (if Camera2 ever exposes them)
+ * are out of scope for this resolver.
  *
  * Pure-helper seam: [resolveDualCameraSizeFrom] takes `List<Pair<Int,Int>>`
  * (not `Size`) so JVM unit tests don't need to construct `android.util.Size`
@@ -51,25 +57,26 @@ internal object DualCameraSizeResolver {
     }
 
     /**
-     * Pure (no Android deps) — JVM-testable. Takes a list of
-     * `(width, height)` pairs and returns the chosen `(width, height)`.
+     * Pure (no Android deps) — JVM-testable. Returns the largest
+     * landscape-oriented 4:3 candidate with short edge ≥ 1920, or
+     * `Size(1920, 1440)` otherwise.
      */
     internal fun resolveDualCameraSizeFrom(sizes: List<Pair<Int, Int>>): Pair<Int, Int> {
-        val landscape4_3 = sizes.filter { isLandscape4to3(it.first, it.second) }
-        if (landscape4_3.isEmpty()) return FALLBACK_HINT_W to FALLBACK_HINT_H
-
-        val pixelPerfect = landscape4_3.filter { it.second >= PIXEL_PERFECT_SHORT_EDGE }
-        val candidates = if (pixelPerfect.isNotEmpty()) pixelPerfect else landscape4_3
-
-        return candidates.maxByOrNull { it.first.toLong() * it.second.toLong() }!!
+        val eligible = sizes
+            .asSequence()
+            .filter { isLandscape4to3(it.first, it.second) }
+            .filter { it.second >= PIXEL_PERFECT_SHORT_EDGE }
+            .toList()
+        if (eligible.isEmpty()) return FALLBACK_HINT_W to FALLBACK_HINT_H
+        return eligible.maxByOrNull { it.first.toLong() * it.second.toLong() }!!
     }
 
     /**
-     * 4:3 landscape: `width × 3 == height × 4` (exact, integer math) and
-     * `width > height`. The ±1 px tolerance the spec mentions is reserved
-     * for future floating-point rounding cases (e.g., if CameraX ever
-     * starts exposing sub-pixel sizes), but integer 4:3 sensor modes
-     * never produce off-by-one outputs in practice.
+     * Landscape 4:3: `width > height` AND `width * 3 == height * 4`
+     * (exact integer ratio). Portrait-oriented 4:3 (e.g. 1920×2560) is
+     * intentionally rejected — the dual-camera session is fixed-landscape
+     * (`Surface.ROTATION_0` in `setupDualCamera`); sampling a portrait
+     * source would force the PORTRAIT zone to read sideways.
      */
     private fun isLandscape4to3(width: Int, height: Int): Boolean {
         if (width <= height) return false
