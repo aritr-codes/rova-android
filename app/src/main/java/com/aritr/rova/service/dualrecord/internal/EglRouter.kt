@@ -64,14 +64,23 @@ import java.nio.FloatBuffer
  *
  * Runtime layer — no unit tests.
  *
- * Phase 6.1c thread-safety: [targets] is mutated from multiple threads
- * — [addTarget]/[removeTarget] called from UI/main (TextureView attach/
- * detach), [renderFrame] called from the GL/frame-callback thread. All
- * three serialize on `synchronized(targets) { ... }`. Holding the lock
- * during [renderFrame]'s draw loop ensures that an EGL surface being
- * destroyed by [removeTarget] is not concurrently used by a GL draw
- * (prevents native segfault). Lock is uncontended in steady state —
- * attach/detach are bind-time/teardown events, not per-frame.
+ * Thread-safety — two-tier locking (revised 2026-05-20 for the recording
+ * ANR). [targets] is mutated from UI/main ([addTarget]/[removeTarget],
+ * TextureView attach/detach) and iterated by [renderFrame] on the GL/
+ * frame-callback thread.
+ *  - The `targets` list lock guards only list structure: add, remove,
+ *    and [renderFrame]'s one-shot snapshot. It is held *briefly* — never
+ *    across a GL draw or `eglSwapBuffers`.
+ *  - Each [RenderTarget] is its own monitor (`synchronized(target)`).
+ *    [renderFrame] draws a target under its monitor; [removeTarget]/
+ *    [release] flip `RenderTarget.alive` false and `eglDestroySurface`
+ *    under the same monitor. So a draw never races a destroy (no native
+ *    segfault), and a stalled `eglSwapBuffers` (encoder back-pressure)
+ *    holds only that one target's monitor — never the shared list lock,
+ *    so the main thread cannot be blocked into an ANR.
+ * Earlier the whole draw loop ran inside `synchronized(targets)`; a
+ * stalled encoder swap then froze the UI the instant it attached or
+ * detached a preview TextureView.
  */
 /**
  * Phase 6.1c — render target classification. Lives next to EglRouter
@@ -174,8 +183,12 @@ internal class EglRouter(
     // Read by debugSnapshot() under synchronized(targets). Size capped
     // at 2 (PORTRAIT + LANDSCAPE) — writes overwrite. Cleared in
     // release() and on removeTarget().
+    // ConcurrentHashMap (not a plain map): renderFrame writes it under a
+    // per-target monitor while removeTarget/debugSnapshot touch it from
+    // other paths — the map's own thread-safety avoids a cross-lock race
+    // without risking a lock-ordering deadlock against `targets`.
     private val debugInfoBySide =
-        mutableMapOf<com.aritr.rova.service.dualrecord.VideoSide, DualShotMatrixDebugInfo>()
+        java.util.concurrent.ConcurrentHashMap<com.aritr.rova.service.dualrecord.VideoSide, DualShotMatrixDebugInfo>()
 
     private var aPositionLoc: Int = -1
     private var aUvLoc: Int = -1
@@ -213,7 +226,17 @@ internal class EglRouter(
         var viewportY: Int,
         var viewportW: Int,
         var viewportH: Int,
-    )
+    ) {
+        // Lifecycle guard for the per-target render lock (2026-05-20 ANR
+        // fix). removeTarget / release set this false — under
+        // synchronized(this) — immediately before eglDestroySurface;
+        // renderFrame skips a target whose `alive` is false. @Volatile so
+        // the renderFrame-thread read is current; the per-target monitor
+        // still orders draw-vs-destroy. A body property, not a
+        // constructor one → excluded from data-class equals/hashCode/copy.
+        @Volatile
+        var alive: Boolean = true
+    }
 
     val inputSurface: Surface
         get() = Surface(inputSurfaceTexture ?: error("EglRouter not initialised"))
@@ -378,12 +401,22 @@ internal class EglRouter(
      * from RecordScreen).
      */
     fun removeTarget(side: VideoSide?, kind: TargetKind) {
-        synchronized(targets) {
-            val target = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
+        // Drop from the list under the (fast) list lock, THEN destroy the
+        // EGL surface under the target's own monitor. renderFrame draws
+        // each target under synchronized(target) as well, so the destroy
+        // waits out at most one in-flight draw of THIS target — never the
+        // whole frame, and never behind a stalled swap on another target.
+        // 2026-05-20 ANR fix.
+        val target = synchronized(targets) {
+            val t = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
+            targets.remove(t)
+            t
+        }
+        if (side != null) debugInfoBySide.remove(side)
+        synchronized(target) {
+            target.alive = false
             try { EGL14.eglDestroySurface(eglDisplay!!, target.eglSurface) }
             catch (e: Throwable) { RovaLog.w("EglRouter.removeTarget eglDestroySurface", e) }
-            targets.remove(target)
-            if (side != null) debugInfoBySide.remove(side)
         }
     }
 
@@ -410,14 +443,21 @@ internal class EglRouter(
         val tex = inputSurfaceTexture ?: return
         // Diagnostic — frame entry timestamp (see perf* fields).
         val perfEntryNs = System.nanoTime()
-        // EGL context MUST be current before SurfaceTexture.updateTexImage:
-        // the call samples the OES texture binding, which lives on the
-        // current EGL context. Use the first target if available, else the
-        // 1x1 PBuffer from setup() so the call still has a valid current
-        // surface (Bug 3 of the 6.1b smoke-fix).
-        val anchor = if (targets.isNotEmpty()) targets[0].eglSurface else pbufferSurface
-        if (anchor === EGL14.EGL_NO_SURFACE) return
-        EGL14.eglMakeCurrent(eglDisplay!!, anchor, anchor, eglContext)
+        // Snapshot the target list under the list lock, then draw OUTSIDE
+        // it. renderFrame must NOT hold `targets` across the blocking
+        // eglSwapBuffers calls: a stalled encoder swap (back-pressure)
+        // would hold the lock for seconds and ANR the main thread the
+        // instant it calls addTarget/removeTarget. Per-target mutual
+        // exclusion below (synchronized(target) + RenderTarget.alive)
+        // still prevents removeTarget from destroying an EGL surface
+        // mid-draw. 2026-05-20 ANR fix — see the EglRouter class KDoc.
+        val snapshot = synchronized(targets) { ArrayList(targets) }
+        // EGL context MUST be current before SurfaceTexture.updateTexImage
+        // (the call samples the OES texture binding on the current
+        // context). Use the always-valid 1x1 pbuffer, NOT a target
+        // surface — a target may be concurrently destroyed by removeTarget.
+        if (pbufferSurface === EGL14.EGL_NO_SURFACE) return
+        EGL14.eglMakeCurrent(eglDisplay!!, pbufferSurface, pbufferSurface, eglContext)
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
         val perfTexEndNs = System.nanoTime()
@@ -427,12 +467,17 @@ internal class EglRouter(
         var frameEncSwapMaxNs = 0L
         var framePrevSwapMaxNs = 0L
 
-        synchronized(targets) {
-            targets.forEach { target ->
-                // Phase 6.1c — legacy CameraEffect Preview output (side=null,
-                // kind=PREVIEW) is inert: covered by DualPreviewZone visually,
-                // no draw needed.
-                if (target.side == null && target.kind == TargetKind.PREVIEW) return@forEach
+        for (target in snapshot) {
+            // Phase 6.1c — legacy CameraEffect Preview output (side=null,
+            // kind=PREVIEW) is inert: covered by DualPreviewZone visually,
+            // no draw needed.
+            if (target.side == null && target.kind == TargetKind.PREVIEW) continue
+            // Per-target monitor: removeTarget/release set `alive=false`
+            // and call eglDestroySurface under synchronized(target), so a
+            // draw never races a destroy. A blocked swap holds only THIS
+            // target's monitor — never the shared `targets` lock.
+            synchronized(target) {
+                if (!target.alive) return@synchronized
 
                 val perfDrawStartNs = System.nanoTime()
                 EGL14.eglMakeCurrent(eglDisplay!!, target.eglSurface, target.eglSurface, eglContext)
@@ -489,7 +534,8 @@ internal class EglRouter(
 
                 // Phase: render-architecture audit. Per-frame debug snapshot
                 // write — gated on enableMatrixSnapshots (default false → zero
-                // overhead). Inside the synchronized(targets) block already.
+                // overhead). debugInfoBySide is a ConcurrentHashMap, so this
+                // write is thread-safe outside the `targets` lock.
                 // Per-side map cap at 2; writes overwrite.
                 if (enableMatrixSnapshots && target.side != null) {
                     val sideAspectCropMatrix = FloatArray(16)
@@ -583,12 +629,22 @@ internal class EglRouter(
     }
 
     fun release() {
-        targets.forEach { t ->
-            try { EGL14.eglDestroySurface(eglDisplay!!, t.eglSurface) }
-            catch (e: Throwable) { RovaLog.w("EglRouter eglDestroySurface", e) }
+        // Snapshot + clear the list under the list lock, then destroy each
+        // surface under its own monitor — same draw/destroy ordering as
+        // removeTarget (2026-05-20 ANR fix).
+        val snapshot = synchronized(targets) {
+            val copy = ArrayList(targets)
+            targets.clear()
+            copy
         }
-        targets.clear()
         debugInfoBySide.clear()
+        snapshot.forEach { t ->
+            synchronized(t) {
+                t.alive = false
+                try { EGL14.eglDestroySurface(eglDisplay!!, t.eglSurface) }
+                catch (e: Throwable) { RovaLog.w("EglRouter eglDestroySurface", e) }
+            }
+        }
         try { inputSurfaceTexture?.release() } catch (e: Throwable) { RovaLog.w("EglRouter SurfaceTexture", e) }
         try { EGL14.eglMakeCurrent(eglDisplay!!, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
         catch (e: Throwable) { RovaLog.w("EglRouter eglMakeCurrent NO", e) }
