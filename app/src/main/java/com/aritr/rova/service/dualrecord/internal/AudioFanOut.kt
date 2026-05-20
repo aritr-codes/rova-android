@@ -87,7 +87,13 @@ internal class AudioFanOut(
     fun stop() {
         if (!running.compareAndSet(true, false)) return
         try { audioRecord.stop() } catch (e: Throwable) { RovaLog.w("AudioFanOut record stop", e) }
-        try { encoder.signalEndOfInputStream() } catch (e: Throwable) { RovaLog.w("AudioFanOut EOS", e) }
+        // No `encoder.signalEndOfInputStream()` here: that call is valid ONLY
+        // for Surface-input codecs, and this AAC encoder is buffer-fed
+        // (`configure(..., surface = null, ...)`) — it threw IllegalStateException
+        // on every stop(). EOS for a buffer-fed codec is the input buffer
+        // queued with BUFFER_FLAG_END_OF_STREAM; `captureLoop` already does
+        // that once `running` flips false (see its post-loop block). The
+        // join below waits for that EOS buffer to be queued.
         captureThread?.join(500L); captureThread = null
         drainThread?.join(500L); drainThread = null
         try { audioRecord.release() } catch (e: Throwable) { RovaLog.w("AudioFanOut record release", e) }

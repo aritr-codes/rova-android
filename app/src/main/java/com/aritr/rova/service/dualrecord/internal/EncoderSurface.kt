@@ -72,11 +72,18 @@ internal class EncoderSurface(
 
     fun release() {
         if (!running.compareAndSet(true, false)) return
+        // Teardown order is load-bearing. `running` is now false, so
+        // `drainLoop`'s `while (running.get())` exits — but the loop may be
+        // blocked inside `dequeueOutputBuffer` for up to DEQUEUE_TIMEOUT_US.
+        // Join it FIRST so that window drains; only then stop/release the
+        // codec. The previous order (stop → release → join) let the still-
+        // blocked drain call `dequeueOutputBuffer` on an already-stopped
+        // codec → IllegalStateException every teardown.
+        drainThread?.join(500L)
+        drainThread = null
         try { codec.stop() } catch (e: Throwable) { RovaLog.w("EncoderSurface ${side} stop", e) }
         try { codec.release() } catch (e: Throwable) { RovaLog.w("EncoderSurface ${side} release", e) }
         try { inputSurface.release() } catch (e: Throwable) { RovaLog.w("EncoderSurface ${side} surface", e) }
-        drainThread?.join(500L)
-        drainThread = null
     }
 
     private fun drainLoop() {
