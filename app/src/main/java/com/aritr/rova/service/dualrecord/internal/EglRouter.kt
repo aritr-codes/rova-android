@@ -87,18 +87,30 @@ internal enum class TargetKind { ENCODER, PREVIEW }
 internal class EglRouter(
     private val lensFacing: LensFacing,
     private val displayRotation: Int,
+    private val sensorOrientation: Int = 90,
+    private val useFirstPrinciplesRender: Boolean = false,
+    private val enableMatrixSnapshots: Boolean = false,
 ) {
 
     init {
         require(displayRotation in 0..3) {
             "displayRotation must be Surface.ROTATION_0..ROTATION_270 (0..3), was $displayRotation"
         }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
     }
 
-    private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
-    private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
+    // JVM-stub workaround: EGL14.EGL_NO_DISPLAY/CONTEXT/SURFACE return null
+    // under isReturnDefaultValues=true, causing NPE on non-nullable field init.
+    // Nullable types match the Java @Nullable annotation on the EGL sentinels;
+    // runtime behaviour is unchanged (setup() assigns real values before use).
+    // Per 6.1a Size-stub workaround precedent.
+    private var eglDisplay: EGLDisplay? = EGL14.EGL_NO_DISPLAY
+    private var eglContext: EGLContext? = EGL14.EGL_NO_CONTEXT
     private var eglConfig: EGLConfig? = null
-    private var pbufferSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    private var pbufferSurface: EGLSurface? = EGL14.EGL_NO_SURFACE
     private var inputTextureId: Int = 0
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var program: Int = 0
@@ -108,9 +120,34 @@ internal class EglRouter(
     private val finalMatrix = FloatArray(16)
     // Temp buffer for the 2-step matrix multiply:
     //   tmpMatrix   = texMatrix × mirrorMatrix
-    //   finalMatrix = cropMatrix × tmpMatrix
+    //   finalMatrix = uvTransform × tmpMatrix
     // Reused per-target to avoid per-frame allocation.
     private val tmpMatrix = FloatArray(16)
+
+    // Phase: render-architecture audit. Caller-owned scratch buffers for
+    // buildUvTransformV2. 4 pairwise-distinct length-16 arrays, allocated
+    // once at ctor, reused for every addTarget call. Per spec §2.2 + the
+    // multiplyMat4 no-alias contract (spec §2.4).
+    private val scratchA = FloatArray(16)
+    private val scratchB = FloatArray(16)
+    private val scratchC = FloatArray(16)
+    private val scratchD = FloatArray(16)
+
+    // Phase: render-architecture audit. Session-pinned component matrices
+    // for DualShotMatrixDebugInfo snapshots. Built once in setup() — texture
+    // normalization + display rotation depend only on ctor-pinned params, so
+    // they're cached. Per-side sideAspectCrop is read from target.uvTransform's
+    // composition at snapshot time (or recomputed; cheap).
+    private val cachedNormalizationMatrix = FloatArray(16)
+    private val cachedDisplayRotationMatrix = FloatArray(16)
+
+    // Phase: render-architecture audit. Per-side debug snapshot map.
+    // Written by renderFrame when enableMatrixSnapshots=true (Task 13).
+    // Read by debugSnapshot() under synchronized(targets). Size capped
+    // at 2 (PORTRAIT + LANDSCAPE) — writes overwrite. Cleared in
+    // release() and on removeTarget().
+    private val debugInfoBySide =
+        mutableMapOf<com.aritr.rova.service.dualrecord.VideoSide, DualShotMatrixDebugInfo>()
 
     private var aPositionLoc: Int = -1
     private var aUvLoc: Int = -1
@@ -132,7 +169,11 @@ internal class EglRouter(
         val eglSurface: EGLSurface,
         val width: Int,
         val height: Int,
-        val cropMatrix: FloatArray,
+        // RENAMED from cropMatrix per spec §2.5. Carries the full uvTransform
+        // composition (legacy: sideAspectCrop × displayRotationCorrection ×
+        // sideCorrection; V2: sideAspectCrop × displayRotationCorrection ×
+        // textureNormalization). Naming it cropMatrix invited regression.
+        val uvTransform: FloatArray,
         val mirrorMatrix: FloatArray,
         // Phase 6.1c — per-target aspect-fit viewport. Encoder targets
         // get viewport == full surface; preview targets letterbox the
@@ -173,7 +214,7 @@ internal class EglRouter(
         eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         require(eglDisplay !== EGL14.EGL_NO_DISPLAY) { "eglGetDisplay failed" }
         val version = IntArray(2)
-        require(EGL14.eglInitialize(eglDisplay, version, 0, version, 1)) { "eglInitialize failed" }
+        require(EGL14.eglInitialize(eglDisplay!!, version, 0, version, 1)) { "eglInitialize failed" }
 
         val configs = arrayOfNulls<EGLConfig>(1)
         val numConfigs = IntArray(1)
@@ -182,13 +223,13 @@ internal class EglRouter(
             EGL14.EGL_ALPHA_SIZE, 8, EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
             EGLExt.EGL_RECORDABLE_ANDROID, 1, EGL14.EGL_NONE,
         )
-        require(EGL14.eglChooseConfig(eglDisplay, attribs, 0, configs, 0, configs.size, numConfigs, 0)) {
+        require(EGL14.eglChooseConfig(eglDisplay!!, attribs, 0, configs, 0, configs.size, numConfigs, 0)) {
             "eglChooseConfig failed"
         }
         eglConfig = configs[0]
 
         val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
-        eglContext = EGL14.eglCreateContext(eglDisplay, eglConfig, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
+        eglContext = EGL14.eglCreateContext(eglDisplay!!, eglConfig, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
         require(eglContext !== EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
 
         // PBuffer surface kept so we can make-current even when no output
@@ -196,8 +237,8 @@ internal class EglRouter(
         // added — also used as the fallback current-surface in renderFrame
         // if no targets exist yet).
         val pbAttribs = intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE)
-        pbufferSurface = EGL14.eglCreatePbufferSurface(eglDisplay, eglConfig, pbAttribs, 0)
-        require(EGL14.eglMakeCurrent(eglDisplay, pbufferSurface, pbufferSurface, eglContext)) {
+        pbufferSurface = EGL14.eglCreatePbufferSurface(eglDisplay!!, eglConfig, pbAttribs, 0)
+        require(EGL14.eglMakeCurrent(eglDisplay!!, pbufferSurface, pbufferSurface, eglContext)) {
             "eglMakeCurrent failed"
         }
 
@@ -211,6 +252,12 @@ internal class EglRouter(
         inputTextureId = createOesTexture()
         inputSurfaceTexture = SurfaceTexture(inputTextureId)
         Matrix.setIdentityM(mvpMatrix, 0)
+
+        // Phase: render-architecture audit. Populate session-pinned debug
+        // snapshot caches. Cheap one-time cost; only meaningful when
+        // enableMatrixSnapshots is on.
+        AspectFitMath.buildTextureNormalization(sensorOrientation, cachedNormalizationMatrix)
+        AspectFitMath.buildDisplayRotationCorrection(displayRotation, cachedDisplayRotationMatrix)
     }
 
     fun setOnFrameAvailableListener(listener: SurfaceTexture.OnFrameAvailableListener) {
@@ -240,7 +287,7 @@ internal class EglRouter(
      */
     fun addTarget(side: VideoSide?, kind: TargetKind, surface: Surface, width: Int, height: Int) {
         val winAttribs = intArrayOf(EGL14.EGL_NONE)
-        val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, winAttribs, 0)
+        val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay!!, eglConfig, surface, winAttribs, 0)
         val crop = FloatArray(16)
         val viewport: IntArray
         if (side != null) {
@@ -249,7 +296,22 @@ internal class EglRouter(
             // side's content aspect inside the surface dims (encoder
             // surfaces are aspect-matched → full viewport; preview
             // TextureView surfaces letterbox).
-            AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+            if (useFirstPrinciplesRender) {
+                // V2 first-principles path — canonical UV transform from
+                // sideAspectCrop × displayRotationCorrection × textureNormalization.
+                // Active only when SharedPreferences pref.dev.useFirstPrinciplesRender
+                // is true AND BuildConfig.DEBUG (release short-circuits to false).
+                AspectFitMath.buildUvTransformV2(
+                    displayRotation, sensorOrientation, side,
+                    crop, scratchA, scratchB, scratchC, scratchD,
+                )
+            } else {
+                // Legacy path — buildCropMatrix with empirical +270° sideCorrection.
+                // Default for all callers. Bridge-tested against V2 at
+                // sensorOrientation=270 (see AspectFitMathBridgeTest).
+                @Suppress("DEPRECATION")
+                AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+            }
             val contentAspect = when (side) {
                 VideoSide.PORTRAIT -> 9f / 16f
                 VideoSide.LANDSCAPE -> 16f / 9f
@@ -271,7 +333,8 @@ internal class EglRouter(
         synchronized(targets) {
             targets.add(
                 RenderTarget(
-                    side, kind, surface, eglSurface, width, height, crop, mirror,
+                    side, kind, surface, eglSurface, width, height,
+                    uvTransform = crop, mirrorMatrix = mirror,
                     viewportX = viewport[0], viewportY = viewport[1],
                     viewportW = viewport[2], viewportH = viewport[3],
                 )
@@ -289,9 +352,29 @@ internal class EglRouter(
     fun removeTarget(side: VideoSide?, kind: TargetKind) {
         synchronized(targets) {
             val target = targets.firstOrNull { it.side == side && it.kind == kind } ?: return
-            try { EGL14.eglDestroySurface(eglDisplay, target.eglSurface) }
+            try { EGL14.eglDestroySurface(eglDisplay!!, target.eglSurface) }
             catch (e: Throwable) { RovaLog.w("EglRouter.removeTarget eglDestroySurface", e) }
             targets.remove(target)
+            if (side != null) debugInfoBySide.remove(side)
+        }
+    }
+
+    /**
+     * Phase: render-architecture audit. Returns the most recent
+     * DualShotMatrixDebugInfo for [side], or null if none has been written
+     * (e.g. enableMatrixSnapshots=false, or removeTarget cleared it, or
+     * renderFrame hasn't fired yet).
+     *
+     * Returns a defensive `.copy()` — caller's mutations don't reach the
+     * router's internal map. Read under the same lock as the writer
+     * (synchronized(targets) in renderFrame).
+     *
+     * Consumed by sub-project 2's debug overlay. Inert in this PR (no
+     * caller).
+     */
+    fun debugSnapshot(side: VideoSide): DualShotMatrixDebugInfo? {
+        synchronized(targets) {
+            return debugInfoBySide[side]?.copy()
         }
     }
 
@@ -304,7 +387,7 @@ internal class EglRouter(
         // surface (Bug 3 of the 6.1b smoke-fix).
         val anchor = if (targets.isNotEmpty()) targets[0].eglSurface else pbufferSurface
         if (anchor === EGL14.EGL_NO_SURFACE) return
-        EGL14.eglMakeCurrent(eglDisplay, anchor, anchor, eglContext)
+        EGL14.eglMakeCurrent(eglDisplay!!, anchor, anchor, eglContext)
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
 
@@ -315,7 +398,7 @@ internal class EglRouter(
                 // no draw needed.
                 if (target.side == null && target.kind == TargetKind.PREVIEW) return@forEach
 
-                EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)
+                EGL14.eglMakeCurrent(eglDisplay!!, target.eglSurface, target.eglSurface, eglContext)
                 // 1. Clear full surface with black — paints letterbox/pillar bars
                 //    for preview targets that letterbox; no visible effect on
                 //    encoder targets (full-viewport draw covers it).
@@ -329,11 +412,11 @@ internal class EglRouter(
                 GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
                 GLES20.glUniform1i(uTextureLoc, 0)
 
-                // uTexMatrix = cropMatrix × texMatrix × mirrorMatrix.
-                // cropMatrix is pinned at addTarget time (session-start); no
+                // uTexMatrix = uvTransform × texMatrix × mirrorMatrix.
+                // uvTransform is pinned at addTarget time (session-start); no
                 // per-frame recompute.
                 Matrix.multiplyMM(tmpMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
-                Matrix.multiplyMM(finalMatrix, 0, target.cropMatrix, 0, tmpMatrix, 0)
+                Matrix.multiplyMM(finalMatrix, 0, target.uvTransform, 0, tmpMatrix, 0)
                 GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
 
                 vertexBuffer.position(0)
@@ -349,29 +432,57 @@ internal class EglRouter(
 
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
+                // Phase: render-architecture audit. Per-frame debug snapshot
+                // write — gated on enableMatrixSnapshots (default false → zero
+                // overhead). Inside the synchronized(targets) block already.
+                // Per-side map cap at 2; writes overwrite.
+                if (enableMatrixSnapshots && target.side != null) {
+                    val sideAspectCropMatrix = FloatArray(16)
+                    AspectFitMath.buildSideAspectCrop(target.side, sideAspectCropMatrix)
+                    debugInfoBySide[target.side] = DualShotMatrixDebugInfo(
+                        side = target.side,
+                        sensorOrientation = sensorOrientation,
+                        displayRotation = displayRotation,
+                        lensFacing = lensFacing,
+                        texMatrix = texMatrix.copyOf(),
+                        normalizationMatrix = cachedNormalizationMatrix.copyOf(),
+                        displayRotationMatrix = cachedDisplayRotationMatrix.copyOf(),
+                        sideAspectCropMatrix = sideAspectCropMatrix,
+                        uvTransform = target.uvTransform.copyOf(),
+                        finalMatrix = finalMatrix.copyOf(),
+                        viewport = intArrayOf(
+                            target.viewportX, target.viewportY,
+                            target.viewportW, target.viewportH,
+                        ),
+                        encoderSize = target.width to target.height,
+                        timestampNs = System.nanoTime(),
+                    )
+                }
+
                 GLES20.glDisableVertexAttribArray(aPositionLoc)
                 GLES20.glDisableVertexAttribArray(aUvLoc)
-                EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+                EGL14.eglSwapBuffers(eglDisplay!!, target.eglSurface)
             }
         }
     }
 
     fun release() {
         targets.forEach { t ->
-            try { EGL14.eglDestroySurface(eglDisplay, t.eglSurface) }
+            try { EGL14.eglDestroySurface(eglDisplay!!, t.eglSurface) }
             catch (e: Throwable) { RovaLog.w("EglRouter eglDestroySurface", e) }
         }
         targets.clear()
+        debugInfoBySide.clear()
         try { inputSurfaceTexture?.release() } catch (e: Throwable) { RovaLog.w("EglRouter SurfaceTexture", e) }
-        try { EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
+        try { EGL14.eglMakeCurrent(eglDisplay!!, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
         catch (e: Throwable) { RovaLog.w("EglRouter eglMakeCurrent NO", e) }
         if (pbufferSurface !== EGL14.EGL_NO_SURFACE) {
-            try { EGL14.eglDestroySurface(eglDisplay, pbufferSurface) }
+            try { EGL14.eglDestroySurface(eglDisplay!!, pbufferSurface) }
             catch (e: Throwable) { RovaLog.w("EglRouter pbuffer", e) }
             pbufferSurface = EGL14.EGL_NO_SURFACE
         }
-        try { EGL14.eglDestroyContext(eglDisplay, eglContext) } catch (e: Throwable) { RovaLog.w("EglRouter context", e) }
-        try { EGL14.eglTerminate(eglDisplay) } catch (e: Throwable) { RovaLog.w("EglRouter terminate", e) }
+        try { EGL14.eglDestroyContext(eglDisplay!!, eglContext) } catch (e: Throwable) { RovaLog.w("EglRouter context", e) }
+        try { EGL14.eglTerminate(eglDisplay!!) } catch (e: Throwable) { RovaLog.w("EglRouter terminate", e) }
     }
 
     private fun createOesTexture(): Int {

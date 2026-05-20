@@ -55,6 +55,27 @@ data class DualVideoRecorderConfig(
     val displayRotation: Int,
     /** Encoder frame rate target; must be 15..60. */
     val fps: Int,
+    /**
+     * `CameraCharacteristics.SENSOR_ORIENTATION` for the active lens.
+     * Must be one of {0, 90, 180, 270}. Threaded into EglRouter for
+     * V2 first-principles UV transform; ignored by legacy path.
+     * Default 90: SAFE ASSUMPTION for portrait-natural phones (typical
+     * rear-camera mount). Caller should pass the actual queried value.
+     */
+    val sensorOrientation: Int = 90,
+    /**
+     * Hybrid render-path flag. When true, EglRouter.addTarget uses
+     * buildUvTransformV2; when false (default), uses legacy
+     * buildCropMatrix. Read from SharedPreferences in DEBUG builds
+     * only; forced false in release per BuildConfig.DEBUG short-circuit.
+     */
+    val useFirstPrinciplesRender: Boolean = false,
+    /**
+     * Debug snapshot flag. When true, EglRouter.renderFrame writes
+     * per-frame DualShotMatrixDebugInfo into a per-side map for
+     * sub-project 2 consumption. Default false — zero overhead.
+     */
+    val enableMatrixSnapshots: Boolean = false,
 ) {
     /** Derived view of the camera input dimensions as an [android.util.Size]. */
     val cameraInputSize: Size get() = Size(cameraInputWidth, cameraInputHeight)
@@ -93,6 +114,10 @@ data class DualVideoRecorderConfig(
         require(fps in 15..60) {
             "fps must be in 15..60, was $fps"
         }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
         ensureEncoderConfigComposable(this)
     }
 
@@ -121,6 +146,9 @@ data class DualVideoRecorderConfig(
             lensFacing: LensFacing,
             displayRotation: Int,
             fps: Int,
+            sensorOrientation: Int = 90,
+            useFirstPrinciplesRender: Boolean = false,
+            enableMatrixSnapshots: Boolean = false,
         ): DualVideoRecorderConfig = DualVideoRecorderConfig(
             cameraInputWidth = cameraInputSize.width,
             cameraInputHeight = cameraInputSize.height,
@@ -136,6 +164,9 @@ data class DualVideoRecorderConfig(
             lensFacing = lensFacing,
             displayRotation = displayRotation,
             fps = fps,
+            sensorOrientation = sensorOrientation,
+            useFirstPrinciplesRender = useFirstPrinciplesRender,
+            enableMatrixSnapshots = enableMatrixSnapshots,
         )
     }
 }

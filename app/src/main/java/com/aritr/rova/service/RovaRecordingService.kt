@@ -96,6 +96,42 @@ data class RovaServiceState(
     val isCameraActive: Boolean = false
 )
 
+/**
+ * Phase: render-architecture audit. Container for the two intrinsics
+ * queried from `CameraCharacteristics` at `setupDualCamera` time. Spec §2.6.
+ */
+internal data class DualCameraIntrinsics(
+    val size: android.util.Size,
+    val sensorOrientation: Int,
+)
+
+/**
+ * SAFE ASSUMPTION for portrait-natural phones (typical rear-camera mount).
+ * NOT universally correct — some tablets/foldables have 0 or 180. Hit only
+ * when CameraManager query fails or SENSOR_ORIENTATION is null
+ * (Camera2 spec guarantees non-null per CameraCharacteristics docs, but
+ * defensive).
+ */
+internal const val SENSOR_ORIENTATION_FALLBACK = 90
+
+/**
+ * Per spec §4.1 — RELEASE soft-fallback for OEM-bug SENSOR_ORIENTATION
+ * values. DEBUG ctor `require` in EglRouter will fail-fast on illegal
+ * values reaching it; RELEASE pre-sanitizes via this function to avoid
+ * camera-startup crash.
+ *
+ * Logs WARN on fallback so QA + crash analytics surface the OEM quirk.
+ */
+internal fun sanitizeSensorOrientation(raw: Int): Int = when (raw) {
+    0, 90, 180, 270 -> raw
+    else -> {
+        com.aritr.rova.utils.RovaLog.w(
+            "SENSOR_ORIENTATION out-of-spec ($raw); falling back to $SENSOR_ORIENTATION_FALLBACK"
+        )
+        SENSOR_ORIENTATION_FALLBACK
+    }
+}
+
 class RovaRecordingService : Service(), LifecycleOwner {
 
     private lateinit var lifecycleRegistry: LifecycleRegistry
@@ -1182,6 +1218,102 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * Phase: render-architecture audit (extends ADR-0009 query). Queries
+     * BOTH the device's preferred 4:3 source size AND SENSOR_ORIENTATION
+     * for the active lens, in a single CameraManager round-trip. Returns
+     * a [DualCameraIntrinsics] container. Defensive fallback on any
+     * failure step: `DualCameraIntrinsics(Size(1920, 1440), 90)`.
+     *
+     * Called once per setupDualCamera invocation; bypasses the CameraX-
+     * bound camera so the intrinsics are known BEFORE Preview.Builder.
+     *
+     * The fallback `sensorOrientation = 90` is the SAFE ASSUMPTION for
+     * portrait-natural phones (see [SENSOR_ORIENTATION_FALLBACK] KDoc).
+     */
+    private fun resolveDualCameraIntrinsics(): DualCameraIntrinsics {
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE)
+            as? android.hardware.camera2.CameraManager
+            ?: run {
+                RovaLog.w("resolveDualCameraIntrinsics: CameraManager unavailable — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
+            }
+        val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+            android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+        } else {
+            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+        }
+        return try {
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id).get(
+                    android.hardware.camera2.CameraCharacteristics.LENS_FACING
+                ) == lensFacing
+            } ?: run {
+                RovaLog.w("resolveDualCameraIntrinsics: no cameraId for lensFacing=$lensFacing — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
+            }
+            val chars = cameraManager.getCameraCharacteristics(cameraId)
+            val map = chars.get(
+                android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+            ) ?: run {
+                RovaLog.w("resolveDualCameraIntrinsics: null StreamConfigurationMap — fallback")
+                return DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
+            }
+            val rawSensorOrientation = chars.get(
+                android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION
+            ) ?: SENSOR_ORIENTATION_FALLBACK
+            val sanitized = sanitizeSensorOrientation(rawSensorOrientation)
+            val chosenSize = com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver
+                .resolveDualCameraSize(map)
+            RovaLog.d(
+                "resolveDualCameraIntrinsics: size=${chosenSize.width}×${chosenSize.height} " +
+                    "sensorOrientation=$sanitized (raw=$rawSensorOrientation, lensFacing=$lensFacing)"
+            )
+            DualCameraIntrinsics(chosenSize, sanitized)
+        } catch (e: Exception) {
+            RovaLog.w("resolveDualCameraIntrinsics: $e — fallback")
+            DualCameraIntrinsics(android.util.Size(1920, 1440), SENSOR_ORIENTATION_FALLBACK)
+        }
+    }
+
+    /**
+     * Phase: render-architecture audit. DEBUG-only SharedPreferences read
+     * for the first-principles render-path flag. RELEASE returns false
+     * unconditionally (BuildConfig.DEBUG short-circuit).
+     *
+     * ClassCastException-safe: if a corrupt prefs file has a non-boolean
+     * value at the key, swallow + WARN + return false (spec §4.1 row #3).
+     *
+     * Per spec §1.6: prefs key = "pref.dev.useFirstPrinciplesRender",
+     * prefs file = "rova_dev_flags", default = false.
+     */
+    private fun readUseFirstPrinciplesRender(): Boolean {
+        if (!com.aritr.rova.BuildConfig.DEBUG) return false
+        return try {
+            getSharedPreferences("rova_dev_flags", Context.MODE_PRIVATE)
+                .getBoolean("pref.dev.useFirstPrinciplesRender", false)
+        } catch (e: ClassCastException) {
+            RovaLog.w("useFirstPrinciplesRender prefs type mismatch; defaulting false", e)
+            false
+        }
+    }
+
+    /**
+     * Phase: render-architecture audit. DEBUG-only SharedPreferences read
+     * for the debug snapshot flag. Same contract + safety as
+     * [readUseFirstPrinciplesRender].
+     */
+    private fun readEnableMatrixSnapshots(): Boolean {
+        if (!com.aritr.rova.BuildConfig.DEBUG) return false
+        return try {
+            getSharedPreferences("rova_dev_flags", Context.MODE_PRIVATE)
+                .getBoolean("pref.dev.enableMatrixSnapshots", false)
+        } catch (e: ClassCastException) {
+            RovaLog.w("enableMatrixSnapshots prefs type mismatch; defaulting false", e)
+            false
+        }
+    }
+
     private suspend fun setupDualCamera() {
         setupMutex.withLock {
             if (_serviceState.value.isCameraActive) {
@@ -1210,11 +1342,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 com.aritr.rova.service.dualrecord.LensFacing.BACK
             }
 
+            // Render-audit (Task 11) — intrinsics + debug-flag reads MUST happen
+            // before config construction so cameraInputSize/sensorOrientation/flags
+            // are all available. Single CameraManager round-trip (resolveDualCamera-
+            // Intrinsics already coalesces the size + sensorOrientation query).
+            val intrinsics = resolveDualCameraIntrinsics()
+            val cameraInputSize = intrinsics.size
+            val useFirstPrinciplesRender = readUseFirstPrinciplesRender()
+            val enableMatrixSnapshots = readEnableMatrixSnapshots()
+
             // 6.1b consumer config — FHD-locked for v1; 6.1c may lookup BitrateTable per resolution.
             val portraitSize = android.util.Size(1080, 1920)
             val landscapeSize = android.util.Size(1920, 1080)
             val config = com.aritr.rova.service.dualrecord.DualVideoRecorderConfig(
-                cameraInputSize = android.util.Size(1920, 1080),
+                cameraInputSize = intrinsics.size,
                 portraitOutputSize = portraitSize,
                 landscapeOutputSize = landscapeSize,
                 portraitBitrate = 8_000_000,
@@ -1224,8 +1365,27 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 audioSampleRate = 48_000,
                 lensFacing = lensFacing,
                 displayRotation = displayRotation,
-                fps = 30
+                fps = 30,
+                sensorOrientation = intrinsics.sensorOrientation,
+                useFirstPrinciplesRender = useFirstPrinciplesRender,
+                enableMatrixSnapshots = enableMatrixSnapshots,
             )
+
+            // Spec §4.4 — QA-correlation log line at session-start. Flag-state
+            // is observable in logcat regardless of render-path active. Same
+            // line in release (both flags forced false) confirms by absence
+            // that observed behavior is legacy + stable.
+            // NOTE: RovaLog has no .i() — use .d() (same D-deviation as Phase 6.1a).
+            RovaLog.d(
+                "DualShot renderer mode: " +
+                    "path=${if (config.useFirstPrinciplesRender) "v2-first-principles" else "legacy"}, " +
+                    "snapshots=${if (config.enableMatrixSnapshots) "ENABLED" else "disabled"}, " +
+                    "sensorOrientation=${config.sensorOrientation}, " +
+                    "displayRotation=${config.displayRotation}, " +
+                    "lensFacing=${config.lensFacing}, " +
+                    "sourceSize=${config.cameraInputWidth}x${config.cameraInputHeight}"
+            )
+
             currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
             // Phase 6.1c — replay any UI-registered preview surfaces onto
             // the new recorder. Survives camera flip / mode change without
@@ -1239,23 +1399,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 currentDualRecorder?.attachPreviewInput(side, triple.first, triple.second, triple.third)
             }
 
-            // Phase 6.1c — force landscape 1920×1080 consumer for full
-            // sensor FOV. Without this, CameraX picks portrait dims
-            // based on PreviewView size and center-crops the sensor to
-            // 9:16 before our shader sees it (loses ~44% horizontal FOV
-            // → both encoder outputs forced to share a portrait crop).
+            // ADR-0009 (PORTRAIT-stretch architectural fix) — pick the
+            // largest 4:3 landscape source mode the device exposes
+            // (PORTRAIT pixel-perfect when shortEdge ≥ 1920; PORTRAIT
+            // upscales otherwise — both no-stretch, no-bars). The 4:3
+            // source feeds AspectFitMath.buildSideAspectCrop's re-derived
+            // per-side crops (PORTRAIT pivot-scale(27/64, 1, 1) +
+            // LANDSCAPE pivot-scale(1, 3/4, 1) — see ADR-0009). Pre-fix
+            // this block forced 1920×1080 (16:9) to dodge CameraX's
+            // ~44% FOV center-crop default; the 4:3 strategy now dodges
+            // it differently while also giving PORTRAIT a true 9:16
+            // crop instead of a 1:1 square stretched into 9:16.
+            //
             // setTargetRotation(ROTATION_0) keeps the camera producing
-            // sensor-native landscape — we own rotation correction in
-            // the EglRouter/AspectFitMath pipeline.
+            // sensor-native landscape orientation — we own rotation
+            // correction in the EglRouter/AspectFitMath pipeline.
             val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
                 .setResolutionStrategy(
                     androidx.camera.core.resolutionselector.ResolutionStrategy(
-                        android.util.Size(1920, 1080),
+                        cameraInputSize,
                         androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
                     )
                 )
                 .setAspectRatioStrategy(
-                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                    androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
                 )
                 .build()
             preview = Preview.Builder()
