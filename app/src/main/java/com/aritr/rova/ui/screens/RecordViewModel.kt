@@ -45,6 +45,21 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val serviceState: StateFlow<RovaServiceState> = _serviceState.asStateFlow()
     private var pendingSurfaceProvider: Preview.SurfaceProvider? = null
 
+    // Cold-start replay buffer for the P+L dual-preview surfaces. Mirrors
+    // [pendingSurfaceProvider]: the DualPreviewZone TextureViews can fire
+    // their one-shot onSurfaceTextureAvailable BEFORE the ServiceConnection
+    // completes, at which point [attachDualPreview]'s `serviceBinder?` is
+    // null and the registration would be lost — the TextureView listener
+    // never re-fires, so the EglRouter never receives the preview targets
+    // and both zones stay black until a mode-toggle re-mounts the zone.
+    // Buffered here and replayed in onServiceConnected. Keyed by side so a
+    // re-register (size change) cleanly replaces the prior entry.
+    // Main-thread only — same single-threaded assumption as
+    // [pendingSurfaceProvider] (TextureView callbacks and onServiceConnected
+    // are all delivered on the main thread).
+    private val pendingDualPreviews =
+        mutableMapOf<com.aritr.rova.service.dualrecord.VideoSide, Triple<android.view.Surface, Int, Int>>()
+
     // A2: ServiceConnection managed here, not in the Composable
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -52,6 +67,14 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
             serviceBinder = localBinder
             // Apply any surface provider that was set before the service connected
             pendingSurfaceProvider?.let { localBinder.getService().setSurfaceProvider(it) }
+            // Replay any P+L dual-preview surfaces registered before the
+            // service bound (cold-start race — see [pendingDualPreviews]).
+            // Must precede startCameraPreview() so the surfaces are already
+            // in the service's pendingPreviewSurfaces buffer when
+            // setupDualCamera builds the recorder and replays them onto it.
+            pendingDualPreviews.forEach { (side, t) ->
+                localBinder.getService().attachDualPreview(side, t.first, t.second, t.third)
+            }
             localBinder.getService().startCameraPreview()
             // Collect from the service instance's StateFlow
             serviceStateJob?.cancel()
@@ -199,8 +222,11 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Phase 6.1c — DualPreviewZone TextureView attached. Forwards to
-     * the service; no VM state held (service is the source of truth).
+     * Phase 6.1c — DualPreviewZone TextureView attached. Buffers the
+     * surface in [pendingDualPreviews] AND forwards to the service if it
+     * is already bound. The buffer covers the cold-start race where the
+     * TextureView becomes available before the ServiceConnection
+     * completes; onServiceConnected replays the buffer.
      */
     fun attachDualPreview(
         side: com.aritr.rova.service.dualrecord.VideoSide,
@@ -208,13 +234,17 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         width: Int,
         height: Int,
     ) {
+        pendingDualPreviews[side] = Triple(surface, width, height)
         serviceBinder?.getService()?.attachDualPreview(side, surface, width, height)
     }
 
     /**
-     * Phase 6.1c — DualPreviewZone TextureView detached.
+     * Phase 6.1c — DualPreviewZone TextureView detached. Drops the
+     * buffered surface so a later onServiceConnected does not replay a
+     * dead Surface, and tells the service to remove its target.
      */
     fun detachDualPreview(side: com.aritr.rova.service.dualrecord.VideoSide) {
+        pendingDualPreviews.remove(side)
         serviceBinder?.getService()?.detachDualPreview(side)
     }
 
