@@ -124,6 +124,14 @@ internal class EglRouter(
     // Reused per-target to avoid per-frame allocation.
     private val tmpMatrix = FloatArray(16)
 
+    // Diagnostic — sides whose GL matrices have already been logged. The
+    // recorded DualShot files show an aspect deformation that cannot come
+    // from buildSideAspectCrop alone (both sides share the same stretch
+    // formula), so the per-side texMatrix / uvTransform / finalMatrix must
+    // be dumped to diagnose objectively rather than by eyeballing frames.
+    // renderFrame logs each side once on its first drawn frame.
+    private val diagLoggedSides = mutableSetOf<VideoSide>()
+
     // Phase: render-architecture audit. Caller-owned scratch buffers for
     // buildUvTransformV2. 4 pairwise-distinct length-16 arrays, allocated
     // once at ctor, reused for every addTarget call. Per spec §2.2 + the
@@ -418,6 +426,24 @@ internal class EglRouter(
                 Matrix.multiplyMM(tmpMatrix, 0, texMatrix, 0, target.mirrorMatrix, 0)
                 Matrix.multiplyMM(finalMatrix, 0, target.uvTransform, 0, tmpMatrix, 0)
                 GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, finalMatrix, 0)
+
+                // Diagnostic — one-time per-side dump of the actual GL
+                // matrices. finalMatrix maps encoder UV → OES sampling UV;
+                // from it the sampled-region aspect (and therefore the
+                // exact stretch) is computed objectively. texMatrix is
+                // CameraX's SurfaceTexture transform — the suspected
+                // source of the deformation. Logged once per side.
+                if (target.side != null && diagLoggedSides.add(target.side)) {
+                    RovaLog.d(
+                        "EglRouter diag side=${target.side} " +
+                            "encoder=${target.width}x${target.height} " +
+                            "viewport=[${target.viewportX},${target.viewportY}," +
+                            "${target.viewportW},${target.viewportH}] " +
+                            "texMatrix=[${texMatrix.joinToString(",")}] " +
+                            "uvTransform=[${target.uvTransform.joinToString(",")}] " +
+                            "finalMatrix=[${finalMatrix.joinToString(",")}]"
+                    )
+                }
 
                 vertexBuffer.position(0)
                 GLES20.glEnableVertexAttribArray(aPositionLoc)
