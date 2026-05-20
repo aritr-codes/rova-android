@@ -88,7 +88,7 @@ class AspectFitMathTest {
     // ─── sideAspectCrop tests (Task 2) ─────────────────────────────
 
     @Test
-    fun `buildSideAspectCrop PORTRAIT matches 4 to 3 source pivot-scale 27 over 64`() {
+    fun `buildSideAspectCrop PORTRAIT canonical frame matches pivot-scale 27 over 64`() {
         // Phase: 4:3-source fix (PORTRAIT-stretch). Pinned regression-lock —
         // asserts the exact 16-element column-major matrix matches
         // pivot-scale(27/64, 1, 1) around (0.5, 0.5).
@@ -97,10 +97,14 @@ class AspectFitMathTest {
         //   col 0 = (27/64, 0, 0, 0)
         //   col 3 = (0.5 - 0.5*27/64, 0, 0, 1) = (37/128, 0, 0, 1)
         //
+        // sensorOrientation=0 → canonical (non-axis-swapped) frame; PORTRAIT
+        // crops the U/horizontal axis. The 90°/270° axis-swapped case (every
+        // real phone camera) is pinned separately below.
+        //
         // If this fails, the source-aspect constant in
         // [AspectFitMath.buildSideAspectCrop] PORTRAIT branch has drifted.
         val m = FloatArray(16)
-        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, m)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 0, m)
 
         val s = 27f / 64f
         val expected = floatArrayOf(
@@ -124,7 +128,7 @@ class AspectFitMathTest {
     }
 
     @Test
-    fun `buildSideAspectCrop LANDSCAPE matches 4 to 3 source pivot-scale 1 by 3 over 4`() {
+    fun `buildSideAspectCrop LANDSCAPE canonical frame matches pivot-scale 1 by 3 over 4`() {
         // Phase: 4:3-source fix (PORTRAIT-stretch). Pinned regression-lock —
         // asserts the exact 16-element column-major matrix matches
         // pivot-scale(1, 3/4, 1) around (0.5, 0.5).
@@ -133,15 +137,14 @@ class AspectFitMathTest {
         //   col 1 = (0, 3/4, 0, 0)
         //   col 3 = (0, 0.5 - 0.5*3/4, 0, 1) = (0, 1/8, 0, 1)
         //
-        // Pre-4:3-source fix this branch was identity (16:9 source flowed
-        // straight into the 16:9 encoder pixel-perfect). After the fix the
-        // 4:3 source is center-cropped top+bottom — LANDSCAPE accepts a
-        // 1.33× downscale as the documented tradeoff (ADR-0009).
+        // sensorOrientation=0 → canonical (non-axis-swapped) frame; LANDSCAPE
+        // crops the V/vertical axis. The 90°/270° axis-swapped case is pinned
+        // separately below.
         //
         // If this fails, the source-aspect constant in
         // [AspectFitMath.buildSideAspectCrop] LANDSCAPE branch has drifted.
         val m = FloatArray(16)
-        AspectFitMath.buildSideAspectCrop(VideoSide.LANDSCAPE, m)
+        AspectFitMath.buildSideAspectCrop(VideoSide.LANDSCAPE, 0, m)
 
         val s = 3f / 4f
         val expected = floatArrayOf(
@@ -151,6 +154,78 @@ class AspectFitMathTest {
             0f,  0.5f - 0.5f * s, 0f, 1f,   // col 3
         )
         assertArrayEquals(expected, m, 1e-6f)
+    }
+
+    @Test
+    fun `buildSideAspectCrop PORTRAIT at sensorOrientation 90 swaps to V-axis pivot-scale 3 over 4`() {
+        // 2026-05-20 stretch fix — regression-lock for the ACTIVE on-device
+        // path. Every standard phone camera has SENSOR_ORIENTATION 90 (rear)
+        // or 270 (front); the OES texMatrix then swaps U<->V, so PORTRAIT's
+        // crop must land on the V axis. The transform is geometrically the
+        // canonical-frame LANDSCAPE crop = pivot-scale(1, 3/4, 1).
+        //
+        // Pre-fix the PORTRAIT branch scaled U by 27/64 here → the recorded
+        // file sampled a 16:9 region into a 9:16 encoder = 3.16× vertical
+        // stretch (Samsung SM-A176B smoke, 2026-05-20).
+        val m = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 90, m)
+
+        val s = 3f / 4f
+        val expected = floatArrayOf(
+            1f,  0f,  0f,  0f,   // col 0
+            0f,  s,   0f,  0f,   // col 1
+            0f,  0f,  1f,  0f,   // col 2
+            0f,  0.5f - 0.5f * s, 0f, 1f,   // col 3
+        )
+        assertArrayEquals(expected, m, 1e-6f)
+    }
+
+    @Test
+    fun `buildSideAspectCrop LANDSCAPE at sensorOrientation 90 swaps to U-axis pivot-scale 27 over 64`() {
+        // 2026-05-20 stretch fix — regression-lock. On the axis-swapped frame
+        // LANDSCAPE's crop lands on the U axis: pivot-scale(27/64, 1, 1), the
+        // canonical-frame PORTRAIT crop. Pre-fix LANDSCAPE scaled V by 3/4
+        // here → 3.16× vertical squish.
+        val m = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.LANDSCAPE, 90, m)
+
+        val s = 27f / 64f
+        val expected = floatArrayOf(
+            s,   0f,  0f,  0f,   // col 0
+            0f,  1f,  0f,  0f,   // col 1
+            0f,  0f,  1f,  0f,   // col 2
+            0.5f - 0.5f * s, 0f, 0f, 1f,   // col 3
+        )
+        assertArrayEquals(expected, m, 1e-6f)
+    }
+
+    @Test
+    fun `buildSideAspectCrop sensorOrientation 270 axis-swaps same as 90`() {
+        // 270° (front camera) also satisfies `% 180 != 0` → axis-swapped,
+        // identical to the 90° case. Guards the `% 180` predicate.
+        val p90 = FloatArray(16); val p270 = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 90, p90)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 270, p270)
+        assertArrayEquals(p90, p270, 1e-6f)
+    }
+
+    @Test
+    fun `buildSideAspectCrop sensorOrientation 180 stays canonical like 0`() {
+        // 180° satisfies `% 180 == 0` → NOT axis-swapped, identical to 0°.
+        val p0 = FloatArray(16); val p180 = FloatArray(16)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 0, p0)
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 180, p180)
+        assertArrayEquals(p0, p180, 1e-6f)
+    }
+
+    @Test
+    fun `buildSideAspectCrop rejects illegal sensorOrientation`() {
+        runCatching { AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 45, FloatArray(16)) }.let {
+            assertTrue("expected throw on 45", it.isFailure)
+        }
+        runCatching { AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, -90, FloatArray(16)) }.let {
+            assertTrue("expected throw on -90", it.isFailure)
+        }
     }
 
     // ─── displayRotationCorrection tests ───────────────────────────
@@ -201,8 +276,12 @@ class AspectFitMathTest {
         //   R(+90° pivot) × R(+270° pivot) = R(+360° pivot) = identity
         //   So cropMatrix collapses to pivot-scale(s, 1, 1) alone where
         //   s = (9/16) / (4/3) = 27/64 (ADR-0009 4:3-source fix).
+        // sensorOrientation=0 → canonical frame; the composition logic under
+        // test (displayRotationCorrection × sideCorrection) is independent of
+        // sensorOrientation. The axis-swap is pinned in the buildSideAspectCrop
+        // tests above.
         val m = FloatArray(16)
-        AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, m)
+        AspectFitMath.buildCropMatrix(0, 0, VideoSide.PORTRAIT, m)
 
         // Pivot (0.5, 0.5) is invariant.
         val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
@@ -232,7 +311,7 @@ class AspectFitMathTest {
         // R(+270° pivot) maps (u, v) → (v, 1-u) in GL y-up convention.
         // Then pivot-scale(1, 3/4, 1) maps (x, y) → (x, 0.5 + (3/4)*(y - 0.5)).
         val m = FloatArray(16)
-        AspectFitMath.buildCropMatrix(1, VideoSide.LANDSCAPE, m)
+        AspectFitMath.buildCropMatrix(1, 0, VideoSide.LANDSCAPE, m)
 
         // Pivot (0.5, 0.5) is invariant under both ops.
         val pivot = applyMat4(m, floatArrayOf(0.5f, 0.5f, 0f, 1f))
@@ -249,7 +328,7 @@ class AspectFitMathTest {
 
     @Test
     fun `buildCropMatrix output length check`() {
-        runCatching { AspectFitMath.buildCropMatrix(0, VideoSide.PORTRAIT, FloatArray(15)) }.let {
+        runCatching { AspectFitMath.buildCropMatrix(0, 0, VideoSide.PORTRAIT, FloatArray(15)) }.let {
             assertTrue("expected throw on length 15 array", it.isFailure)
         }
     }

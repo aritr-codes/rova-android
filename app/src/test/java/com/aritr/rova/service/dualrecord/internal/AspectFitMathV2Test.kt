@@ -186,7 +186,9 @@ class AspectFitMathV2Test {
 
         // Manually recompute via the same helpers — verify equality.
         val crop = FloatArray(16); val rot = FloatArray(16); val norm = FloatArray(16)
-        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, crop)
+        // sensorOrientation=90 — must match the buildUvTransformV2 call above;
+        // buildSideAspectCrop is sensorOrientation-aware (2026-05-20 axis-swap).
+        AspectFitMath.buildSideAspectCrop(VideoSide.PORTRAIT, 90, crop)
         AspectFitMath.buildDisplayRotationCorrection(0, rot)
         AspectFitMath.buildTextureNormalization(90, norm)
         val rotTimesNorm = FloatArray(16)

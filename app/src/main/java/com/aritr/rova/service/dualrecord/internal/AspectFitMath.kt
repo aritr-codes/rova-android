@@ -58,16 +58,34 @@ internal object AspectFitMath {
      * `ResolutionSelector`). If the source aspect ever changes, both
      * branches below must be re-derived in lockstep.
      *
-     *  - [VideoSide.PORTRAIT]: pivot-scale around (0.5, 0.5) by
-     *    `((9/16) / (4/3), 1, 1) = (27/64, 1, 1)` — center-crop a vertical
-     *    9:16 column from a 4:3 source. Fills the 1080×1920 PORTRAIT
-     *    encoder with no stretch and no bars.
-     *  - [VideoSide.LANDSCAPE]: pivot-scale around (0.5, 0.5) by
-     *    `(1, (4/3) / (16/9), 1) = (1, 3/4, 1)` — center-crop top+bottom
-     *    of a 4:3 source to a 16:9 strip. Fills the 1920×1080 LANDSCAPE
-     *    encoder with no stretch and no bars; accepts a 1.33× downscale.
+     * **Axis-swap — the 2026-05-20 stretch fix.** This crop composes AFTER
+     * the OES `texMatrix`: [EglRouter.renderFrame] builds
+     * `finalMatrix = uvTransform × texMatrix × mirrorMatrix`, so the crop
+     * operates on `texMatrix`'s output, NOT on raw encoder UV. For a camera
+     * whose `SENSOR_ORIENTATION` is 90° or 270° — every standard phone
+     * camera — `texMatrix` is a reflection that SWAPS the U and V axes
+     * (measured on a Samsung SM-A176B, 2026-05-20:
+     * `texMatrix: (u,v) → (1-v, 1-u)`). A crop authored for the canonical
+     * X=horizontal / Y=vertical frame then lands on the wrong axis — the
+     * cause of the PORTRAIT-pinched / LANDSCAPE-squished 3.16× stretch in
+     * the recorded DualShot files. When [sensorOrientation] is 90 or 270
+     * the crop is therefore applied to the OTHER axis, which is
+     * geometrically identical to running the other side's branch (see
+     * `effectiveSide` below).
+     *
+     *  - canonical frame (sensorOrientation 0/180):
+     *     - [VideoSide.PORTRAIT]: pivot-scale (0.5,0.5) by
+     *       `((9/16)/(4/3), 1, 1) = (27/64, 1, 1)` — crop a vertical 9:16
+     *       column from the wide 4:3 source.
+     *     - [VideoSide.LANDSCAPE]: pivot-scale (0.5,0.5) by
+     *       `(1, (4/3)/(16/9), 1) = (1, 3/4, 1)` — crop top+bottom of the
+     *       4:3 source to a 16:9 strip (accepts a 1.33× downscale).
+     *  - axis-swapped frame (sensorOrientation 90/270): the two branches
+     *    exchange — PORTRAIT scales V by 3/4, LANDSCAPE scales U by 27/64.
+     *    Each side still fills its encoder with no stretch and no bars.
      *
      * `out` must be a length-16 float array; contents are overwritten.
+     * [sensorOrientation] must be one of 0/90/180/270.
      *
      * Phase 6.1c D-deviation from plan Task 2 (preserved): inline pure-
      * Kotlin mat4 math (no `android.opengl.Matrix.*`) per spec §5.4 "no
@@ -79,21 +97,34 @@ internal object AspectFitMath {
      * See `docs/adr/0009-dualshot-4-3-source-aspect.md` for the rationale
      * behind the 4:3 source-aspect decision and the rejected alternatives.
      */
-    fun buildSideAspectCrop(side: VideoSide, out: FloatArray) {
+    fun buildSideAspectCrop(side: VideoSide, sensorOrientation: Int, out: FloatArray) {
         require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
         // Identity baseline.
         for (i in 0..15) out[i] = 0f
         out[0] = 1f; out[5] = 1f; out[10] = 1f; out[15] = 1f
-        when (side) {
+        // texMatrix swaps U<->V for 90°/270° sensors (the universal phone-
+        // camera case). The crop composes after texMatrix, so on a swapped
+        // frame the transform that fills a PORTRAIT encoder is geometrically
+        // the LANDSCAPE crop and vice versa — see the KDoc axis-swap note.
+        val axisSwapped = sensorOrientation % 180 != 0
+        val effectiveSide = if (axisSwapped) {
+            when (side) {
+                VideoSide.PORTRAIT -> VideoSide.LANDSCAPE
+                VideoSide.LANDSCAPE -> VideoSide.PORTRAIT
+            }
+        } else {
+            side
+        }
+        when (effectiveSide) {
             VideoSide.LANDSCAPE -> {
                 // Pivot-scale around (0.5, 0.5) by (1, (4/3) / (16/9), 1) =
-                // (1, 3/4, 1). Center-crops top+bottom of a 4:3 source to a
-                // 16:9 strip — fills the 1920×1080 LANDSCAPE encoder with no
-                // stretch and no bars. Pre-4:3-source fix this branch was
-                // identity (16:9 source flowed straight to the 16:9 encoder
-                // pixel-perfect). The 4:3-source fix accepts a 1.33×
-                // downscale on LANDSCAPE as the documented tradeoff vs the
-                // rejected dual-capture-session alternative — see ADR-0009.
+                // (1, 3/4, 1) — scales the V (vertical) axis. Crops a 4:3
+                // source to a 16:9 strip in the canonical frame; on a swapped
+                // frame this is the PORTRAIT side's crop.
                 //
                 // Column-major closed form:
                 //   col 1 = (0, 3/4, 0, 0)
@@ -104,11 +135,9 @@ internal object AspectFitMath {
             }
             VideoSide.PORTRAIT -> {
                 // Pivot-scale around (0.5, 0.5) by ((9/16) / (4/3), 1, 1) =
-                // (27/64, 1, 1). Center-crops a vertical 9:16 column from a
-                // 4:3 source — fills the 1080×1920 PORTRAIT encoder with no
-                // stretch and no bars. Pre-4:3-source fix this branch sampled
-                // 9/16 of a 16:9 source = a 1:1 square (stretched 1.78× into
-                // the 9:16 encoder — the bug ADR-0009 fixes).
+                // (27/64, 1, 1) — scales the U (horizontal) axis. Crops a 4:3
+                // source to a 9:16 column in the canonical frame; on a swapped
+                // frame this is the LANDSCAPE side's crop.
                 //
                 // Column-major closed form:
                 //   col 0 = (27/64, 0, 0, 0)
@@ -238,12 +267,15 @@ internal object AspectFitMath {
             "docs/superpowers/specs/2026-05-18-render-architecture-audit-design.md §5.5 retirement plan.",
         ReplaceWith("buildUvTransformV2(displayRotation, sensorOrientation, side, out, scratchA, scratchB, scratchC, scratchD)"),
     )
-    fun buildCropMatrix(displayRotation: Int, side: VideoSide, out: FloatArray) {
+    fun buildCropMatrix(displayRotation: Int, sensorOrientation: Int, side: VideoSide, out: FloatArray) {
         require(out.size == 16) { "out must be length 16, was ${out.size}" }
         val rot = FloatArray(16)
         val crop = FloatArray(16)
         buildDisplayRotationCorrection(displayRotation, rot)
-        buildSideAspectCrop(side, crop)
+        // 2026-05-20 stretch fix — sideAspectCrop is sensorOrientation-aware:
+        // the OES texMatrix swaps U<->V for 90°/270° sensors, so the crop
+        // axis depends on it. See AspectFitMath.buildSideAspectCrop KDoc.
+        buildSideAspectCrop(side, sensorOrientation, crop)
 
         // Phase 6.1c on-device smoke-fix series (Samsung SM-A176B, 2026-05-17):
         //
@@ -354,7 +386,7 @@ internal object AspectFitMath {
         require(out !== scratchC) { "out must not alias scratchC" }
         require(out !== scratchD) { "out must not alias scratchD" }
 
-        buildSideAspectCrop(side, scratchA)                       // scratchA = sideAspectCrop
+        buildSideAspectCrop(side, sensorOrientation, scratchA)    // scratchA = sideAspectCrop
         buildDisplayRotationCorrection(displayRotation, scratchB) // scratchB = displayRotationCorrection
         buildTextureNormalization(sensorOrientation, scratchC)    // scratchC = textureNormalization
         multiplyMat4(scratchD, scratchB, scratchC)                // scratchD = rotTimesNorm

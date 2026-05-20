@@ -73,7 +73,12 @@ class AspectFitMathBridgeTest(
     @Test
     fun `V2 uvTransform epsilon-equals legacy buildCropMatrix`() {
         val legacy = FloatArray(16)
-        AspectFitMath.buildCropMatrix(displayRotation, side, legacy)
+        // buildCropMatrix is now sensorOrientation-aware (2026-05-20 axis-swap
+        // fix) — buildSideAspectCrop's crop axis depends on it. Pass the same
+        // sensorOrientation as the V2 call below so the shared sideAspectCrop
+        // factor is identical; the bridge then still isolates the
+        // sideCorrection-vs-textureNormalization equivalence at so=270.
+        AspectFitMath.buildCropMatrix(displayRotation, sensorOrientation, side, legacy)
 
         val v2 = FloatArray(16)
         val a = FloatArray(16); val b = FloatArray(16)
