@@ -318,7 +318,7 @@ internal class EglRouter(
                 // Default for all callers. Bridge-tested against V2 at
                 // sensorOrientation=270 (see AspectFitMathBridgeTest).
                 @Suppress("DEPRECATION")
-                AspectFitMath.buildCropMatrix(displayRotation, side, crop)
+                AspectFitMath.buildCropMatrix(displayRotation, sensorOrientation, side, crop)
             }
             val contentAspect = when (side) {
                 VideoSide.PORTRAIT -> 9f / 16f
@@ -464,7 +464,7 @@ internal class EglRouter(
                 // Per-side map cap at 2; writes overwrite.
                 if (enableMatrixSnapshots && target.side != null) {
                     val sideAspectCropMatrix = FloatArray(16)
-                    AspectFitMath.buildSideAspectCrop(target.side, sideAspectCropMatrix)
+                    AspectFitMath.buildSideAspectCrop(target.side, sensorOrientation, sideAspectCropMatrix)
                     debugInfoBySide[target.side] = DualShotMatrixDebugInfo(
                         side = target.side,
                         sensorOrientation = sensorOrientation,
