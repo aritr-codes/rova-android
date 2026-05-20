@@ -132,6 +132,26 @@ internal class EglRouter(
     // renderFrame logs each side once on its first drawn frame.
     private val diagLoggedSides = mutableSetOf<VideoSide>()
 
+    // Diagnostic — per-frame render timing, to locate the on-device
+    // DualShot recording stutter (2026-05-20). Accumulated over
+    // PERF_WINDOW frames, then one summary line is logged and the
+    // accumulators reset (~1 log / 2 s at 30 fps → negligible overhead).
+    // The per-target swap times are split ENCODER vs PREVIEW because the
+    // prime suspect is encoder-input-surface back-pressure: eglSwapBuffers
+    // on a MediaCodec input surface blocks when the encoder is not
+    // draining fast enough, stalling the whole single-threaded pump.
+    private var perfFrames = 0
+    private var perfLastEntryNs = 0L
+    private var perfIntervalSumNs = 0L
+    private var perfIntervalMaxNs = 0L
+    private var perfTexSumNs = 0L
+    private var perfTexMaxNs = 0L
+    private var perfTotalSumNs = 0L
+    private var perfTotalMaxNs = 0L
+    private var perfDrawMaxNs = 0L
+    private var perfEncSwapMaxNs = 0L
+    private var perfPrevSwapMaxNs = 0L
+
     // Phase: render-architecture audit. Caller-owned scratch buffers for
     // buildUvTransformV2. 4 pairwise-distinct length-16 arrays, allocated
     // once at ctor, reused for every addTarget call. Per spec §2.2 + the
@@ -388,6 +408,8 @@ internal class EglRouter(
 
     fun renderFrame() {
         val tex = inputSurfaceTexture ?: return
+        // Diagnostic — frame entry timestamp (see perf* fields).
+        val perfEntryNs = System.nanoTime()
         // EGL context MUST be current before SurfaceTexture.updateTexImage:
         // the call samples the OES texture binding, which lives on the
         // current EGL context. Use the first target if available, else the
@@ -398,6 +420,12 @@ internal class EglRouter(
         EGL14.eglMakeCurrent(eglDisplay!!, anchor, anchor, eglContext)
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
+        val perfTexEndNs = System.nanoTime()
+
+        // Diagnostic — per-frame maxima across this frame's targets.
+        var frameDrawMaxNs = 0L
+        var frameEncSwapMaxNs = 0L
+        var framePrevSwapMaxNs = 0L
 
         synchronized(targets) {
             targets.forEach { target ->
@@ -406,6 +434,7 @@ internal class EglRouter(
                 // no draw needed.
                 if (target.side == null && target.kind == TargetKind.PREVIEW) return@forEach
 
+                val perfDrawStartNs = System.nanoTime()
                 EGL14.eglMakeCurrent(eglDisplay!!, target.eglSurface, target.eglSurface, eglContext)
                 // 1. Clear full surface with black — paints letterbox/pillar bars
                 //    for preview targets that letterbox; no visible effect on
@@ -487,9 +516,70 @@ internal class EglRouter(
 
                 GLES20.glDisableVertexAttribArray(aPositionLoc)
                 GLES20.glDisableVertexAttribArray(aUvLoc)
+
+                // Diagnostic — split per-target GL draw time from
+                // eglSwapBuffers. A swap on a MediaCodec input surface
+                // blocks under encoder back-pressure; a swap on a preview
+                // surface blocks on vsync. Splitting them tells us which.
+                val perfSwapStartNs = System.nanoTime()
                 EGL14.eglSwapBuffers(eglDisplay!!, target.eglSurface)
+                val perfTargetEndNs = System.nanoTime()
+                val drawNs = perfSwapStartNs - perfDrawStartNs
+                val swapNs = perfTargetEndNs - perfSwapStartNs
+                if (drawNs > frameDrawMaxNs) frameDrawMaxNs = drawNs
+                if (target.kind == TargetKind.ENCODER) {
+                    if (swapNs > frameEncSwapMaxNs) frameEncSwapMaxNs = swapNs
+                } else {
+                    if (swapNs > framePrevSwapMaxNs) framePrevSwapMaxNs = swapNs
+                }
             }
         }
+        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, frameEncSwapMaxNs, framePrevSwapMaxNs)
+    }
+
+    /**
+     * Diagnostic — accumulate one frame's render timings; every
+     * [PERF_WINDOW] frames emit a summary line and reset. Pure
+     * instrumentation: no behaviour change. Called once per
+     * [renderFrame], on the frame-callback thread (single-threaded —
+     * the `perf*` fields need no synchronisation).
+     */
+    private fun recordRenderPerf(
+        entryNs: Long,
+        texEndNs: Long,
+        drawMaxNs: Long,
+        encSwapMaxNs: Long,
+        prevSwapMaxNs: Long,
+    ) {
+        val nowNs = System.nanoTime()
+        val intervalNs = if (perfLastEntryNs != 0L) entryNs - perfLastEntryNs else 0L
+        perfLastEntryNs = entryNs
+        val texNs = texEndNs - entryNs
+        val totalNs = nowNs - entryNs
+        if (intervalNs > perfIntervalMaxNs) perfIntervalMaxNs = intervalNs
+        perfIntervalSumNs += intervalNs
+        if (texNs > perfTexMaxNs) perfTexMaxNs = texNs
+        perfTexSumNs += texNs
+        if (totalNs > perfTotalMaxNs) perfTotalMaxNs = totalNs
+        perfTotalSumNs += totalNs
+        if (drawMaxNs > perfDrawMaxNs) perfDrawMaxNs = drawMaxNs
+        if (encSwapMaxNs > perfEncSwapMaxNs) perfEncSwapMaxNs = encSwapMaxNs
+        if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
+        if (++perfFrames < PERF_WINDOW) return
+        fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
+        RovaLog.d(
+            "EglRouter perf [${perfFrames}f]: " +
+                "interval avg=${ms(perfIntervalSumNs / perfFrames)} max=${ms(perfIntervalMaxNs)} | " +
+                "updateTex avg=${ms(perfTexSumNs / perfFrames)} max=${ms(perfTexMaxNs)} | " +
+                "renderTotal avg=${ms(perfTotalSumNs / perfFrames)} max=${ms(perfTotalMaxNs)} | " +
+                "drawMax=${ms(perfDrawMaxNs)} encSwapMax=${ms(perfEncSwapMaxNs)} " +
+                "prevSwapMax=${ms(perfPrevSwapMaxNs)} | targets=${targets.size} (ms)"
+        )
+        perfFrames = 0
+        perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
+        perfTexSumNs = 0L; perfTexMaxNs = 0L
+        perfTotalSumNs = 0L; perfTotalMaxNs = 0L
+        perfDrawMaxNs = 0L; perfEncSwapMaxNs = 0L; perfPrevSwapMaxNs = 0L
     }
 
     fun release() {
@@ -548,6 +638,8 @@ internal class EglRouter(
 
     companion object {
         private const val FLOATS_PER_VERT = 4 // x, y, u, v
+        // Diagnostic — render-perf summary cadence (frames per log line).
+        private const val PERF_WINDOW = 60
         // Full-screen quad in clip space + matching UV [0,1] range; the
         // texMatrix from SurfaceTexture remaps these UVs to sample the OES
         // texture correctly. TRIANGLE_STRIP order: BL, BR, TL, TR.
