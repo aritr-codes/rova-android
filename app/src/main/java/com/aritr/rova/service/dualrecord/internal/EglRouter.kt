@@ -182,6 +182,13 @@ internal class EglRouter(
     private var perfDrawMaxNs = 0L
     private var perfBlitSumNs = 0L
     private var perfBlitMaxNs = 0L
+    // Diagnostic split (chore, 2026-05-21) — the glFinish() portion of the
+    // blit, isolated from the blit draw. blitDraw ≈ blit − blitFinish.
+    // Tells B3 whether the ~20ms blit cost is the GPU-drain wait (glFinish
+    // — an EGL fence would remove it) or the 2560×1920 draw itself (the
+    // FBO is too large). Temporary — drop once B3 lands.
+    private var perfBlitFinishSumNs = 0L
+    private var perfBlitFinishMaxNs = 0L
     private var perfPrevSwapMaxNs = 0L
 
     // Phase: render-architecture audit. Caller-owned scratch buffers for
@@ -546,6 +553,7 @@ internal class EglRouter(
         // clocks; the callback thread waits for NO encoder work. See the
         // 2026-05-21 FBO-ring design doc §3 / §6.
         val perfBlitStartNs = System.nanoTime()
+        var perfBlitFinishNs = 0L
         val liveEncoders = synchronized(encoderLock) {
             encoderThreads.values.filter { !it.failed }
         }
@@ -581,8 +589,12 @@ internal class EglRouter(
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
                 // glFinish — the blit pixels must be complete AND visible
                 // to the encoder share-group contexts before they sample
-                // the slot. Drains only the blit (one quad), ~1-2 ms.
+                // the slot. Diagnostic (chore, 2026-05-21): time the
+                // glFinish drain separately from the blit draw above, so
+                // B3 targets the real cost — see perfBlitFinish*.
+                val perfBlitFinishStartNs = System.nanoTime()
                 GLES20.glFinish()
+                perfBlitFinishNs = System.nanoTime() - perfBlitFinishStartNs
                 // One read-only texMatrix copy, shared across encoders —
                 // they only sample it, never mutate.
                 val frame = EncoderFrame(slot.textureId, texMatrix.copyOf())
@@ -716,7 +728,9 @@ internal class EglRouter(
         // updateTexImage is free; the encoders run fully async against
         // their FBO copies. renderFrame returns straight after the
         // previews (design §3 / §6).
-        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBlitNs, framePrevSwapMaxNs)
+        recordRenderPerf(
+            perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBlitNs, perfBlitFinishNs, framePrevSwapMaxNs,
+        )
     }
 
     /**
@@ -731,6 +745,7 @@ internal class EglRouter(
         texEndNs: Long,
         drawMaxNs: Long,
         blitNs: Long,
+        blitFinishNs: Long,
         prevSwapMaxNs: Long,
     ) {
         val nowNs = System.nanoTime()
@@ -747,6 +762,8 @@ internal class EglRouter(
         if (drawMaxNs > perfDrawMaxNs) perfDrawMaxNs = drawMaxNs
         perfBlitSumNs += blitNs
         if (blitNs > perfBlitMaxNs) perfBlitMaxNs = blitNs
+        perfBlitFinishSumNs += blitFinishNs
+        if (blitFinishNs > perfBlitFinishMaxNs) perfBlitFinishMaxNs = blitFinishNs
         if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
         if (++perfFrames < PERF_WINDOW) return
         fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
@@ -757,6 +774,7 @@ internal class EglRouter(
                 "renderTotal avg=${ms(perfTotalSumNs / perfFrames)} max=${ms(perfTotalMaxNs)} | " +
                 "drawMax=${ms(perfDrawMaxNs)} " +
                 "blit avg=${ms(perfBlitSumNs / perfFrames)} max=${ms(perfBlitMaxNs)} " +
+                "blitFinish avg=${ms(perfBlitFinishSumNs / perfFrames)} max=${ms(perfBlitFinishMaxNs)} " +
                 "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
                 "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
         )
@@ -764,7 +782,8 @@ internal class EglRouter(
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
         perfTexSumNs = 0L; perfTexMaxNs = 0L
         perfTotalSumNs = 0L; perfTotalMaxNs = 0L
-        perfDrawMaxNs = 0L; perfBlitSumNs = 0L; perfBlitMaxNs = 0L; perfPrevSwapMaxNs = 0L
+        perfDrawMaxNs = 0L; perfBlitSumNs = 0L; perfBlitMaxNs = 0L
+        perfBlitFinishSumNs = 0L; perfBlitFinishMaxNs = 0L; perfPrevSwapMaxNs = 0L
     }
 
     fun release() {
