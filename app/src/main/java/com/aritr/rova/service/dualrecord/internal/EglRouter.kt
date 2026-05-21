@@ -136,6 +136,13 @@ internal class EglRouter(
     private val encoderThreads = mutableMapOf<VideoSide, EncoderRenderThread>()
     private val encoderLock = Any()
 
+    // DualShot FBO ring (B2, 2026-05-21) — off-screen snapshot buffers the
+    // encoder threads sample, so the callback thread never blocks on
+    // encoder GPU work. Built in setup(); null if FboRing.init() fails, in
+    // which case renderFrame skips the encoder fan-out. Touched only on the
+    // callback thread (setup/renderFrame/release all run there).
+    private var fboRing: FboRing? = null
+
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
     private val finalMatrix = FloatArray(16)
@@ -322,6 +329,20 @@ internal class EglRouter(
         // enableMatrixSnapshots is on.
         AspectFitMath.buildTextureNormalization(sensorOrientation, cachedNormalizationMatrix)
         AspectFitMath.buildDisplayRotationCorrection(displayRotation, cachedDisplayRotationMatrix)
+
+        // DualShot FBO ring (B2) — allocate the off-screen snapshot
+        // buffers. init() needs the GL context current; the pbuffer was
+        // made current above. A false return leaves fboRing null and
+        // renderFrame simply skips the encoder fan-out (design §4).
+        val ring = FboRing()
+        if (ring.init()) {
+            fboRing = ring
+        } else {
+            RovaLog.w(
+                "EglRouter.setup: FboRing.init failed — " +
+                    "dual-record encoders will receive no frames",
+            )
+        }
     }
 
     fun setOnFrameAvailableListener(listener: SurfaceTexture.OnFrameAvailableListener) {
@@ -733,6 +754,31 @@ internal class EglRouter(
             t.join(JOIN_TIMEOUT_MS)
             if (t.isAlive) RovaLog.w("EglRouter.release: ${t.name} did not exit in ${JOIN_TIMEOUT_MS}ms")
         }
+        // DualShot FBO ring (B2) — delete the ring AFTER the encoder
+        // threads have joined (an encoder must never sample a deleted
+        // texture) and BEFORE the root context is destroyed (design §8).
+        // glDeleteFramebuffers reclaims the FBOs only with the root
+        // context current — so make the pbuffer current first, and skip
+        // ring.release() if that fails (a GL call with no current context
+        // is undefined). Skipping is harmless: eglDestroyContext below
+        // reclaims every object the context owns, these FBOs included.
+        fboRing?.let { ring ->
+            var contextCurrent = false
+            if (pbufferSurface !== EGL14.EGL_NO_SURFACE) {
+                try {
+                    EGL14.eglMakeCurrent(eglDisplay!!, pbufferSurface, pbufferSurface, eglContext)
+                    contextCurrent = true
+                } catch (e: Throwable) {
+                    RovaLog.w(
+                        "EglRouter.release: eglMakeCurrent for FBO teardown — " +
+                            "FBOs reclaimed at context destroy",
+                        e,
+                    )
+                }
+            }
+            if (contextCurrent) ring.release()
+        }
+        fboRing = null
         // Snapshot + clear the list under the list lock, then destroy each
         // surface under its own monitor — same draw/destroy ordering as
         // removeTarget (2026-05-20 ANR fix).
