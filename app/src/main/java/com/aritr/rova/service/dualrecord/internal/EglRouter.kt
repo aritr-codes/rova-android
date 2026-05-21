@@ -18,6 +18,8 @@ import com.aritr.rova.utils.RovaLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Phase 6.1a — EGL14 context + GLES20 shader + per-frame fan-out to 3
@@ -124,6 +126,16 @@ internal class EglRouter(
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var program: Int = 0
     private val targets = mutableListOf<RenderTarget>()
+
+    // DualShot render threading (2026-05-21) — one dedicated render
+    // thread per encoder side. Encoder targets are driven OFF this
+    // callback thread, so `targets` now holds only preview targets (and
+    // the inert legacy side=null output). A blocking eglSwapBuffers on a
+    // MediaCodec input surface therefore can no longer stall the pump.
+    // Guarded by its own monitor — never nested with the `targets` lock.
+    private val encoderThreads = mutableMapOf<VideoSide, EncoderRenderThread>()
+    private val encoderLock = Any()
+
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
     private val finalMatrix = FloatArray(16)
@@ -337,29 +349,19 @@ internal class EglRouter(
      * both placeholders, since [renderFrame] skips this target.
      */
     fun addTarget(side: VideoSide?, kind: TargetKind, surface: Surface, width: Int, height: Int) {
-        val winAttribs = intArrayOf(EGL14.EGL_NONE)
-        val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay!!, eglConfig, surface, winAttribs, 0)
+        // Build the per-side UV transform + aspect-fit viewport. Used by
+        // both encoder render threads and inline preview targets.
         val crop = FloatArray(16)
         val viewport: IntArray
         if (side != null) {
-            // Phase 6.1c — real target. Build cropMatrix once from the
-            // session-pinned displayRotation; viewport aspect-fits the
-            // side's content aspect inside the surface dims (encoder
-            // surfaces are aspect-matched → full viewport; preview
-            // TextureView surfaces letterbox).
             if (useFirstPrinciplesRender) {
-                // V2 first-principles path — canonical UV transform from
-                // sideAspectCrop × displayRotationCorrection × textureNormalization.
-                // Active only when SharedPreferences pref.dev.useFirstPrinciplesRender
-                // is true AND BuildConfig.DEBUG (release short-circuits to false).
+                // V2 first-principles path — canonical UV transform.
                 AspectFitMath.buildUvTransformV2(
                     displayRotation, sensorOrientation, side,
                     crop, scratchA, scratchB, scratchC, scratchD,
                 )
             } else {
-                // Legacy path — buildCropMatrix with empirical +270° sideCorrection.
-                // Default for all callers. Bridge-tested against V2 at
-                // sensorOrientation=270 (see AspectFitMathBridgeTest).
+                // Legacy path — buildCropMatrix with empirical sideCorrection.
                 @Suppress("DEPRECATION")
                 AspectFitMath.buildCropMatrix(displayRotation, sensorOrientation, side, crop)
             }
@@ -369,12 +371,48 @@ internal class EglRouter(
             }
             viewport = AspectFitMath.computeFitViewport(width, height, contentAspect)
         } else {
-            // Legacy CameraEffect Preview output (side=null, kind=PREVIEW).
-            // Inert in 6.1c — renderFrame skips. cropMatrix + viewport are
-            // placeholders.
+            // Legacy CameraEffect Preview output (side=null) — inert.
             Matrix.setIdentityM(crop, 0)
             viewport = intArrayOf(0, 0, width, height)
         }
+
+        // DualShot render threading — an encoder target gets its own
+        // render thread, not a slot in `targets`. The thread creates its
+        // EGL window surface over `surface` and its shared-group context
+        // ON ITS OWN THREAD (an EGLContext is thread-affine once current).
+        if (kind == TargetKind.ENCODER && side != null) {
+            val thread = EncoderRenderThread(
+                side = side,
+                encoderSurface = surface,
+                eglDisplay = eglDisplay!!,
+                eglConfig = eglConfig!!,
+                sharedContext = eglContext!!,
+                inputTextureId = inputTextureId,
+                uvTransform = crop,
+                surfaceWidth = width,
+                surfaceHeight = height,
+                viewportX = viewport[0],
+                viewportY = viewport[1],
+                viewportW = viewport[2],
+                viewportH = viewport[3],
+            )
+            synchronized(encoderLock) {
+                // Defensive — replace a stale thread for the same side.
+                encoderThreads.remove(side)?.let { old ->
+                    old.shutdown()
+                    old.join(JOIN_TIMEOUT_MS)
+                }
+                encoderThreads[side] = thread
+            }
+            thread.start()
+            return
+        }
+
+        // Preview target (or the legacy side=null output) — drawn inline
+        // on the callback thread, so its EGL window surface is created
+        // here and stored in `targets`.
+        val winAttribs = intArrayOf(EGL14.EGL_NONE)
+        val eglSurface = EGL14.eglCreateWindowSurface(eglDisplay!!, eglConfig, surface, winAttribs, 0)
         val mirror = FloatArray(16).also {
             Matrix.setIdentityM(it, 0)
             if (side == null && lensFacing == LensFacing.FRONT) {
@@ -401,6 +439,18 @@ internal class EglRouter(
      * from RecordScreen).
      */
     fun removeTarget(side: VideoSide?, kind: TargetKind) {
+        // DualShot render threading — an encoder target is a thread, not
+        // a `targets` entry. Poison it and join (bounded) so its EGL
+        // teardown runs on its own thread before this returns.
+        if (kind == TargetKind.ENCODER && side != null) {
+            val thread = synchronized(encoderLock) { encoderThreads.remove(side) } ?: return
+            thread.shutdown()
+            thread.join(JOIN_TIMEOUT_MS)
+            if (thread.isAlive) {
+                RovaLog.w("EglRouter.removeTarget: ${thread.name} did not exit in ${JOIN_TIMEOUT_MS}ms")
+            }
+            return
+        }
         // Drop from the list under the (fast) list lock, THEN destroy the
         // EGL surface under the target's own monitor. renderFrame draws
         // each target under synchronized(target) as well, so the destroy
@@ -696,6 +746,12 @@ internal class EglRouter(
         private const val FLOATS_PER_VERT = 4 // x, y, u, v
         // Diagnostic — render-perf summary cadence (frames per log line).
         private const val PERF_WINDOW = 60
+        // DualShot render threading — per-frame barrier wedge-detector
+        // timeout. A legitimate encoder draw+glFinish is ~10-14ms; this
+        // only fires if an encoder thread is wedged in a driver call.
+        private const val BARRIER_TIMEOUT_MS = 100L
+        // Bounded join for encoder-thread shutdown (removeTarget/release).
+        private const val JOIN_TIMEOUT_MS = 500L
         // Full-screen quad in clip space + matching UV [0,1] range; the
         // texMatrix from SurfaceTexture remaps these UVs to sample the OES
         // texture correctly. TRIANGLE_STRIP order: BL, BR, TL, TR.
