@@ -127,6 +127,14 @@ ceiling. Camera source is 4080×3060 (4:3). The size is derived from the
   encoder = 1.33× **downscale** (supersampled, clean).
 - **No upscale anywhere.** ~19.7 MB per buffer; ~59 MB for the 3-deep ring.
 
+The identity blit (§6) makes the FBO a 2D mirror of the OES texture's `[0,1]` UV
+space, so `uvTransform`'s 27/64 crop lands on 2560 × 27/64 = 1080 exactly. This
+assumes the camera `SurfaceTexture` `texMatrix` is a flip with unit scale — the
+universal case for a camera external texture (the transform corrects buffer
+orientation, it does not crop). A device whose `texMatrix` carried a cropping
+scale would shrink the effective content slightly; the `RING_DEPTH`/size
+escalation note (§4.2) is the fallback if any device proves pathological.
+
 Versus the alternatives: source-res 4080×3060 is ~47 MB/buffer (~141 MB ring) —
 too heavy for the budget SM-A176B (B1 design §6 already ruled it out); any buffer
 narrower than 2560 upscales the portrait crop. 2560×1920 is the only sizing that
@@ -153,9 +161,11 @@ encoder; depth 3 is the safer default.
 poison-pill shutdown. It now carries an `EncoderFrame` whose payload is just the
 ring slot's texture id.
 
-- **`EncoderFrame`** becomes `EncoderFrame(fboTextureId: Int)` — drops B1's
-  `texMatrix` (now baked into the FBO by the blit) and `barrier` (deleted — there
-  is no barrier).
+- **`EncoderFrame`** becomes `EncoderFrame(fboTextureId: Int, texMatrix: FloatArray)`
+  — drops only B1's `barrier` (there is no barrier). It **keeps** `texMatrix`: the
+  blit is an *identity* copy (§6), so the encoder still applies B1's full
+  `uvTransform × texMatrix` composition. `texMatrix` is still a defensive copy the
+  callback thread will not mutate.
 - The callback thread, after the blit + `glFinish`, calls
   `submit(EncoderFrame(slot.textureId))` on each live encoder. Latest-wins: a
   slow encoder's queued frame is overwritten — that side drops a frame, silently
@@ -175,10 +185,10 @@ ring slot's texture id.
      slot = fboRing.advance()                             // slot = N % RING_DEPTH
      glBindFramebuffer(GL_FRAMEBUFFER, slot.framebufferId)
      glViewport(0, 0, 2560, 1920)
-     draw full quad: program, OES texture, uTexMatrix = texMatrix   // blit, no mirror
+     draw full quad: program, OES texture, uTexMatrix = IDENTITY   // identity blit, no mirror
      glBindFramebuffer(GL_FRAMEBUFFER, 0)
      glFinish()                                           // blit complete + cross-context visible
-     liveEncoders.forEach { submit(EncoderFrame(slot.textureId)) }
+     liveEncoders.forEach { submit(EncoderFrame(slot.textureId, texMatrix.copyOf())) }
 5. draw previews inline (sample OES texture) + swap       // B1 behaviour, unchanged
 6. return                                                 // no barrier; updateTexImage(N+1) free
 ```
@@ -186,23 +196,32 @@ ring slot's texture id.
 The blit reuses the **existing `EglRouter.program`** — that shader already samples
 the OES texture through a `uTexMatrix` uniform and draws a full quad. The blit is
 exactly that draw, retargeted from a window surface to the FBO, at viewport
-2560×1920, with `uTexMatrix = texMatrix` and **no mirror** (encoder output is
-never mirrored — the front-camera mirror is preview-only, unchanged).
+2560×1920, with `uTexMatrix = identity` and **no mirror** (encoder output is never
+mirrored — the front-camera mirror is preview-only, unchanged).
 
 **Encoder thread loop (per side):**
 
 ```
-1. texId = mailbox.take()?.fboTextureId   // null = poisoned -> shutdown
+1. frame = mailbox.take()                  // null = poisoned -> shutdown
 2. eglMakeCurrent(its encoder surface, its context)
-3. draw quad: glBindTexture(GL_TEXTURE_2D, texId), uniform = uvTransform,
+3. draw quad: glBindTexture(GL_TEXTURE_2D, frame.fboTextureId),
+   uniform = uvTransform × frame.texMatrix  (B1's finalMatrix — unchanged),
    viewport = this side's aspect-fit viewport
 4. glFinish()                              // this side's read of the FBO slot done
 5. eglSwapBuffers()                        // blocks on MediaCodec back-pressure — nobody waits
 ```
 
-Step 3's uniform is `uvTransform` **alone**: B1's encoder computed
-`finalMatrix = uvTransform × texMatrix`; the blit has already applied `texMatrix`,
-so `texMatrix` is identity from the encoder's view and `finalMatrix = uvTransform`.
+**Why the blit is identity, not `texMatrix`.** The encoder samples
+`FBO[ M_enc × p ]`, and an identity-quad blit produces `FBO[uv] = OES[ M_blit × uv ]`,
+so the encoder reads `OES[ M_blit × M_enc × p ]`. B1 sampled
+`OES[ uvTransform × texMatrix × p ]`. Matching the two requires
+`M_blit × M_enc = uvTransform × texMatrix`. Matrix multiply does **not** commute, so
+the only solution that keeps `M_enc` per-side (the blit is shared) is `M_blit =
+identity`, `M_enc = uvTransform × texMatrix`. A `texMatrix` blit would instead
+compose as `texMatrix × uvTransform` and distort the frame. So the blit is an
+identity copy — the FBO is a faithful, resolution-reduced 2D mirror of the OES
+texture's `[0,1]` UV space — and the encoder keeps B1's exact
+`finalMatrix = uvTransform × texMatrix` (`drawFrame` matrix math unchanged).
 
 **Per-side frame drop.** A slow encoder's mailbox silently overwrites — that side
 drops frames; the callback thread, both previews, and the other encoder are
@@ -212,14 +231,16 @@ captured-frame-drop fix.
 
 ## 7. Shaders & Texture Binding
 
-- **Callback / blit:** unchanged. `EglRouter.program` keeps its
+- **Callback / blit:** the shader is unchanged. `EglRouter.program` keeps its
   `samplerExternalOES` fragment shader; the blit binds `GL_TEXTURE_EXTERNAL_OES`
-  (the camera OES texture) and draws into the FBO.
+  (the camera OES texture), uploads `uTexMatrix = identity`, and draws a full quad
+  into the FBO.
 - **Encoder:** the `EncoderRenderThread` fragment shader changes from
   `samplerExternalOES` to `sampler2D`, and drops the
   `#extension GL_OES_EGL_image_external : require` line — the encoder now samples
   the FBO's plain `GL_TEXTURE_2D` colour texture. `drawFrame` binds
-  `GL_TEXTURE_2D` instead of `GL_TEXTURE_EXTERNAL_OES`.
+  `GL_TEXTURE_2D` instead of `GL_TEXTURE_EXTERNAL_OES`; its matrix math is
+  unchanged from B1 (`finalMatrix = uvTransform × frame.texMatrix`).
 - The `EncoderRenderThread` constructor drops `inputTextureId` (it no longer
   samples the shared OES texture; the FBO texture id arrives per-frame in
   `EncoderFrame`).
