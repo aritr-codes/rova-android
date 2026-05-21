@@ -44,10 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -145,19 +142,23 @@ fun WarningCenter(
         // Idle branch — sheet / chip path (R1). TopBanner-mapped ids continue to no-op here.
         if (surface == WarningSurface.TopBanner) return
 
-        // Dismiss/collapse state — per active id, so a different warning re-presents fresh.
-        var collapsed by rememberSaveable(id) { mutableStateOf(false) }
+        // Dismiss state is owned by the ViewModel, NOT composable-local
+        // rememberSaveable — see WarningCenterViewModel.dismissedWarnings.
+        // A composable-local collapse flag was discarded on every
+        // WarningCenter unmount / early-return slot discard, re-presenting
+        // the sheet endlessly (2026-05-20 "keeps asking" bug).
+        val dismissed by vm.dismissedWarnings.collectAsStateWithLifecycle()
 
-        if (collapsed) {
-            WarningChip(id = id, onExpand = { collapsed = false }, modifier = modifier)
+        if (id in dismissed) {
+            WarningChip(id = id, onExpand = { vm.restore(id) }, modifier = modifier)
         } else {
             WarningSheet(
                 id = id,
                 surface = surface,
-                onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); collapsed = true },
-                onSecondary = { collapsed = true },     // "Not now" / "Continue without audio" → collapse to a chip
+                onPrimary = { launchActionTarget(context, warningSheetContent(id).primary.target); vm.dismiss(id) },
+                onSecondary = { vm.dismiss(id) },     // "Not now" / "Continue without audio" → collapse to a chip
                 onDismissRequest = {
-                    if (surface != WarningSurface.HardBlockSheet) collapsed = true
+                    if (surface != WarningSurface.HardBlockSheet) vm.dismiss(id)
                 },
             )
         }

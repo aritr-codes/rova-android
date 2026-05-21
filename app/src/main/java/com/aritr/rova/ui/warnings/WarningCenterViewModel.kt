@@ -7,8 +7,10 @@ import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
@@ -45,6 +47,37 @@ class WarningCenterViewModel(
             microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
             storageLowMidRec,                                    // ← NEW
         ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
+
+    /**
+     * Per-session dismiss state — the set of [WarningId]s the user has
+     * collapsed to a chip via "Not now" / the sheet's primary action.
+     *
+     * Lives on the ViewModel (not in composable `rememberSaveable`) on
+     * purpose: a dismiss is application state, not UI state. The
+     * `WarningCenter` composable is mounted at two sites in `RecordScreen`
+     * and early-`return`s before its `remember` slots whenever
+     * `activeWarning` blips null — so composable-local dismiss state was
+     * discarded on nearly every UI change and the sheet re-presented
+     * endlessly (the 2026-05-20 "keeps asking" bug). The ViewModel is one
+     * shared instance and survives recomposition, the early-return slot
+     * discard, the idle↔active remount, and navigation within the host.
+     *
+     * Scope is the ViewModel lifetime → a fresh cold app launch re-asks
+     * once (intentional: a recording-critical permission warrants one
+     * re-check per launch — that is not nagging).
+     */
+    private val _dismissedWarnings = MutableStateFlow<Set<WarningId>>(emptySet())
+    val dismissedWarnings: StateFlow<Set<WarningId>> = _dismissedWarnings.asStateFlow()
+
+    /** Collapse [id] to a chip — called from the sheet's "Not now" / primary action. */
+    fun dismiss(id: WarningId) {
+        _dismissedWarnings.value = _dismissedWarnings.value + id
+    }
+
+    /** Re-expand [id] to its sheet — called when the user taps the collapsed chip. */
+    fun restore(id: WarningId) {
+        _dismissedWarnings.value = _dismissedWarnings.value - id
+    }
 
     companion object {
         /**
