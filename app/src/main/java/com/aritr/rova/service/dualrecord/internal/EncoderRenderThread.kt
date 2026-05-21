@@ -6,6 +6,7 @@ import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.GLES20
+import android.opengl.GLES30
 import android.opengl.Matrix
 import android.view.Surface
 import com.aritr.rova.service.dualrecord.VideoSide
@@ -28,10 +29,18 @@ import java.nio.FloatBuffer
  *    read-only across both encoders. The FBO blit is an *identity* copy,
  *    so the encoder still applies the full `uvTransform x texMatrix`
  *    composition (design §6 — matrix multiply does not commute).
+ *  - [fenceSync] is the GL sync object the callback thread inserted right
+ *    after the blit (B3 fence-sync). The encoder issues `glWaitSync` on
+ *    it so the GPU orders the blit before this encoder's FBO sample —
+ *    replacing B2's callback-thread `glFinish`. It is a read-only handle
+ *    borrowed from the [FboRing], which owns the handle's lifecycle. 0
+ *    means no fence (a failed `glFenceSync`) — the encoder then skips the
+ *    wait. Both encoders share one handle (fence-sync design §6).
  */
 internal class EncoderFrame(
     val fboTextureId: Int,
     val texMatrix: FloatArray,
+    val fenceSync: Long,
 )
 
 /**
@@ -46,12 +55,14 @@ internal class EncoderFrame(
  * pre-threading [EglRouter] had to patch with two-tier locking.
  *
  * Per-frame loop: take the latest [EncoderFrame] from the [FrameMailbox]
- * (latest-wins → stale frames dropped for this side only), draw the
- * cropped quad sampling the frame's FBO `GL_TEXTURE_2D` snapshot,
- * `glFinish`, then `eglSwapBuffers`. There is no barrier — the callback
- * thread blitted the camera frame into an FBO slot and waits for no
+ * (latest-wins → stale frames dropped for this side only), `glWaitSync`
+ * on the frame's blit fence (B3 — a server-side GPU wait; the CPU
+ * returns at once), draw the cropped quad sampling the frame's FBO
+ * `GL_TEXTURE_2D` snapshot, `glFinish`, then `eglSwapBuffers`. There is
+ * no barrier and no callback-thread `glFinish` — the callback thread
+ * blitted the camera frame, inserted a GPU fence, and waits for no
  * encoder work, so a stalled `eglSwapBuffers` here freezes only this
- * side. See the 2026-05-21 FBO-ring design doc §3 / §6.
+ * side. See the 2026-05-21 fence-sync design doc §3 / §7.
  *
  * Runtime EGL/GL layer — no unit tests (the dualrecord policy). The
  * latest-wins / poison-pill logic is unit-tested via [FrameMailbox].
@@ -110,6 +121,15 @@ internal class EncoderRenderThread(
         while (true) {
             val frame = mailbox.take() ?: break   // null = poisoned → shutdown
             try {
+                // DualShot fence-sync (B3) — server-side wait on the
+                // callback thread's post-blit fence. glWaitSync queues a
+                // GPU-side dependency (blit-before-sample) and returns on
+                // the CPU immediately; it does NOT block this thread. A 0
+                // fence (failed glFenceSync on the callback side) is
+                // skipped — at worst one early/torn frame (design §7/§8).
+                if (frame.fenceSync != 0L) {
+                    GLES30.glWaitSync(frame.fenceSync, 0, GLES30.GL_TIMEOUT_IGNORED)
+                }
                 drawFrame(frame.fboTextureId, frame.texMatrix)
             } catch (t: Throwable) {
                 RovaLog.w("EglEncoder[$side] draw failed", t)
@@ -136,7 +156,11 @@ internal class EncoderRenderThread(
 
     private fun initEgl(): Boolean {
         try {
-            val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
+            // DualShot fence-sync (B3, 2026-05-21) — ES3 context, matching
+            // the router root context. glWaitSync (the server-side wait on
+            // the callback's blit fence) is core OpenGL ES 3.0. The shared
+            // eglConfig is unchanged. See fence-sync design §5.
+            val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
             // share_context = the router's root context → this context
             // joins the share group and can sample the camera OES texture.
             context = EGL14.eglCreateContext(eglDisplay, eglConfig, sharedContext, ctxAttribs, 0)

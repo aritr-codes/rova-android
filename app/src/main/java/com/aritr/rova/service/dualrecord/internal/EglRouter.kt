@@ -10,6 +10,7 @@ import android.opengl.EGLExt
 import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import android.opengl.GLES30
 import android.opengl.Matrix
 import android.view.Surface
 import com.aritr.rova.service.dualrecord.LensFacing
@@ -170,7 +171,7 @@ internal class EglRouter(
     // frame into an FBO slot and waits for NO encoder work. The
     // callback-thread cost is updateTex + the OES→FBO blit + preview
     // draw/swap. `blit` is the headline number — how long the OES→FBO
-    // snapshot (one quad + glFinish) took.
+    // snapshot (one quad + a GPU fence, no glFinish — B3) took.
     private var perfFrames = 0
     private var perfLastEntryNs = 0L
     private var perfIntervalSumNs = 0L
@@ -302,7 +303,13 @@ internal class EglRouter(
         }
         eglConfig = configs[0]
 
-        val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
+        // DualShot fence-sync (B3, 2026-05-21) — ES3 context. glFenceSync /
+        // glWaitSync (the per-frame blit→encoder fence) are core OpenGL
+        // ES 3.0. The EGL config above keeps EGL_OPENGL_ES2_BIT — an ES3
+        // context is compatible with an ES2-bit config (ES3 is a strict
+        // superset; the bit advertises a minimum). The GLSL ES 1.00
+        // shaders compile unchanged on an ES3 context. See fence-sync §5.
+        val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
         eglContext = EGL14.eglCreateContext(eglDisplay!!, eglConfig, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
         require(eglContext !== EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
 
@@ -579,13 +586,27 @@ internal class EglRouter(
                 GLES20.glDisableVertexAttribArray(aPositionLoc)
                 GLES20.glDisableVertexAttribArray(aUvLoc)
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
-                // glFinish — the blit pixels must be complete AND visible
-                // to the encoder share-group contexts before they sample
-                // the slot. Drains only the blit (one quad), ~1-2 ms.
-                GLES20.glFinish()
-                // One read-only texMatrix copy, shared across encoders —
-                // they only sample it, never mutate.
-                val frame = EncoderFrame(slot.textureId, texMatrix.copyOf())
+                // DualShot fence-sync (B3, 2026-05-21) — insert a GPU
+                // fence after the blit instead of draining the GPU with
+                // glFinish. glFenceSync + glFlush both return on the CPU
+                // immediately; the fence signals on the GPU once the blit
+                // completes. Each encoder glWaitSync's it, so the GPU —
+                // not this callback thread — orders blit-before-sample.
+                // The glFlush is MANDATORY: glWaitSync (unlike
+                // glClientWaitSync) cannot self-flush, so without it an
+                // encoder could wait on a fence command still stuck in
+                // this context's queue. See fence-sync design §3 / §7.
+                val fence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+                GLES20.glFlush()
+                // Hand the fence to the FboRing — it owns the handle's
+                // lifecycle (deleted on slot recycle / in release). A 0
+                // fence (glFenceSync failure) is stored verbatim; the
+                // encoder skips the wait for that frame (design §6 / §8).
+                ring.recordFence(fence)
+                // One read-only texMatrix copy + the shared fence handle,
+                // broadcast to both encoders — they only sample, never
+                // mutate (design §6).
+                val frame = EncoderFrame(slot.textureId, texMatrix.copyOf(), fence)
                 liveEncoders.forEach { it.submit(frame) }
             } catch (t: Throwable) {
                 // A blit failure is root-context loss — the router is dead
