@@ -5,7 +5,6 @@ import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
-import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.Matrix
 import android.view.Surface
@@ -14,42 +13,45 @@ import com.aritr.rova.utils.RovaLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import java.util.concurrent.CountDownLatch
 
 /**
  * One camera frame handed from the [EglRouter] callback thread to an
  * [EncoderRenderThread].
  *
+ *  - [fboTextureId] is the `GL_TEXTURE_2D` id of the FBO ring slot
+ *    holding this frame's snapshot. The encoder samples this 2D copy
+ *    instead of the shared camera OES texture, so it never races the
+ *    callback thread's `updateTexImage`. The ring depth keeps the slot
+ *    valid long enough (FBO-ring design §4.2).
  *  - [texMatrix] is the `SurfaceTexture` transform for this frame — a
- *    defensive copy the callback thread will not mutate. It is shared
- *    read-only across both encoders.
- *  - [barrier] is the per-frame [CountDownLatch] the callback thread
- *    awaits. The encoder counts it down after `glFinish` (camera-texture
- *    sampling complete) and BEFORE its blocking `eglSwapBuffers`.
+ *    defensive copy the callback thread will not mutate, shared
+ *    read-only across both encoders. The FBO blit is an *identity* copy,
+ *    so the encoder still applies the full `uvTransform x texMatrix`
+ *    composition (design §6 — matrix multiply does not commute).
  */
 internal class EncoderFrame(
+    val fboTextureId: Int,
     val texMatrix: FloatArray,
-    val barrier: CountDownLatch,
 )
 
 /**
- * DualShot render threading (2026-05-21) — one dedicated render thread
- * per encoder target.
+ * DualShot FBO-ring rendering (B2, 2026-05-21) — one dedicated render
+ * thread per encoder target.
  *
  * Each instance owns its own [EGLContext], created in the [EglRouter]
- * root context's share group so it samples the shared camera OES
- * texture, plus its own window [EGLSurface] over the MediaCodec input
- * [Surface] and its own GL program + vertex buffer. The context never
- * leaves this thread — that is what removes the cross-thread EGL-surface
- * races the pre-threading [EglRouter] had to patch with two-tier
- * locking.
+ * root context's share group so it can sample the FBO ring textures,
+ * plus its own window [EGLSurface] over the MediaCodec input [Surface]
+ * and its own GL program + vertex buffer. The context never leaves this
+ * thread — that is what removes the cross-thread EGL-surface races the
+ * pre-threading [EglRouter] had to patch with two-tier locking.
  *
  * Per-frame loop: take the latest [EncoderFrame] from the [FrameMailbox]
  * (latest-wins → stale frames dropped for this side only), draw the
- * cropped quad, `glFinish`, count the frame barrier down, then
- * `eglSwapBuffers`. The swap blocks on MediaCodec back-pressure but runs
- * AFTER the barrier countdown, so a stalled encoder never freezes the
- * callback thread. See the 2026-05-21 render-threading design doc §5.
+ * cropped quad sampling the frame's FBO `GL_TEXTURE_2D` snapshot,
+ * `glFinish`, then `eglSwapBuffers`. There is no barrier — the callback
+ * thread blitted the camera frame into an FBO slot and waits for no
+ * encoder work, so a stalled `eglSwapBuffers` here freezes only this
+ * side. See the 2026-05-21 FBO-ring design doc §3 / §6.
  *
  * Runtime EGL/GL layer — no unit tests (the dualrecord policy). The
  * latest-wins / poison-pill logic is unit-tested via [FrameMailbox].
@@ -60,7 +62,6 @@ internal class EncoderRenderThread(
     private val eglDisplay: EGLDisplay,
     private val eglConfig: EGLConfig,
     private val sharedContext: EGLContext,
-    private val inputTextureId: Int,
     private val uvTransform: FloatArray,
     private val surfaceWidth: Int,
     private val surfaceHeight: Int,
@@ -108,19 +109,13 @@ internal class EncoderRenderThread(
         }
         while (true) {
             val frame = mailbox.take() ?: break   // null = poisoned → shutdown
-            var drawOk = true
             try {
-                drawFrame(frame.texMatrix)
+                drawFrame(frame.fboTextureId, frame.texMatrix)
             } catch (t: Throwable) {
                 RovaLog.w("EglEncoder[$side] draw failed", t)
                 failed = true
-                drawOk = false
-            } finally {
-                // ALWAYS release the callback thread, even on draw failure,
-                // so a broken encoder side never wedges the frame barrier.
-                frame.barrier.countDown()
+                break
             }
-            if (!drawOk) break
             try {
                 if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                     val err = EGL14.eglGetError()
@@ -171,7 +166,7 @@ internal class EncoderRenderThread(
         }
     }
 
-    private fun drawFrame(texMatrix: FloatArray) {
+    private fun drawFrame(fboTextureId: Int, texMatrix: FloatArray) {
         // Clear the full surface black, then draw into the aspect-fit
         // viewport (encoder surfaces are aspect-matched → full viewport,
         // so the clear has no visible effect; kept for parity/safety).
@@ -182,7 +177,10 @@ internal class EncoderRenderThread(
 
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
+        // Sample the FBO ring slot's 2D snapshot, NOT the camera OES
+        // texture. The EglRouter blit is an identity copy, so this is the
+        // SAME composition B1 applied to the OES texture (design §6).
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTextureId)
         GLES20.glUniform1i(uTextureLoc, 0)
 
         // uTexMatrix = uvTransform x texMatrix. Encoder targets are never
@@ -215,10 +213,9 @@ internal class EncoderRenderThread(
         GLES20.glDisableVertexAttribArray(aPositionLoc)
         GLES20.glDisableVertexAttribArray(aUvLoc)
 
-        // Block until the GPU has finished SAMPLING the shared camera
-        // texture. Only after this is it safe for the callback thread to
-        // call updateTexImage for the next frame — run() counts the frame
-        // barrier down immediately after drawFrame() returns. Design §5.
+        // Block until this side has finished SAMPLING the FBO slot — it
+        // must complete before the depth-3 ring wraps back to this slot.
+        // Nobody waits on this glFinish; there is no barrier (design §6).
         GLES20.glFinish()
     }
 
@@ -246,9 +243,8 @@ internal class EncoderRenderThread(
         val vs = "attribute vec4 aPosition; attribute vec4 aUv; " +
             "uniform mat4 uTexMatrix; varying vec2 vUv; " +
             "void main(){ gl_Position = aPosition; vUv = (uTexMatrix * aUv).xy; }"
-        val fs = "#extension GL_OES_EGL_image_external : require\n" +
-            "precision mediump float; varying vec2 vUv; " +
-            "uniform samplerExternalOES sTex; " +
+        val fs = "precision mediump float; varying vec2 vUv; " +
+            "uniform sampler2D sTex; " +
             "void main(){ gl_FragColor = texture2D(sTex, vUv); }"
         val v = compileShader(GLES20.GL_VERTEX_SHADER, vs)
         val f = compileShader(GLES20.GL_FRAGMENT_SHADER, fs)
