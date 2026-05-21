@@ -18,8 +18,6 @@ import com.aritr.rova.utils.RovaLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * Phase 6.1a — EGL14 context + GLES20 shader + per-frame fan-out to 3
@@ -146,6 +144,11 @@ internal class EglRouter(
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
     private val finalMatrix = FloatArray(16)
+    // DualShot FBO ring (B2) — the identity uTexMatrix for the OES→FBO
+    // blit. The blit must NOT bake texMatrix in: the FBO is an identity
+    // copy of the OES [0,1] space and the encoder re-applies the full
+    // uvTransform × texMatrix composition (design §6).
+    private val identityMatrix = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
     // Temp buffer for the 2-step matrix multiply:
     //   tmpMatrix   = texMatrix × mirrorMatrix
     //   finalMatrix = uvTransform × tmpMatrix
@@ -163,11 +166,11 @@ internal class EglRouter(
     // Diagnostic — per-frame render timing on the callback thread.
     // Accumulated over PERF_WINDOW frames, then one summary line is
     // logged and the accumulators reset (~1 log / 2 s at 30 fps).
-    // Post-threading (2026-05-21): encoder eglSwapBuffers runs off-thread
-    // (EncoderRenderThread), so the callback-thread cost is updateTex +
-    // preview draw/swap + the encoder barrier wait. `barrier` is the
-    // headline number — how long this thread blocked on the encoders'
-    // draw+glFinish.
+    // FBO ring (B2, 2026-05-21): the callback thread blits the camera
+    // frame into an FBO slot and waits for NO encoder work. The
+    // callback-thread cost is updateTex + the OES→FBO blit + preview
+    // draw/swap. `blit` is the headline number — how long the OES→FBO
+    // snapshot (one quad + glFinish) took.
     private var perfFrames = 0
     private var perfLastEntryNs = 0L
     private var perfIntervalSumNs = 0L
@@ -177,8 +180,8 @@ internal class EglRouter(
     private var perfTotalSumNs = 0L
     private var perfTotalMaxNs = 0L
     private var perfDrawMaxNs = 0L
-    private var perfBarrierSumNs = 0L
-    private var perfBarrierMaxNs = 0L
+    private var perfBlitSumNs = 0L
+    private var perfBlitMaxNs = 0L
     private var perfPrevSwapMaxNs = 0L
 
     // Phase: render-architecture audit. Caller-owned scratch buffers for
@@ -409,7 +412,6 @@ internal class EglRouter(
                 eglDisplay = eglDisplay!!,
                 eglConfig = eglConfig!!,
                 sharedContext = eglContext!!,
-                inputTextureId = inputTextureId,
                 uvTransform = crop,
                 surfaceWidth = width,
                 surfaceHeight = height,
@@ -538,24 +540,61 @@ internal class EglRouter(
         tex.getTransformMatrix(texMatrix)
         val perfTexEndNs = System.nanoTime()
 
-        // DualShot render threading (2026-05-21) — fan this frame out to
-        // the encoder threads BEFORE drawing previews, so the two encoder
-        // draws run concurrently with the preview draws. Each encoder
-        // counts down `barrier` after its glFinish (camera-texture
-        // sampling complete) and BEFORE its blocking eglSwapBuffers;
-        // awaiting `barrier` below therefore costs only draw+glFinish,
-        // never a stalled swap. See the 2026-05-21 render-threading
-        // design doc §5.
+        // DualShot FBO ring (B2, 2026-05-21) — snapshot this camera frame
+        // into an off-screen FBO slot, then hand the slot's texture id to
+        // the encoder threads. They sample the FBO copy on their own
+        // clocks; the callback thread waits for NO encoder work. See the
+        // 2026-05-21 FBO-ring design doc §3 / §6.
+        val perfBlitStartNs = System.nanoTime()
         val liveEncoders = synchronized(encoderLock) {
             encoderThreads.values.filter { !it.failed }
         }
-        val barrier = CountDownLatch(liveEncoders.size)
-        if (liveEncoders.isNotEmpty()) {
-            // One read-only copy of this frame's transform, shared across
-            // encoders — they only sample it, never mutate.
-            val frame = EncoderFrame(texMatrix.copyOf(), barrier)
-            liveEncoders.forEach { it.submit(frame) }
+        val ring = fboRing
+        if (liveEncoders.isNotEmpty() && ring != null) {
+            try {
+                val slot = ring.advance()
+                // Identity blit: full quad, OES source, uTexMatrix =
+                // identity. The FBO becomes a faithful 2D mirror of the
+                // OES [0,1] UV space; the encoder re-applies texMatrix via
+                // its uvTransform composition. The blit must NOT bake
+                // texMatrix in — matrix multiply does not commute (§6).
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, slot.framebufferId)
+                GLES20.glViewport(0, 0, FboRing.FBO_WIDTH, FboRing.FBO_HEIGHT)
+                GLES20.glUseProgram(program)
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, inputTextureId)
+                GLES20.glUniform1i(uTextureLoc, 0)
+                GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, identityMatrix, 0)
+                vertexBuffer.position(0)
+                GLES20.glEnableVertexAttribArray(aPositionLoc)
+                GLES20.glVertexAttribPointer(
+                    aPositionLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+                )
+                vertexBuffer.position(2)
+                GLES20.glEnableVertexAttribArray(aUvLoc)
+                GLES20.glVertexAttribPointer(
+                    aUvLoc, 2, GLES20.GL_FLOAT, false, FLOATS_PER_VERT * 4, vertexBuffer,
+                )
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                GLES20.glDisableVertexAttribArray(aPositionLoc)
+                GLES20.glDisableVertexAttribArray(aUvLoc)
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+                // glFinish — the blit pixels must be complete AND visible
+                // to the encoder share-group contexts before they sample
+                // the slot. Drains only the blit (one quad), ~1-2 ms.
+                GLES20.glFinish()
+                // One read-only texMatrix copy, shared across encoders —
+                // they only sample it, never mutate.
+                val frame = EncoderFrame(slot.textureId, texMatrix.copyOf())
+                liveEncoders.forEach { it.submit(frame) }
+            } catch (t: Throwable) {
+                // A blit failure is root-context loss — the router is dead
+                // regardless. Log, skip this frame's submit, continue
+                // (design §8).
+                RovaLog.w("EglRouter: FBO blit failed — encoders skip this frame", t)
+            }
         }
+        val perfBlitNs = System.nanoTime() - perfBlitStartNs
 
         // Diagnostic — per-frame maxima across this frame's preview targets.
         var frameDrawMaxNs = 0L
@@ -672,23 +711,12 @@ internal class EglRouter(
                 if (swapNs > framePrevSwapMaxNs) framePrevSwapMaxNs = swapNs
             }
         }
-        // Strict per-frame barrier (design §5). Do not return — and
-        // therefore do not allow the next updateTexImage — until every
-        // encoder has finished SAMPLING the shared camera texture, so a
-        // frame still in use is never overwritten. The bounded timeout is
-        // a wedge detector only; a legitimate draw+glFinish never
-        // approaches it. On timeout the pump proceeds degraded rather
-        // than ANR (design §7).
-        val perfBarrierStartNs = System.nanoTime()
-        if (liveEncoders.isNotEmpty()) {
-            val ok = barrier.await(BARRIER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            if (!ok) {
-                RovaLog.w("EglRouter: render barrier timed out (${BARRIER_TIMEOUT_MS}ms) — encoder wedged")
-            }
-        }
-        val perfBarrierNs = System.nanoTime() - perfBarrierStartNs
-
-        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBarrierNs, framePrevSwapMaxNs)
+        // FBO ring (B2) — there is no barrier. The OES→FBO blit (above)
+        // already consumed the camera frame on this thread, so the next
+        // updateTexImage is free; the encoders run fully async against
+        // their FBO copies. renderFrame returns straight after the
+        // previews (design §3 / §6).
+        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBlitNs, framePrevSwapMaxNs)
     }
 
     /**
@@ -702,7 +730,7 @@ internal class EglRouter(
         entryNs: Long,
         texEndNs: Long,
         drawMaxNs: Long,
-        barrierNs: Long,
+        blitNs: Long,
         prevSwapMaxNs: Long,
     ) {
         val nowNs = System.nanoTime()
@@ -717,8 +745,8 @@ internal class EglRouter(
         if (totalNs > perfTotalMaxNs) perfTotalMaxNs = totalNs
         perfTotalSumNs += totalNs
         if (drawMaxNs > perfDrawMaxNs) perfDrawMaxNs = drawMaxNs
-        perfBarrierSumNs += barrierNs
-        if (barrierNs > perfBarrierMaxNs) perfBarrierMaxNs = barrierNs
+        perfBlitSumNs += blitNs
+        if (blitNs > perfBlitMaxNs) perfBlitMaxNs = blitNs
         if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
         if (++perfFrames < PERF_WINDOW) return
         fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
@@ -728,7 +756,7 @@ internal class EglRouter(
                 "updateTex avg=${ms(perfTexSumNs / perfFrames)} max=${ms(perfTexMaxNs)} | " +
                 "renderTotal avg=${ms(perfTotalSumNs / perfFrames)} max=${ms(perfTotalMaxNs)} | " +
                 "drawMax=${ms(perfDrawMaxNs)} " +
-                "barrier avg=${ms(perfBarrierSumNs / perfFrames)} max=${ms(perfBarrierMaxNs)} " +
+                "blit avg=${ms(perfBlitSumNs / perfFrames)} max=${ms(perfBlitMaxNs)} " +
                 "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
                 "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
         )
@@ -736,7 +764,7 @@ internal class EglRouter(
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
         perfTexSumNs = 0L; perfTexMaxNs = 0L
         perfTotalSumNs = 0L; perfTotalMaxNs = 0L
-        perfDrawMaxNs = 0L; perfBarrierSumNs = 0L; perfBarrierMaxNs = 0L; perfPrevSwapMaxNs = 0L
+        perfDrawMaxNs = 0L; perfBlitSumNs = 0L; perfBlitMaxNs = 0L; perfPrevSwapMaxNs = 0L
     }
 
     fun release() {
@@ -846,10 +874,6 @@ internal class EglRouter(
         private const val FLOATS_PER_VERT = 4 // x, y, u, v
         // Diagnostic — render-perf summary cadence (frames per log line).
         private const val PERF_WINDOW = 60
-        // DualShot render threading — per-frame barrier wedge-detector
-        // timeout. A legitimate encoder draw+glFinish is ~10-14ms; this
-        // only fires if an encoder thread is wedged in a driver call.
-        private const val BARRIER_TIMEOUT_MS = 100L
         // Bounded join for encoder-thread shutdown (removeTarget/release).
         private const val JOIN_TIMEOUT_MS = 500L
         // Full-screen quad in clip space + matching UV [0,1] range; the
