@@ -136,7 +136,11 @@ internal class EncoderRenderThread(
 
     private fun initEgl(): Boolean {
         try {
-            val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
+            // DualShot fence-sync (B3, 2026-05-21) — ES3 context, matching
+            // the router root context. glWaitSync (the server-side wait on
+            // the callback's blit fence) is core OpenGL ES 3.0. The shared
+            // eglConfig is unchanged. See fence-sync design §5.
+            val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
             // share_context = the router's root context → this context
             // joins the share group and can sample the camera OES texture.
             context = EGL14.eglCreateContext(eglDisplay, eglConfig, sharedContext, ctxAttribs, 0)

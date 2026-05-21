@@ -302,7 +302,13 @@ internal class EglRouter(
         }
         eglConfig = configs[0]
 
-        val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
+        // DualShot fence-sync (B3, 2026-05-21) — ES3 context. glFenceSync /
+        // glWaitSync (the per-frame blit→encoder fence) are core OpenGL
+        // ES 3.0. The EGL config above keeps EGL_OPENGL_ES2_BIT — an ES3
+        // context is compatible with an ES2-bit config (ES3 is a strict
+        // superset; the bit advertises a minimum). The GLSL ES 1.00
+        // shaders compile unchanged on an ES3 context. See fence-sync §5.
+        val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
         eglContext = EGL14.eglCreateContext(eglDisplay!!, eglConfig, EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
         require(eglContext !== EGL14.EGL_NO_CONTEXT) { "eglCreateContext failed" }
 
