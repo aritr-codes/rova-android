@@ -122,9 +122,16 @@ internal class EncoderRenderThread(
             }
             if (!drawOk) break
             try {
-                EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+                if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
+                    val err = EGL14.eglGetError()
+                    RovaLog.w("EglEncoder[$side] eglSwapBuffers failed err=0x${err.toString(16)}")
+                    failed = true
+                    break
+                }
             } catch (t: Throwable) {
-                RovaLog.w("EglEncoder[$side] eglSwapBuffers failed", t)
+                // Defensive — eglSwapBuffers normally returns false rather
+                // than throwing, but a JNI-layer wrapper could still throw.
+                RovaLog.w("EglEncoder[$side] eglSwapBuffers threw", t)
                 failed = true
                 break
             }
@@ -249,6 +256,13 @@ internal class EncoderRenderThread(
         GLES20.glAttachShader(p, v)
         GLES20.glAttachShader(p, f)
         GLES20.glLinkProgram(p)
+        val linkOk = IntArray(1)
+        GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, linkOk, 0)
+        require(linkOk[0] == GLES20.GL_TRUE) { "program link failed: ${GLES20.glGetProgramInfoLog(p)}" }
+        // Shaders are reference-counted by the program once linked; flag
+        // them for deletion now so they are freed with the program.
+        GLES20.glDeleteShader(v)
+        GLES20.glDeleteShader(f)
         return p
     }
 
