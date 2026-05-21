@@ -396,14 +396,18 @@ internal class EglRouter(
                 viewportW = viewport[2],
                 viewportH = viewport[3],
             )
-            synchronized(encoderLock) {
-                // Defensive — replace a stale thread for the same side.
-                encoderThreads.remove(side)?.let { old ->
-                    old.shutdown()
-                    old.join(JOIN_TIMEOUT_MS)
-                }
-                encoderThreads[side] = thread
-            }
+            // Defensive — replace a stale thread for the same side (e.g.
+            // a surface reconnect). Remove it from the map under the lock,
+            // but shutdown+join it OUTSIDE the lock: a bounded join (up to
+            // JOIN_TIMEOUT_MS) must not be held against `encoderLock`,
+            // which the camera callback thread also acquires in
+            // renderFrame. While the side is briefly absent from the map
+            // the callback simply skips that encoder for a frame or two —
+            // correct graceful degradation.
+            val stale = synchronized(encoderLock) { encoderThreads.remove(side) }
+            stale?.shutdown()
+            stale?.join(JOIN_TIMEOUT_MS)
+            synchronized(encoderLock) { encoderThreads[side] = thread }
             thread.start()
             return
         }
