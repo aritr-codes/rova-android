@@ -153,14 +153,14 @@ internal class EglRouter(
     // renderFrame logs each side once on its first drawn frame.
     private val diagLoggedSides = mutableSetOf<VideoSide>()
 
-    // Diagnostic — per-frame render timing, to locate the on-device
-    // DualShot recording stutter (2026-05-20). Accumulated over
-    // PERF_WINDOW frames, then one summary line is logged and the
-    // accumulators reset (~1 log / 2 s at 30 fps → negligible overhead).
-    // The per-target swap times are split ENCODER vs PREVIEW because the
-    // prime suspect is encoder-input-surface back-pressure: eglSwapBuffers
-    // on a MediaCodec input surface blocks when the encoder is not
-    // draining fast enough, stalling the whole single-threaded pump.
+    // Diagnostic — per-frame render timing on the callback thread.
+    // Accumulated over PERF_WINDOW frames, then one summary line is
+    // logged and the accumulators reset (~1 log / 2 s at 30 fps).
+    // Post-threading (2026-05-21): encoder eglSwapBuffers runs off-thread
+    // (EncoderRenderThread), so the callback-thread cost is updateTex +
+    // preview draw/swap + the encoder barrier wait. `barrier` is the
+    // headline number — how long this thread blocked on the encoders'
+    // draw+glFinish.
     private var perfFrames = 0
     private var perfLastEntryNs = 0L
     private var perfIntervalSumNs = 0L
@@ -170,7 +170,8 @@ internal class EglRouter(
     private var perfTotalSumNs = 0L
     private var perfTotalMaxNs = 0L
     private var perfDrawMaxNs = 0L
-    private var perfEncSwapMaxNs = 0L
+    private var perfBarrierSumNs = 0L
+    private var perfBarrierMaxNs = 0L
     private var perfPrevSwapMaxNs = 0L
 
     // Phase: render-architecture audit. Caller-owned scratch buffers for
@@ -516,9 +517,27 @@ internal class EglRouter(
         tex.getTransformMatrix(texMatrix)
         val perfTexEndNs = System.nanoTime()
 
-        // Diagnostic — per-frame maxima across this frame's targets.
+        // DualShot render threading (2026-05-21) — fan this frame out to
+        // the encoder threads BEFORE drawing previews, so the two encoder
+        // draws run concurrently with the preview draws. Each encoder
+        // counts down `barrier` after its glFinish (camera-texture
+        // sampling complete) and BEFORE its blocking eglSwapBuffers;
+        // awaiting `barrier` below therefore costs only draw+glFinish,
+        // never a stalled swap. See the 2026-05-21 render-threading
+        // design doc §5.
+        val liveEncoders = synchronized(encoderLock) {
+            encoderThreads.values.filter { !it.failed }
+        }
+        val barrier = CountDownLatch(liveEncoders.size)
+        if (liveEncoders.isNotEmpty()) {
+            // One read-only copy of this frame's transform, shared across
+            // encoders — they only sample it, never mutate.
+            val frame = EncoderFrame(texMatrix.copyOf(), barrier)
+            liveEncoders.forEach { it.submit(frame) }
+        }
+
+        // Diagnostic — per-frame maxima across this frame's preview targets.
         var frameDrawMaxNs = 0L
-        var frameEncSwapMaxNs = 0L
         var framePrevSwapMaxNs = 0L
 
         for (target in snapshot) {
@@ -627,14 +646,28 @@ internal class EglRouter(
                 val drawNs = perfSwapStartNs - perfDrawStartNs
                 val swapNs = perfTargetEndNs - perfSwapStartNs
                 if (drawNs > frameDrawMaxNs) frameDrawMaxNs = drawNs
-                if (target.kind == TargetKind.ENCODER) {
-                    if (swapNs > frameEncSwapMaxNs) frameEncSwapMaxNs = swapNs
-                } else {
-                    if (swapNs > framePrevSwapMaxNs) framePrevSwapMaxNs = swapNs
-                }
+                // `targets` now holds only preview targets — encoder swaps
+                // run off-thread in EncoderRenderThread.
+                if (swapNs > framePrevSwapMaxNs) framePrevSwapMaxNs = swapNs
             }
         }
-        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, frameEncSwapMaxNs, framePrevSwapMaxNs)
+        // Strict per-frame barrier (design §5). Do not return — and
+        // therefore do not allow the next updateTexImage — until every
+        // encoder has finished SAMPLING the shared camera texture, so a
+        // frame still in use is never overwritten. The bounded timeout is
+        // a wedge detector only; a legitimate draw+glFinish never
+        // approaches it. On timeout the pump proceeds degraded rather
+        // than ANR (design §7).
+        val perfBarrierStartNs = System.nanoTime()
+        if (liveEncoders.isNotEmpty()) {
+            val ok = barrier.await(BARRIER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            if (!ok) {
+                RovaLog.w("EglRouter: render barrier timed out (${BARRIER_TIMEOUT_MS}ms) — encoder wedged")
+            }
+        }
+        val perfBarrierNs = System.nanoTime() - perfBarrierStartNs
+
+        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBarrierNs, framePrevSwapMaxNs)
     }
 
     /**
@@ -648,7 +681,7 @@ internal class EglRouter(
         entryNs: Long,
         texEndNs: Long,
         drawMaxNs: Long,
-        encSwapMaxNs: Long,
+        barrierNs: Long,
         prevSwapMaxNs: Long,
     ) {
         val nowNs = System.nanoTime()
@@ -663,7 +696,8 @@ internal class EglRouter(
         if (totalNs > perfTotalMaxNs) perfTotalMaxNs = totalNs
         perfTotalSumNs += totalNs
         if (drawMaxNs > perfDrawMaxNs) perfDrawMaxNs = drawMaxNs
-        if (encSwapMaxNs > perfEncSwapMaxNs) perfEncSwapMaxNs = encSwapMaxNs
+        perfBarrierSumNs += barrierNs
+        if (barrierNs > perfBarrierMaxNs) perfBarrierMaxNs = barrierNs
         if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
         if (++perfFrames < PERF_WINDOW) return
         fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
@@ -672,17 +706,33 @@ internal class EglRouter(
                 "interval avg=${ms(perfIntervalSumNs / perfFrames)} max=${ms(perfIntervalMaxNs)} | " +
                 "updateTex avg=${ms(perfTexSumNs / perfFrames)} max=${ms(perfTexMaxNs)} | " +
                 "renderTotal avg=${ms(perfTotalSumNs / perfFrames)} max=${ms(perfTotalMaxNs)} | " +
-                "drawMax=${ms(perfDrawMaxNs)} encSwapMax=${ms(perfEncSwapMaxNs)} " +
-                "prevSwapMax=${ms(perfPrevSwapMaxNs)} | targets=${targets.size} (ms)"
+                "drawMax=${ms(perfDrawMaxNs)} " +
+                "barrier avg=${ms(perfBarrierSumNs / perfFrames)} max=${ms(perfBarrierMaxNs)} " +
+                "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
+                "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
         )
         perfFrames = 0
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
         perfTexSumNs = 0L; perfTexMaxNs = 0L
         perfTotalSumNs = 0L; perfTotalMaxNs = 0L
-        perfDrawMaxNs = 0L; perfEncSwapMaxNs = 0L; perfPrevSwapMaxNs = 0L
+        perfDrawMaxNs = 0L; perfBarrierSumNs = 0L; perfBarrierMaxNs = 0L; perfPrevSwapMaxNs = 0L
     }
 
     fun release() {
+        // DualShot render threading — stop the encoder threads first.
+        // Each tears down its own EGL context + window surface ON ITS OWN
+        // thread; join (bounded) before destroying the root context they
+        // share from.
+        val encoders = synchronized(encoderLock) {
+            val copy = encoderThreads.values.toList()
+            encoderThreads.clear()
+            copy
+        }
+        encoders.forEach { it.shutdown() }
+        encoders.forEach { t ->
+            t.join(JOIN_TIMEOUT_MS)
+            if (t.isAlive) RovaLog.w("EglRouter.release: ${t.name} did not exit in ${JOIN_TIMEOUT_MS}ms")
+        }
         // Snapshot + clear the list under the list lock, then destroy each
         // surface under its own monitor — same draw/destroy ordering as
         // removeTarget (2026-05-20 ANR fix).
