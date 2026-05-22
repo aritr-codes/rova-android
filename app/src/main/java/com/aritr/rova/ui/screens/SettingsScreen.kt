@@ -169,7 +169,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsRow(
                     icon = Icons.Default.GridOn,
                     label = "Camera guides",
-                    supporting = "Show the framing grid, focus brackets and edge vignette over the viewfinder.",
+                    supporting = "Show the framing grid and focus brackets over the viewfinder.",
                     onClick = {
                         settingsViewModel.cameraGuidesEnabled.value = !cameraGuidesEnabled
                     },

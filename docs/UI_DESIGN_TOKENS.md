@@ -405,15 +405,13 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 
 #### Camera-guide overlay constants (decorative framing)
 
-Seven tokens define the mockup-exact dimensions and styling for decorative camera-framing overlays (`01-record-home.html` `.camera-grid`, `.camera-vignette`, `.focus-frame`), consumed by `CameraGuides.kt`. These overlays are gated by the "Camera guides" app-setting (enabled by default) and do not affect the live CameraX preview or recording output — they are purely decorative UI elements layered atop the viewfinder.
+Five tokens define the mockup-exact dimensions and styling for decorative camera-framing overlays (`01-record-home.html` `.camera-grid`, `.focus-frame`), consumed by `CameraGuides.kt`. These overlays are gated by the "Camera guides" app-setting (enabled by default) and do not affect the live CameraX preview or recording output — they are purely decorative UI elements layered atop the viewfinder.
 
 | Token | Value | Source CSS |
 |---|---|---|
 | `cameraGridCellWidth` | 105.3.dp | `.camera-grid` cell width, CSS `background-size` X |
 | `cameraGridCellHeight` | 228.3.dp | `.camera-grid` cell height, CSS `background-size` Y |
 | `cameraGridLineWidth` | 1.dp | `.camera-grid` line stroke width |
-| `cameraVignetteEdge` | `Color.Black.copy(alpha = 0.6f)` | `.camera-vignette` outer edge, CSS `rgba(0,0,0,0.6)` |
-| `cameraVignetteInnerStop` | 0.35f | `.camera-vignette` inner stop position (Float gradient stop), CSS `transparent 35%` |
 | `focusFrameCornerArm` | 14.dp | `.focus-frame` corner bracket arm length |
 | `focusFrameStrokeWidth` | 1.5.dp | `.focus-frame` bracket stroke |
 

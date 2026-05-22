@@ -110,7 +110,7 @@ private fun PreviewZone(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        // Decorative guides — grid + vignette + focus brackets — above the
+        // Decorative guides — grid + focus brackets — above the
         // camera, below the tag. Renders nothing when the toggle is off.
         CameraGuides(visible = guidesEnabled, modifier = Modifier.fillMaxSize())
         // cam-zone-tag — plain uppercase micro-text (mockup .cam-zone-tag:
