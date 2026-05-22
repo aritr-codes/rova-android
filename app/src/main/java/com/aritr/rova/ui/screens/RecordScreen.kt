@@ -548,36 +548,8 @@ fun RecordScreen(
                 // ------------------------------------------------------
                 when (hudState) {
                     RecordHudState.Idle -> {
-                        if (!showCompleteCard) {
-                            // Idle: camera-first body. The settings card sits above the
-                            // bottom nav; the viewfinder is the camera preview behind. The
-                            // recovery chip (if any) is rendered separately near the status
-                            // pill (see above).
-                            //
-                            // Phase 2.4 — suppressed during the brief post-merge grace
-                            // window so a rapid Start tap cannot race the impending nav to
-                            // Library. The FAB owns Start; per-preset / save-preset
-                            // plumbing is gone (the VM methods stay, just unused — spec
-                            // dormancy).
-                            RecordSettingsCard(
-                                durationSeconds = duration,
-                                loopCount = loopCount,
-                                intervalMinutes = interval,
-                                quality = resolution,
-                                // Phase 6.1b smoke-fix #3 — display-only
-                                // map: the persisted "PortraitLandscape"
-                                // truncates to "PortraitLa..." inside the
-                                // chip. Mirror the canonical "P + L"
-                                // string used in SessionSettingsSheet's
-                                // P+L tab so the chip stays legible.
-                                mode = if (mode == "PortraitLandscape") "P + L" else mode,
-                                onOpenSheet = { viewModel.openSettingsSheet() },
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .windowInsetsPadding(WindowInsets.navigationBars)
-                                    .padding(bottom = RecordChromeMetrics.bottomNavClearance, start = 16.dp, end = 16.dp),   // clear the bottom nav
-                            )
-                        }
+                        // Idle: camera-first body. The settings card is rendered
+                        // once for all states below the `when` (dimmed when active).
                     }
                     RecordHudState.Recording,
                     RecordHudState.Waiting,
@@ -609,6 +581,31 @@ fun RecordScreen(
                             )
                         }
                     }
+                }
+
+                // Phase 2 — the settings card is shared chrome: shown in every
+                // HUD state, dimmed + read-only while a session is active
+                // (mockups/new_uiux/01-record-home.html — the recording/break
+                // states show the card at 75% opacity). Suppressed only during
+                // the brief post-merge MergeCompleteCard grace window.
+                if (!showCompleteCard) {
+                    RecordSettingsCard(
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        mode = if (mode == "PortraitLandscape") "P + L" else mode,
+                        onOpenSheet = { viewModel.openSettingsSheet() },
+                        dimmed = hudState != RecordHudState.Idle,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(
+                                bottom = RecordChromeMetrics.bottomNavClearance,
+                                start = 16.dp,
+                                end = 16.dp,
+                            ),
+                    )
                 }
 
                 // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
