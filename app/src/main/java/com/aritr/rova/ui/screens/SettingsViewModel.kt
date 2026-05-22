@@ -25,6 +25,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val enableBeeps = MutableStateFlow(settings.enableBeeps)
     val vibrateAlerts = MutableStateFlow(settings.vibrateAlerts)
     val keepScreenOn = MutableStateFlow(settings.keepScreenOn)
+    val cameraGuidesEnabled = MutableStateFlow(settings.cameraGuidesEnabled)
     val autoDeleteEnabled = MutableStateFlow(settings.autoDeleteEnabled)
     val autoDeleteKeepLatest = MutableStateFlow(settings.autoDeleteKeepLatest)
     // Phase 2.1B — UI/persistence-only surface for the Phase 0 key. No
@@ -36,6 +37,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
         viewModelScope.launch { keepScreenOn.collect { settings.keepScreenOn = it } }
+        viewModelScope.launch { cameraGuidesEnabled.collect { settings.cameraGuidesEnabled = it } }
         viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
         viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
         viewModelScope.launch { exportFolderName.collect { settings.exportFolderName = it } }
