@@ -208,10 +208,10 @@ fun RecordCameraControls(
 @Composable
 private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @Composable () -> Unit) {
     // The IconButton carries the 48 dp touch target; the glass circle is the
-    // smaller ControlBtnSize visual centered inside it. Sizing the IconButton
-    // itself to ControlBtnSize would clamp the hit box to ~30 dp (the incoming
-    // fixed constraint defeats IconButton's minimumInteractiveComponentSize) —
-    // a regression vs the pre-R1 48 dp flash/flip IconButtons.
+    // smaller RecordChromeTokens.camControlSize visual centered inside it. Sizing
+    // the IconButton itself to camControlSize would clamp the hit box to ~30 dp
+    // (the incoming fixed constraint defeats IconButton's minimumInteractiveComponentSize)
+    // — a regression vs the pre-R1 48 dp flash/flip IconButtons.
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(ControlBtnTouchSize)) {
         Box(
             modifier = Modifier
@@ -334,7 +334,7 @@ private fun CellSep() {
  * Layout metrics RecordScreen needs to clear chrome it can't measure directly.
  *
  * [bottomNavClearance] — bottom padding for content that sits above [RecordBottomNav]
- * (the idle settings card, the active-HUD bands, the merge band): the FAB (⌀ [FabSize])
+ * (the idle settings card, the active-HUD bands, the merge band): the FAB (⌀ [RecordChromeTokens.fabSize])
  * plus the bar's vertical padding. Pair it with `windowInsetsPadding(navigationBars)` at
  * the call site — that handles the gesture-nav inset separately. One source of truth so
  * the three call sites can't drift; tune here if [RecordBottomNav]'s height changes.
