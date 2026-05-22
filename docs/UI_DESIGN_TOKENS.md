@@ -403,6 +403,18 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 | `zoneTagPaddingBottom` | 9.dp | `.cam-zone-tag` bottom offset |
 | `focusFrameSize` | 60.dp | `.focus-frame` bounding square |
 
+#### Camera-guide overlay constants (decorative framing)
+
+Five tokens define the mockup-exact dimensions and styling for decorative camera-framing overlays (`01-record-home.html` `.camera-grid`, `.focus-frame`), consumed by `CameraGuides.kt`. These overlays are gated by the "Camera guides" app-setting (enabled by default) and do not affect the live CameraX preview or recording output — they are purely decorative UI elements layered atop the viewfinder.
+
+| Token | Value | Source CSS |
+|---|---|---|
+| `cameraGridCellWidth` | 105.3.dp | `.camera-grid` cell width, CSS `background-size` X |
+| `cameraGridCellHeight` | 228.3.dp | `.camera-grid` cell height, CSS `background-size` Y |
+| `cameraGridLineWidth` | 1.dp | `.camera-grid` line stroke width |
+| `focusFrameCornerArm` | 14.dp | `.focus-frame` corner bracket arm length |
+| `focusFrameStrokeWidth` | 1.5.dp | `.focus-frame` bracket stroke |
+
 ### 2.14 Settings-sheet constants (`SettingsSheetTokens`)
 
 `SettingsSheetTokens.kt` is a **settings-sheet-scoped** constants object, carrying every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/02-settings-sheet.html`. It follows the same rationale as `RecordChromeTokens`: values that are meaningful only to the settings sheet must not bleed into unrelated UI via `RovaTokens`. The object is consumed exclusively by `SettingsSheet.kt`. Constants cover the camera-peek strip (fill, border, radius, peek height), the sheet panel surface (fill, stroke, corner radius), the mode-tab row (selected/unselected fills and strokes), row steppers (button size, radius, fill, label colours), quality chips (selected/idle fills, stroke, radius), the Save CTA button (fill, text colour, height, radius), and shared row geometry (horizontal padding, row height, divider alpha, section-label spacing).

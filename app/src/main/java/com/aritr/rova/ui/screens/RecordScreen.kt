@@ -123,6 +123,7 @@ fun RecordScreen(
     val startBlocked = !cameraPermissionGranted || storageInsufficient
 
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
+    val cameraGuidesEnabled by settingsViewModel.cameraGuidesEnabled.collectAsStateWithLifecycle()
 
     // Q3: Wire keepScreenOn to the view flag
     DisposableEffect(keepScreenOn) {
@@ -466,13 +467,19 @@ fun RecordScreen(
                                 registerPreviewSurface = registerPreview,
                                 unregisterPreviewSurface = unregisterPreview,
                                 modifier = Modifier.fillMaxSize(),
+                                guidesEnabled = cameraGuidesEnabled,
                             )
                         } else {
                             // Single Portrait / Landscape modes — existing
-                            // PreviewView path, unchanged.
+                            // PreviewView path, with the decorative guides
+                            // overlaid above it.
                             AndroidView(
                                 factory = { _ -> previewView },
                                 modifier = Modifier.fillMaxSize()
+                            )
+                            CameraGuides(
+                                visible = cameraGuidesEnabled,
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }

@@ -177,4 +177,16 @@ object RecordChromeTokens {
     val zoneTagPaddingBottom = 9.dp
     /** `.focus-frame` size. */
     val focusFrameSize = 60.dp
+
+    // ── Camera guides (decorative overlays — mockup 01 cam-zone) ─────────
+    /** `.camera-grid` cell width — CSS `background-size` X (`105.3px`). */
+    val cameraGridCellWidth = 105.3.dp
+    /** `.camera-grid` cell height — CSS `background-size` Y (`228.3px`). */
+    val cameraGridCellHeight = 228.3.dp
+    /** `.camera-grid` line thickness — the linear-gradient's `1px` band. */
+    val cameraGridLineWidth = 1.dp
+    /** `.focus-frame` corner-bracket arm length — CSS corner `14px`. */
+    val focusFrameCornerArm = 14.dp
+    /** `.focus-frame` corner-bracket stroke width — CSS `border-width: 1.5px`. */
+    val focusFrameStrokeWidth = 1.5.dp
 }
