@@ -1,6 +1,6 @@
 # Rova — UI Design Tokens (post-redesign)
 
-> **Status:** Phase 1 Foundation implemented. `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, and `Font.kt` (Inter downloadable font) are live on `feat/record-skin-phase-1-foundation`. Phase 2/3 composables consume these tokens.
+> **Status:** Phase 1 Foundation implemented. `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, and `Font.kt` (Inter downloadable font) are live on `feat/record-skin-phase-1-foundation`. **Phase 2 implemented:** the record-screen shared chrome (`RecordChrome.kt`) now consumes all `RecordChromeTokens` and the 7 `RovaTokens` type styles declared in Phase 1. Six custom chrome glyphs are defined in `ui/screens/RecordChromeIcons.kt`. Phase 3+ composables will consume the remaining tokens.
 > **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks).
 > **Existing implementation reference:** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Type,Theme,RovaTokens,RecordChromeTokens,Font}.kt`.
 
@@ -277,7 +277,7 @@ The reasoning: anything Compose components consume implicitly (`MaterialTheme.co
 
 ### 2.13 Record-chrome constants (`RecordChromeTokens`)
 
-`RecordChromeTokens.kt` is a **record-screen-scoped** constants object. It contains every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/01-record-home.html`. It is separate from `RovaTokens` by the same rationale: values that are meaningful only to the record screen cannot over-apply to unrelated UI. Phase 2/3 composables consume these; Phase 1 only declares them.
+`RecordChromeTokens.kt` is a **record-screen-scoped** constants object. It contains every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/01-record-home.html`. It is separate from `RovaTokens` by the same rationale: values that are meaningful only to the record screen cannot over-apply to unrelated UI. **As of Phase 2, the record-screen shared chrome (`RecordChrome.kt`) consumes all of these tokens** — they are no longer unused declarations. Six custom chrome vector glyphs (flash, flip, start, stop, library, settings icons) are co-located in `ui/screens/RecordChromeIcons.kt`. Phase 3+ composables will consume any tokens not yet referenced by `RecordChrome.kt`.
 
 CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose has no backdrop-blur API; the semi-transparent fills are the production approximation (see §2.5).
 

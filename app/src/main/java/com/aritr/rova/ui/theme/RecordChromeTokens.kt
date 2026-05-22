@@ -26,8 +26,15 @@ object RecordChromeTokens {
     val camControlFill = Color.Black.copy(alpha = 0.38f)
     /** `.cam-ctrl-btn` border — `rgba(255,255,255,0.09)`. */
     val camControlStroke = Color.White.copy(alpha = 0.09f)
-    /** `.settings-card` background — `rgba(255,255,255,0.065)`. */
-    val settingsCardFill = Color.White.copy(alpha = 0.065f)
+    /**
+     * `.settings-card` background. The mockup uses `rgba(255,255,255,0.065)`
+     * **with** `backdrop-filter: blur(24px)` — a 6.5%-white fill only reads as
+     * a panel because the blur darkens what shows through. Compose has no
+     * backdrop-blur, so over bright camera footage that fill is invisible.
+     * Substituted with the same dark fill the pills use (`rgba(0,0,0,0.40)`),
+     * which reads correctly on-device — the deliberate no-blur approximation.
+     */
+    val settingsCardFill = Color.Black.copy(alpha = 0.40f)
     /** `.settings-card` border — `rgba(255,255,255,0.09)`. */
     val settingsCardStroke = Color.White.copy(alpha = 0.09f)
     /** `.s-cell + .s-cell` divider — `rgba(255,255,255,0.07)`. */
