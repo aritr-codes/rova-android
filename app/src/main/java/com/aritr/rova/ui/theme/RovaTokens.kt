@@ -130,6 +130,65 @@ object RovaTokens {
         fontSize = 7.5.sp,
         letterSpacing = 1.5.sp
     )
+
+    // ── Settings-sheet type scale (mockups/new_uiux/02-settings-sheet.html) ──
+
+    /** `.sheet-section-label` — "RECORDING MODE" / "SETTINGS". */
+    val sheetSectionLabel: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 8.5.sp,
+        letterSpacing = 2.sp,
+    )
+
+    /** `.s-row-label` — the setting-row label ("Clip Duration"). */
+    val sheetRowLabel: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        letterSpacing = 0.1.sp,
+    )
+
+    /** `.step-val` — the stepper's numeric value. */
+    val sheetStepValue: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        letterSpacing = (-0.2).sp,
+        fontFeatureSettings = "tnum",
+    )
+
+    /** `.chip` — the quality chip label. */
+    val sheetChip: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
+        letterSpacing = 0.4.sp,
+    )
+
+    /** `.mode-tab` — the recording-mode tab label. */
+    val sheetModeTab: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        letterSpacing = 0.1.sp,
+    )
+
+    /** `.sheet-cta` — the "Save" button label. */
+    val sheetCta: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        letterSpacing = 0.1.sp,
+    )
+
+    /** `.peek-txt` — the camera-peek mini status pill text. */
+    val peekStatus: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 10.sp,
+        letterSpacing = 0.1.sp,
+    )
 }
 
 /**
