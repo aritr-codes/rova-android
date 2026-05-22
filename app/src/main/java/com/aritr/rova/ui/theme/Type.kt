@@ -43,81 +43,76 @@ val NumericMonoMedium: TextStyle = TextStyle(
 
 val Typography = Typography(
     displayMedium = TextStyle(
-        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2). Roboto via
-        // FontFamily.SansSerif is metrically close enough for v1.0 and avoids the
-        // license + asset scope this docs-foundation phase is not chartered for.
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Bold,
         fontSize = 40.sp,
         lineHeight = 44.sp,
         letterSpacing = (-0.5).sp
     ),
     headlineSmall = TextStyle(
-        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2).
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 31.sp,
         letterSpacing = (-0.2).sp
     ),
     titleLarge = TextStyle(
-        // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2).
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Bold,
         fontSize = 17.sp,
         lineHeight = 23.sp,
         letterSpacing = 0.1.sp
     ),
     titleSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 21.sp,
         letterSpacing = 0.1.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 21.sp,
         letterSpacing = 0.2.sp
     ),
     bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.25.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.4.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.35.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.SemiBold,
         fontSize = 11.sp,
         lineHeight = 14.sp,
