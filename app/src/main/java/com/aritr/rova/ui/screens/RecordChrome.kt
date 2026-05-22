@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.theme.RecordChromeTokens
+import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 
@@ -92,9 +93,9 @@ fun RecordTopOverlay(
             horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
         ) {
             StatusDot(hudState)
-            Text(statusText, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
+            Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
             if (statusDetail != null) {
-                Text("· $statusDetail", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.32f))
+                Text("· $statusDetail", style = RovaTokens.statusTime, color = RecordChromeTokens.statusTimeText)
             }
         }
     }
@@ -225,7 +226,7 @@ fun RecordSettingsCard(
                     .clip(RoundedCornerShape(1.dp))
                     .background(RecordChromeTokens.swipeHint),
             )
-            Text("SWIPE TO EDIT", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.22f))
+            Text("SWIPE TO EDIT", style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
         }
         Row(
             modifier = Modifier
@@ -261,8 +262,20 @@ fun RecordSettingsCard(
 @Composable
 private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean) {
     Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.labelLarge, color = if (readOnly) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.88f), textAlign = TextAlign.Center, maxLines = 1)
-        Text(key.uppercase(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.28f), textAlign = TextAlign.Center, maxLines = 1)
+        Text(
+            value,
+            style = RovaTokens.cellValue,
+            color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
+        Text(
+            key.uppercase(),
+            style = RovaTokens.cellKey,
+            color = RecordChromeTokens.cellKeyText,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
     }
 }
 
@@ -331,7 +344,11 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
         modifier = if (enabled) Modifier.clickable { onClick() } else Modifier,
     ) {
         Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = if (enabled) 0.4f else 0.14f), modifier = Modifier.size(34.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = if (enabled) 0.32f else 0.12f))
+        Text(
+            label,
+            style = RovaTokens.navTxt,
+            color = if (enabled) RecordChromeTokens.navText else Color.White.copy(alpha = 0.12f),
+        )
     }
 }
 
@@ -463,7 +480,15 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
 
 @Composable
 private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
-    val text = loopPillContent(loopIndex, loopTotal) ?: return       // hide pill on single-clip / zero-clip
+    // loopPillContent is the tested (untouched) hide-gate: null ⇒ single-clip /
+    // zero-clip ⇒ no pill. The mockup splits the body into a numeral + a caption,
+    // so the numeral is re-derived here with the same clamp loopPillContent uses.
+    loopPillContent(loopIndex, loopTotal) ?: return
+    val numeral = if (loopTotal < 0) {
+        "${loopIndex.coerceAtLeast(0)}"
+    } else {
+        "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal"
+    }
     Surface(
         modifier = modifier,
         shape = PillShape,
@@ -471,11 +496,17 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
         contentColor = Color.White,
         border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-        )
+        Row(
+            modifier = Modifier.padding(
+                horizontal = RecordChromeTokens.loopPillPaddingH,
+                vertical = RecordChromeTokens.loopPillPaddingV,
+            ),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.loopPillContentGap),
+        ) {
+            Text(numeral, style = RovaTokens.loopCount, color = RecordChromeTokens.loopCountText)
+            Text("LOOPS DONE", style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
+        }
     }
 }
 
@@ -489,20 +520,20 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
         border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = RecordChromeTokens.statusPillPaddingH, vertical = RecordChromeTokens.statusPillPaddingV),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
         ) {
             StatusDot(content.dot)
             Text(
                 content.main,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
+                style = RovaTokens.statusMain,
+                color = RecordChromeTokens.statusMainText,
             )
             Text(
                 content.time,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.75f),
+                style = RovaTokens.statusTime,
+                color = RecordChromeTokens.statusTimeText,
             )
         }
     }
