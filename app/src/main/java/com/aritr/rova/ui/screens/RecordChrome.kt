@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -239,8 +240,15 @@ fun RecordSettingsCard(
     mode: String,
     onOpenSheet: () -> Unit,
     modifier: Modifier = Modifier,
+    dimmed: Boolean = false,
 ) {
-    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .alpha(if (dimmed) 0.75f else 1f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap),
+    ) {
         // swipe-to-edit hint
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 1.dp)) {
             Box(
@@ -259,10 +267,19 @@ fun RecordSettingsCard(
                 .clip(SettingsCardShape)
                 .background(RecordChromeTokens.settingsCardFill)
                 .border(1.dp, RecordChromeTokens.settingsCardStroke, SettingsCardShape)
-                .clickable { onOpenSheet() }
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dragAmount -> if (dragAmount < -8f) onOpenSheet() }
-                }
+                .then(
+                    if (dimmed) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clickable { onOpenSheet() }
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (dragAmount < -8f) onOpenSheet()
+                                }
+                            }
+                    },
+                )
                 .padding(
                     horizontal = RecordChromeTokens.settingsCardPaddingH,
                     vertical = RecordChromeTokens.settingsCardPaddingV,
