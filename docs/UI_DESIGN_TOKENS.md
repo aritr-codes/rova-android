@@ -409,12 +409,12 @@ Seven tokens define the mockup-exact dimensions and styling for decorative camer
 
 | Token | Value | Source CSS |
 |---|---|---|
-| `cameraGridCellWidth` | 20.dp | `.camera-grid` cell width |
-| `cameraGridCellHeight` | 20.dp | `.camera-grid` cell height |
-| `cameraGridLineWidth` | 0.5.dp | `.camera-grid` line stroke |
-| `cameraVignetteEdge` | `Color.Black.copy(alpha = 0.50f)` | `.camera-vignette` outer edge |
-| `cameraVignetteInnerStop` | `Color.Black.copy(alpha = 0.0f)` | `.camera-vignette` inner fade stop |
-| `focusFrameCornerArm` | 12.dp | `.focus-frame` corner bracket arm length |
+| `cameraGridCellWidth` | 105.3.dp | `.camera-grid` cell width, CSS `background-size` X |
+| `cameraGridCellHeight` | 228.3.dp | `.camera-grid` cell height, CSS `background-size` Y |
+| `cameraGridLineWidth` | 1.dp | `.camera-grid` line stroke width |
+| `cameraVignetteEdge` | `Color.Black.copy(alpha = 0.6f)` | `.camera-vignette` outer edge, CSS `rgba(0,0,0,0.6)` |
+| `cameraVignetteInnerStop` | 0.35f | `.camera-vignette` inner stop position (Float gradient stop), CSS `transparent 35%` |
+| `focusFrameCornerArm` | 14.dp | `.focus-frame` corner bracket arm length |
 | `focusFrameStrokeWidth` | 1.5.dp | `.focus-frame` bracket stroke |
 
 ### 2.14 Settings-sheet constants (`SettingsSheetTokens`)
