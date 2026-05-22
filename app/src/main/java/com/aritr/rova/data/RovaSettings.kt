@@ -40,6 +40,12 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("keep_screen_on", false)
         set(value) = prefs.edit { putBoolean("keep_screen_on", value) }
 
+    // Decorative camera guides (grid + focus brackets + vignette) over the
+    // viewfinder. Default ON — the record screen ships matching the mockup.
+    var cameraGuidesEnabled: Boolean
+        get() = prefs.getBoolean("camera_guides_enabled", true)
+        set(value) = prefs.edit { putBoolean("camera_guides_enabled", value) }
+
     // Custom Presets (JSON String)
     var customPresetsJson: String
         get() = prefs.getString("custom_presets", "[]") ?: "[]"
