@@ -221,27 +221,33 @@ private fun SettingsPanel(
             .clip(panelShape)
             .background(SettingsSheetTokens.sheetFill)
             .border(1.dp, SettingsSheetTokens.sheetTopStroke, panelShape)
+            // Drag down anywhere on the panel to dismiss (native bottom-sheet
+            // feel). Detector lives on the whole Column — not the tiny handle
+            // bar — so the gesture target is the full panel, not a 4 dp strip.
+            // Vertical drags don't steal taps from the steppers/chips: a
+            // `clickable` consumes the tap, the drag detector only engages
+            // past touch-slop.
+            .pointerInput(Unit) {
+                var dragTotal = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragTotal = 0f },
+                    onDragEnd = { if (dragTotal > 40f) onDismiss() },
+                ) { _, dragAmount ->
+                    dragTotal += dragAmount
+                }
+            }
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
             .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
     ) {
-        // Handle — drag down to dismiss.
+        // Handle — visual affordance only; the whole panel is drag-to-dismiss.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
                     top = SettingsSheetTokens.sheetTopPaddingTop,
                     bottom = SettingsSheetTokens.sheetTopPaddingBottom,
-                )
-                .pointerInput(Unit) {
-                    var dragTotal = 0f
-                    detectVerticalDragGestures(
-                        onDragStart = { dragTotal = 0f },
-                        onDragEnd = { if (dragTotal > 40f) onDismiss() },
-                    ) { _, dragAmount ->
-                        dragTotal += dragAmount
-                    }
-                },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Box(
