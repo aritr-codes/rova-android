@@ -104,10 +104,10 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
     val customPresets: StateFlow<List<RovaPreset>> = _customPresets.asStateFlow()
 
-    // --- Combined settings sheet visibility.
+    // --- Settings sheet visibility.
     //
-    // Mirrors the editingField/openSheet/closeSheet pattern above.
-    // Opened when the user taps the settings card on the idle layout.
+    // Opened when the user taps the settings card on the idle layout;
+    // drives the SettingsSheet camera-peek panel in RecordScreen.
     private val _combinedSettingsOpen = MutableStateFlow(false)
     val combinedSettingsOpen: StateFlow<Boolean> = _combinedSettingsOpen.asStateFlow()
 
