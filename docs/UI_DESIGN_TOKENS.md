@@ -1,9 +1,8 @@
 # Rova — UI Design Tokens (post-redesign)
 
-> **Status:** Phase 1.B + 1.C authored. Planning artifact. No production code modified by this doc.
+> **Status:** Phase 1 Foundation implemented. `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, and `Font.kt` (Inter downloadable font) are live on `feat/record-skin-phase-1-foundation`. Phase 2/3 composables consume these tokens.
 > **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks).
-> **Existing implementation reference (read-only):** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Type,Theme}.kt`.
-> **Phase 2 is not yet started.** This document precedes any token implementation; it is the contract a Phase 2.1 PR must follow.
+> **Existing implementation reference:** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Type,Theme,RovaTokens,RecordChromeTokens,Font}.kt`.
 
 ---
 
@@ -76,41 +75,53 @@ Phase 2.1 PR will translate the "Replaced" rows into concrete `ColorScheme` inst
 
 ### 2.2 Typography tokens
 
-The mockups use **Inter exclusively** at four weights (`300`, `400`, `500`, `600`). The existing `Type.kt` mixes `FontFamily.Serif` (display / headline / titleLarge) and `FontFamily.SansSerif` (everything else). **Phase 1.C decision: drop the serif fields now**, in the same Phase 2.1 re-skin slice that lands the App Settings layout (no separate slice).
+The mockups use **Inter exclusively** at four weights (`300`, `400`, `500`, `600`). **Phase 1 Foundation (implemented)** delivers Inter via the **AndroidX Google Fonts downloadable provider** (`Font.kt`). Both the M3 `Typography` slots in `Type.kt` and all `RovaTokens` type styles use `Inter` directly — `FontFamily.SansSerif` is no longer a stand-in. The old "TODO: bundle Inter font asset" is **resolved**; Inter ships without bundled `.ttf` assets.
 
-Replacement uses `FontFamily.SansSerif` as a temporary stand-in. Bundling Inter as a real font resource is **not** in this phase — `FontFamily.SansSerif` is the default sans on Android (Roboto), which is metrically close enough for v1.0 and avoids adding a font asset + license in a docs-only phase. A future polish slice may wire the actual Inter family.
+#### Decision note — Inter via AndroidX Google Fonts downloadable provider
 
-| Existing `Typography` slot | Today | Phase 2 target |
-|---|---|---|
-| `displayMedium` | Serif Bold 40sp | SansSerif Bold 40sp (drop serif) |
-| `headlineSmall` | Serif SemiBold 26sp | SansSerif SemiBold 26sp (drop serif) |
-| `titleLarge` | Serif SemiBold 22sp | SansSerif SemiBold 22sp (drop serif) |
-| `titleMedium` | SansSerif Bold 17sp | unchanged |
-| `titleSmall` | SansSerif SemiBold 15sp | unchanged |
-| `bodyLarge` / `bodyMedium` / `bodySmall` | SansSerif Normal | unchanged |
-| `labelLarge` / `labelMedium` / `labelSmall` | SansSerif weighted | unchanged |
-| `NumericMonoLarge` (top-level `TextStyle`) | Monospace Medium 64sp `tnum` | unchanged — Slice 3 already shipped this for the HUD timer |
-| `NumericMonoMedium` (top-level `TextStyle`) | Monospace Medium 32sp `tnum` | unchanged — countdown |
+| Aspect | Detail |
+|---|---|
+| **Delivery** | `Font.kt` declares `val Inter = FontFamily(...)` using `Font(GoogleFont("Inter"), provider)` at weights 300 / 400 / 500 / 600. No `.ttf` resource in `res/font/`. |
+| **Rationale** | No bundled asset, no licence-asset scope, no APK size cost. |
+| **Trade-off** | Requires Google Play services on device. On first cold launch the font is fetched asynchronously; Android falls back to `FontFamily.SansSerif` (Roboto) for approximately one frame until the download completes. |
 
-Mockup-specific typography tokens that the Phase 2.1 PR introduces as **screen-local** (not theme-level):
+#### M3 `Typography` slots (all Inter — live in `Type.kt`)
 
-| Token | Spec | Used in |
-|---|---|---|
-| `RovaTokens.eyebrow` | `font-size: 9sp` (8.5–10 px in mockup), weight `500`, letter-spacing `2sp`, ALL-CAPS | Page eyebrow on docs/static screens; small section labels |
-| `RovaTokens.statusPillLabel` | `font-size: 11sp`, weight `500`, tabular-nums | REC / WAIT badges, loop counter pills |
-| `RovaTokens.cellValue` | `font-size: 12sp`, weight `500`, tabular-nums, color = high-emphasis | The 5-cell record summary card values |
-| `RovaTokens.cellKey` | `font-size: 8sp`, weight `400`, ALL-CAPS, color = low-emphasis | Cell label below the value |
+| `Typography` slot | Size | Weight | Letter-spacing | Notes |
+|---|---|---|---|---|
+| `displayMedium` | 40sp | Bold (700) | −0.5sp | serif dropped (Phase 1.C) |
+| `headlineSmall` | 26sp | SemiBold (600) | −0.2sp | serif dropped (Phase 1.C) |
+| `titleLarge` | 22sp | SemiBold (600) | 0sp | serif dropped (Phase 1.C) |
+| `titleMedium` | 17sp | Bold (700) | +0.1sp | |
+| `titleSmall` | 15sp | SemiBold (600) | +0.1sp | |
+| `bodyLarge` | 16sp | Normal (400) | +0.15sp | |
+| `bodyMedium` | 14sp | Normal (400) | +0.2sp | |
+| `bodySmall` | 12sp | Normal (400) | +0.25sp | |
+| `labelLarge` | 13sp | Bold (700) | +0.4sp | |
+| `labelMedium` | 12sp | Medium (500) | +0.35sp | |
+| `labelSmall` | 11sp | SemiBold (600) | +0.5sp | |
+| `NumericMonoLarge` *(top-level `TextStyle`)* | 64sp | Medium (500) | 0sp | `FontFamily.Monospace`; `tnum`; Slice 3 HUD timer — unchanged |
+| `NumericMonoMedium` *(top-level `TextStyle`)* | 32sp | Medium (500) | 0sp | `FontFamily.Monospace`; `tnum`; countdown — unchanged |
 
-Tabular figures (`fontFeatureSettings = "tnum"`) apply to every numeric value rendered in the UI — counters, timers, file sizes, dates that contain digits. Slice 3 set the precedent (`NumericMonoLarge`); Phase 2 extends it to the `cellValue` and any other numeric cell.
+#### Screen-local type styles — `RovaTokens` (all Inter)
 
-#### Why `FontFamily.SansSerif` and not bundled Inter
+These are **not** M3 `Typography` slots. They live in `RovaTokens.kt` and are consumed directly by the composables that need them.
 
-The mockups call out Inter explicitly. The reasons to defer the actual Inter font to a future slice:
-1. Adding a font requires a `res/font/inter_*.ttf` asset, a `fontFamily` definition file, and license attribution. Each is a small but non-zero scope item.
-2. Roboto (Android default sans on most OEM skins) is metrically close enough that Phase 2 visual review can land without it.
-3. Bundling Inter on a docs-only foundation phase is exactly the kind of premature dependency the project's CLAUDE.md warns against.
+| Token | Size | Weight | Letter-spacing | Feature | Used in |
+|---|---|---|---|---|---|
+| `eyebrow` | 9sp | Medium (500) | +2.0sp | — | Section eyebrows, small labels; ALL-CAPS at call site |
+| `statusPillLabel` | 11sp | Medium (500) | 0sp | `tnum` | REC / WAIT badges, loop counter pills |
+| `cellValue` | 12sp | Medium (500) | 0sp | `tnum` | 5-cell settings card values |
+| `cellKey` | 8sp | Normal (400) | +0.8sp | — | Cell label below the value; ALL-CAPS at call site |
+| `loopCount` | 21sp | SemiBold (600) | −0.6sp | `tnum` | `.loop-count` — big "4/10" numeral in the loop pill |
+| `loopUnit` | 10sp | Normal (400) | +1.0sp | — | `.loop-unit` — "LOOPS DONE" caption beside `loopCount` |
+| `statusMain` | 11sp | Normal (400) | +0.1sp | — | `.status-main` — status-pill primary label ("Recording") |
+| `statusTime` | 11sp | Light (300) | 0sp | `tnum` | `.status-time` — status-pill trailing time ("· 0:18 left") |
+| `swipeLabel` | 8sp | Normal (400) | +1.4sp | — | `.swipe-label` — "SWIPE TO EDIT" hint above settings card |
+| `navTxt` | 9sp | Normal (400) | +0.6sp | — | `.nav-txt` — Library / Settings / Start labels in bottom nav |
+| `zoneTag` | 7.5sp | Medium (500) | +1.5sp | — | `.cam-zone-tag` — "PORTRAIT · 9:16" tag in dual mode |
 
-The Phase 2.1 PR description should call out `// TODO: bundle Inter font asset` next to the `FontFamily.SansSerif` reference so a future polish slice can find it.
+Tabular figures (`fontFeatureSettings = "tnum"`) apply to every numeric value rendered in the UI — counters, timers, file sizes, dates that contain digits. `NumericMonoLarge` set the precedent (Slice 3); Phase 1 extends it to `cellValue`, `statusPillLabel`, `loopCount`, `statusTime`.
 
 ### 2.3 Shape / radius tokens
 
@@ -257,28 +268,160 @@ These are token-scoped accessibility rules. Cross-screen accessibility lives in 
 | `surface` (and surface-container family) = derived from mockup | `RovaTokens.pill` (= `RoundedCornerShape(999.dp)`) |
 | `onBackground` / `onSurface` text emphases via `.copy(alpha = ...)` | All sizing tokens (`recordCardBottomInset`, `camControlGap`, etc.) |
 | `outlineVariant` ≈ `rgba(255,255,255,0.18)` | All warning severity tokens (`RovaWarnings.*`) |
-| `Typography` slots (with serif → sans replacement) | `Type.NumericMonoLarge` / `Type.NumericMonoMedium` (already top-level) |
-| `Shapes` defaults | `RovaTokens.eyebrow` / `cellValue` / `cellKey` text styles |
+| `Typography` slots (serif dropped; all Inter via `Font.kt`) | `Type.NumericMonoLarge` / `Type.NumericMonoMedium` (already top-level) |
+| `Shapes` defaults | `RovaTokens` type styles (`eyebrow`, `cellValue`, `cellKey`, `loopCount`, `loopUnit`, `statusMain`, `statusTime`, `swipeLabel`, `navTxt`, `zoneTag`) |
 | | `RovaTokens.minHitTarget` (assertion constant) |
+| | `RecordChromeTokens.*` (all record-screen colour/dimension constants — see §2.13) |
 
 The reasoning: anything Compose components consume implicitly (`MaterialTheme.colorScheme.error` from a Text / Icon / Surface) belongs in the theme. Anything tied to a specific layout piece (the 5-cell record card, the camera-overlay backdrop, the warning severity bucket) stays local — putting it in `MaterialTheme` would invite over-application and pollute the M3 surface roles.
+
+### 2.13 Record-chrome constants (`RecordChromeTokens`)
+
+`RecordChromeTokens.kt` is a **record-screen-scoped** constants object. It contains every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/01-record-home.html`. It is separate from `RovaTokens` by the same rationale: values that are meaningful only to the record screen cannot over-apply to unrelated UI. Phase 2/3 composables consume these; Phase 1 only declares them.
+
+CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose has no backdrop-blur API; the semi-transparent fills are the production approximation (see §2.5).
+
+#### Surface fills & strokes
+
+| Token | Value | Source CSS |
+|---|---|---|
+| `glassFill` | `Color.Black.copy(alpha = 0.40f)` | `.status-pill` / `.loop-pill` background |
+| `glassStroke` | `Color.White.copy(alpha = 0.07f)` | `.status-pill` / `.loop-pill` border |
+| `camControlFill` | `Color.Black.copy(alpha = 0.38f)` | `.cam-ctrl-btn` background |
+| `camControlStroke` | `Color.White.copy(alpha = 0.09f)` | `.cam-ctrl-btn` border |
+| `settingsCardFill` | `Color.White.copy(alpha = 0.065f)` | `.settings-card` background |
+| `settingsCardStroke` | `Color.White.copy(alpha = 0.09f)` | `.settings-card` border |
+| `cellDivider` | `Color.White.copy(alpha = 0.07f)` | `.s-cell + .s-cell` divider |
+| `bottomNavFill` | `Color.Black.copy(alpha = 0.50f)` | `.bottom-nav` background |
+| `bottomNavTopStroke` | `Color.White.copy(alpha = 0.055f)` | `.bottom-nav` top border |
+
+#### Status dots
+
+| Token | Value | Source CSS |
+|---|---|---|
+| `dotIdle` | `Color.White.copy(alpha = 0.25f)` | `.dot-idle` |
+| `dotRecording` | `Color(0xFFEF4444)` | `.dot-recording` — recording red |
+| `dotBreak` | `Color(0xFF94A3B8)` | `.dot-break` — slate (corrects today's amber) |
+
+#### FAB (`.center-btn`)
+
+| Token | Value | Source CSS |
+|---|---|---|
+| `fabStartFill` | `Color.White.copy(alpha = 0.07f)` | `.btn-start` background |
+| `fabStartStroke` | `Color.White.copy(alpha = 0.15f)` | `.btn-start` border |
+| `fabStopFill` | `Color(0xFFEF4444).copy(alpha = 0.12f)` | `.btn-stop` background |
+| `fabStopStroke` | `Color(0xFFEF4444).copy(alpha = 0.30f)` | `.btn-stop` border |
+| `fabStopRing` | `Color(0xFFEF4444).copy(alpha = 0.10f)` | `.btn-stop::after` outer ring |
+| `stopSquare` | `Color(0xFFEF4444)` | `.stop-sq` glyph |
+
+#### Camera-zone framing (dual mode)
+
+| Token | Value | Source CSS |
+|---|---|---|
+| `splitDivider` | `Color.White.copy(alpha = 0.14f)` | `.cam-split-divider` |
+| `camZoneBackground` | `Color(0xFF060D18)` | `.cam-zone` background |
+| `cameraGridLine` | `Color.White.copy(alpha = 0.018f)` | `.camera-grid` line |
+| `focusFrameStroke` | `Color.White.copy(alpha = 0.20f)` | `.focus-frame` bracket |
+
+#### Text-fill colours (white at mockup alpha)
+
+| Token | Alpha | Source CSS |
+|---|---|---|
+| `loopCountText` | 0.93f | `.loop-count` |
+| `loopUnitText` | 0.32f | `.loop-unit` |
+| `statusMainText` | 0.65f | `.status-main` |
+| `statusTimeText` | 0.32f | `.status-time` |
+| `cellValueText` | 0.88f | `.s-val` |
+| `cellKeyText` | 0.28f | `.s-key` |
+| `cellValueReadOnlyText` | 0.50f | Mode cell read-only |
+| `settingsArrow` | 0.18f | `.settings-arrow` |
+| `swipeHint` | 0.22f | `.swipe-hint` container |
+| `navIcon` | 0.35f | `.nav-ico` glyph |
+| `navText` | 0.30f | `.nav-txt` |
+| `zoneTagText` | 0.32f | `.cam-zone-tag` |
+
+#### Pills
+
+| Token | Value | Notes |
+|---|---|---|
+| `statusPillRadius` | 20.dp | `.status-pill` corner radius |
+| `loopPillRadius` | 11.dp | `.loop-pill` corner radius |
+| `statusPillPaddingH` | 11.dp | `.status-pill` horizontal padding |
+| `statusPillPaddingV` | 6.dp | `.status-pill` vertical padding |
+| `loopPillPaddingH` | 13.dp | `.loop-pill` horizontal padding |
+| `loopPillPaddingV` | 8.dp | `.loop-pill` vertical padding |
+| `pillContentGap` | 7.dp | `.status-pill` inner gap |
+| `loopPillContentGap` | 6.dp | `.loop-pill` inner gap |
+| `topOverlayGap` | 8.dp | gap between loop pill and status pill |
+| `dotSize` | 6.dp | `.dot` diameter |
+
+#### Camera controls
+
+| Token | Value | Notes |
+|---|---|---|
+| `camControlSize` | 30.dp | `.cam-ctrl-btn` diameter |
+| `camControlGap` | 7.dp | `.cam-controls` vertical gap |
+
+#### Settings card
+
+| Token | Value | Notes |
+|---|---|---|
+| `settingsCardRadius` | 14.dp | corner radius |
+| `settingsCardPaddingH` | 12.dp | horizontal padding |
+| `settingsCardPaddingV` | 7.dp | vertical padding |
+| `settingsCellPaddingH` | 3.dp | `.s-cell` horizontal padding |
+| `settingsWrapGap` | 7.dp | `.settings-wrap` vertical gap |
+| `settingsCardBottomInset` | 110.dp | `.settings-wrap` bottom offset above nav |
+| `swipeBarWidth` | 30.dp | `.swipe-bar` width |
+| `swipeBarHeight` | 2.dp | `.swipe-bar` height |
+
+#### Bottom nav
+
+| Token | Value | Notes |
+|---|---|---|
+| `bottomNavHeight` | 106.dp | full bar height |
+| `bottomNavPaddingH` | 28.dp | horizontal padding |
+| `bottomNavPaddingBottom` | 18.dp | bottom padding |
+| `navItemGap` | 5.dp | `.nav-item` / `.center-btn-wrap` inner gap |
+| `navIconBoxSize` | 42.dp | `.nav-ico` rounded container |
+| `navIconGlyphSize` | 20.dp | inner SVG glyph size |
+| `navIconCornerRadius` | 12.dp | `.nav-ico` corner radius |
+| `fabSize` | 56.dp | `.center-btn` diameter |
+| `fabStopRingInset` | 5.dp | outer ring extension on stop state |
+| `stopSquareSize` | 18.dp | `.stop-sq` size |
+| `stopSquareRadius` | 4.dp | `.stop-sq` corner radius |
+
+#### Shared geometry
+
+| Token | Value | Notes |
+|---|---|---|
+| `screenEdgeMargin` | 16.dp | overlay / controls / settings-wrap edge offset |
+| `splitDividerHeight` | 2.dp | `.cam-split-divider` height |
+| `zoneTagPaddingEnd` | 13.dp | `.cam-zone-tag` end offset |
+| `zoneTagPaddingBottom` | 9.dp | `.cam-zone-tag` bottom offset |
+| `focusFrameSize` | 60.dp | `.focus-frame` bounding square |
 
 ---
 
 ## 3. Implementation notes (for Phase 2.1)
 
-A Phase 2.1 PR translating this contract into code should:
+**Phase 1 Foundation status (implemented on `feat/record-skin-phase-1-foundation`):**
+
+| Item | Status |
+|---|---|
+| `Font.kt` — Inter downloadable font declaration | Done |
+| `Type.kt` — all M3 `Typography` slots wired to `Inter`; serif dropped | Done |
+| `RovaTokens.kt` — shape, sizing/spacing, and all type styles (including Phase 1 mockup scale) | Done |
+| `RecordChromeTokens.kt` — full record-screen pixel constants | Done |
+
+**Remaining for Phase 2.1 PR:**
 
 1. **Edit `Color.kt`** to add the new dark-scheme entries (`#06090f` background, `#5b7fff` primary, `#ef4444` error, derived surface family). Keep the existing `Sand*` / `Ink*` / `Harbor*` / `Copper*` / `Sage*` palette unchanged (light scheme stays).
-2. **Edit `Type.kt`** to drop `FontFamily.Serif` from `displayMedium`, `headlineSmall`, `titleLarge`. Keep `NumericMonoLarge` / `NumericMonoMedium` exactly as shipped (Slice 3).
-3. **Add a new file** `app/src/main/java/com/aritr/rova/ui/theme/RovaTokens.kt` containing screen-local tokens (`RovaTokens.pill`, `RovaTokens.eyebrow`, `RovaTokens.minHitTarget`, severity colors as `RovaWarnings.*`, etc.). One file is fine — they all share the `theme` package.
-4. **Do not** introduce a font asset for Inter in this PR. Add the `// TODO: bundle Inter font asset` marker next to the `FontFamily.SansSerif` references that replaced serif.
-5. **Do not** touch `Theme.kt` beyond the `colorScheme` / `typography` / `shapes` it already wires up (lines 70-95 today). The light scheme stays.
-6. **Test gates.** `lintDebug` + `testDebugUnitTest` + `assembleRelease`. Lint baseline must not be expanded to mask new `Lint` warnings (e.g. unused color resources). Add a Compose preview for at least one screen using the new tokens (Settings, idle dock — pick one) and verify dark and light renderings.
+2. **Do not** touch `Theme.kt` beyond the `colorScheme` / `typography` / `shapes` it already wires up. The light scheme stays.
+3. **Test gates.** `lintDebug` + `testDebugUnitTest` + `assembleRelease`. Lint baseline must not be expanded to mask new `Lint` warnings (e.g. unused color resources). Add a Compose preview for at least one screen using the new tokens (Settings, idle dock — pick one) and verify dark and light renderings.
 
-The PR is **not** allowed to:
-- Implement any new screen layout (that's Phase 2.1's other scope, but token-only changes ship first).
-- Bundle a real Inter font.
+The Phase 2.1 PR is **not** allowed to:
+- Implement any new screen layout (token-only changes ship first).
 - Modify `service/`, `data/`, or `RovaApp.kt`.
 - Create a "design tokens" Gradle module — single-file `RovaTokens.kt` is enough for v1.0.
 
@@ -287,7 +430,7 @@ The PR is **not** allowed to:
 ## 4. NO-GO list (token-specific)
 
 1. **Do not introduce real `Modifier.blur` for frosted-glass effects in Phase 2.** Pre-API-31 fallback inconsistency + GPU cost during recording > visual fidelity. Tonal elevation + alpha is the v1.0 substitute. Re-evaluate post-v1.0 polish only if a measurable user-visible regression surfaces.
-2. **Do not bundle Inter font in this phase.** The mockups call out Inter; production substitutes `FontFamily.SansSerif` until a future polish slice. Adding the font asset now is scope creep on a foundation pass.
+2. ~~**Do not bundle Inter font in this phase.**~~ **Resolved (Phase 1).** Inter is delivered via the AndroidX Google Fonts downloadable provider (`Font.kt`). No `.ttf` asset was bundled. The `FontFamily.SansSerif` stand-in and `// TODO: bundle Inter font asset` marker are both removed.
 3. **Do not migrate the light theme to match the new dark direction.** The mockups are dark-only. Light scheme decisions belong to a separate slice with its own design pass.
 4. **Do not add severity tokens for warning states beyond the four in §2.10.** Adding a fifth severity bucket invalidates the `WarningCenterContract.md` model; new severities come back as Phase 1.B revisions, not a quick fix in `RovaTokens.kt`.
 5. **Do not use raw hex literals (`Color(0xFFEF4444)`) in screen code.** Every color reaches the screen via either `MaterialTheme.colorScheme.*` or `RovaTokens.* / RovaWarnings.*`. The only exception is `Color.Transparent` for over-painting.
@@ -305,7 +448,7 @@ These should be resolved before the Phase 2.1 PR opens. Defer until then; do not
 2. **`MidnightSurface` exact value.** The replacement value approximated `rgba(9,13,20,0.97)` over `#06090f` ≈ `#0E1216`. Confirm against an on-device screenshot before the Phase 2.1 PR commits the exact hex.
 3. **Eyebrow style call sites.** Eyebrow labels appear all over the mockup pages. In production, only a few real screens will need them (Settings sections, possibly the player title row). List the call sites in the Phase 2.1 PR description so the token does not become decoration.
 4. **Drill / Vlog / Custom mode tabs styling.** The mockup shows tabs at the top of `01-record-home.html`. Tokens: tab radius, selected-state color, font weight. Defer to Phase 2.1 — listed here so the token gap is visible.
-5. **Inter font bundling timing.** Decide whether v1.0 ships with `FontFamily.SansSerif` (Roboto on most devices) or a real Inter family. The recommendation in §2.2 is to defer; revisit at v1.1 polish.
+5. ~~**Inter font bundling timing.**~~ **Resolved (Phase 1).** Inter is live via the AndroidX Google Fonts provider (`Font.kt`). No `.ttf` bundle; first-cold-launch falls back to Roboto for ~1 frame. No further action needed.
 
 ---
 
@@ -313,7 +456,7 @@ These should be resolved before the Phase 2.1 PR opens. Defer until then; do not
 
 - Mockup design system source: `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" (lines 86–158).
 - Mockup CSS: every `<style>` block in `mockups/new_uiux/*.html`. The 18-state warning palette lives in `07-warnings.html` lines 32–35 (`sev-r`, `sev-y`, `sev-b`, `sev-o`).
-- Existing theme: `app/src/main/java/com/aritr/rova/ui/theme/Color.kt`, `Type.kt`, `Theme.kt`.
+- Theme files: `app/src/main/java/com/aritr/rova/ui/theme/Color.kt`, `Type.kt`, `Theme.kt`, `Font.kt`, `RovaTokens.kt`, `RecordChromeTokens.kt`.
 - Slice 3 typography precedent: `Type.kt:22-42` (`NumericMonoLarge`, `NumericMonoMedium`).
 - Bottom-nav surface precedent: `MainScreen.kt:118-179`.
 - Replan source: `NEW_UI_BACKEND_REPLAN.md` §5 Phase 1.B + 1.C.
