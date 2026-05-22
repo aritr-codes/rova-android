@@ -123,6 +123,8 @@ These are **not** M3 `Typography` slots. They live in `RovaTokens.kt` and are co
 
 Tabular figures (`fontFeatureSettings = "tnum"`) apply to every numeric value rendered in the UI — counters, timers, file sizes, dates that contain digits. `NumericMonoLarge` set the precedent (Slice 3); Phase 1 extends it to `cellValue`, `statusPillLabel`, `loopCount`, `statusTime`.
 
+**Settings-sheet type scale (added with the Phase 3 settings-sheet re-skin).** Seven additional `RovaTokens` styles cover the settings sheet (sourced from `mockups/new_uiux/02-settings-sheet.html`): `sheetSectionLabel` (section headings inside the sheet), `sheetRowLabel` (row label / left-side key), `sheetStepValue` (stepper current value), `sheetChip` (quality-chip text), `sheetModeTab` (mode-tab label), `sheetCta` (Save CTA button label), and `peekStatus` (camera-peek strip status line). These are settings-sheet-scoped and consumed by `SettingsSheet.kt`; they are not M3 `Typography` slots.
+
 ### 2.3 Shape / radius tokens
 
 | Mockup element | Radius | Material 3 slot |
@@ -400,6 +402,12 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 | `zoneTagPaddingEnd` | 13.dp | `.cam-zone-tag` end offset |
 | `zoneTagPaddingBottom` | 9.dp | `.cam-zone-tag` bottom offset |
 | `focusFrameSize` | 60.dp | `.focus-frame` bounding square |
+
+### 2.14 Settings-sheet constants (`SettingsSheetTokens`)
+
+`SettingsSheetTokens.kt` is a **settings-sheet-scoped** constants object, carrying every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/02-settings-sheet.html`. It follows the same rationale as `RecordChromeTokens`: values that are meaningful only to the settings sheet must not bleed into unrelated UI via `RovaTokens`. The object is consumed exclusively by `SettingsSheet.kt`. Constants cover the camera-peek strip (fill, border, radius, peek height), the sheet panel surface (fill, stroke, corner radius), the mode-tab row (selected/unselected fills and strokes), row steppers (button size, radius, fill, label colours), quality chips (selected/idle fills, stroke, radius), the Save CTA button (fill, text colour, height, radius), and shared row geometry (horizontal padding, row height, divider alpha, section-label spacing).
+
+CSS `backdrop-filter` blurs present in `02-settings-sheet.html` are deliberately **not** tokenised — Compose has no backdrop-blur API, and the panel's near-opaque fill (`rgba(9,13,20,0.97)`) means the no-blur approximation is visually faithful (see §2.5 for the production substitute rationale).
 
 ---
 
