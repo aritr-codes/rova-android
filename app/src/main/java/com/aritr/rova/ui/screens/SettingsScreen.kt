@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Smartphone
@@ -96,6 +97,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
+    val cameraGuidesEnabled by settingsViewModel.cameraGuidesEnabled.collectAsStateWithLifecycle()
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
     val exportFolderName by settingsViewModel.exportFolderName.collectAsStateWithLifecycle()
@@ -160,6 +162,21 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                         Switch(
                             checked = keepScreenOn,
                             onCheckedChange = { settingsViewModel.keepScreenOn.value = it }
+                        )
+                    }
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.GridOn,
+                    label = "Camera guides",
+                    supporting = "Show the framing grid, focus brackets and edge vignette over the viewfinder.",
+                    onClick = {
+                        settingsViewModel.cameraGuidesEnabled.value = !cameraGuidesEnabled
+                    },
+                    trailing = {
+                        Switch(
+                            checked = cameraGuidesEnabled,
+                            onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
                         )
                     }
                 )
