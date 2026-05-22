@@ -185,10 +185,6 @@ object RecordChromeTokens {
     val cameraGridCellHeight = 228.3.dp
     /** `.camera-grid` line thickness — the linear-gradient's `1px` band. */
     val cameraGridLineWidth = 1.dp
-    /** `.camera-vignette` outer stop — `rgba(0,0,0,0.6)`. */
-    val cameraVignetteEdge = Color.Black.copy(alpha = 0.6f)
-    /** `.camera-vignette` inner transparent stop — CSS `transparent 35%`. */
-    val cameraVignetteInnerStop = 0.35f
     /** `.focus-frame` corner-bracket arm length — CSS corner `14px`. */
     val focusFrameCornerArm = 14.dp
     /** `.focus-frame` corner-bracket stroke width — CSS `border-width: 1.5px`. */

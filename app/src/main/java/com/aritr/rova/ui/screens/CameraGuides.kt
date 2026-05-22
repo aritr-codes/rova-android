@@ -1,7 +1,6 @@
 package com.aritr.rova.ui.screens
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -10,14 +9,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import com.aritr.rova.ui.theme.RecordChromeTokens
 
 /**
- * Decorative camera-guide overlays — re-skin of the `.camera-grid`,
- * `.camera-vignette` and `.focus-frame` layers in
- * `mockups/new_uiux/01-record-home.html`.
+ * Decorative camera-guide overlays — re-skin of the `.camera-grid` and
+ * `.focus-frame` layers in `mockups/new_uiux/01-record-home.html`.
  *
  * Stateless and **non-interactive** (no `clickable` / `pointerInput`) — it
  * cannot intercept camera-area touches. The caller sizes the host (a P+L
@@ -30,7 +26,6 @@ fun CameraGuides(visible: Boolean, modifier: Modifier = Modifier) {
     if (!visible) return
     Box(modifier) {
         CameraGrid(Modifier.fillMaxSize())
-        CameraVignette(Modifier.fillMaxSize())
         // CSS `translate(-50%,-60%)` puts the frame centre 10 % of its own
         // height above the parent centre — centre-align then offset up.
         FocusFrame(
@@ -60,25 +55,6 @@ private fun CameraGrid(modifier: Modifier = Modifier) {
             y += cellH
         }
     }
-}
-
-/**
- * `.camera-vignette` — radial edge-darkening. Compose `radialGradient` is
- * circular; the mockup's `ellipse 90% 80%` is approximated by a circular
- * gradient sized to the host (default radius reaches the farthest corner).
- */
-@Composable
-private fun CameraVignette(modifier: Modifier = Modifier) {
-    Box(
-        modifier.background(
-            Brush.radialGradient(
-                colorStops = arrayOf(
-                    RecordChromeTokens.cameraVignetteInnerStop to Color.Transparent,
-                    1f to RecordChromeTokens.cameraVignetteEdge,
-                ),
-            ),
-        ),
-    )
 }
 
 /**
