@@ -104,25 +104,10 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
     val customPresets: StateFlow<List<RovaPreset>> = _customPresets.asStateFlow()
 
-    // --- Slice 2: which idle-dock cell currently has its focused edit
-    // sheet mounted. null = no sheet open. Lives on the VM so the sheet
-    // visibility survives configuration changes. Single-cell mode by
-    // construction — only one sheet can be open at a time.
-    private val _editingField = MutableStateFlow<SheetTarget?>(null)
-    val editingField: StateFlow<SheetTarget?> = _editingField.asStateFlow()
-
-    fun openSheet(target: SheetTarget) {
-        _editingField.value = target
-    }
-
-    fun closeSheet() {
-        _editingField.value = null
-    }
-
-    // --- Combined settings sheet visibility.
+    // --- Settings sheet visibility.
     //
-    // Mirrors the editingField/openSheet/closeSheet pattern above.
-    // Opened when the user taps the settings card on the idle layout.
+    // Opened when the user taps the settings card on the idle layout;
+    // drives the SettingsSheet camera-peek panel in RecordScreen.
     private val _combinedSettingsOpen = MutableStateFlow(false)
     val combinedSettingsOpen: StateFlow<Boolean> = _combinedSettingsOpen.asStateFlow()
 
