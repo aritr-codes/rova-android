@@ -21,15 +21,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FlashAuto
-import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.FlipCameraIos
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History as HistoryIcon
-import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -160,12 +153,30 @@ fun RecordCameraControls(
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
         GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
-            val (icon, contentTint) = when (flashMode) {
-                RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn to (if (enabled) Color.Yellow else tint)
-                RovaRecordingService.FLASH_MODE_AUTO -> Icons.Default.FlashAuto to tint
-                else -> Icons.Default.FlashOff to tint
+            val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
+                flashMode != RovaRecordingService.FLASH_MODE_AUTO
+            val contentTint = when {
+                flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
+                else -> tint
             }
-            Icon(icon, contentDescription = "Flash", tint = contentTint)
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    RecordChromeIcons.flashBolt,
+                    contentDescription = "Flash",
+                    tint = contentTint,
+                    modifier = Modifier.size(15.dp),
+                )
+                if (isOff) {
+                    // OFF state — diagonal slash across the bolt (mockup shows
+                    // only the bolt; the slash is the app's tri-state affordance).
+                    Box(
+                        Modifier
+                            .size(width = 20.dp, height = 1.5.dp)
+                            .rotate(-45f)
+                            .background(contentTint),
+                    )
+                }
+            }
         }
         // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from
         // [enabled] so P+L mode can disable JUST this button while
@@ -175,7 +186,12 @@ fun RecordCameraControls(
         // and entry-level Samsung devices like the A17 don't support
         // concurrent rear+front camera streams either).
         GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
-            Icon(Icons.Default.FlipCameraIos, contentDescription = "Flip camera", tint = flipTint)
+            Icon(
+                RecordChromeIcons.flipCamera,
+                contentDescription = "Flip camera",
+                tint = flipTint,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -254,7 +270,12 @@ fun RecordSettingsCard(
             SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
             CellSep()
             SettingsCell("Mode", mode, Modifier.weight(1f), readOnly = true)
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Edit session settings", tint = Color.White.copy(alpha = 0.18f), modifier = Modifier.padding(start = 6.dp))
+            Icon(
+                RecordChromeIcons.chevronUp,
+                contentDescription = "Edit session settings",
+                tint = RecordChromeTokens.settingsArrow,
+                modifier = Modifier.padding(start = 8.dp).size(13.dp),
+            )
         }
     }
 }
@@ -330,9 +351,9 @@ fun RecordBottomNav(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceAround,
     ) {
-        NavItem(icon = Icons.Default.PhotoLibrary, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+        NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
         RecordFab(state = fabState, onClick = onFabClick)
-        NavItem(icon = Icons.Default.SettingsIcon, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+        NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
     }
 }
 
@@ -343,7 +364,19 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
         modifier = if (enabled) Modifier.clickable { onClick() } else Modifier,
     ) {
-        Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = if (enabled) 0.4f else 0.14f), modifier = Modifier.size(34.dp))
+        Box(
+            modifier = Modifier
+                .size(RecordChromeTokens.navIconBoxSize)
+                .clip(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
+                modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
+            )
+        }
         Text(
             label,
             style = RovaTokens.navTxt,
@@ -360,25 +393,36 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
         RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), "Start recording (unavailable)")
     }
     val enabled = state != RecordFabState.Disabled
-    Box(
-        modifier = Modifier
-            .size(RecordChromeTokens.fabSize)
-            .clip(CircleShape)
-            .background(fill)
-            .border(1.5.dp, stroke, CircleShape)
-            .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
-            .semantics { contentDescription = semanticsLabel },
-        contentAlignment = Alignment.Center,
-    ) {
-        when (state) {
-            RecordFabState.Stop -> Box(
+    Box(contentAlignment = Alignment.Center) {
+        if (state == RecordFabState.Stop) {
+            // .btn-stop::after — a ring inset -5 dp (extends outward).
+            Box(
                 Modifier
-                    .size(RecordChromeTokens.stopSquareSize)
-                    .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
-                    .background(RecordChromeTokens.stopSquare),
+                    .size(RecordChromeTokens.fabSize + RecordChromeTokens.fabStopRingInset * 2)
+                    .clip(CircleShape)
+                    .border(1.dp, RecordChromeTokens.fabStopRing, CircleShape),
             )
-            RecordFabState.Start -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(26.dp))
-            RecordFabState.Disabled -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(26.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(RecordChromeTokens.fabSize)
+                .clip(CircleShape)
+                .background(fill)
+                .border(1.5.dp, stroke, CircleShape)
+                .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+                .semantics { contentDescription = semanticsLabel },
+            contentAlignment = Alignment.Center,
+        ) {
+            when (state) {
+                RecordFabState.Stop -> Box(
+                    Modifier
+                        .size(RecordChromeTokens.stopSquareSize)
+                        .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
+                        .background(RecordChromeTokens.stopSquare),
+                )
+                RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
+                RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+            }
         }
     }
 }
