@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface as M3Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.theme.RecordChromeTokens
+import com.aritr.rova.ui.theme.RovaTokens
 
 /**
  * Phase 6.1c — P+L mode preview surface. Two stacked TextureViews per
@@ -41,6 +40,7 @@ fun DualPreviewZone(
     registerPreviewSurface: (side: VideoSide, surface: Surface, width: Int, height: Int) -> Unit,
     unregisterPreviewSurface: (side: VideoSide) -> Unit,
     modifier: Modifier = Modifier,
+    guidesEnabled: Boolean = true,
 ) {
     Column(modifier = modifier) {
         // Top zone — portrait preview, weight 352:225 (mockup proportions).
@@ -49,6 +49,7 @@ fun DualPreviewZone(
             label = "Portrait · 9:16",
             registerPreviewSurface = registerPreviewSurface,
             unregisterPreviewSurface = unregisterPreviewSurface,
+            guidesEnabled = guidesEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(352f),
@@ -66,6 +67,7 @@ fun DualPreviewZone(
             label = "Landscape · 16:9",
             registerPreviewSurface = registerPreviewSurface,
             unregisterPreviewSurface = unregisterPreviewSurface,
+            guidesEnabled = guidesEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(225f),
@@ -74,7 +76,7 @@ fun DualPreviewZone(
 }
 
 /**
- * Single zone — hosts a TextureView via AndroidView and a label chip
+ * Single zone — hosts a TextureView via AndroidView and a label
  * in the bottom-right corner per mockup .cam-zone-tag styling.
  */
 @Composable
@@ -83,9 +85,10 @@ private fun PreviewZone(
     label: String,
     registerPreviewSurface: (side: VideoSide, surface: Surface, width: Int, height: Int) -> Unit,
     unregisterPreviewSurface: (side: VideoSide) -> Unit,
+    guidesEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.background(Color.Black)) {
+    Box(modifier = modifier.background(RecordChromeTokens.camZoneBackground)) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
@@ -107,20 +110,21 @@ private fun PreviewZone(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        // cam-zone-tag chip — bottom-right per mockup §C-Z.
-        M3Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = Color.Black.copy(alpha = 0.45f),
+        // Decorative guides — grid + vignette + focus brackets — above the
+        // camera, below the tag. Renders nothing when the toggle is off.
+        CameraGuides(visible = guidesEnabled, modifier = Modifier.fillMaxSize())
+        // cam-zone-tag — plain uppercase micro-text (mockup .cam-zone-tag:
+        // 7.5 sp, weight 500, 1.5 sp tracking, white-32%), bottom-end.
+        Text(
+            text = label.uppercase(),
+            style = RovaTokens.zoneTag,
+            color = RecordChromeTokens.zoneTagText,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 13.dp, bottom = 9.dp),
-        ) {
-            Text(
-                text = label,
-                color = Color.White.copy(alpha = 0.75f),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-        }
+                .padding(
+                    end = RecordChromeTokens.zoneTagPaddingEnd,
+                    bottom = RecordChromeTokens.zoneTagPaddingBottom,
+                ),
+        )
     }
 }
