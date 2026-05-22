@@ -59,7 +59,7 @@ fun RecordScreen(
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
-    val editingField by viewModel.editingField.collectAsStateWithLifecycle()
+    val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
 
     // Slice 2 — read-only echo of the existing app-level recovery
     // report. No new RecoveryViewModel ownership; the History tab
@@ -500,6 +500,12 @@ fun RecordScreen(
                     }
                 }
 
+                // Chrome (recovery chip, idle WarningCenter, active HUD, settings
+                // card, top overlay / cam-controls, bottom nav) is suppressed while
+                // the SettingsSheet is open — the sheet is a camera-peek panel, so
+                // only the camera preview shows behind it. The MergeCompleteCard and
+                // loading overlay stay outside this gate.
+                if (!combinedOpen) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -656,6 +662,7 @@ fun RecordScreen(
                     onFabClick = onFabClick,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
+                }   // close if (!combinedOpen) — chrome suppressed behind the sheet
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
                 // shown for ~900 ms between merge success and the
@@ -676,56 +683,35 @@ fun RecordScreen(
 
                 // Task 14 — the in-app tutorial overlay (3-step walkthrough) is
                 // removed; onboarding owns the first-run tutorial now (spec A2).
+
+                // Settings sheet — the custom camera-peek panel
+                // (mockups/new_uiux/02-settings-sheet.html). Always emitted;
+                // SettingsSheet owns its slide animation via `visible`. Edits
+                // write through immediately; Save / handle-drag / back dismiss.
+                SettingsSheet(
+                    visible = combinedOpen,
+                    durationSeconds = duration,
+                    loopCount = loopCount,
+                    intervalMinutes = interval,
+                    quality = resolution,
+                    currentMode = mode,
+                    editable = !isUiLocked,
+                    statusText = statusText,
+                    flashMode = flashMode,
+                    flipEnabled = !isUiLocked && mode != "PortraitLandscape",
+                    onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
+                    onFlip = {
+                        if (!isUiLocked && mode != "PortraitLandscape") viewModel.flipCamera()
+                    },
+                    onDurationChange = { viewModel.duration.value = it },
+                    onLoopCountChange = { viewModel.loopCount.value = it },
+                    onIntervalChange = { viewModel.interval.value = it },
+                    onQualityChange = { viewModel.resolution.value = it },
+                    onModePick = { viewModel.setMode(it) },
+                    onDismiss = { viewModel.closeSettingsSheet() },
+                )
             }   // close Box
         }       // close Scaffold content lambda
-
-    // --------------------------------------------------------------
-    // Edit sheets — single-target router driven by editingField. Lives outside
-    // the Scaffold so the ModalBottomSheet overlays the entire screen. When
-    // invoked from a SessionSettingsSheet row, the per-param sheet stacks ON TOP
-    // of the combined sheet.
-    // --------------------------------------------------------------
-    when (editingField) {
-        SheetTarget.ClipLength -> ClipLengthEditSheet(
-            initialSeconds = duration,
-            onCommit = { viewModel.duration.value = it.coerceIn(1, 300) },
-            onCancel = { viewModel.closeSheet() }
-        )
-        SheetTarget.Repeats -> RepeatsEditSheet(
-            initialLoopCount = loopCount,
-            onCommit = { viewModel.loopCount.value = it },
-            onCancel = { viewModel.closeSheet() }
-        )
-        SheetTarget.Wait -> WaitEditSheet(
-            initialMinutes = interval,
-            onCommit = { viewModel.interval.value = it.coerceAtLeast(0) },
-            onCancel = { viewModel.closeSheet() }
-        )
-        SheetTarget.Quality -> QualityEditSheet(
-            initialQuality = resolution,
-            onCommit = { viewModel.resolution.value = it },
-            onCancel = { viewModel.closeSheet() }
-        )
-        null -> Unit
-    }
-
-    // Task 12/14 — the combined "Session settings" sheet. Opened from the idle
-    // settings card; each row hands off to the per-param editingField router
-    // above, so the per-param sheet stacks ON TOP of this one.
-    val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
-    if (combinedOpen) {
-        SessionSettingsSheet(
-            durationSeconds = duration,
-            loopCount = loopCount,
-            intervalMinutes = interval,
-            quality = resolution,
-            currentMode = mode,
-            modeEnabled = !isUiLocked,
-            onPickRow = { target -> viewModel.openSheet(target) },   // opens the existing per-param sheet ON TOP
-            onModePick = { viewModel.setMode(it) },
-            onDismiss = { viewModel.closeSettingsSheet() },
-        )
-    }
 
     // Phase 2.4 — Merge HUD progression. Merging renders inside the
     // active HUD's [StatusPill] (RecordActiveHud's Merging branch),
