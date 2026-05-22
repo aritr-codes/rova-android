@@ -27,8 +27,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -514,12 +522,51 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
         StatusDotColor.WAITING   -> RecordChromeTokens.dotBreak   // slate #94A3B8 — mockup .dot-break
         StatusDotColor.MERGING   -> MergingDotColor
     }
-    Box(
-        modifier
-            .size(8.dp)
-            .clip(CircleShape)
-            .background(color),
-    )
+    if (dot == StatusDotColor.RECORDING) {
+        // mockup `.dot-recording` — blink 1.8s ease-in-out + a red glow.
+        // Compose has no box-shadow; the glow is a radial-gradient halo drawn
+        // behind the dot, pulsing on the same transition as the dot alpha.
+        val transition = rememberInfiniteTransition(label = "recordingDot")
+        val pulse by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.35f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1800),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "recordingDotPulse",
+        )
+        Box(
+            modifier
+                .size(20.dp)                       // 8 dp dot + room for the ~8 dp halo
+                .drawBehind {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                color.copy(alpha = 0.55f * pulse),
+                                color.copy(alpha = 0f),
+                            ),
+                            radius = size.minDimension / 2f,
+                        ),
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = pulse)),
+            )
+        }
+    } else {
+        Box(
+            modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+    }
 }
 
 @Composable
