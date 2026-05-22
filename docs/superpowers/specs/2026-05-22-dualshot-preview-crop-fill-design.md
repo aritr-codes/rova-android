@@ -87,14 +87,14 @@ Lives with `DualPreviewZone` (same file or a sibling). Rendered once per `Previe
 
 Takes the `VideoSide` → recording aspect (`9f / 16f` PORTRAIT, `16f / 9f` LANDSCAPE). Draws:
 
-- a thin **1 dp solid white outline** (~0.55 alpha) around the recording sub-rectangle;
+- a thin, **faint 1 dp gray outline** (low-alpha light gray, ≈ `rgba(176,180,188,0.38)`) around the recording sub-rectangle — deliberately subtle so it does not compete with the live preview;
 - a **faint scrim** (~black 0.22 alpha) over the non-recorded margin — the band between the zone edge and the guide outline — signalling "this part isn't captured".
 
 Layout uses `Modifier.aspectRatio(recordingAspect)` on a centre-aligned `Box` inside the zone-filling `Box`; `aspectRatio` fits the recording rectangle inside the zone with no manual geometry. The scrim is drawn as the inverse region (zone minus the guide rect).
 
 ### 5.4 `RecordChromeTokens` — new tokens
 
-Add tokens for the guide outline (colour ~white 0.55, width 1 dp) and the scrim colour (~black 0.22). Mockup-derived where possible; net-new otherwise (the mockup has no guide). Documented in `docs/UI_DESIGN_TOKENS.md`.
+Add tokens for the guide outline (faint light-gray, ≈ 0.38 alpha, width 1 dp) and the scrim colour (~black 0.22). Net-new — the HTML mockup has no guide. Documented in `docs/UI_DESIGN_TOKENS.md`.
 
 ## 6. Data flow
 
