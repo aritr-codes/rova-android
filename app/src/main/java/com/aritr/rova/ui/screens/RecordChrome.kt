@@ -47,20 +47,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 
-// Screen-local style constants (see mockups/new_uiux/01-record-home.html .status-pill / .loop-pill;
-// docs/UI_DESIGN_TOKENS.md decides any of these the tokens doc promotes to MaterialTheme.*).
-private val GlassFill = Color.Black.copy(alpha = 0.40f)
-private val GlassStroke = Color.White.copy(alpha = 0.07f)
-private val RecordingDotColor = Color(0xFFEF4444)   // red
-private val WaitingDotColor   = Color(0xFFFBBF24)   // amber (matches WarningCenter's AmberWarning + SoftSheet accent)
-private val MergingDotColor   = Color(0xFF60A5FA)   // blue
-private val StatusPillShape = RoundedCornerShape(20.dp)
-private val PillShape = RoundedCornerShape(11.dp)
-private val ControlBtnSize = 30.dp          // visible glass-circle diameter
-private val ControlBtnTouchSize = 48.dp     // a11y touch target (the glass circle is centered inside)
+// Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
+// docs/UI_DESIGN_TOKENS.md §2.13). Only values with no token stay local:
+// the merging-dot colour (the mockup defines no merging dot) and the 48 dp
+// a11y touch box (an interaction metric, not a mockup pixel).
+private val MergingDotColor = Color(0xFF60A5FA)   // blue — no mockup token (mockup has idle/recording/break only)
+private val ControlBtnTouchSize = 48.dp           // a11y touch target; the glass circle is centered inside
+private val StatusPillShape = RoundedCornerShape(RecordChromeTokens.statusPillRadius)
+private val PillShape = RoundedCornerShape(RecordChromeTokens.loopPillRadius)
+private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCardRadius)
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -79,15 +78,18 @@ fun RecordTopOverlay(
 ) {
     // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
     // (Recording/Waiting) block was removed — unreachable since T9.
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.topOverlayGap)) {
         Row(
             modifier = Modifier
                 .clip(StatusPillShape)
-                .background(GlassFill)
-                .border(1.dp, GlassStroke, StatusPillShape)
-                .padding(horizontal = 11.dp, vertical = 6.dp),
+                .background(RecordChromeTokens.glassFill)
+                .border(1.dp, RecordChromeTokens.glassStroke, StatusPillShape)
+                .padding(
+                    horizontal = RecordChromeTokens.statusPillPaddingH,
+                    vertical = RecordChromeTokens.statusPillPaddingV,
+                ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
         ) {
             StatusDot(hudState)
             Text(statusText, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.65f))
@@ -102,7 +104,12 @@ fun RecordTopOverlay(
 // of the original when-expression is unreachable. Simplified to the idle/white dot.
 @Composable
 private fun StatusDot(hudState: RecordHudState) {
-    Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f)))
+    Box(
+        Modifier
+            .size(RecordChromeTokens.dotSize)
+            .clip(CircleShape)
+            .background(RecordChromeTokens.dotIdle),
+    )
 }
 
 /** What the center button in the Record bottom nav shows / does. */
@@ -150,7 +157,7 @@ fun RecordCameraControls(
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
         GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
             val (icon, contentTint) = when (flashMode) {
                 RovaRecordingService.FLASH_MODE_ON -> Icons.Default.FlashOn to (if (enabled) Color.Yellow else tint)
@@ -182,20 +189,14 @@ private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @C
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(ControlBtnTouchSize)) {
         Box(
             modifier = Modifier
-                .size(ControlBtnSize)
+                .size(RecordChromeTokens.camControlSize)
                 .clip(CircleShape)
-                .background(GlassFill)
-                .border(1.dp, GlassStroke, CircleShape),
+                .background(RecordChromeTokens.camControlFill)
+                .border(1.dp, RecordChromeTokens.camControlStroke, CircleShape),
             contentAlignment = Alignment.Center,
         ) { content() }
     }
 }
-
-// ── RecordSettingsCard style constants ──
-private val SettingsCardShape = RoundedCornerShape(14.dp)
-private val SettingsCardFill = Color.White.copy(alpha = 0.065f)
-private val SettingsCardStroke = Color.White.copy(alpha = 0.09f)
-private val CellDivider = Color.White.copy(alpha = 0.07f)
 
 /**
  * The idle-state settings strip (mockups/new_uiux/01-record-home.html .settings-wrap +
@@ -214,10 +215,16 @@ fun RecordSettingsCard(
     onOpenSheet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap)) {
         // swipe-to-edit hint
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 1.dp)) {
-            Box(Modifier.width(30.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.White.copy(alpha = 0.22f)))
+            Box(
+                Modifier
+                    .width(RecordChromeTokens.swipeBarWidth)
+                    .height(RecordChromeTokens.swipeBarHeight)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(RecordChromeTokens.swipeHint),
+            )
             Text("SWIPE TO EDIT", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.22f))
         }
         Row(
@@ -225,13 +232,16 @@ fun RecordSettingsCard(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)              // a11y minimum touch target
                 .clip(SettingsCardShape)
-                .background(SettingsCardFill)
-                .border(1.dp, SettingsCardStroke, SettingsCardShape)
+                .background(RecordChromeTokens.settingsCardFill)
+                .border(1.dp, RecordChromeTokens.settingsCardStroke, SettingsCardShape)
                 .clickable { onOpenSheet() }
                 .pointerInput(Unit) {
                     detectVerticalDragGestures { _, dragAmount -> if (dragAmount < -8f) onOpenSheet() }
                 }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(
+                    horizontal = RecordChromeTokens.settingsCardPaddingH,
+                    vertical = RecordChromeTokens.settingsCardPaddingV,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SettingsCell("Clip", recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
@@ -250,7 +260,7 @@ fun RecordSettingsCard(
 
 @Composable
 private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean) {
-    Column(modifier = modifier.padding(horizontal = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.labelLarge, color = if (readOnly) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.88f), textAlign = TextAlign.Center, maxLines = 1)
         Text(key.uppercase(), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.28f), textAlign = TextAlign.Center, maxLines = 1)
     }
@@ -258,13 +268,8 @@ private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnl
 
 @Composable
 private fun CellSep() {
-    Box(Modifier.width(1.dp).height(22.dp).background(CellDivider))
+    Box(Modifier.width(1.dp).height(22.dp).background(RecordChromeTokens.cellDivider))
 }
-
-// ── RecordBottomNav style constants ──
-private val BottomNavFill = Color.Black.copy(alpha = 0.50f)
-private val BottomNavStroke = Color.White.copy(alpha = 0.055f)
-private val FabSize = 56.dp
 
 /**
  * Layout metrics RecordScreen needs to clear chrome it can't measure directly.
@@ -300,10 +305,15 @@ fun RecordBottomNav(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(BottomNavFill)
-            .border(width = 1.dp, color = BottomNavStroke, shape = RoundedCornerShape(0.dp))
+            .background(RecordChromeTokens.bottomNavFill)
+            .border(width = 1.dp, color = RecordChromeTokens.bottomNavTopStroke, shape = RoundedCornerShape(0.dp))
             .windowInsetsPadding(WindowInsets.navigationBars)   // clear the gesture-nav bar
-            .padding(horizontal = 28.dp, vertical = 14.dp),
+            .padding(
+                start = RecordChromeTokens.bottomNavPaddingH,
+                end = RecordChromeTokens.bottomNavPaddingH,
+                top = 14.dp,
+                bottom = RecordChromeTokens.bottomNavPaddingBottom,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceAround,
     ) {
@@ -317,7 +327,7 @@ fun RecordBottomNav(
 private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
         modifier = if (enabled) Modifier.clickable { onClick() } else Modifier,
     ) {
         Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = if (enabled) 0.4f else 0.14f), modifier = Modifier.size(34.dp))
@@ -328,14 +338,14 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
 @Composable
 private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
     val (fill, stroke, semanticsLabel) = when (state) {
-        RecordFabState.Start -> Triple(Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.15f), "Start recording")
-        RecordFabState.Stop -> Triple(Color(0xFFEF4444).copy(alpha = 0.13f), Color(0xFFEF4444).copy(alpha = 0.30f), "Stop recording")
+        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, "Start recording")
+        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, "Stop recording")
         RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), "Start recording (unavailable)")
     }
     val enabled = state != RecordFabState.Disabled
     Box(
         modifier = Modifier
-            .size(FabSize)
+            .size(RecordChromeTokens.fabSize)
             .clip(CircleShape)
             .background(fill)
             .border(1.5.dp, stroke, CircleShape)
@@ -344,7 +354,12 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         when (state) {
-            RecordFabState.Stop -> Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFFEF4444)))
+            RecordFabState.Stop -> Box(
+                Modifier
+                    .size(RecordChromeTokens.stopSquareSize)
+                    .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
+                    .background(RecordChromeTokens.stopSquare),
+            )
             RecordFabState.Start -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(26.dp))
             RecordFabState.Disabled -> Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(26.dp))
         }
@@ -434,8 +449,8 @@ internal fun hudStatusPillContent(
 @Composable
 private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
     val color = when (dot) {
-        StatusDotColor.RECORDING -> RecordingDotColor
-        StatusDotColor.WAITING   -> WaitingDotColor
+        StatusDotColor.RECORDING -> RecordChromeTokens.dotRecording
+        StatusDotColor.WAITING   -> RecordChromeTokens.dotBreak   // slate #94A3B8 — mockup .dot-break
         StatusDotColor.MERGING   -> MergingDotColor
     }
     Box(
@@ -451,10 +466,10 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
     val text = loopPillContent(loopIndex, loopTotal) ?: return       // hide pill on single-clip / zero-clip
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = GlassFill,
+        shape = PillShape,
+        color = RecordChromeTokens.glassFill,
         contentColor = Color.White,
-        border = BorderStroke(1.dp, GlassStroke),
+        border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
     ) {
         Text(
             text,
@@ -468,10 +483,10 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
 private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        color = GlassFill,
+        shape = StatusPillShape,
+        color = RecordChromeTokens.glassFill,
         contentColor = Color.White,
-        border = BorderStroke(1.dp, GlassStroke),
+        border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
