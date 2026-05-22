@@ -3,7 +3,6 @@ package com.aritr.rova.ui.theme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,33 +42,93 @@ object RovaTokens {
 
     // Typography — see docs/UI_DESIGN_TOKENS.md §2.2 ("screen-local"
     // typography tokens, separate from the M3 Typography slots).
-    // TODO: bundle Inter font asset (docs/UI_DESIGN_TOKENS.md §2.2 + §5.5).
     val eyebrow: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 9.sp,
         letterSpacing = 2.sp
     )
 
     val statusPillLabel: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         fontFeatureSettings = "tnum"
     )
 
     val cellValue: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         fontFeatureSettings = "tnum"
     )
 
     val cellKey: TextStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = Inter,
         fontWeight = FontWeight.Normal,
         fontSize = 8.sp,
         letterSpacing = 0.8.sp
+    )
+
+    // Phase 1 — mockup-exact record-chrome type scale (mockups/new_uiux/01-record-home.html).
+    // 1 px → 1 sp. ALL-CAPS labels are .uppercase()'d at the call site.
+
+    /** `.loop-count` — the big "4/10" numeral in the loop pill. */
+    val loopCount: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 21.sp,
+        letterSpacing = (-0.6).sp,
+        fontFeatureSettings = "tnum"
+    )
+
+    /** `.loop-unit` — the "LOOPS DONE" caption beside [loopCount]. */
+    val loopUnit: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 10.sp,
+        letterSpacing = 1.sp
+    )
+
+    /** `.status-main` — the status-pill primary label ("Recording" / "On break"). */
+    val statusMain: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        letterSpacing = 0.1.sp
+    )
+
+    /** `.status-time` — the status-pill trailing time ("· 0:18 left"). */
+    val statusTime: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Light,
+        fontSize = 11.sp,
+        letterSpacing = 0.sp,
+        fontFeatureSettings = "tnum"
+    )
+
+    /** `.swipe-label` — the "SWIPE TO EDIT" hint above the settings card. */
+    val swipeLabel: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 8.sp,
+        letterSpacing = 1.4.sp
+    )
+
+    /** `.nav-txt` — the Library / Settings / Start-Stop labels in the bottom nav. */
+    val navTxt: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 9.sp,
+        letterSpacing = 0.6.sp
+    )
+
+    /** `.cam-zone-tag` — the per-zone "PORTRAIT · 9:16" tag in dual mode. */
+    val zoneTag: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 7.5.sp,
+        letterSpacing = 1.5.sp
     )
 }
 
