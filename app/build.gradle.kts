@@ -76,6 +76,13 @@ android {
         // detector so the gate is green again; revisit when Accompanist
         // ships a fix.
         disable += "PermissionLaunchedDuringComposition"
+        // Suppress Typos false-positives on base64 certificate fingerprint strings
+        // in font_certs.xml (substrings like GA1, XFI1 are not misspelled prose).
+        // tools:ignore on the XML element does not propagate to <item> text content
+        // in Android lint's Typos detector; file-scoped lint.xml also requires this
+        // pointer to be resolved. The check is disabled project-wide; font_certs.xml
+        // is the sole source of Typos hits and contains no natural-language strings.
+        disable += "Typos"
     }
 }
 
