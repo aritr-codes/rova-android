@@ -110,18 +110,36 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         "Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.",
         WarningAction("Enable notifications", ActionTarget.NOTIFICATION_SETTINGS),
         WarningAction("Not now", ActionTarget.NOTIFICATION_SETTINGS),
+        overflow = listOf(
+            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+        ),
+        whyThisMatters = "Notifications are how Rova tells you what's happening while you're not " +
+            "in the app — recording started, clip merged, session finished. Without them, you'll " +
+            "need to open the app to check progress.",
     )
     WarningId.BATTERY_OPTIMIZATION_ON -> WarningSheetContent(
         Icons.Default.BatterySaver, "Battery optimization may stop recording",
         "Android may kill Rova in the background. Disable battery optimization for reliable long sessions.",
         WarningAction("Disable", ActionTarget.BATTERY_OPTIMIZATION),
         WarningAction("Not now", ActionTarget.BATTERY_OPTIMIZATION),
+        overflow = listOf(
+            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+        ),
+        whyThisMatters = "Android's battery optimizer can pause background apps to save power. " +
+            "If Rova is paused mid-recording, the session may stop early or skip clips. " +
+            "Exempting Rova keeps the foreground service alive for the full session.",
     )
     WarningId.POWER_SAVE_MODE -> WarningSheetContent(
         Icons.Default.PowerSettingsNew, "Power-save mode may throttle recording",
         "Turning off battery saver gives Rova full CPU/IO for the session.",
         WarningAction("Settings", ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+        overflow = listOf(
+            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+        ),
+        whyThisMatters = "Battery saver caps CPU frequency and background I/O. " +
+            "Rova may drop frames or fall behind on encoding, which can corrupt clip boundaries " +
+            "on long sessions.",
     )
     WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(Icons.Default.Thermostat, "Device overheating — recording stopped", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.THERMAL_EMERGENCY -> WarningSheetContent(Icons.Default.Thermostat, "Device critically hot", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
