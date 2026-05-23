@@ -277,6 +277,8 @@ These are token-scoped accessibility rules. Cross-screen accessibility lives in 
 
 The reasoning: anything Compose components consume implicitly (`MaterialTheme.colorScheme.error` from a Text / Icon / Surface) belongs in the theme. Anything tied to a specific layout piece (the 5-cell record card, the camera-overlay backdrop, the warning severity bucket) stays local — putting it in `MaterialTheme` would invite over-application and pollute the M3 surface roles.
 
+> **Slice B (2026-05-23, PR pending):** Dock fill flipped from `bottomNavFill` flat-alpha to `bottomNavBrush` vertical gradient; settings card from `settingsCardRadius=14.dp` to `settingsCardRadiusPill=22.dp`; new `modeChip*` token family for the Mode tap-cycle chip. See spec `docs/superpowers/specs/2026-05-23-edge-to-edge-record-home-slice-b-design.md` and ADR-0012.
+
 ### 2.13 Record-chrome constants (`RecordChromeTokens`)
 
 `RecordChromeTokens.kt` is a **record-screen-scoped** constants object. It contains every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/01-record-home.html`. It is separate from `RovaTokens` by the same rationale: values that are meaningful only to the record screen cannot over-apply to unrelated UI. **As of Phase 2, the record-screen shared chrome (`RecordChrome.kt`) consumes all of these tokens** — they are no longer unused declarations. Six custom chrome vector glyphs (flash, flip, start, stop, library, settings icons) are co-located in `ui/screens/RecordChromeIcons.kt`. Phase 3+ composables will consume any tokens not yet referenced by `RecordChrome.kt`.
@@ -294,8 +296,13 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 | `settingsCardFill` | `Color.White.copy(alpha = 0.065f)` | `.settings-card` background |
 | `settingsCardStroke` | `Color.White.copy(alpha = 0.09f)` | `.settings-card` border |
 | `cellDivider` | `Color.White.copy(alpha = 0.07f)` | `.s-cell + .s-cell` divider |
-| `bottomNavFill` | `Color.Black.copy(alpha = 0.50f)` | `.bottom-nav` background |
-| `bottomNavTopStroke` | `Color.White.copy(alpha = 0.055f)` | `.bottom-nav` top border |
+| `bottomNavBrush` | `Brush.verticalGradient(0→Transparent, 0.35→Transparent, 0.55→Black 0.20, 0.80→Black 0.45, 1.0→Black 0.55)` | Dock vertical gradient (Slice B); transparent top 35% lets preview read through |
+| `modeChipFill` | `Color.White.copy(alpha=0.07f)` | Mode tap-cycle chip background (Slice B) |
+| `modeChipStroke` | `Color.White.copy(alpha=0.10f)` | Mode tap-cycle chip border (Slice B) |
+| `modeChipGlyphAlphaEnabled` | `0.35f` | `↻` glyph alpha when chip enabled (Slice B) |
+| `modeChipGlyphAlphaDisabled` | `0.12f` | `↻` glyph alpha when chip dimmed (Slice B) |
+| `modeChipGlyphSize` | `7.sp` | `↻` glyph text size (Slice B) |
+| `modeChipCornerRadius` | `11.dp` | Mode tap-cycle chip corner radius (Slice B) |
 
 #### Status dots
 
@@ -367,7 +374,7 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 
 | Token | Value | Notes |
 |---|---|---|
-| `settingsCardRadius` | 14.dp | corner radius |
+| `settingsCardRadiusPill` | `22.dp` | Settings card pill corner radius (Slice B; supersedes `settingsCardRadius`) |
 | `settingsCardPaddingH` | 12.dp | horizontal padding |
 | `settingsCardPaddingV` | 7.dp | vertical padding |
 | `settingsCellPaddingH` | 3.dp | `.s-cell` horizontal padding |
@@ -375,6 +382,12 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 | `settingsCardBottomInset` | 110.dp | `.settings-wrap` bottom offset above nav |
 | `swipeBarWidth` | 30.dp | `.swipe-bar` width |
 | `swipeBarHeight` | 2.dp | `.swipe-bar` height |
+
+#### Settings card metrics (Slice B)
+
+| Metric | Value | Notes |
+|---|---|---|
+| `RecordChromeMetrics.settingsCardLift` | `30.dp` | Upward offset applied to the settings card in Slice B edge-to-edge layout |
 
 #### Bottom nav
 
