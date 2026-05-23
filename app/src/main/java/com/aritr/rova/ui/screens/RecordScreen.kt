@@ -609,12 +609,17 @@ fun RecordScreen(
                         quality = resolution,
                         mode = if (mode == "PortraitLandscape") "P + L" else mode,
                         onOpenSheet = { viewModel.openSettingsSheet() },
+                        onCycleMode = { viewModel.cycleMode() },
                         dimmed = hudState != RecordHudState.Idle,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
                             .padding(
-                                bottom = RecordChromeMetrics.bottomNavClearance,
+                                // Slice B — bottomNavClearance clears above the dock;
+                                // settingsCardLift adds the 30 dp the gradient's
+                                // transparent top zone needs. See
+                                // RecordChromeMetrics.settingsCardLift KDoc.
+                                bottom = RecordChromeMetrics.bottomNavClearance + RecordChromeMetrics.settingsCardLift,
                                 start = 16.dp,
                                 end = 16.dp,
                             ),
