@@ -1,11 +1,11 @@
 package com.aritr.rova.ui
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -46,12 +46,13 @@ fun MainScreen() {
     val settingsViewModel: SettingsViewModel = viewModel()
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
+        containerColor = Color.Black,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { _ ->
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
         ) {
             // Phase 2.6 — onboarding gate. Completion (and Skip)
             // navigates to `record` and pops the onboarding entry off

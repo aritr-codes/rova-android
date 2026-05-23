@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 29+ override: suppress the OS auto-scrim behind gesture-nav region.
+  android:enforceNavigationBarContrast requires API 29; placed here so the
+  base values/themes.xml (minSdk 24) does not trigger a NewApi lint error.
+-->
+<resources>
+
+    <style name="Theme.Rova" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+</resources>
