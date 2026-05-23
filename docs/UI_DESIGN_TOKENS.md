@@ -417,7 +417,7 @@ Five tokens define the mockup-exact dimensions and styling for decorative camera
 
 #### Recording-frame guide constants (functional framing — P+L mode)
 
-Three tokens define the mockup-exact styling for the recording-frame guide overlay (spec §2.3, ADR-0010), consumed by `CameraGuides.kt` in portrait and landscape mode. Unlike the decorative camera-guide overlays above (gated by the "Camera guides" app-setting), the recording-frame guide is **functional** — it is always on in P+L mode regardless of the setting. It outlines the recorded region of the dual-camera preview and scrim the margins that fall outside the encoder's crop window.
+Three tokens define the mockup-exact styling for the recording-frame guide overlay (spec §2.3, ADR-0010). Consumed by `DualPreviewZone.kt` in P+L (DualShot) mode only — the guide is functional, not decorative; the single Portrait / Landscape modes are out of scope. Unlike the decorative camera-guide overlays above (gated by the "Camera guides" app-setting), the recording-frame guide is always on in P+L mode regardless of the setting. It outlines the recorded region of the dual-camera preview and scrims the margins that fall outside the encoder's crop window.
 
 | Token | Value | Source CSS / Purpose |
 |---|---|---|

@@ -538,6 +538,41 @@ class AspectFitMathTest {
         assertEquals(true, differs)
     }
 
+    @Test
+    fun buildPreviewCropMatrix_matchesBuildCropMatrix_allDisplayRotationsAndSensors() {
+        // Exhaustive equivalence — preview path with side-fixed target must equal
+        // legacy buildCropMatrix for every (displayRotation × sensorOrientation × side)
+        // combination. This locks the load-bearing property that preview rotates
+        // identically to encoder. Per spec §8.
+        val sides = listOf(VideoSide.PORTRAIT, VideoSide.LANDSCAPE)
+        val sensors = listOf(0, 90, 180, 270)
+        val rotations = listOf(0, 1, 2, 3)
+        for (side in sides) {
+            val (tw, th) = if (side == VideoSide.PORTRAIT) 9 to 16 else 16 to 9
+            for (sensor in sensors) {
+                for (rot in rotations) {
+                    val preview = FloatArray(16)
+                    val legacy = FloatArray(16)
+                    AspectFitMath.buildPreviewCropMatrix(
+                        displayRotation = rot, sensorOrientation = sensor, side = side,
+                        targetAspectW = tw, targetAspectH = th, out = preview,
+                    )
+                    @Suppress("DEPRECATION")
+                    AspectFitMath.buildCropMatrix(
+                        displayRotation = rot, sensorOrientation = sensor, side = side,
+                        out = legacy,
+                    )
+                    for (i in 0..15) {
+                        assertEquals(
+                            "side=$side sensor=$sensor rot=$rot idx=$i",
+                            legacy[i], preview[i], 1e-6f,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun buildPreviewCropMatrix_invalidOutSize_throws() {
         AspectFitMath.buildPreviewCropMatrix(

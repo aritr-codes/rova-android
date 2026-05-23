@@ -104,7 +104,7 @@ On a `TextureView` size change the listener re-registers the surface; `addTarget
 
 ## 7. Edge cases & error handling
 
-- **Degenerate `width / height`** (0 or negative during `TextureView` setup) — `buildPreviewCropMatrix` returns identity (mirrors the existing guard in `computeFitViewport` / `buildCropMatrix`); `addTarget` falls back to a full-surface viewport. No crash, no divide-by-zero.
+- **Degenerate `width / height`** (0 or negative) — `buildPreviewCropMatrix` throws `IllegalArgumentException` (via `buildAspectCrop`'s `require(targetW > 0 && targetH > 0)`). In practice this is unreachable: `TextureView.SurfaceTextureListener.onSurfaceTextureAvailable` only fires with positive dims, and the `addTarget` call path has no other entry point. The fail-fast contract is intentional — silent identity-fallback would mask a real bug in surface-lifecycle wiring.
 - **Extreme device aspect ratios** — cropping a 4:3 source to any target aspect always yields a valid centred sub-rectangle; there is no unsatisfiable case.
 - **Encoder unaffected** — no `ENCODER` code path is touched; recorded files are byte-identical. This is the load-bearing invariant.
 
