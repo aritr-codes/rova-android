@@ -394,6 +394,55 @@ internal object AspectFitMath {
     }
 
     /**
+     * Preview-target variant of [buildCropMatrix] — composes the same
+     *   `cropMatrix = aspectCrop × displayRotationCorrection × sideOrientationCorrection`
+     * chain, including the empirical +270° per-side correction from the
+     * Phase 6.1c smoke-fix series, but substitutes [buildAspectCrop] (target
+     * = preview zone aspect) for [buildSideAspectCrop] (target = recording
+     * aspect). For the canonical (9, 16) / (16, 9) targets the matrix is
+     * bit-identical to [buildCropMatrix] — verified in [AspectFitMathTest].
+     *
+     * Used by `EglRouter.addTarget` when `kind == TargetKind.PREVIEW`. The
+     * `side` is still required: the +270° sideCorrection is per-side, and
+     * the preview MUST rotate identically to its encoder so the
+     * `RecordingFrameGuide` overlay lines up with the actual capture region.
+     *
+     * `out` must be length 16; [displayRotation] in 0..3;
+     * [sensorOrientation] in {0, 90, 180, 270};
+     * [targetAspectW] and [targetAspectH] > 0.
+     *
+     * See `docs/adr/0010-dualshot-preview-crop-divergence.md`.
+     */
+    fun buildPreviewCropMatrix(
+        displayRotation: Int,
+        sensorOrientation: Int,
+        side: VideoSide,
+        targetAspectW: Int,
+        targetAspectH: Int,
+        out: FloatArray,
+    ) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        val rot = FloatArray(16)
+        val crop = FloatArray(16)
+        buildDisplayRotationCorrection(displayRotation, rot)
+        buildAspectCrop(targetAspectW, targetAspectH, sensorOrientation, crop)
+
+        // Per-side +270° UV correction — same as buildCropMatrix. Both sides
+        // land on the same correction after the Phase 6.1c round-3 smoke-fix
+        // but the per-side `when` is kept to preserve clear intent and to
+        // give future smoke-fixes a place to diverge.
+        val sideCorrection = FloatArray(16)
+        when (side) {
+            VideoSide.PORTRAIT -> buildDisplayRotationCorrection(2, sideCorrection)
+            VideoSide.LANDSCAPE -> buildDisplayRotationCorrection(2, sideCorrection)
+        }
+        val cropTimesRot = FloatArray(16)
+        multiplyMat4(cropTimesRot, crop, rot)
+        // out = (crop × rot) × sideCorrection — applied to UV right-to-left.
+        multiplyMat4(out, cropTimesRot, sideCorrection)
+    }
+
+    /**
      * Phase: render-architecture audit (first-principles UV pipeline).
      *
      * Composes the canonical UV pipeline from first-principles components:

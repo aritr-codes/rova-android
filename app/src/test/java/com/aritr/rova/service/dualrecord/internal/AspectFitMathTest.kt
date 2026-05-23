@@ -464,4 +464,85 @@ class AspectFitMathTest {
             assertTrue("expected throw on length 15 array", it.isFailure)
         }
     }
+
+    // ── buildPreviewCropMatrix ───────────────────────────────────────────────
+    // Preview path matrix: same composition as buildCropMatrix but with
+    // arbitrary-aspect crop. Equivalence with buildCropMatrix for side-fixed
+    // targets is the load-bearing property — it's what makes the preview
+    // rotate identically to the encoder.
+
+    @Test
+    fun buildPreviewCropMatrix_portraitSideFixedTarget_matchesBuildCropMatrix_sensor0() {
+        val preview = FloatArray(16)
+        val legacy = FloatArray(16)
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.PORTRAIT,
+            targetAspectW = 9, targetAspectH = 16, out = preview,
+        )
+        @Suppress("DEPRECATION")
+        AspectFitMath.buildCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.PORTRAIT,
+            out = legacy,
+        )
+        for (i in 0..15) assertEquals("idx=$i", legacy[i], preview[i], 1e-6f)
+    }
+
+    @Test
+    fun buildPreviewCropMatrix_landscapeSideFixedTarget_matchesBuildCropMatrix_sensor0() {
+        val preview = FloatArray(16)
+        val legacy = FloatArray(16)
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.LANDSCAPE,
+            targetAspectW = 16, targetAspectH = 9, out = preview,
+        )
+        @Suppress("DEPRECATION")
+        AspectFitMath.buildCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.LANDSCAPE,
+            out = legacy,
+        )
+        for (i in 0..15) assertEquals("idx=$i", legacy[i], preview[i], 1e-6f)
+    }
+
+    @Test
+    fun buildPreviewCropMatrix_portraitSideFixedTarget_matchesBuildCropMatrix_sensor90() {
+        val preview = FloatArray(16)
+        val legacy = FloatArray(16)
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 90, side = VideoSide.PORTRAIT,
+            targetAspectW = 9, targetAspectH = 16, out = preview,
+        )
+        @Suppress("DEPRECATION")
+        AspectFitMath.buildCropMatrix(
+            displayRotation = 1, sensorOrientation = 90, side = VideoSide.PORTRAIT,
+            out = legacy,
+        )
+        for (i in 0..15) assertEquals("idx=$i", legacy[i], preview[i], 1e-6f)
+    }
+
+    @Test
+    fun buildPreviewCropMatrix_zoneAspectTarget_differsFromSideFixed() {
+        // A zone-aspect target (9:10 portrait zone) should produce a different
+        // matrix than the side-fixed (9:16) target — the crop component changes.
+        val zone = FloatArray(16)
+        val sideFixed = FloatArray(16)
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.PORTRAIT,
+            targetAspectW = 9, targetAspectH = 10, out = zone,
+        )
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.PORTRAIT,
+            targetAspectW = 9, targetAspectH = 16, out = sideFixed,
+        )
+        var differs = false
+        for (i in 0..15) if (kotlin.math.abs(zone[i] - sideFixed[i]) > 1e-6f) { differs = true; break }
+        assertEquals(true, differs)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildPreviewCropMatrix_invalidOutSize_throws() {
+        AspectFitMath.buildPreviewCropMatrix(
+            displayRotation = 1, sensorOrientation = 0, side = VideoSide.PORTRAIT,
+            targetAspectW = 9, targetAspectH = 16, out = FloatArray(15),
+        )
+    }
 }
