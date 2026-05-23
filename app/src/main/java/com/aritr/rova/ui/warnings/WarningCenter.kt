@@ -109,7 +109,7 @@ fun WarningCenter(
         val dismissed by vm.dismissedWarnings.collectAsStateWithLifecycle()
 
         if (id in dismissed) {
-            WarningChip(id = id, onExpand = { vm.restore(id) }, modifier = modifier)
+            WarningSnoozeChip(id = id, onExpand = { vm.restore(id) }, modifier = modifier)
         } else {
             WarningSheet(
                 id = id,
@@ -175,22 +175,6 @@ private fun WarningSheet(
             c.secondary?.let { sec ->
                 TextButton(onClick = onSecondary, modifier = Modifier.fillMaxWidth()) { Text(sec.label) }
             }
-        }
-    }
-}
-
-@Composable
-private fun WarningChip(id: WarningId, onExpand: () -> Unit, modifier: Modifier = Modifier) {
-    val c = warningSheetContent(id)
-    Surface(
-        modifier = modifier.clickable { onExpand() },
-        shape = RoundedCornerShape(20.dp),
-        color = Color.Black.copy(alpha = 0.40f),
-        contentColor = Color.White,
-    ) {
-        Row(Modifier.padding(horizontal = 11.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Icon(c.icon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-            Text(c.title, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
     }
 }
