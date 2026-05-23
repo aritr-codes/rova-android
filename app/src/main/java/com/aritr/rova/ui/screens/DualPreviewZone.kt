@@ -92,7 +92,7 @@ private fun PreviewZone(
     guidesEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.background(RecordChromeTokens.camZoneBackground)) {
+    Box(modifier = modifier) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
