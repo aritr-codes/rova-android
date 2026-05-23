@@ -218,3 +218,11 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.NOTIFICATIONS_DENIED ->
         error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
 }
+
+/** True iff [warningSheetContent] for [id] declares an overflow ⋯ menu. */
+internal fun hasOverflow(id: WarningId): Boolean =
+    warningSheetContent(id).overflow.isNotEmpty()
+
+/** True iff [warningSheetContent] for [id] declares a "Why this matters" expander. */
+internal fun shouldShowWhy(id: WarningId): Boolean =
+    warningSheetContent(id).whyThisMatters != null
