@@ -367,14 +367,19 @@ internal class EglRouter(
      * These drive the per-target `glViewport` so each target receives a
      * full-frame draw at its intrinsic aspect.
      *
-     * Phase 6.1c — `cropMatrix` is built once here via
-     * [AspectFitMath.buildCropMatrix] from the session-pinned
-     * `displayRotation` + per-side aspect. The viewport is computed via
-     * [AspectFitMath.computeFitViewport]: encoder targets are
-     * aspect-matched by design → full surface; preview TextureView
-     * targets letterbox the side's content aspect inside their surface
-     * dims. Neither is recomputed per frame (the previous smoke-fix #5
-     * per-frame `computeCropMatrix` call has been removed).
+     * Phase 6.1c + ADR-0010 — `cropMatrix` is built once here from the
+     * session-pinned `displayRotation` + the target's aspect:
+     *  - ENCODER target → [AspectFitMath.buildCropMatrix] (or V2), crop to
+     *    the side-fixed 9:16 / 16:9 recording aspect; viewport from
+     *    [AspectFitMath.computeFitViewport] — encoder surfaces are aspect-
+     *    matched by design → full surface.
+     *  - PREVIEW target → [AspectFitMath.buildPreviewCropMatrix], crop to
+     *    the surface's actual aspect (the preview zone's aspect); viewport
+     *    = full surface (the crop now matches it — no letterbox bars). See
+     *    `docs/adr/0010-dualshot-preview-crop-divergence.md`.
+     *
+     * Neither is recomputed per frame (the previous smoke-fix #5 per-frame
+     * `computeCropMatrix` call has been removed).
      *
      * For the legacy CameraEffect Preview target (`side == null`),
      * `cropMatrix` is identity and the viewport is the full surface —
@@ -386,22 +391,37 @@ internal class EglRouter(
         val crop = FloatArray(16)
         val viewport: IntArray
         if (side != null) {
-            if (useFirstPrinciplesRender) {
-                // V2 first-principles path — canonical UV transform.
-                AspectFitMath.buildUvTransformV2(
-                    displayRotation, sensorOrientation, side,
-                    crop, scratchA, scratchB, scratchC, scratchD,
+            if (kind == TargetKind.PREVIEW) {
+                // Preview path — crop to the zone's aspect (fills the surface,
+                // no letterbox). Viewport is the full surface because the
+                // crop now matches it. See ADR-0010 and
+                // docs/superpowers/specs/2026-05-22-dualshot-preview-crop-fill-design.md.
+                AspectFitMath.buildPreviewCropMatrix(
+                    displayRotation = displayRotation,
+                    sensorOrientation = sensorOrientation,
+                    side = side,
+                    targetAspectW = width,
+                    targetAspectH = height,
+                    out = crop,
                 )
+                viewport = intArrayOf(0, 0, width, height)
             } else {
-                // Legacy path — buildCropMatrix with empirical sideCorrection.
-                @Suppress("DEPRECATION")
-                AspectFitMath.buildCropMatrix(displayRotation, sensorOrientation, side, crop)
+                // Encoder path — unchanged (frozen per ADR-0010).
+                if (useFirstPrinciplesRender) {
+                    AspectFitMath.buildUvTransformV2(
+                        displayRotation, sensorOrientation, side,
+                        crop, scratchA, scratchB, scratchC, scratchD,
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    AspectFitMath.buildCropMatrix(displayRotation, sensorOrientation, side, crop)
+                }
+                val contentAspect = when (side) {
+                    VideoSide.PORTRAIT -> 9f / 16f
+                    VideoSide.LANDSCAPE -> 16f / 9f
+                }
+                viewport = AspectFitMath.computeFitViewport(width, height, contentAspect)
             }
-            val contentAspect = when (side) {
-                VideoSide.PORTRAIT -> 9f / 16f
-                VideoSide.LANDSCAPE -> 16f / 9f
-            }
-            viewport = AspectFitMath.computeFitViewport(width, height, contentAspect)
         } else {
             // Legacy CameraEffect Preview output (side=null) — inert.
             Matrix.setIdentityM(crop, 0)
