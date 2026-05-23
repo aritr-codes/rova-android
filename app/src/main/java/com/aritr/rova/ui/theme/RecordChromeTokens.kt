@@ -164,8 +164,6 @@ object RecordChromeTokens {
     val modeChipCornerRadius = 11.dp
     /** Slice B — Mode chip `↻` glyph text size. */
     val modeChipGlyphSize = 7.sp
-    /** `.settings-card` corner radius. */
-    val settingsCardRadius = 14.dp
     /** `.settings-card` padding — `7px 12px`. */
     val settingsCardPaddingH = 12.dp
     val settingsCardPaddingV = 7.dp
