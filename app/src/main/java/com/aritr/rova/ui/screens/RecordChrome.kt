@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,7 +63,7 @@ private val MergingDotColor = Color(0xFF60A5FA)   // blue — no mockup token (m
 private val ControlBtnTouchSize = 48.dp           // a11y touch target; the glass circle is centered inside
 private val StatusPillShape = RoundedCornerShape(RecordChromeTokens.statusPillRadius)
 private val PillShape = RoundedCornerShape(RecordChromeTokens.loopPillRadius)
-private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCardRadius)
+private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCardRadiusPill)
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -239,6 +240,7 @@ fun RecordSettingsCard(
     quality: String,
     mode: String,
     onOpenSheet: () -> Unit,
+    onCycleMode: () -> Unit,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
 ) {
@@ -293,8 +295,13 @@ fun RecordSettingsCard(
             SettingsCell("Wait", recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
             CellSep()
             SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell("Mode", mode, Modifier.weight(1f), readOnly = true)
+            ModeCycleChip(
+                mode = mode,
+                onCycleMode = onCycleMode,
+                onLongPress = onOpenSheet,
+                enabled = !dimmed,
+                modifier = Modifier.weight(1f),
+            )
             Icon(
                 RecordChromeIcons.chevronUp,
                 contentDescription = "Edit session settings",
@@ -302,6 +309,80 @@ fun RecordSettingsCard(
                 modifier = Modifier.padding(start = 8.dp).size(13.dp),
             )
         }
+    }
+}
+
+/**
+ * Slice B — Mode tap-cycle chip. Replaces the read-only Mode `SettingsCell`
+ * in [RecordSettingsCard]. Tap advances the mode one step (Portrait →
+ * Landscape → P+L → Portrait) via [onCycleMode]; long-press opens the
+ * settings sheet via [onLongPress] (gesture redundancy + discoverability
+ * fallback for the inline cycle). Disabled while [enabled] is false (=
+ * card-dimmed during an active session — the existing card behaviour).
+ *
+ * Visual: outlined chip with a faint `↻` glyph top-right. The chip
+ * absorbs tap events within its bounds, so taps inside the chip do NOT
+ * bubble to the outer card's `clickable { onOpenSheet() }`.
+ *
+ * The cycle order itself lives in [cycleModeNext] (RecordModeCycle.kt) —
+ * RecordViewModel.cycleMode() reads the current mode, calls the helper,
+ * and writes via the existing setMode path.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ModeCycleChip(
+    mode: String,
+    onCycleMode: () -> Unit,
+    onLongPress: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val glyphAlpha = if (enabled) RecordChromeTokens.modeChipGlyphAlphaEnabled
+                     else RecordChromeTokens.modeChipGlyphAlphaDisabled
+    val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
+    Box(
+        modifier = modifier
+            .padding(horizontal = 2.dp)
+            .clip(chipShape)
+            .background(RecordChromeTokens.modeChipFill)
+            .border(1.dp, RecordChromeTokens.modeChipStroke, chipShape)
+            .then(
+                if (enabled) {
+                    Modifier.combinedClickable(
+                        onClick = onCycleMode,
+                        onLongClick = onLongPress,
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                mode,
+                style = RovaTokens.cellValue,
+                color = RecordChromeTokens.cellValueText,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+            Text(
+                "MODE",
+                style = RovaTokens.cellKey,
+                color = RecordChromeTokens.cellKeyText,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+        }
+        Text(
+            "↻",
+            modifier = Modifier.align(Alignment.TopEnd),
+            color = Color.White.copy(alpha = glyphAlpha),
+            fontSize = RecordChromeTokens.modeChipGlyphSize,
+        )
     }
 }
 
@@ -341,6 +422,16 @@ private fun CellSep() {
  */
 internal object RecordChromeMetrics {
     val bottomNavClearance = 90.dp
+    /**
+     * Slice B — additional padding above [bottomNavClearance] for the
+     * settings card. The dock's gradient has a fully-transparent top
+     * zone (35% of dock height ≈ 31 dp); without this lift the
+     * settings card's lower edge would overlap the gradient's
+     * mid-darkness band, producing a visible alpha-curve seam between
+     * two semi-transparent layers. 30 dp lift clears the gradient
+     * with an 8 dp buffer.
+     */
+    val settingsCardLift = 30.dp
 }
 
 /**
@@ -361,24 +452,37 @@ fun RecordBottomNav(
     onFabClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    // Slice B — gradient brush replaces the flat `bottomNavFill`. The
+    // outer Box paints the brush across the Box's full intrinsic height,
+    // INCLUDING the navigation-bar inset zone that the inner Row consumes
+    // via `windowInsetsPadding`. This is what makes the gradient dissolve
+    // into the OS-transparent gesture-nav region (Slice A — see ADR-0011)
+    // with no band edge. Painting the brush on the Row directly would
+    // bound it to the inset-padded layout, breaking the seamless blend.
+    // The 1 dp top stroke is deleted — a gradient has no top, so a stroke
+    // would re-introduce the edge we're killing.
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(RecordChromeTokens.bottomNavFill)
-            .border(width = 1.dp, color = RecordChromeTokens.bottomNavTopStroke, shape = RoundedCornerShape(0.dp))
-            .windowInsetsPadding(WindowInsets.navigationBars)   // clear the gesture-nav bar
-            .padding(
-                start = RecordChromeTokens.bottomNavPaddingH,
-                end = RecordChromeTokens.bottomNavPaddingH,
-                top = 14.dp,
-                bottom = RecordChromeTokens.bottomNavPaddingBottom,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceAround,
+            .background(RecordChromeTokens.bottomNavBrush)
     ) {
-        NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
-        RecordFab(state = fabState, onClick = onFabClick)
-        NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(
+                    start = RecordChromeTokens.bottomNavPaddingH,
+                    end = RecordChromeTokens.bottomNavPaddingH,
+                    top = 14.dp,
+                    bottom = RecordChromeTokens.bottomNavPaddingBottom,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceAround,
+        ) {
+            NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+            RecordFab(state = fabState, onClick = onFabClick)
+            NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+        }
     }
 }
 

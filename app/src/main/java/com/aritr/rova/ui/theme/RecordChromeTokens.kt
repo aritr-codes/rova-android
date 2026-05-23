@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.theme
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * Phase 1 — mockup-exact pixel constants for the record-screen re-skin
@@ -39,10 +41,35 @@ object RecordChromeTokens {
     val settingsCardStroke = Color.White.copy(alpha = 0.09f)
     /** `.s-cell + .s-cell` divider — `rgba(255,255,255,0.07)`. */
     val cellDivider = Color.White.copy(alpha = 0.07f)
-    /** `.bottom-nav` background — `rgba(0,0,0,0.50)`. */
-    val bottomNavFill = Color.Black.copy(alpha = 0.50f)
-    /** `.bottom-nav` top border — `rgba(255,255,255,0.055)`. */
-    val bottomNavTopStroke = Color.White.copy(alpha = 0.055f)
+    /**
+     * Slice B — dock fill is now a vertical gradient brush. The top
+     * 35% is fully transparent so the camera preview reads continuously
+     * through the dock zone; the gradient ramps to 0.55 black at the
+     * bottom to provide readable contrast behind Library/FAB/Settings.
+     * Paint on an outer Box that extends through `windowInsetsPadding`
+     * so the brush dissolves into the OS-transparent gesture-nav
+     * region (Slice A) with no band edge. See
+     * `docs/superpowers/specs/2026-05-23-edge-to-edge-record-home-slice-b-design.md`
+     * §3.1.
+     */
+    val bottomNavBrush: Brush = Brush.verticalGradient(
+        colorStops = arrayOf(
+            0.00f to Color.Transparent,
+            0.35f to Color.Transparent,
+            0.55f to Color.Black.copy(alpha = 0.20f),
+            0.80f to Color.Black.copy(alpha = 0.45f),
+            1.00f to Color.Black.copy(alpha = 0.55f),
+        )
+    )
+
+    /** Slice B — Mode tap-cycle chip background. */
+    val modeChipFill = Color.White.copy(alpha = 0.07f)
+    /** Slice B — Mode tap-cycle chip stroke. */
+    val modeChipStroke = Color.White.copy(alpha = 0.10f)
+    /** Slice B — Mode tap-cycle chip's `↻` glyph alpha when enabled. */
+    val modeChipGlyphAlphaEnabled = 0.35f
+    /** Slice B — Mode tap-cycle chip's `↻` glyph alpha when dimmed. */
+    val modeChipGlyphAlphaDisabled = 0.12f
 
     // ── Status dots ──────────────────────────────────────────────────────
     /** `.dot-idle` — `rgba(255,255,255,0.25)`. */
@@ -127,8 +154,15 @@ object RecordChromeTokens {
     val camControlGap = 7.dp
 
     // ── Settings card ────────────────────────────────────────────────────
-    /** `.settings-card` corner radius. */
-    val settingsCardRadius = 14.dp
+    /**
+     * Slice B — pill corner radius for the settings card. Supersedes
+     * the former `settingsCardRadius = 14.dp` (deleted in Slice B).
+     */
+    val settingsCardRadiusPill = 22.dp
+    /** Slice B — Mode chip corner radius (matches the cell-divider visual anchor). */
+    val modeChipCornerRadius = 11.dp
+    /** Slice B — Mode chip `↻` glyph text size. */
+    val modeChipGlyphSize = 7.sp
     /** `.settings-card` padding — `7px 12px`. */
     val settingsCardPaddingH = 12.dp
     val settingsCardPaddingV = 7.dp
