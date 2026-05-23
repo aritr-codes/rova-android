@@ -156,8 +156,7 @@ object RecordChromeTokens {
     // ── Settings card ────────────────────────────────────────────────────
     /**
      * Slice B — pill corner radius for the settings card. Supersedes
-     * [settingsCardRadius] (which is deleted in Task 5 once
-     * `SettingsCardShape` flips to this token).
+     * the former `settingsCardRadius = 14.dp` (deleted in Slice B).
      */
     val settingsCardRadiusPill = 22.dp
     /** Slice B — Mode chip corner radius (matches the cell-divider visual anchor). */
