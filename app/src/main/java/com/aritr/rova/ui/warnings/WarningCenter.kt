@@ -276,6 +276,10 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
         ActionTarget.APP_DETAILS_SETTINGS ->
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+        // VM-only target — should be routed by [WarningCenterViewModel.snoozeForever]
+        // before reaching here. Defensive no-op keeps the `when` exhaustive without
+        // launching an unrelated Intent if a future caller misroutes it.
+        ActionTarget.SNOOZE_FOREVER -> return
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
 }

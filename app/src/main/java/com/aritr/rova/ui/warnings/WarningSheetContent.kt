@@ -45,7 +45,12 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
 internal data class WarningAction(val label: String, val target: ActionTarget)
 
 internal enum class ActionTarget {
-    EXACT_ALARM_SETTINGS, BATTERY_OPTIMIZATION, NOTIFICATION_SETTINGS, APP_DETAILS_SETTINGS
+    EXACT_ALARM_SETTINGS,
+    BATTERY_OPTIMIZATION,
+    NOTIFICATION_SETTINGS,
+    APP_DETAILS_SETTINGS,
+    /** VM-only target — routes to [WarningCenterViewModel.snoozeForever]. NOT an Intent. */
+    SNOOZE_FOREVER,
 }
 
 internal data class WarningSheetContent(
@@ -57,6 +62,17 @@ internal data class WarningSheetContent(
     val primary: WarningAction,
     /** Secondary CTA — present for HardBlock/Soft/Advisory sheets ("Not now" / "Continue without audio"); may be null for TopBanner. */
     val secondary: WarningAction?,
+    /**
+     * Overflow ⋯ menu items (top-right of sheet). Empty list = no menu rendered.
+     * Each action targets either an Intent (`launchActionTarget`) or
+     * [ActionTarget.SNOOZE_FOREVER] (handled by the VM).
+     */
+    val overflow: List<WarningAction> = emptyList(),
+    /**
+     * Body text revealed when the "Why this matters" expander is open.
+     * Null = expander row is not rendered for this id.
+     */
+    val whyThisMatters: String? = null,
 )
 
 /**
@@ -131,7 +147,20 @@ internal data class TopBannerContent(
     val title: String,
     val sub: String,
     val cta: String,            // "Stop" for all R2 ids
+    /**
+     * Optional auto-action countdown — when non-null, the banner renders a
+     * countdown ring instead of the trailing CTA pill. Phase 4.4 will wire a
+     * real seconds-source; this slice ships a static placeholder.
+     */
+    val autoAction: AutoAction? = null,
 )
+
+/**
+ * Placeholder countdown payload for the top-banner ring. [secondsRemaining]
+ * is static in Phase 4 — a real ticking source lands in Phase 4.4 alongside
+ * thermal hysteresis.
+ */
+internal data class AutoAction(val secondsRemaining: Int, val description: String)
 
 /**
  * R2 — copy for the mid-recording top banner (ADR 0007 amendment 2026-05-13). One arm
