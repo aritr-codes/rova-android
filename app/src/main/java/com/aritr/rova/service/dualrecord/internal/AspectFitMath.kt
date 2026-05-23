@@ -150,6 +150,67 @@ internal object AspectFitMath {
     }
 
     /**
+     * Generalisation of [buildSideAspectCrop] — builds a UV center-crop into
+     * [out] for an arbitrary target aspect ([targetAspectW] / [targetAspectH]),
+     * not just the side-fixed 9:16 / 16:9. For the canonical PORTRAIT (9,16)
+     * and LANDSCAPE (16,9) inputs the matrix is bit-identical to
+     * [buildSideAspectCrop] — verified in [AspectFitMathTest].
+     *
+     * Backs [buildPreviewCropMatrix]: the preview path crops the source to
+     * the preview zone's aspect (fills the surface, no letterbox) rather
+     * than the side-fixed recording aspect.
+     *
+     * Same axis-swap rationale as [buildSideAspectCrop]: the OES `texMatrix`
+     * swaps U<->V for 90° / 270° sensor orientations, so the effective target
+     * aspect in post-`texMatrix` UV coords is (H, W) instead of (W, H). The
+     * canonical formula is then applied to the effective target.
+     *
+     * `out` must be length 16; contents are overwritten. [sensorOrientation]
+     * must be one of 0 / 90 / 180 / 270. [targetAspectW] and [targetAspectH]
+     * must be > 0.
+     */
+    internal fun buildAspectCrop(
+        targetAspectW: Int,
+        targetAspectH: Int,
+        sensorOrientation: Int,
+        out: FloatArray,
+    ) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
+        require(targetAspectW > 0 && targetAspectH > 0) {
+            "target aspect dims must be > 0; was ${targetAspectW}x${targetAspectH}"
+        }
+        // Identity baseline.
+        for (i in 0..15) out[i] = 0f
+        out[0] = 1f; out[5] = 1f; out[10] = 1f; out[15] = 1f
+
+        // texMatrix U<->V swap on 90°/270° sensors — effective target is (H, W).
+        val axisSwapped = sensorOrientation % 180 != 0
+        val effW = if (axisSwapped) targetAspectH else targetAspectW
+        val effH = if (axisSwapped) targetAspectW else targetAspectH
+
+        val sourceAspect = SOURCE_ASPECT_W / SOURCE_ASPECT_H  // 4/3
+        val targetAspect = effW.toFloat() / effH.toFloat()
+
+        if (kotlin.math.abs(targetAspect - sourceAspect) < 1e-6f) return  // identity
+
+        if (targetAspect < sourceAspect) {
+            // Target narrower → pivot-scale X (col 0, col 3 row 0).
+            val s = targetAspect / sourceAspect
+            out[0] = s
+            out[12] = 0.5f - 0.5f * s
+        } else {
+            // Target wider → pivot-scale Y (col 1, col 3 row 1).
+            val s = sourceAspect / targetAspect
+            out[5] = s
+            out[13] = 0.5f - 0.5f * s
+        }
+    }
+
+    /**
      * Phase: render-architecture audit (first-principles UV pipeline).
      *
      * Produces the canonical UV alignment transform derived from
@@ -329,6 +390,55 @@ internal object AspectFitMath {
         multiplyMat4(cropTimesRot, crop, rot)
         // out = (crop × rot) × sideCorrection — applied to UV right-to-left:
         // (1) sideCorrection first, (2) then rot, (3) then crop.
+        multiplyMat4(out, cropTimesRot, sideCorrection)
+    }
+
+    /**
+     * Preview-target variant of [buildCropMatrix] — composes the same
+     *   `cropMatrix = aspectCrop × displayRotationCorrection × sideOrientationCorrection`
+     * chain, including the empirical +270° per-side correction from the
+     * Phase 6.1c smoke-fix series, but substitutes [buildAspectCrop] (target
+     * = preview zone aspect) for [buildSideAspectCrop] (target = recording
+     * aspect). For the canonical (9, 16) / (16, 9) targets the matrix is
+     * bit-identical to [buildCropMatrix] — verified in [AspectFitMathTest].
+     *
+     * Used by `EglRouter.addTarget` when `kind == TargetKind.PREVIEW`. The
+     * `side` is still required: the +270° sideCorrection is per-side, and
+     * the preview MUST rotate identically to its encoder so the
+     * `RecordingFrameGuide` overlay lines up with the actual capture region.
+     *
+     * `out` must be length 16; [displayRotation] in 0..3;
+     * [sensorOrientation] in {0, 90, 180, 270};
+     * [targetAspectW] and [targetAspectH] > 0.
+     *
+     * See `docs/adr/0010-dualshot-preview-crop-divergence.md`.
+     */
+    fun buildPreviewCropMatrix(
+        displayRotation: Int,
+        sensorOrientation: Int,
+        side: VideoSide,
+        targetAspectW: Int,
+        targetAspectH: Int,
+        out: FloatArray,
+    ) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        val rot = FloatArray(16)
+        val crop = FloatArray(16)
+        buildDisplayRotationCorrection(displayRotation, rot)
+        buildAspectCrop(targetAspectW, targetAspectH, sensorOrientation, crop)
+
+        // Per-side +270° UV correction — same as buildCropMatrix. Both sides
+        // land on the same correction after the Phase 6.1c round-3 smoke-fix
+        // but the per-side `when` is kept to preserve clear intent and to
+        // give future smoke-fixes a place to diverge.
+        val sideCorrection = FloatArray(16)
+        when (side) {
+            VideoSide.PORTRAIT -> buildDisplayRotationCorrection(2, sideCorrection)
+            VideoSide.LANDSCAPE -> buildDisplayRotationCorrection(2, sideCorrection)
+        }
+        val cropTimesRot = FloatArray(16)
+        multiplyMat4(cropTimesRot, crop, rot)
+        // out = (crop × rot) × sideCorrection — applied to UV right-to-left.
         multiplyMat4(out, cropTimesRot, sideCorrection)
     }
 

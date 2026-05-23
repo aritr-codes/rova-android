@@ -189,4 +189,20 @@ object RecordChromeTokens {
     val focusFrameCornerArm = 14.dp
     /** `.focus-frame` corner-bracket stroke width — CSS `border-width: 1.5px`. */
     val focusFrameStrokeWidth = 1.5.dp
+
+    // ── Recording-frame guide (P+L mode — always on, ADR-0010) ─────────
+    /**
+     * Recording-frame outline colour — faint light-gray, low alpha. Per
+     * `docs/superpowers/specs/2026-05-22-dualshot-preview-crop-fill-design.md`
+     * §5.3 / §5.4. Deliberately subtle so it does not compete with the live
+     * preview; pairs with [recordingFrameStrokeWidth].
+     */
+    val recordingFrameOutline = Color(0xFFB0B4BC).copy(alpha = 0.38f)
+    /** Recording-frame outline stroke width. */
+    val recordingFrameStrokeWidth = 1.dp
+    /**
+     * Recording-frame scrim — faint black over the non-recorded preview
+     * margin. Signals "this part isn't captured".
+     */
+    val recordingFrameScrim = Color.Black.copy(alpha = 0.22f)
 }
