@@ -361,24 +361,37 @@ fun RecordBottomNav(
     onFabClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    // Slice B — gradient brush replaces the flat `bottomNavFill`. The
+    // outer Box paints the brush across the Box's full intrinsic height,
+    // INCLUDING the navigation-bar inset zone that the inner Row consumes
+    // via `windowInsetsPadding`. This is what makes the gradient dissolve
+    // into the OS-transparent gesture-nav region (Slice A — see ADR-0011)
+    // with no band edge. Painting the brush on the Row directly would
+    // bound it to the inset-padded layout, breaking the seamless blend.
+    // The 1 dp top stroke is deleted — a gradient has no top, so a stroke
+    // would re-introduce the edge we're killing.
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(RecordChromeTokens.bottomNavFill)
-            .border(width = 1.dp, color = RecordChromeTokens.bottomNavTopStroke, shape = RoundedCornerShape(0.dp))
-            .windowInsetsPadding(WindowInsets.navigationBars)   // clear the gesture-nav bar
-            .padding(
-                start = RecordChromeTokens.bottomNavPaddingH,
-                end = RecordChromeTokens.bottomNavPaddingH,
-                top = 14.dp,
-                bottom = RecordChromeTokens.bottomNavPaddingBottom,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceAround,
+            .background(RecordChromeTokens.bottomNavBrush)
     ) {
-        NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
-        RecordFab(state = fabState, onClick = onFabClick)
-        NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(
+                    start = RecordChromeTokens.bottomNavPaddingH,
+                    end = RecordChromeTokens.bottomNavPaddingH,
+                    top = 14.dp,
+                    bottom = RecordChromeTokens.bottomNavPaddingBottom,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceAround,
+        ) {
+            NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+            RecordFab(state = fabState, onClick = onFabClick)
+            NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+        }
     }
 }
 

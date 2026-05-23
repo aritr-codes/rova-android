@@ -41,11 +41,6 @@ object RecordChromeTokens {
     val settingsCardStroke = Color.White.copy(alpha = 0.09f)
     /** `.s-cell + .s-cell` divider — `rgba(255,255,255,0.07)`. */
     val cellDivider = Color.White.copy(alpha = 0.07f)
-    /** `.bottom-nav` background — `rgba(0,0,0,0.50)`. */
-    val bottomNavFill = Color.Black.copy(alpha = 0.50f)
-    /** `.bottom-nav` top border — `rgba(255,255,255,0.055)`. */
-    val bottomNavTopStroke = Color.White.copy(alpha = 0.055f)
-
     /**
      * Slice B — dock fill is now a vertical gradient brush. The top
      * 35% is fully transparent so the camera preview reads continuously
