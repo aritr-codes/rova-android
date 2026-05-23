@@ -249,7 +249,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
      * VM stays a thin shim around the existing persistence pipeline.
      *
      * Called from [RecordSettingsCard]'s ModeCycleChip via
-     * `onCycleMode = viewModel::cycleMode` in [RecordScreen].
+     * `onCycleMode = { viewModel.cycleMode() }` in [RecordScreen].
      */
     fun cycleMode() {
         val s = _serviceState.value
