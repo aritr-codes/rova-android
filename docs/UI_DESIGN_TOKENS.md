@@ -415,6 +415,16 @@ Five tokens define the mockup-exact dimensions and styling for decorative camera
 | `focusFrameCornerArm` | 14.dp | `.focus-frame` corner bracket arm length |
 | `focusFrameStrokeWidth` | 1.5.dp | `.focus-frame` bracket stroke |
 
+#### Recording-frame guide constants (functional framing — P+L mode)
+
+Three tokens define the mockup-exact styling for the recording-frame guide overlay (spec §2.3, ADR-0010), consumed by `CameraGuides.kt` in portrait and landscape mode. Unlike the decorative camera-guide overlays above (gated by the "Camera guides" app-setting), the recording-frame guide is **functional** — it is always on in P+L mode regardless of the setting. It outlines the recorded region of the dual-camera preview and scrim the margins that fall outside the encoder's crop window.
+
+| Token | Value | Source CSS / Purpose |
+|---|---|---|
+| `recordingFrameOutline` | `Color(0xFFB0B4BC).copy(alpha = 0.38f)` | faint light-gray outline; the color of the recording-frame guide rectangle |
+| `recordingFrameStrokeWidth` | `1.dp` | outline thickness; renders ~2 device pixels on the SM-A176B reference device |
+| `recordingFrameScrim` | `Color.Black.copy(alpha = 0.22f)` | faint scrim over the non-recorded preview margin (areas outside the crop rectangle) |
+
 ### 2.14 Settings-sheet constants (`SettingsSheetTokens`)
 
 `SettingsSheetTokens.kt` is a **settings-sheet-scoped** constants object, carrying every colour and dimension value extracted pixel-faithfully from `mockups/new_uiux/02-settings-sheet.html`. It follows the same rationale as `RecordChromeTokens`: values that are meaningful only to the settings sheet must not bleed into unrelated UI via `RovaTokens`. The object is consumed exclusively by `SettingsSheet.kt`. Constants cover the camera-peek strip (fill, border, radius, peek height), the sheet panel surface (fill, stroke, corner radius), the mode-tab row (selected/unselected fills and strokes), row steppers (button size, radius, fill, label colours), quality chips (selected/idle fills, stroke, radius), the Save CTA button (fill, text colour, height, radius), and shared row geometry (horizontal padding, row height, divider alpha, section-label spacing).
