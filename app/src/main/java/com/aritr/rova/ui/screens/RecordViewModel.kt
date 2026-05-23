@@ -239,6 +239,24 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         serviceBinder?.getService()?.setMode(mode)            // (3) service rebind
     }
 
+    /**
+     * Slice B — Mode tap-cycle. Reads the current mode + session-lock
+     * state and writes the next mode via [setMode]. No-op during an
+     * active session (matches the existing sheet behaviour: Mode row
+     * hidden / non-interactive when periodic active or merging).
+     *
+     * Cycle order is delegated to [cycleModeNext] (pure helper) so the
+     * VM stays a thin shim around the existing persistence pipeline.
+     *
+     * Called from [RecordSettingsCard]'s ModeCycleChip via
+     * `onCycleMode = viewModel::cycleMode` in [RecordScreen].
+     */
+    fun cycleMode() {
+        val s = _serviceState.value
+        if (s.isPeriodicActive || s.isMerging) return
+        setMode(cycleModeNext(mode.value))
+    }
+
     fun setFlashMode(mode: Int) {
         flashMode.value = mode
         serviceBinder?.getService()?.setFlashMode(mode)
