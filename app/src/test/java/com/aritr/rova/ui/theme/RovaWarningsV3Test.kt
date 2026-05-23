@@ -23,13 +23,21 @@ class RovaWarningsV3Test {
         assertEquals(18.dp, RovaWarningsV3.sheetIconCornerRadius)
     }
 
+    @Test fun sheetTitleSize_is_15sp() {
+        assertEquals(15.sp, RovaWarningsV3.sheetTitleSize)
+    }
+
+    @Test fun sheetBodySize_is_11sp() {
+        assertEquals(11.sp, RovaWarningsV3.sheetBodySize)
+    }
+
     @Test fun sheetCtaHeight_is_46dp() {
         assertEquals(46.dp, RovaWarningsV3.sheetCtaHeight)
     }
 
     @Test fun secondaryCtaTextAlpha_is_0_68() {
         // a11y bump from R2's 0.55 — pinned to catch regressions
-        assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha)
+        assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha, 1e-4f)
     }
 
     @Test fun bannerCountdownRingSize_is_38dp() {
@@ -49,10 +57,11 @@ class RovaWarningsV3Test {
     }
 
     @Test fun iconGlow_returns_nonNull_brush_for_each_severity() {
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.hard))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.soft))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.advisory))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.escalating))
+        val r = 100f
+        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.hard, r))
+        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.soft, r))
+        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.advisory, r))
+        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.escalating, r))
     }
 
     @Test fun recoveryGlow_returns_nonNull_brush_for_each_severity() {
@@ -64,7 +73,7 @@ class RovaWarningsV3Test {
         // iconGlow is radial; recoveryGlow is vertical. Same severity ≠ same Brush.
         assertTrue(
             "iconGlow and recoveryGlow must produce different Brush instances",
-            RovaWarningsV3.iconGlow(RovaWarnings.hard) !== RovaWarningsV3.recoveryGlow(RovaWarnings.hard)
+            RovaWarningsV3.iconGlow(RovaWarnings.hard, 100f) !== RovaWarningsV3.recoveryGlow(RovaWarnings.hard)
         )
     }
 }

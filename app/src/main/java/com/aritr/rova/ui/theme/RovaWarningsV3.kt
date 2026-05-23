@@ -84,12 +84,20 @@ object RovaWarningsV3 {
     val snoozeChipBorderAlpha = 0.25f
     val snoozeChipDotPulseAlpha = 0.6f
 
-    /** Radial glow brush behind the sheet icon. Severity-tinted, 0.70 base alpha. */
-    fun iconGlow(severityColor: Color): Brush = Brush.radialGradient(
+    /**
+     * Radial glow brush behind the sheet icon. Severity-tinted, ~0.46 effective alpha
+     * at center fading to transparent at [radiusPx]. The radius is taken in pixels —
+     * callers in a `@Composable` scope compute it via
+     * `with(LocalDensity.current) { RovaWarningsV3.sheetIconSize.toPx() * 0.9f }`
+     * (or similar). Defaulting `radius` to `Float.POSITIVE_INFINITY` would collapse
+     * the gradient to a flat fill, defeating the bloom.
+     */
+    fun iconGlow(severityColor: Color, radiusPx: Float): Brush = Brush.radialGradient(
         colors = listOf(
             severityColor.copy(alpha = sheetIconGlowAlpha * 0.65f),
             Color.Transparent,
         ),
+        radius = radiusPx,
     )
 
     /** Vertical glow brush along the top edge of the recovery card. */
