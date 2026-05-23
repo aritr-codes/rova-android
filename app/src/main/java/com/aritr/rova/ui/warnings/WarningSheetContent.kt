@@ -189,10 +189,18 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
         Icons.Default.Thermostat, "Device overheating — stopping",
         "Recording will stop automatically.", "Stop",
+        autoAction = AutoAction(
+            secondsRemaining = 30,
+            description = "Will auto-stop to protect device",
+        ),
     )
     WarningId.THERMAL_EMERGENCY -> TopBannerContent(
         Icons.Default.Thermostat, "Device critically hot",
         "Stop now to let it cool.", "Stop",
+        autoAction = AutoAction(
+            secondsRemaining = 30,
+            description = "Will auto-stop to protect device",
+        ),
     )
     WarningId.THERMAL_CRITICAL -> TopBannerContent(
         Icons.Default.Thermostat, "Device very hot",

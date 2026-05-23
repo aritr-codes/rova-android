@@ -2,6 +2,7 @@ package com.aritr.rova.ui.warnings
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -112,5 +113,37 @@ class WarningSheetContentV3Test {
                 overflow.any { it.target == ActionTarget.SNOOZE_FOREVER }
             )
         }
+    }
+
+    // ───────── midRecBannerContent.autoAction ─────────
+
+    @Test fun midRecBanner_autoAction_for_THERMAL_EMERGENCY_is_set() {
+        val auto = midRecBannerContent(WarningId.THERMAL_EMERGENCY).autoAction
+        assertNotNull(auto)
+        assertTrue("expected secondsRemaining > 0", auto!!.secondsRemaining > 0)
+        assertTrue("expected non-blank description", auto.description.isNotBlank())
+    }
+
+    @Test fun midRecBanner_autoAction_for_THERMAL_SHUTDOWN_is_set() {
+        val auto = midRecBannerContent(WarningId.THERMAL_SHUTDOWN).autoAction
+        assertNotNull(auto)
+    }
+
+    @Test fun midRecBanner_autoAction_for_BATTERY_CRITICAL_is_null() {
+        // Non-thermal critical ids keep the CTA pill, not the countdown.
+        assertNull(midRecBannerContent(WarningId.BATTERY_CRITICAL).autoAction)
+    }
+
+    @Test fun midRecBanner_autoAction_for_STORAGE_LOW_MID_REC_is_null() {
+        assertNull(midRecBannerContent(WarningId.STORAGE_LOW_MID_REC).autoAction)
+    }
+
+    @Test fun midRecBanner_autoAction_for_CAMERA_IN_USE_is_null() {
+        assertNull(midRecBannerContent(WarningId.CAMERA_IN_USE).autoAction)
+    }
+
+    @Test fun midRecBanner_autoAction_for_THERMAL_SEVERE_is_null() {
+        // Only EMERGENCY / SHUTDOWN auto-stop; SEVERE keeps CTA.
+        assertNull(midRecBannerContent(WarningId.THERMAL_SEVERE).autoAction)
     }
 }
