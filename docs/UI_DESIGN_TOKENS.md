@@ -321,7 +321,6 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 | Token | Value | Source CSS |
 |---|---|---|
 | `splitDivider` | `Color.White.copy(alpha = 0.14f)` | `.cam-split-divider` |
-| `camZoneBackground` | `Color(0xFF060D18)` | `.cam-zone` background |
 | `cameraGridLine` | `Color.White.copy(alpha = 0.018f)` | `.camera-grid` line |
 | `focusFrameStroke` | `Color.White.copy(alpha = 0.20f)` | `.focus-frame` bracket |
 

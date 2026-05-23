@@ -69,8 +69,6 @@ object RecordChromeTokens {
     // ── Camera-zone framing (dual mode) ──────────────────────────────────
     /** `.cam-split-divider` — `rgba(255,255,255,0.14)`. */
     val splitDivider = Color.White.copy(alpha = 0.14f)
-    /** `.cam-zone` background — `#060d18`. */
-    val camZoneBackground = Color(0xFF060D18)
     /** `.camera-grid` line — `rgba(255,255,255,0.018)`. */
     val cameraGridLine = Color.White.copy(alpha = 0.018f)
     /** `.focus-frame` bracket — `rgba(255,255,255,0.8)` × `opacity:0.25` = 0.20. */

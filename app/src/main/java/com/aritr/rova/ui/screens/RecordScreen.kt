@@ -428,12 +428,12 @@ fun RecordScreen(
     // keepScreenOn DisposableEffect above.
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color.Black
-    ) { innerPadding ->
+        containerColor = Color.Black,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { _ ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
                     .background(Color.Black)
             ) {
                 // Camera Preview
