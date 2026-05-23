@@ -150,6 +150,67 @@ internal object AspectFitMath {
     }
 
     /**
+     * Generalisation of [buildSideAspectCrop] — builds a UV center-crop into
+     * [out] for an arbitrary target aspect ([targetAspectW] / [targetAspectH]),
+     * not just the side-fixed 9:16 / 16:9. For the canonical PORTRAIT (9,16)
+     * and LANDSCAPE (16,9) inputs the matrix is bit-identical to
+     * [buildSideAspectCrop] — verified in [AspectFitMathTest].
+     *
+     * Backs [buildPreviewCropMatrix]: the preview path crops the source to
+     * the preview zone's aspect (fills the surface, no letterbox) rather
+     * than the side-fixed recording aspect.
+     *
+     * Same axis-swap rationale as [buildSideAspectCrop]: the OES `texMatrix`
+     * swaps U<->V for 90° / 270° sensor orientations, so the effective target
+     * aspect in post-`texMatrix` UV coords is (H, W) instead of (W, H). The
+     * canonical formula is then applied to the effective target.
+     *
+     * `out` must be length 16; contents are overwritten. [sensorOrientation]
+     * must be one of 0 / 90 / 180 / 270. [targetAspectW] and [targetAspectH]
+     * must be > 0.
+     */
+    internal fun buildAspectCrop(
+        targetAspectW: Int,
+        targetAspectH: Int,
+        sensorOrientation: Int,
+        out: FloatArray,
+    ) {
+        require(out.size == 16) { "out must be length 16, was ${out.size}" }
+        require(sensorOrientation in setOf(0, 90, 180, 270)) {
+            "sensorOrientation must be 0/90/180/270 " +
+                "(CameraCharacteristics.SENSOR_ORIENTATION), was $sensorOrientation"
+        }
+        require(targetAspectW > 0 && targetAspectH > 0) {
+            "target aspect dims must be > 0; was ${targetAspectW}x${targetAspectH}"
+        }
+        // Identity baseline.
+        for (i in 0..15) out[i] = 0f
+        out[0] = 1f; out[5] = 1f; out[10] = 1f; out[15] = 1f
+
+        // texMatrix U<->V swap on 90°/270° sensors — effective target is (H, W).
+        val axisSwapped = sensorOrientation % 180 != 0
+        val effW = if (axisSwapped) targetAspectH else targetAspectW
+        val effH = if (axisSwapped) targetAspectW else targetAspectH
+
+        val sourceAspect = SOURCE_ASPECT_W / SOURCE_ASPECT_H  // 4/3
+        val targetAspect = effW.toFloat() / effH.toFloat()
+
+        if (kotlin.math.abs(targetAspect - sourceAspect) < 1e-6f) return  // identity
+
+        if (targetAspect < sourceAspect) {
+            // Target narrower → pivot-scale X (col 0, col 3 row 0).
+            val s = targetAspect / sourceAspect
+            out[0] = s
+            out[12] = 0.5f - 0.5f * s
+        } else {
+            // Target wider → pivot-scale Y (col 1, col 3 row 1).
+            val s = sourceAspect / targetAspect
+            out[5] = s
+            out[13] = 0.5f - 0.5f * s
+        }
+    }
+
+    /**
      * Phase: render-architecture audit (first-principles UV pipeline).
      *
      * Produces the canonical UV alignment transform derived from

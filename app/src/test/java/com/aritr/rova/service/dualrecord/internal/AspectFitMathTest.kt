@@ -228,6 +228,138 @@ class AspectFitMathTest {
         }
     }
 
+    // ── buildAspectCrop ──────────────────────────────────────────────────────
+    // Generalised aspect-crop; bit-identical to buildSideAspectCrop for the
+    // canonical PORTRAIT (9,16) / LANDSCAPE (16,9) targets but accepts any
+    // positive (w,h) pair. Backs the preview crop (zone aspect).
+
+    @Test
+    fun buildAspectCrop_portraitAspect_sensor0_pivotScaleX_27over64() {
+        val out = FloatArray(16)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 0, out = out)
+        // Same output as buildSideAspectCrop(PORTRAIT, 0): pivot-scale (27/64, 1, 1).
+        assertEquals(27f / 64f, out[0], 1e-6f)
+        assertEquals(1f, out[5], 1e-6f)
+        assertEquals(1f, out[10], 1e-6f)
+        assertEquals(1f, out[15], 1e-6f)
+        assertEquals(0.5f - 0.5f * (27f / 64f), out[12], 1e-6f)  // 37/128
+        assertEquals(0f, out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_landscapeAspect_sensor0_pivotScaleY_3over4() {
+        val out = FloatArray(16)
+        AspectFitMath.buildAspectCrop(16, 9, sensorOrientation = 0, out = out)
+        // Same output as buildSideAspectCrop(LANDSCAPE, 0): pivot-scale (1, 3/4, 1).
+        assertEquals(1f, out[0], 1e-6f)
+        assertEquals(3f / 4f, out[5], 1e-6f)
+        assertEquals(1f, out[10], 1e-6f)
+        assertEquals(1f, out[15], 1e-6f)
+        assertEquals(0f, out[12], 1e-6f)
+        assertEquals(0.5f - 0.5f * (3f / 4f), out[13], 1e-6f)  // 1/8
+    }
+
+    @Test
+    fun buildAspectCrop_arbitraryNarrowTarget_sensor0_pivotScaleX() {
+        val out = FloatArray(16)
+        // Target 9:10 = 0.9, narrower than source 4:3 = 1.333 → pivot-scale X by
+        // (9/10) / (4/3) = 27/40.
+        AspectFitMath.buildAspectCrop(9, 10, sensorOrientation = 0, out = out)
+        val expectedS = (9f / 10f) / (4f / 3f)  // 27/40 = 0.675
+        assertEquals(expectedS, out[0], 1e-6f)
+        assertEquals(1f, out[5], 1e-6f)
+        assertEquals(0.5f - 0.5f * expectedS, out[12], 1e-6f)
+        assertEquals(0f, out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_arbitraryWideTarget_sensor0_pivotScaleY() {
+        val out = FloatArray(16)
+        // Target 7:5 = 1.4, wider than source 4:3 = 1.333 → pivot-scale Y by
+        // (4/3) / (7/5) = 20/21.
+        AspectFitMath.buildAspectCrop(7, 5, sensorOrientation = 0, out = out)
+        val expectedS = (4f / 3f) / (7f / 5f)  // 20/21
+        assertEquals(1f, out[0], 1e-6f)
+        assertEquals(expectedS, out[5], 1e-6f)
+        assertEquals(0f, out[12], 1e-6f)
+        assertEquals(0.5f - 0.5f * expectedS, out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_targetEqualsSourceAspect_identity() {
+        val out = FloatArray(16)
+        AspectFitMath.buildAspectCrop(4, 3, sensorOrientation = 0, out = out)
+        // Identity — no crop.
+        assertEquals(1f, out[0], 1e-6f); assertEquals(0f, out[1], 1e-6f)
+        assertEquals(0f, out[4], 1e-6f); assertEquals(1f, out[5], 1e-6f)
+        assertEquals(1f, out[10], 1e-6f); assertEquals(1f, out[15], 1e-6f)
+        assertEquals(0f, out[12], 1e-6f); assertEquals(0f, out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_portraitAspect_sensor90_axisSwapsToLandscapeCrop() {
+        val out = FloatArray(16)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 90, out = out)
+        // Sensor 90° swaps texMatrix U<->V, so the canonical portrait crop
+        // (out[0]) moves to out[5] with the swapped-target scale.
+        // Effective target post-swap = (16, 9) → wider than source → pivot-scale Y
+        // by (4/3) / (16/9) = 3/4.
+        assertEquals(1f, out[0], 1e-6f)
+        assertEquals(3f / 4f, out[5], 1e-6f)
+        assertEquals(0f, out[12], 1e-6f)
+        assertEquals(0.5f - 0.5f * (3f / 4f), out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_landscapeAspect_sensor90_axisSwapsToPortraitCrop() {
+        val out = FloatArray(16)
+        AspectFitMath.buildAspectCrop(16, 9, sensorOrientation = 90, out = out)
+        // Effective post-swap target = (9, 16) → narrower → pivot-scale X by 27/64.
+        assertEquals(27f / 64f, out[0], 1e-6f)
+        assertEquals(1f, out[5], 1e-6f)
+        assertEquals(0.5f - 0.5f * (27f / 64f), out[12], 1e-6f)
+        assertEquals(0f, out[13], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_sensor180_matchesSensor0() {
+        val canon = FloatArray(16)
+        val flipped = FloatArray(16)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 0, out = canon)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 180, out = flipped)
+        // sensorOrientation % 180 == 0 → no axis swap; same as canonical.
+        for (i in 0..15) assertEquals("idx=$i", canon[i], flipped[i], 1e-6f)
+    }
+
+    @Test
+    fun buildAspectCrop_sensor270_matchesSensor90() {
+        val sens90 = FloatArray(16)
+        val sens270 = FloatArray(16)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 90, out = sens90)
+        AspectFitMath.buildAspectCrop(9, 16, sensorOrientation = 270, out = sens270)
+        for (i in 0..15) assertEquals("idx=$i", sens90[i], sens270[i], 1e-6f)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildAspectCrop_invalidOutSize_throws() {
+        AspectFitMath.buildAspectCrop(9, 16, 0, FloatArray(15))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildAspectCrop_invalidSensorOrientation_throws() {
+        AspectFitMath.buildAspectCrop(9, 16, 45, FloatArray(16))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildAspectCrop_zeroTargetWidth_throws() {
+        AspectFitMath.buildAspectCrop(0, 16, 0, FloatArray(16))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun buildAspectCrop_zeroTargetHeight_throws() {
+        AspectFitMath.buildAspectCrop(9, 0, 0, FloatArray(16))
+    }
+
     // ─── displayRotationCorrection tests ───────────────────────────
 
     @Test
