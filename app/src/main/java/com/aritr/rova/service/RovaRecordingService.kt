@@ -1233,6 +1233,28 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupCamera: Binding failed", e)
+                // Null out dangling use cases. Preview / VideoCapture were
+                // constructed above before bindToLifecycle threw, so they
+                // exist as objects even though the camera was never bound.
+                // If we leave them set, the next setSurfaceProvider call
+                // sees `preview != null && !boundToDummy` and takes the
+                // hot-swap branch, attaching the UI surface to a Preview
+                // that has no camera feeding it -- PreviewView stays black
+                // forever. The fresh-install cold-launch path hits exactly
+                // this race: CAMERA permission is denied at startup, the
+                // service's startCameraPreview grace expires and setupCamera
+                // runs without permission, bindToLifecycle throws, and the
+                // user's later permission grant + return arrives into
+                // dangling preview state. Clear it so the post-grant
+                // setSurfaceProvider falls through to the else-branch that
+                // launches a fresh setupCamera.
+                try { provider.unbindAll() } catch (_: Exception) {}
+                markCameraUnbound()
+                preview = null
+                videoCapture = null
+                camera = null
+                configuredResolution = null
+                boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
@@ -1476,6 +1498,23 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupDualCamera: Binding failed", e)
+                // Same dangling-state cleanup as setupSingleCamera's catch
+                // (see comment there). UseCaseGroup carries the Preview +
+                // DualVideoRecorder effect; on bind failure all references
+                // need to be cleared so the next setSurfaceProvider call
+                // re-launches setupCamera with the freshly-granted
+                // permission rather than hot-swapping into an unbound
+                // Preview.
+                try { provider.unbindAll() } catch (_: Exception) {}
+                currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+                currentDualRecording = null
+                currentDualRecorder?.release()
+                currentDualRecorder = null
+                markCameraUnbound()
+                preview = null
+                camera = null
+                configuredResolution = null
+                boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
