@@ -2,7 +2,10 @@ package com.aritr.rova.ui.signals
 
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,7 +62,23 @@ enum class ThermalStatus {
  */
 class ThermalStatusSignal(
     private val sdkInt: Int,
-    private val currentStatus: () -> Int
+    private val currentStatus: () -> Int,
+    /**
+     * Phase 4 Slice 3 — register a thermal-status push listener.
+     * Receives a callback `(rawInt) -> Unit` and returns an opaque token
+     * (the actual [PowerManager.OnThermalStatusChangedListener] object) that
+     * [removeListener] accepts to unregister. Default no-op (returns [callback]
+     * as a pass-through token) preserves pre-Slice-3 call sites (in particular,
+     * every existing ThermalStatusSignalTest fixture). Production wiring in
+     * [forContext] wraps the callback in a real listener inside an SDK guard and
+     * returns that listener as the token.
+     */
+    private val addListener: ((Int) -> Unit) -> Any = { it },
+    /**
+     * Phase 4 Slice 3 — unregister the opaque token returned by [addListener].
+     * Default no-op symmetric with [addListener].
+     */
+    private val removeListener: (Any) -> Unit = {},
 ) {
 
     private val _state: MutableStateFlow<ThermalStatus> = MutableStateFlow(currentValue())
@@ -71,6 +90,38 @@ class ThermalStatusSignal(
      */
     fun refresh() {
         _state.value = currentValue()
+    }
+
+    /** Opaque listener token held so [stop] can unregister it. */
+    private var registeredListenerToken: Any? = null
+
+    /**
+     * Phase 4 Slice 3 — begin receiving real-time thermal updates.
+     * Idempotent; pre-API-29 no-op.
+     *
+     * Call from `RovaApp.onCreate` (process-scoped). The OS releases the
+     * registration on process death, so no explicit [stop] from app
+     * teardown is required (Android does not reliably invoke
+     * Application.onTerminate on production devices).
+     */
+    fun start() {
+        if (sdkInt < Build.VERSION_CODES.Q) return
+        if (registeredListenerToken != null) return
+        val callback: (Int) -> Unit = { raw ->
+            _state.value = ThermalStatus.fromRaw(raw)
+        }
+        registeredListenerToken = addListener(callback)
+    }
+
+    /**
+     * Phase 4 Slice 3 — unregister the listener captured by [start].
+     * Idempotent. Defensive — production never calls this (process death
+     * does the cleanup), but tests use it to assert teardown.
+     */
+    fun stop() {
+        val token = registeredListenerToken ?: return
+        removeListener(token)
+        registeredListenerToken = null
     }
 
     private fun currentValue(): ThermalStatus =
@@ -101,8 +152,52 @@ class ThermalStatusSignal(
                     } else {
                         0
                     }
+                },
+                addListener = { callback ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        registerThermalListener(pm, callback) ?: callback
+                    } else {
+                        callback
+                    }
+                },
+                removeListener = { token ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        unregisterThermalListener(pm, token)
+                    }
                 }
             )
+        }
+
+        @RequiresApi(Build.VERSION_CODES.Q)
+        private fun registerThermalListener(
+            pm: PowerManager,
+            callback: (Int) -> Unit,
+        ): PowerManager.OnThermalStatusChangedListener? {
+            val listener = PowerManager.OnThermalStatusChangedListener { raw -> callback(raw) }
+            val mainExecutor = java.util.concurrent.Executor { r -> Handler(Looper.getMainLooper()).post(r) }
+            return runCatching {
+                pm.addThermalStatusListener(mainExecutor, listener)
+                listener
+            }
+                .onFailure {
+                    com.aritr.rova.utils.RovaLog.w(
+                        "ThermalStatusSignal.addListener threw; falling back to ON_RESUME poll",
+                        it
+                    )
+                }
+                .getOrNull()
+        }
+
+        @RequiresApi(Build.VERSION_CODES.Q)
+        private fun unregisterThermalListener(pm: PowerManager, token: Any) {
+            if (token !is PowerManager.OnThermalStatusChangedListener) return
+            runCatching { pm.removeThermalStatusListener(token) }
+                .onFailure {
+                    com.aritr.rova.utils.RovaLog.w(
+                        "ThermalStatusSignal.removeListener threw",
+                        it
+                    )
+                }
         }
     }
 }
