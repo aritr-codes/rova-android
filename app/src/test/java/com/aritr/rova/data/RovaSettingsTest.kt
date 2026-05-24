@@ -263,6 +263,28 @@ class RovaSettingsTest {
         assertEquals("", s.exportFolderName)
     }
 
+    // ─── snoozedWarningIds (Phase 4.1c) ───────────────────────────
+
+    @Test fun `snoozedWarningIds default is empty set`() {
+        assertEquals(emptySet<String>(), settings().snoozedWarningIds)
+    }
+
+    @Test fun `snoozedWarningIds round-trips a 2-id set`() {
+        val s = settings()
+        s.snoozedWarningIds = setOf("NOTIFICATIONS_DENIED", "BATTERY_OPTIMIZATION_ON")
+        assertEquals(
+            setOf("NOTIFICATIONS_DENIED", "BATTERY_OPTIMIZATION_ON"),
+            s.snoozedWarningIds,
+        )
+    }
+
+    @Test fun `snoozedWarningIds setter replaces, does not merge`() {
+        val s = settings()
+        s.snoozedWarningIds = setOf("A", "B")
+        s.snoozedWarningIds = setOf("C")
+        assertEquals(setOf("C"), s.snoozedWarningIds)
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────
 
     /**

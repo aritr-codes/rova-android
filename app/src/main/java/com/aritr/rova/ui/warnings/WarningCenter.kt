@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -36,28 +37,21 @@ fun WarningCenter(
     hudState: RecordHudState,
     onStopRecording: () -> Unit,
     modifier: Modifier = Modifier,
+    // Phase 4.1c — optional shared VM. RecordScreen hoists one instance and
+    // passes it to both WarningCenter mounts (idle + active HUD) so the same
+    // snoozedForever flow drives both surfaces + the Settings reset row.
+    // When null (legacy callers, previews), the factory below constructs one
+    // wired straight to RovaSettings.
+    vm: WarningCenterViewModel? = null,
 ) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
-    val vm: WarningCenterViewModel = viewModel(
+    val resolvedVm: WarningCenterViewModel = vm ?: viewModel(
         factory = viewModelFactory {
-            initializer {
-                WarningCenterViewModel(
-                    cameraPermissionGranted = app.cameraPermissionSignal.state,
-                    exactAlarmGranted = app.exactAlarmSignal.state,
-                    storageInsufficient = app.storageSignal.insufficientToStart,
-                    thermal = app.thermalStatusSignal.state,
-                    power = app.powerSignal.state,
-                    camera = app.cameraStateSignal.state,
-                    microphonePermissionGranted = app.microphonePermissionSignal.state,
-                    notificationsGranted = app.notificationPermissionSignal.state,
-                    batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
-                    storageLowMidRec = app.storageLowMidRecSignal.isLow,
-                )
-            }
+            initializer { buildWarningCenterViewModel(app) }
         }
     )
-    val active by vm.activeWarning.collectAsStateWithLifecycle()
+    val active by resolvedVm.activeWarning.collectAsStateWithLifecycle()
     val id = active ?: return
     val surface = warningSurfaceFor(id)
 
@@ -65,36 +59,36 @@ fun WarningCenter(
         // Idle branch — sheet / chip. TopBanner ids no-op here.
         if (surface == WarningSurface.TopBanner) return
 
-        val dismissed by vm.dismissedWarnings.collectAsStateWithLifecycle()
+        val dismissed by resolvedVm.dismissedWarnings.collectAsStateWithLifecycle()
         if (id in dismissed) {
             WarningSnoozeChip(
                 id = id,
-                onExpand = { vm.restore(id) },
+                onExpand = { resolvedVm.restore(id) },
                 modifier = modifier,
             )
             return
         }
 
-        val expandedWhy by vm.expandedWhy.collectAsStateWithLifecycle()
+        val expandedWhy by resolvedVm.expandedWhy.collectAsStateWithLifecycle()
         WarningSheetV3(
             id = id,
             surface = surface,
             expanded = id in expandedWhy,
             onPrimary = {
                 launchActionTarget(context, warningSheetContent(id).primary.target)
-                vm.dismiss(id)
+                resolvedVm.dismiss(id)
             },
-            onSecondary = { vm.dismiss(id) },
+            onSecondary = { resolvedVm.dismiss(id) },
             onOverflow = { target ->
                 if (target == ActionTarget.SNOOZE_FOREVER) {
-                    vm.snoozeForever(id)
+                    resolvedVm.snoozeForever(id)
                 } else {
                     launchActionTarget(context, target)
                 }
             },
-            onToggleWhy = { vm.toggleExpandWhy(id) },
+            onToggleWhy = { resolvedVm.toggleExpandWhy(id) },
             onDismissRequest = {
-                if (surface != WarningSurface.HardBlockSheet) vm.dismiss(id)
+                if (surface != WarningSurface.HardBlockSheet) resolvedVm.dismiss(id)
             },
         )
     } else {
@@ -132,4 +126,39 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.SNOOZE_FOREVER -> return    // unreachable (guarded above) — for `when` exhaustiveness
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+}
+
+/**
+ * Phase 4.1c — single source of truth for constructing a [WarningCenterViewModel]
+ * wired to live signals on [RovaApp] AND to the persistent snooze set on
+ * [RovaSettings]. Called by both:
+ *   - the factory inside [WarningCenter] (when no `vm` is hoisted), and
+ *   - the factory inside `RecordScreen` (when one shared VM drives both
+ *     WarningCenter mounts + the SettingsSheet reset row).
+ *
+ * `runCatching { WarningId.valueOf(it) }.getOrNull()` swallows any stale
+ * `WarningId.name` left over from a renamed/removed id; `mapNotNull` drops
+ * it. The stored set self-heals to the trimmed value on the next write.
+ */
+internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
+    val settings = RovaSettings(app)
+    val initial: Set<WarningId> = settings.snoozedWarningIds
+        .mapNotNull { runCatching { WarningId.valueOf(it) }.getOrNull() }
+        .toSet()
+    return WarningCenterViewModel(
+        cameraPermissionGranted = app.cameraPermissionSignal.state,
+        exactAlarmGranted = app.exactAlarmSignal.state,
+        storageInsufficient = app.storageSignal.insufficientToStart,
+        thermal = app.thermalStatusSignal.state,
+        power = app.powerSignal.state,
+        camera = app.cameraStateSignal.state,
+        microphonePermissionGranted = app.microphonePermissionSignal.state,
+        notificationsGranted = app.notificationPermissionSignal.state,
+        batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
+        storageLowMidRec = app.storageLowMidRecSignal.isLow,
+        initialSnoozedIds = initial,
+        onSnoozeChanged = { set ->
+            settings.snoozedWarningIds = set.map(WarningId::name).toSet()
+        },
+    )
 }

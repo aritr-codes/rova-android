@@ -77,6 +77,11 @@ fun SettingsSheet(
     onIntervalChange: (Int) -> Unit,
     onQualityChange: (String) -> Unit,
     onModePick: (String) -> Unit,
+    // Phase 4.1c — "Reset snoozed warnings" affordance. `onResetSnoozes` is
+    // null when the persisted set is empty; the row is suppressed entirely
+    // in that state so there is no dead-end "Reset (0)" affordance.
+    snoozedCount: Int,
+    onResetSnoozes: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     AnimatedVisibility(
@@ -110,6 +115,8 @@ fun SettingsSheet(
                 onIntervalChange = onIntervalChange,
                 onQualityChange = onQualityChange,
                 onModePick = onModePick,
+                snoozedCount = snoozedCount,
+                onResetSnoozes = onResetSnoozes,
                 onDismiss = onDismiss,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -207,6 +214,8 @@ private fun SettingsPanel(
     onIntervalChange: (Int) -> Unit,
     onQualityChange: (String) -> Unit,
     onModePick: (String) -> Unit,
+    snoozedCount: Int,
+    onResetSnoozes: (() -> Unit)?,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -297,6 +306,11 @@ private fun SettingsPanel(
         )
         SheetRowDivider()
         QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
+
+        if (onResetSnoozes != null) {
+            SheetRowDivider()
+            ResetSnoozesRow(count = snoozedCount, onClick = onResetSnoozes)
+        }
 
         // Push the CTA to the bottom of the panel.
         Spacer(Modifier.weight(1f))
@@ -491,5 +505,42 @@ private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onCl
             ),
     ) {
         Text(label, style = RovaTokens.sheetChip, color = textColor)
+    }
+}
+
+/* ── Reset snoozed warnings (Phase 4.1c) ──────────────────────────────── */
+
+/**
+ * One-line clickable row that clears the persisted snooze set via
+ * [WarningCenterViewModel.clearSnoozes]. Surfaced only when the caller
+ * passes a non-null `onClick` (i.e. the set is non-empty), so there is
+ * no dead-end "Reset (0)" affordance.
+ *
+ * Visually mirrors the existing settings rows: title on the left at
+ * `sheetRowLabel` style, subtitle directly under the title with a muted
+ * alpha, no value/stepper on the right.
+ */
+@Composable
+private fun ResetSnoozesRow(count: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = SettingsSheetTokens.rowPaddingV),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Reset snoozed warnings",
+                style = RovaTokens.sheetRowLabel,
+                color = SettingsSheetTokens.rowLabelText,
+            )
+            Text(
+                if (count == 1) "1 warning hidden" else "$count warnings hidden",
+                style = RovaTokens.sheetRowLabel,
+                color = SettingsSheetTokens.rowLabelText.copy(alpha = 0.55f),
+                fontSize = 11.sp,
+            )
+        }
     }
 }
