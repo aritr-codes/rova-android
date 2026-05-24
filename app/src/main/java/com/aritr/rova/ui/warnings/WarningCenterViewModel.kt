@@ -46,6 +46,12 @@ class WarningCenterViewModel(
     // call-sites construct the VM via `viewModel(factory = ...)` and
     // omit this argument so `viewModelScope` is used as before.
     private val scope: CoroutineScope? = null,
+    // Phase 4.1c — initial snooze set + on-mutation callback. Defaults
+    // preserve every pre-4.1c call site (in-memory only behaviour).
+    // The factory in WarningCenter.kt supplies real values that
+    // round-trip through RovaSettings.snoozedWarningIds.
+    initialSnoozedIds: Set<WarningId> = emptySet(),
+    private val onSnoozeChanged: ((Set<WarningId>) -> Unit)? = null,
 ) : ViewModel() {
 
     private val activeScope: CoroutineScope get() = scope ?: viewModelScope
@@ -58,12 +64,24 @@ class WarningCenterViewModel(
         _expandedWhy.update { if (id in it) it - id else it + id }
     }
 
-    // ── v3 — "Don't show again" snooze (in-memory only; Phase 4.1c will persist) ──
-    private val _snoozedForever = MutableStateFlow<Set<WarningId>>(emptySet())
+    // ── v3 + 4.1c — "Don't show again" snooze (persisted via factory callback) ──
+    private val _snoozedForever = MutableStateFlow(initialSnoozedIds)
     val snoozedForever: StateFlow<Set<WarningId>> = _snoozedForever.asStateFlow()
 
     fun snoozeForever(id: WarningId) {
         _snoozedForever.update { it + id }
+        onSnoozeChanged?.invoke(_snoozedForever.value)
+    }
+
+    /**
+     * Phase 4.1c — clear the entire snooze set. Early-returns when already
+     * empty so the Settings reset row is idempotent (no redundant disk
+     * write when the user taps reset on an already-empty set).
+     */
+    fun clearSnoozes() {
+        if (_snoozedForever.value.isEmpty()) return
+        _snoozedForever.value = emptySet()
+        onSnoozeChanged?.invoke(emptySet())
     }
 
     private val _resolvedWarning: StateFlow<WarningId?> =

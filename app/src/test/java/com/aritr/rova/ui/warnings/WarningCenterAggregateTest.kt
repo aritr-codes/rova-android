@@ -175,4 +175,80 @@ class WarningCenterAggregateTest {
         vm.snoozeForever(WarningId.NOTIFICATIONS_DENIED)
         assertNull(vm.activeWarning.value)
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.1c — initialSnoozedIds seed + onSnoozeChanged callback +
+    //              clearSnoozes mutator
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun vm_seeded_with_initialSnoozedIds_filters_those_ids_from_activeWarning() {
+        // Drive NOTIFICATIONS_DENIED into _resolvedWarning (notificationsGranted = false),
+        // and seed snoozedForever with the same id. activeWarning must be null.
+        val s = sources()
+        s.nt.value = false
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
+        )
+        assertNull(vm.activeWarning.value)
+        assertTrue(WarningId.NOTIFICATIONS_DENIED in vm.snoozedForever.value)
+    }
+
+    @Test
+    fun clearSnoozes_empties_the_snoozedForever_flow_and_invokes_callback() {
+        val s = sources()
+        s.nt.value = false
+        val received = mutableListOf<Set<WarningId>>()
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
+            onSnoozeChanged = { received += it },
+        )
+        vm.clearSnoozes()
+        assertEquals(emptySet<WarningId>(), vm.snoozedForever.value)
+        assertEquals(listOf(emptySet<WarningId>()), received)
+    }
+
+    @Test
+    fun snoozeForever_invokes_callback_with_updated_set() {
+        val s = sources()
+        val received = mutableListOf<Set<WarningId>>()
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            onSnoozeChanged = { received += it },
+        )
+        vm.snoozeForever(WarningId.NOTIFICATIONS_DENIED)
+        assertEquals(listOf(setOf(WarningId.NOTIFICATIONS_DENIED)), received)
+    }
 }
