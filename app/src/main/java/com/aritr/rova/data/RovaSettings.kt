@@ -20,22 +20,30 @@ class RovaSettings(context: Context) {
     )
 
     init {
-        // One-time migration for installs that pre-date the mode split.
-        // If we haven't stamped the migration marker yet, copy any
-        // legacy `mode` value from `prefs` into `runtimePrefs`, then
-        // delete the legacy key and stamp the marker. The marker
-        // travels via Auto Backup along with the rest of `prefs`, so
-        // post-backup restores skip this branch and the new install
-        // correctly defaults `runtimePrefs.mode` to Portrait.
-        if (!prefs.getBoolean(MODE_MIGRATED_V1, false)) {
-            val legacyMode = prefs.getString("mode", null)
-            if (legacyMode != null) {
-                runtimePrefs.edit { putString("mode", legacyMode) }
-            }
-            prefs.edit {
-                remove("mode")
-                putBoolean(MODE_MIGRATED_V1, true)
-            }
+        // Legacy-key cleanup. Pre-mode-split installs stored the `mode`
+        // value in `prefs` (rova_settings.xml), which IS backed up by
+        // Android Auto Backup. After a reinstall, the restored backup
+        // brought back the prior `mode=PortraitLandscape` and the app
+        // opened in DualShot -- the bug this whole patch chain exists
+        // to kill. The new authoritative location is `runtimePrefs`
+        // (rova_runtime_prefs.xml), which is excluded from backup, so
+        // a reinstall finds it empty and the getter falls through to
+        // the documented Portrait default.
+        //
+        // We DELIBERATELY do not migrate the legacy value forward
+        // here. Auto Backup snapshots run on a schedule (~24 h, idle +
+        // charging) so a user who installs this patch, sets a mode,
+        // and then reinstalls before the next snapshot would have
+        // their PRE-PATCH backup restored -- with `mode=PortraitLandscape`
+        // intact in `prefs` and no marker. A faithful "copy legacy ->
+        // runtime" migration would dutifully preserve that stale P+L
+        // value and defeat the fix. Dropping the legacy key without
+        // copying it gives the documented Portrait default on every
+        // reinstall and on every in-place update from a pre-split
+        // build. The one-time cost is a single setting reset on update;
+        // worth it for the predictable fresh-install behavior.
+        if (prefs.contains("mode")) {
+            prefs.edit { remove("mode") }
         }
     }
 
@@ -115,7 +123,6 @@ class RovaSettings(context: Context) {
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
-        private const val MODE_MIGRATED_V1 = "mode_migrated_v1"
     }
 }
 
