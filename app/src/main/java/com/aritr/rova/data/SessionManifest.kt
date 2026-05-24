@@ -353,6 +353,7 @@ enum class AudioMode {
  * - [USER_STOPPED] from `RovaRecordingService` low-storage gate → [LOW_STORAGE].
  * - [USER_STOPPED] from `RovaRecordingService` post-manifest init failure
  *   (controller-register collision; camera bind error) → [INIT_FAILED].
+ * - [USER_STOPPED] from `RovaRecordingService` thermal gate → [THERMAL].
  * - [Terminated.COMPLETED] (merge-success) → [NONE].
  * - [Terminated.KILLED_BY_SYSTEM] / [Terminated.KILLED_FORCE_STOP] → [NONE].
  */
@@ -361,5 +362,13 @@ enum class StopReason {
     LOW_STORAGE,
     PERMISSION_REVOKED,
     INIT_FAILED,
+    /**
+     * Phase 4 Slice 3 — service Layer-4 thermal gate fires when
+     * `ThermalStatusSignal.state.value` is at or above
+     * `ThermalStatus.CRITICAL`. The eager-write contract writes
+     * `Terminated.USER_STOPPED` + this reason atomically (B3).
+     * See ADR-0016.
+     */
+    THERMAL,
     NONE
 }
