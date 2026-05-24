@@ -11,13 +11,13 @@ class MidRecBannerContentTest {
     private val ids = WarningId.entries.filter { warningSurfaceFor(it) == WarningSurface.TopBanner }
 
     @Test fun every_mid_rec_id_returns_nonblank_content() {
-        assertEquals("expected 10 TopBanner-mapped ids", 10, ids.size)
+        assertEquals("expected 11 TopBanner-mapped ids", 11, ids.size)
         for (id in ids) {
             val c = midRecBannerContent(id)
             assertNotNull("icon for $id", c.icon)
             assertFalse("title for $id", c.title.isBlank())
             assertFalse("sub for $id", c.sub.isBlank())
-            assertEquals("cta for $id", "Stop", c.cta)
+            assertFalse("cta for $id", c.cta.isBlank())
         }
     }
 

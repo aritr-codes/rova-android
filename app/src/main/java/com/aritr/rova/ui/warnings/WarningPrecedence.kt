@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.warnings
 
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
@@ -55,6 +56,7 @@ internal object WarningPrecedence {
         notificationsGranted: Boolean,
         batteryOptimizationExempt: Boolean,
         storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
+        autoStopEcho: TerminalEcho? = null,            // ← NEW (Phase 4 Slice 2)
     ): WarningId? {
         if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
         if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
@@ -74,12 +76,15 @@ internal object WarningPrecedence {
         }
         if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
         if (storageLowMidRec) return WarningId.STORAGE_LOW_MID_REC                         // #11
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #12
-        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #13
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #14
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #15
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #16
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #17
+        // #12 — STORAGE_FULL_AUTOSTOPPED (Phase 4 Slice 2; LOW_STORAGE-filtered echo of past auto-stop)
+        autoStopEcho?.takeIf { it.stopReason == StopReason.LOW_STORAGE }
+            ?.let { return WarningId.STORAGE_FULL_AUTOSTOPPED }
+        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #13
+        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #14
+        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #15
+        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #16
+        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #17
+        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #18
         return null
     }
 }

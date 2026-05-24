@@ -39,7 +39,8 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
-    WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner       // ← NEW arm in the TopBanner cluster
+    WarningId.STORAGE_LOW_MID_REC,
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSurface.TopBanner       // ← NEW arm (Phase 4 Slice 2)
 }
 
 internal data class WarningAction(val label: String, val target: ActionTarget)
@@ -156,6 +157,15 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSheetContent(
+        // Defensive — STORAGE_FULL_AUTOSTOPPED is TopBanner-only (rendered
+        // on Idle, not as a sheet). This arm keeps warningSheetContent
+        // exhaustive over WarningId; never renders as a sheet.
+        Icons.Default.Storage, "Recording stopped",
+        "Storage filled up.",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        null,
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
@@ -233,6 +243,10 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
         Icons.Default.Storage, "Storage running low",
         "Free space on this device.", "Stop",
+    )
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> TopBannerContent(
+        Icons.Default.Storage, "Recording stopped",
+        "Storage filled up.", "Free up space",
     )
     // All other WarningIds are NOT TopBanner-mapped — calling midRecBannerContent on them is a caller bug.
     WarningId.CAMERA_PERMISSION_DENIED,

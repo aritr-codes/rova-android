@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.warnings
 
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
@@ -28,6 +29,7 @@ class WarningPrecedenceTest {
         notificationsGranted: Boolean = true,
         batteryOptimizationExempt: Boolean = true,
         storageLowMidRec: Boolean = false,                  // ← NEW
+        autoStopEcho: TerminalEcho? = null,                 // ← NEW (Phase 4 Slice 2)
     ): WarningId? = WarningPrecedence.resolve(
         cameraPermissionGranted = cameraPermissionGranted,
         exactAlarmGranted = exactAlarmGranted,
@@ -39,6 +41,7 @@ class WarningPrecedenceTest {
         notificationsGranted = notificationsGranted,
         batteryOptimizationExempt = batteryOptimizationExempt,
         storageLowMidRec = storageLowMidRec,                // ← NEW (passed positionally to WarningPrecedence.resolve)
+        autoStopEcho = autoStopEcho,                        // ← NEW (Phase 4 Slice 2)
     )
 
     @Test fun `everything clear returns null`() = assertNull(resolve())
@@ -171,4 +174,40 @@ class WarningPrecedenceTest {
 
     @Test fun `storage low mid-rec false does not fire when otherwise clear`() =
         assertNull(resolve(storageLowMidRec = false))
+
+    // ── Phase 4 Slice 2 — STORAGE_FULL_AUTOSTOPPED (ordinal 11, row #12) ──
+
+    @Test fun `STORAGE_FULL_AUTOSTOPPED fires when autoStopEcho is LOW_STORAGE and no higher-priority signal active`() {
+        val resolved = WarningPrecedence.resolve(
+            cameraPermissionGranted = true,
+            exactAlarmGranted = true,
+            storageInsufficient = false,
+            thermal = ThermalStatus.NONE,
+            power = PowerState(percent = 80, charging = false, powerSaveMode = false),
+            camera = CameraSignalState.OK,
+            microphonePermissionGranted = true,
+            notificationsGranted = true,
+            batteryOptimizationExempt = true,
+            storageLowMidRec = false,
+            autoStopEcho = TerminalEcho("session-a", StopReason.LOW_STORAGE),
+        )
+        assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, resolved)
+    }
+
+    @Test fun `STORAGE_LOW_MID_REC outranks STORAGE_FULL_AUTOSTOPPED when both fire`() {
+        val resolved = WarningPrecedence.resolve(
+            cameraPermissionGranted = true,
+            exactAlarmGranted = true,
+            storageInsufficient = false,
+            thermal = ThermalStatus.NONE,
+            power = PowerState(percent = 80, charging = false, powerSaveMode = false),
+            camera = CameraSignalState.OK,
+            microphonePermissionGranted = true,
+            notificationsGranted = true,
+            batteryOptimizationExempt = true,
+            storageLowMidRec = true,
+            autoStopEcho = TerminalEcho("session-a", StopReason.LOW_STORAGE),
+        )
+        assertEquals(WarningId.STORAGE_LOW_MID_REC, resolved)
+    }
 }
