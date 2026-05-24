@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -140,14 +141,17 @@ internal fun WarningTopBannerV3(
         if (content.overflow.isNotEmpty() && onOverflow != null) {
             Box {
                 var expanded by remember { mutableStateOf(false) }
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "More options",
-                    tint = Color.White.copy(alpha = 0.55f),
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clickable { expanded = true },
-                )
+                IconButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 DropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
