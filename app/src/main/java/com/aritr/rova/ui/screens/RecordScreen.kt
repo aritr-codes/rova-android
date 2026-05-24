@@ -22,6 +22,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.service.recovery.RecoveryReport
@@ -33,6 +35,8 @@ import com.aritr.rova.ui.components.*
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
 import com.aritr.rova.ui.warnings.WarningCenter
+import com.aritr.rova.ui.warnings.WarningCenterViewModel
+import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -60,6 +64,20 @@ fun RecordScreen(
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
     val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
+
+        // Phase 4.1c — one shared WarningCenterViewModel instance feeds both
+        // WarningCenter mounts (idle + active HUD) AND the Settings sheet's
+        // "Reset snoozed warnings" row. Constructed via the same factory the
+        // standalone WarningCenter would use, so the persistence wiring is
+        // identical.
+        val warningCenterApp = remember(context) { context.applicationContext as RovaApp }
+        val warningVm: WarningCenterViewModel = viewModel(
+            key = "WarningCenterViewModel",
+            factory = viewModelFactory {
+                initializer { buildWarningCenterViewModel(warningCenterApp) }
+            },
+        )
+        val snoozedSet by warningVm.snoozedForever.collectAsStateWithLifecycle()
 
     // Slice 2 — read-only echo of the existing app-level recovery
     // report. No new RecoveryViewModel ownership; the History tab
@@ -542,6 +560,7 @@ fun RecordScreen(
                         WarningCenter(
                             hudState = RecordHudState.Idle,
                             onStopRecording = {},
+                            vm = warningVm,
                         )
                     }
                 }
@@ -584,6 +603,7 @@ fun RecordScreen(
                             WarningCenter(
                                 hudState = hudState,
                                 onStopRecording = { viewModel.stopRecording() },
+                                vm = warningVm,
                             )
                             RecordActiveHud(
                                 state = hudState,
@@ -720,6 +740,10 @@ fun RecordScreen(
                     onIntervalChange = { viewModel.interval.value = it },
                     onQualityChange = { viewModel.resolution.value = it },
                     onModePick = { viewModel.setMode(it) },
+                    snoozedCount = snoozedSet.size,
+                    onResetSnoozes = if (snoozedSet.isNotEmpty()) {
+                        { warningVm.clearSnoozes() }
+                    } else null,
                     onDismiss = { viewModel.closeSettingsSheet() },
                 )
             }   // close Box
