@@ -306,4 +306,53 @@ class WarningCenterAggregateTest {
         vm.dismissAutoStopEcho("session-xyz")
         assertEquals(listOf("session-xyz"), received)
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4 Slice 3 — THERMAL_AUTOSTOPPED aggregate
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun autoStopEcho_source_flow_drives_THERMAL_AUTOSTOPPED_into_activeWarning() {
+        val s = sources()
+        s.autoStopEcho.value = TerminalEcho("session-t", StopReason.THERMAL)
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+        assertEquals(WarningId.THERMAL_AUTOSTOPPED, vm.activeWarning.value)
+    }
+
+    @Test
+    fun autoStopEcho_LOW_STORAGE_still_drives_STORAGE_FULL_AUTOSTOPPED_after_when_rewrite() {
+        // Regression for the Slice-2 echo behavior after T4's when-arm rewrite.
+        // Distinct test from the Slice-2 one above so a failure points at the
+        // rewrite, not the original Slice-2 wiring.
+        val s = sources()
+        s.autoStopEcho.value = TerminalEcho("session-s2", StopReason.LOW_STORAGE)
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+        assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, vm.activeWarning.value)
+    }
 }
