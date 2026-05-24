@@ -179,7 +179,15 @@ Termination   ∈ { ConditionResolved, UserDismissed, Snooze24h, ChoiceCommitted
 | `ConfirmDialog` | record HUD | No (transient) | No |
 | `InlineRow` | history list (per-row decoration) | No | Yes — manifest carries the failure state |
 
-**Snooze contract.** Soft / Advisory dismissals that are 24 h-snoozed write a per-warning timestamp into a new in-memory store (Phase 4.1 owns this — **not** persisted across process restarts; the user gets the banner back on cold start, by design — silencing a battery banner that survives a phone reboot would be wrong).
+**Snooze contract.** *Superseded by ADR-0014 (Phase 4.1c, 2026-05-24).* "Don't
+show again" snoozes are now persisted across cold start, system reclaim,
+force-stop, device reboot, and in-place APK update. They reset on uninstall
++ reinstall (the backing file `rova_runtime_prefs.xml` is `<exclude>`d from
+Android Auto Backup) and on explicit reset via Settings → "Reset snoozed
+warnings". The original "in-memory only" intent stated here was the Phase
+4.1 / 4.1b shipping decision; the Phase 4.1c implementation durably honors
+the user's choice. The 24-h TTL clause is also rescinded: snoozes are
+forever until reset.
 
 **Hysteresis on Escalating.** Thermal status uses a two-level hysteresis to prevent flapping: enter banner at `MODERATE`, leave banner only when status is `LIGHT` or below. Same rule applies to "Storage running low" → "Storage full" transitions (different threshold each direction).
 
