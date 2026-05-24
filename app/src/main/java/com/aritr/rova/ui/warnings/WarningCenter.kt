@@ -124,6 +124,9 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.APP_DETAILS_SETTINGS ->
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
         ActionTarget.SNOOZE_FOREVER -> return    // unreachable (guarded above) — for `when` exhaustiveness
+        ActionTarget.STORAGE_SETTINGS,
+        ActionTarget.DISMISS_AUTOSTOP_ECHO,
+        ActionTarget.REVIEW_SESSION -> return    // Phase 4 Slice 2 — handled by overflow router in T6; placeholder here
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
 }
