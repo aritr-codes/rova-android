@@ -210,4 +210,40 @@ class WarningPrecedenceTest {
         )
         assertEquals(WarningId.STORAGE_LOW_MID_REC, resolved)
     }
+
+    // ── Phase 4 Slice 3 — THERMAL_AUTOSTOPPED (ordinal 12, row #13) ──
+
+    @Test fun `THERMAL_AUTOSTOPPED fires when autoStopEcho is THERMAL and no higher-priority signal active`() {
+        val resolved = WarningPrecedence.resolve(
+            cameraPermissionGranted = true,
+            exactAlarmGranted = true,
+            storageInsufficient = false,
+            thermal = ThermalStatus.NONE,
+            power = PowerState(percent = 80, charging = false, powerSaveMode = false),
+            camera = CameraSignalState.OK,
+            microphonePermissionGranted = true,
+            notificationsGranted = true,
+            batteryOptimizationExempt = true,
+            storageLowMidRec = false,
+            autoStopEcho = TerminalEcho("session-t", StopReason.THERMAL),
+        )
+        assertEquals(WarningId.THERMAL_AUTOSTOPPED, resolved)
+    }
+
+    @Test fun `LOW_STORAGE echo still resolves STORAGE_FULL_AUTOSTOPPED after when-rewrite`() {
+        val resolved = WarningPrecedence.resolve(
+            cameraPermissionGranted = true,
+            exactAlarmGranted = true,
+            storageInsufficient = false,
+            thermal = ThermalStatus.NONE,
+            power = PowerState(percent = 80, charging = false, powerSaveMode = false),
+            camera = CameraSignalState.OK,
+            microphonePermissionGranted = true,
+            notificationsGranted = true,
+            batteryOptimizationExempt = true,
+            storageLowMidRec = false,
+            autoStopEcho = TerminalEcho("session-s", StopReason.LOW_STORAGE),
+        )
+        assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, resolved)
+    }
 }

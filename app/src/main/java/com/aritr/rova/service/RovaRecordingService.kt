@@ -1821,6 +1821,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return SegmentGateResult.AbortNoOp
         }
 
+        // Layer 4 — thermal gate (Phase 4 Slice 3, ADR-0016).
+        // Between-segment check (parallel to LOW_STORAGE Layer 3 — spec §3
+        // non-goal: no mid-segment interrupt). Reads the push-listener-fed
+        // thermalStatusSignal value. Triggers at CRITICAL or above; SEVERE
+        // is intentionally the active-HUD banner's user-driven Stop affordance
+        // (not auto-stop).
+        val thermal = (applicationContext as? RovaApp)
+            ?.thermalStatusSignal?.state?.value
+            ?: com.aritr.rova.ui.signals.ThermalStatus.NONE
+        if (com.aritr.rova.service.SegmentGateThermal.shouldTerminate(thermal)) {
+            RovaLog.w("checkSegmentGates: thermal=$thermal at or above CRITICAL — terminating")
+            return SegmentGateResult.Terminate(com.aritr.rova.data.StopReason.THERMAL)
+        }
+
         return SegmentGateResult.Continue
     }
 
@@ -2600,6 +2614,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                         "Stopped — required permission revoked. Re-grant in Settings."
                                     com.aritr.rova.data.StopReason.LOW_STORAGE ->
                                         "Stopped — device storage low. Free up space."
+                                    com.aritr.rova.data.StopReason.THERMAL ->
+                                        "Stopped — device overheated. Let it cool down."
                                     else -> "Stopping recording…"
                                 }
                             )

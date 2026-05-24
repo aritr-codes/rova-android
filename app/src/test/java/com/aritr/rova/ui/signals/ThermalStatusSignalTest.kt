@@ -103,4 +103,85 @@ class ThermalStatusSignalTest {
         raw.set(6); signal.refresh()
         assertEquals(ThermalStatus.NONE, signal.state.value)
     }
+
+    // ── Phase 4 Slice 3 — push-listener lifecycle ──
+
+    @Test fun `start registers listener once on API 29 plus`() {
+        var registerCalls = 0
+        val signal = ThermalStatusSignal(
+            sdkInt = 29,
+            currentStatus = { 0 },
+            addListener = { registerCalls++ },
+            removeListener = {},
+        )
+        signal.start()
+        assertEquals(1, registerCalls)
+        signal.start()
+        assertEquals("second start is idempotent", 1, registerCalls)
+    }
+
+    @Test fun `start is no-op pre-API-29`() {
+        var registerCalls = 0
+        val signal = ThermalStatusSignal(
+            sdkInt = 28,
+            currentStatus = { 0 },
+            addListener = { registerCalls++ },
+            removeListener = {},
+        )
+        signal.start()
+        assertEquals(0, registerCalls)
+    }
+
+    @Test fun `stop unregisters listener and clears reference`() {
+        var registerCalls = 0
+        var unregisterCalls = 0
+        val signal = ThermalStatusSignal(
+            sdkInt = 29,
+            currentStatus = { 0 },
+            addListener = { registerCalls++ },
+            removeListener = { unregisterCalls++ },
+        )
+        signal.start()
+        signal.stop()
+        assertEquals(1, unregisterCalls)
+        signal.stop()
+        assertEquals("stop after stop is idempotent", 1, unregisterCalls)
+    }
+
+    @Test fun `listener emission updates state flow`() {
+        var captured: ((Int) -> Unit)? = null
+        val signal = ThermalStatusSignal(
+            sdkInt = 29,
+            currentStatus = { 0 },
+            addListener = { callback -> captured = callback; callback },
+            removeListener = {},
+        )
+        signal.start()
+        assertEquals(ThermalStatus.NONE, signal.state.value)
+        captured!!.invoke(3)
+        assertEquals(ThermalStatus.SEVERE, signal.state.value)
+        captured!!.invoke(4)
+        assertEquals(ThermalStatus.CRITICAL, signal.state.value)
+    }
+
+    @Test fun `listener emission distinctness dedupes equal values`() = runBlocking {
+        var captured: ((Int) -> Unit)? = null
+        val signal = ThermalStatusSignal(
+            sdkInt = 29,
+            currentStatus = { 2 },
+            addListener = { callback -> captured = callback; callback },
+            removeListener = {},
+        )
+        signal.start()
+        val emissions = mutableListOf<ThermalStatus>()
+        val job = launch(Dispatchers.Unconfined) {
+            signal.state.collect { emissions += it }
+        }
+        captured!!.invoke(2)
+        captured!!.invoke(2)
+        captured!!.invoke(2)
+        yield()
+        job.cancelAndJoin()
+        assertEquals(listOf(ThermalStatus.MODERATE), emissions)
+    }
 }

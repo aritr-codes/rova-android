@@ -76,9 +76,19 @@ internal object WarningPrecedence {
         }
         if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
         if (storageLowMidRec) return WarningId.STORAGE_LOW_MID_REC                         // #11
-        // #12 — STORAGE_FULL_AUTOSTOPPED (Phase 4 Slice 2; LOW_STORAGE-filtered echo of past auto-stop)
-        autoStopEcho?.takeIf { it.stopReason == StopReason.LOW_STORAGE }
-            ?.let { return WarningId.STORAGE_FULL_AUTOSTOPPED }
+        // #12-13 — auto-stop echoes. Slice 2: LOW_STORAGE → STORAGE_FULL_AUTOSTOPPED.
+        // Slice 3: THERMAL → THERMAL_AUTOSTOPPED. Other StopReasons (USER,
+        // PERMISSION_REVOKED, INIT_FAILED, NONE) do not yield an echo banner —
+        // a user-driven stop is not a surprise to surface, and the other
+        // reasons either pre-empt the start path or have no banner contract.
+        autoStopEcho?.let { echo ->
+            when (echo.stopReason) {
+                StopReason.LOW_STORAGE -> return WarningId.STORAGE_FULL_AUTOSTOPPED
+                StopReason.THERMAL -> return WarningId.THERMAL_AUTOSTOPPED
+                StopReason.USER, StopReason.PERMISSION_REVOKED,
+                StopReason.INIT_FAILED, StopReason.NONE -> Unit
+            }
+        }
         if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #13
         if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #14
         if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #15

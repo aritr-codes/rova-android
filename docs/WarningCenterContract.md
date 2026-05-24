@@ -121,7 +121,7 @@ Each row maps the mockup's title to a category, severity, surface, persistence, 
 | C3.2 Power saver on | "Power Saving Mode Is On" | `Soft` | **missing** | `ACTION_POWER_SAVE_MODE_CHANGED` BroadcastReceiver does not exist | Banner on `record` (pre-flight + mid-session). CTA: "Open battery settings" | until power saver disabled or 24 h snooze | dismissible (snooze) | **Phase 3.3** — `PowerSignal` |
 | C3.3 Low battery (<15%) | "Battery at 12%" | `Soft` | **missing** | BatteryManager polling at session start + threshold not in code | Banner on `record` (pre-flight) — non-blocking. CTA: "Plug in to keep recording" | until battery > 15% or charging | dismissible (snooze ends if level keeps dropping) | **Phase 3.3** — `PowerSignal` |
 | C3.4 Critical battery (<5%) | "Critical Battery — 4%" | `Hard` | **missing** | BatteryManager polling — no thresholds | Pre-launch screen on `record` — blocks Start. Mid-session: forced stop with terminal `StopReason.LOW_BATTERY` (new reason needed — see §7 open question) | until charging | **non-dismissible** for Start; mid-session emits a terminal recovery card | **Phase 3.3** — `PowerSignal` |
-| C3.5 Overheating (escalating) | "Device Getting Hot" | `Escalating` | **missing** | `PowerManager.getThermalStatus()` + `addThermalStatusListener` (API 29+) | Banner on `record` (mid-session). State machine: warm → hot → severe → emergency. At `severe` and above, recording auto-stops with reason `THERMAL` (new reason — see §7 open question) | until thermal status drops two levels (hysteresis) | **state-driven** — auto-clears on de-escalation | **Phase 3.4** — `ThermalSignal` |
+| C3.5 Overheating (escalating) | "Device Getting Hot" | `Escalating` | **shipped Phase 4 Slice 3 (ADR-0016)** | `PowerManager.getThermalStatus()` + `addThermalStatusListener` (API 29+) | Banner on `record` (mid-session). State machine: warm → hot → severe → emergency. **Auto-stop fires at CRITICAL (revised from SEVERE — see ADR-0016)** with reason `THERMAL`. Echo banner `THERMAL_AUTOSTOPPED` surfaces on next Idle with "Tips to cool down" CTA. | state-driven on push-listener emissions; persistent banner at SEVERE with manual-Stop affordance | **state-driven** — auto-clears on de-escalation | **Phase 4 Slice 3** — `ThermalStatusSignal.start()` push listener + `SegmentGateThermal` Layer-4 gate |
 
 ### 4.4 C4 — Recovery (3 states)
 
@@ -283,7 +283,7 @@ flowchart LR
         PERMS_API["PackageManager / PermissionApi<br/>(camera, mic)"]:::have
 
         MID_STORE["mid-session storage poll<br/>(missing — Phase 3 sub-slice)"]:::miss
-        THERMAL["PowerManager.addThermalStatusListener<br/>(missing, API 29+ — Phase 3.4)"]:::miss
+        THERMAL["PowerManager.addThermalStatusListener<br/>(shipped Phase 4 Slice 3, API 29+)"]:::ok
         BATSAVER["ACTION_POWER_SAVE_MODE_CHANGED<br/>(missing — Phase 3.3)"]:::miss
         LOWBAT["BatteryManager thresholds<br/>(missing — Phase 3.3)"]:::miss
         CAMERR["CameraX CameraState.Error<br/>(missing surface — Phase 3.5)"]:::miss
@@ -323,7 +323,7 @@ flowchart LR
     SR_AUDIO --> WCV
 
     MID_STORE -.-> WCV
-    THERMAL -.-> WCV
+    THERMAL --> WCV
     BATSAVER -.-> WCV
     LOWBAT -.-> WCV
     CAMERR -.-> WCV
@@ -407,6 +407,7 @@ Resolve before Phase 3 / Phase 4 opens. Listed here so Phase 1 stays clean of sp
 1. **`StopReason.LOW_BATTERY` and `StopReason.THERMAL`.** C3.4 (Critical battery) and C3.5 (Overheating emergency) auto-stop the service. The current `StopReason` enum (per ADR 0006) covers `USER`, `INIT_FAILED`, `LOW_STORAGE`, etc. Decide whether to add new values or reuse existing ones (e.g. lump thermal into `LOW_STORAGE`'s "auto-stop with reason" pattern). New values trigger an ADR revision; reuse risks losing information. Recommendation: add two new values + ADR 0006 amendment. Do **not** treat this as a Phase 4 surprise.
 2. **SD card scope (mockup #18b).** `installLocation = auto` may move the app to SD on devices that support it. Default install on internal storage is the common case. The contract currently demotes this entry to §4.6 (not a numbered WarningCenter state). Re-evaluate post-v1.0 if telemetry shows non-trivial users moving the app — at which point a Phase 1.D revision adds it back as `C5.2` and a Phase 3 sub-slice ships the producer. Until then it is **not** in the aggregator and not in the smoke plan.
 3. **Thermal hysteresis exact thresholds.** `MODERATE` to enter, `LIGHT` to leave is the proposed pattern. Confirm against `PowerManager.THERMAL_STATUS_*` and the device's typical climbing curve before Phase 3.4 ships.
+**Update 2026-05-24 (Phase 4 Slice 3, ADR-0016):** the `THERMAL` `StopReason` shipped. Two-level hysteresis is **not** implemented — `MutableStateFlow.distinctUntilChanged` dedupe is judged sufficient for the slow thermal physics. The "exact thresholds" item stays parked as a future tightening if field data shows flap.
 4. **Snooze duration.** 24 h is the proposed default for soft / advisory dismissals. Is there a UX argument for a shorter or longer cooldown (e.g. battery optimization snooze should be longer because the user has to walk to system settings)? Decide before Phase 4.1 codifies the timer constant.
 5. **Per-warning analytics.** Do we instrument banner appearances to learn which warnings the user dismisses most? Recommendation: defer past v1.0; analytics-without-purpose is bloat.
 6. **"Stop Recording?" confirmation ownership (mockup #16).** The contract demotes this entry to §4.6 because it is a one-shot interaction, not an observed signal. The dialog body still ships in Phase 4.3 — but inside `RecordViewModel`'s one-shot UI event channel, **not** through `WarningCenterViewModel`. Confirm this assignment in the Phase 4.3 review-gate before implementation.

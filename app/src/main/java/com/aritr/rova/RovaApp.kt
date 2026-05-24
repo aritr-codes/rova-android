@@ -297,6 +297,11 @@ class RovaApp : Application() {
         // RovaCrashReporter.setBackend(FirebaseCrashlyticsBackend()) — wired Phase 4.
         // NOTE: Phase 1.5 recovery is NOT triggered here. See class KDoc.
         registerExactAlarmStateReceiverIfSupported()
+        // Phase 4 Slice 3 — register the thermal push listener for the
+        // process lifetime. Idempotent + pre-API-29 no-op. The OS releases
+        // the registration on process death (Application.onTerminate is
+        // not reliably invoked on production devices).
+        thermalStatusSignal.start()
     }
 
     /**

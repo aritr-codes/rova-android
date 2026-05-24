@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -45,6 +46,14 @@ fun WarningCenter(
     vm: WarningCenterViewModel? = null,
     /** Phase 4 Slice 2 — host-wired callback for the echo banner's "Review session" overflow item. Null = item still rendered but tap is a no-op (the underlying ActionTarget.REVIEW_SESSION is a host-nav target). */
     onNavigateToHistory: (() -> Unit)? = null,
+    /**
+     * Phase 4 Slice 3 — invoked when the user taps the THERMAL_AUTOSTOPPED
+     * echo banner's primary CTA ("Tips to cool down"). Host (RecordScreen)
+     * flips its rememberSaveable showTipsSheet state to render
+     * [ThermalTipsSheet]. Null = no sheet host wired (previews, legacy
+     * callers); the CTA becomes a no-op.
+     */
+    onOpenThermalTips: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
@@ -60,28 +69,42 @@ fun WarningCenter(
     if (hudState is RecordHudState.Idle) {
         // Idle branch — sheet / chip / echo-banner.
         if (surface == WarningSurface.TopBanner) {
-            // Phase 4 Slice 2 — STORAGE_FULL_AUTOSTOPPED is the one TopBanner
-            // id that renders on Idle (echo of past auto-stop). All other
-            // TopBanner ids are active-HUD only and suppress here.
-            if (id == WarningId.STORAGE_FULL_AUTOSTOPPED) {
-                val autoStopEcho by app.autoStopEchoSignal.state.collectAsStateWithLifecycle()
-                WarningTopBannerV3(
-                    content = midRecBannerContent(id),
-                    severityColor = RovaWarnings.advisory,
-                    onAction = { launchActionTarget(context, ActionTarget.STORAGE_SETTINGS) },
-                    onOverflow = { target ->
-                        when (target) {
-                            ActionTarget.DISMISS_AUTOSTOP_ECHO -> {
-                                val sid = autoStopEcho?.sessionId ?: return@WarningTopBannerV3
-                                resolvedVm.dismissAutoStopEcho(sid)
-                            }
-                            ActionTarget.REVIEW_SESSION -> onNavigateToHistory?.invoke()
-                            else -> launchActionTarget(context, target)
-                        }
-                    },
-                    modifier = modifier,
-                )
-                return
+            // Two TopBanner ids render on Idle (echoes of past auto-stops):
+            //  • STORAGE_FULL_AUTOSTOPPED (Slice 2) → CTA opens system storage settings.
+            //  • THERMAL_AUTOSTOPPED      (Slice 3) → CTA opens ThermalTipsSheet via host.
+            // All other TopBanner ids are active-HUD only and suppress here.
+            val autoStopEcho by app.autoStopEchoSignal.state.collectAsStateWithLifecycle()
+            // Phase 4 Slice 3 follow-up — promote a pending echo over the
+            // precedence pick when the pick is an active-state TopBanner id
+            // (THERMAL_*/BATTERY_*/CAMERA_IN_USE etc.). Precedence ranks those
+            // at rows #4-11 ABOVE the #12-13 echoes; on Idle those ids hit the
+            // `else -> Unit` suppression below, swallowing the echo entirely.
+            // See [effectiveIdleTopBannerId] KDoc for the precedence rationale.
+            val effectiveId = effectiveIdleTopBannerId(id, autoStopEcho)
+            when (effectiveId) {
+                WarningId.STORAGE_FULL_AUTOSTOPPED -> {
+                    WarningTopBannerV3(
+                        content = midRecBannerContent(effectiveId),
+                        severityColor = RovaWarnings.advisory,
+                        onAction = { launchActionTarget(context, ActionTarget.STORAGE_SETTINGS) },
+                        onOverflow = { target ->
+                            handleEchoOverflow(target, autoStopEcho, resolvedVm, onNavigateToHistory, context)
+                        },
+                        modifier = modifier,
+                    )
+                }
+                WarningId.THERMAL_AUTOSTOPPED -> {
+                    WarningTopBannerV3(
+                        content = midRecBannerContent(effectiveId),
+                        severityColor = RovaWarnings.advisory,
+                        onAction = { onOpenThermalTips?.invoke() },
+                        onOverflow = { target ->
+                            handleEchoOverflow(target, autoStopEcho, resolvedVm, onNavigateToHistory, context)
+                        },
+                        modifier = modifier,
+                    )
+                }
+                else -> Unit
             }
             return
         }
@@ -135,6 +158,7 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
     if (target == ActionTarget.SNOOZE_FOREVER) return
     if (target == ActionTarget.DISMISS_AUTOSTOP_ECHO) return
     if (target == ActionTarget.REVIEW_SESSION) return
+    if (target == ActionTarget.OPEN_THERMAL_TIPS) return
     val pkgUri = Uri.fromParts("package", context.packageName, null)
     val intent: Intent = when (target) {
         ActionTarget.EXACT_ALARM_SETTINGS ->
@@ -160,8 +184,60 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.SNOOZE_FOREVER -> return                    // VM-only; guarded above
         ActionTarget.DISMISS_AUTOSTOP_ECHO -> return             // VM-only; routed by overflow handler
         ActionTarget.REVIEW_SESSION -> return                    // host-nav; routed at call site
+        ActionTarget.OPEN_THERMAL_TIPS -> return                 // VM-only; guarded above (Phase 4 Slice 3)
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+}
+
+/**
+ * Phase 4 Slice 3 follow-up — pure resolver for the Idle TopBanner branch.
+ * Returns the id that SHOULD render on Idle given (a) what
+ * `WarningPrecedence.resolve` produced and (b) whether an auto-stop echo
+ * is pending in `SessionAutoStopEchoSignal`.
+ *
+ * Rationale: `WarningPrecedence` ranks active-state thermal/battery/camera
+ * TopBanner ids (rows #4-11) ABOVE the auto-stop echoes (rows #12-13). On
+ * Idle, the active ids are suppressed (active-HUD-only), so if precedence
+ * returned one of them, the echo gets swallowed. This helper promotes the
+ * echo to the rendered id in that case — the user keeps the post-stop
+ * affordance even if the underlying condition (e.g. device still hot)
+ * hasn't cleared yet. When no echo is pending, behaviour is unchanged.
+ *
+ * Pure-JVM testable per ADR-0007.
+ */
+internal fun effectiveIdleTopBannerId(
+    precedenceId: WarningId,
+    autoStopEcho: TerminalEcho?,
+): WarningId = when (autoStopEcho?.stopReason) {
+    StopReason.LOW_STORAGE -> WarningId.STORAGE_FULL_AUTOSTOPPED
+    StopReason.THERMAL -> WarningId.THERMAL_AUTOSTOPPED
+    null,
+    StopReason.USER, StopReason.PERMISSION_REVOKED,
+    StopReason.INIT_FAILED, StopReason.NONE -> precedenceId
+}
+
+/**
+ * Phase 4 Slice 3 — shared overflow router for the two Idle TopBanner echo
+ * arms (STORAGE_FULL_AUTOSTOPPED and THERMAL_AUTOSTOPPED). Factored from the
+ * Slice-2 inline lambda so both arms reuse it. `autoStopEcho` may be null
+ * if the user dismissed between recompose and tap; in that case
+ * DISMISS_AUTOSTOP_ECHO no-ops via the elvis return.
+ */
+private fun handleEchoOverflow(
+    target: ActionTarget,
+    autoStopEcho: TerminalEcho?,
+    vm: WarningCenterViewModel,
+    onNavigateToHistory: (() -> Unit)?,
+    context: Context,
+) {
+    when (target) {
+        ActionTarget.DISMISS_AUTOSTOP_ECHO -> {
+            val sid = autoStopEcho?.sessionId ?: return
+            vm.dismissAutoStopEcho(sid)
+        }
+        ActionTarget.REVIEW_SESSION -> onNavigateToHistory?.invoke()
+        else -> launchActionTarget(context, target)
+    }
 }
 
 /**

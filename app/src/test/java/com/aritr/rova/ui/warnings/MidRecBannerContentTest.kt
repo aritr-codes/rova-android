@@ -11,7 +11,7 @@ class MidRecBannerContentTest {
     private val ids = WarningId.entries.filter { warningSurfaceFor(it) == WarningSurface.TopBanner }
 
     @Test fun every_mid_rec_id_returns_nonblank_content() {
-        assertEquals("expected 11 TopBanner-mapped ids", 11, ids.size)
+        assertEquals("expected 12 TopBanner-mapped ids", 12, ids.size)
         for (id in ids) {
             val c = midRecBannerContent(id)
             assertNotNull("icon for $id", c.icon)
@@ -73,5 +73,15 @@ class MidRecBannerContentTest {
         val c = midRecBannerContent(WarningId.CAMERA_DISABLED)
         assertEquals("Camera disabled", c.title)
         assertEquals("Disabled by device policy.", c.sub)
+    }
+
+    @Test fun thermal_autostopped_copy() {
+        val c = midRecBannerContent(WarningId.THERMAL_AUTOSTOPPED)
+        assertEquals("Recording stopped", c.title)
+        assertEquals("Device overheated.", c.sub)
+        assertEquals("Tips to cool down", c.cta)
+        assertEquals(2, c.overflow.size)
+        assertEquals(ActionTarget.DISMISS_AUTOSTOP_ECHO, c.overflow[0].target)
+        assertEquals(ActionTarget.REVIEW_SESSION, c.overflow[1].target)
     }
 }

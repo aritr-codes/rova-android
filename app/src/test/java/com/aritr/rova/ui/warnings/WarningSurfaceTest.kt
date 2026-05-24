@@ -20,7 +20,8 @@ class WarningSurfaceTest {
         WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
         WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
         WarningId.STORAGE_LOW_MID_REC,
-        WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSurface.TopBanner     // ← NEW arm (Phase 4 Slice 2)
+        WarningId.STORAGE_FULL_AUTOSTOPPED,
+        WarningId.THERMAL_AUTOSTOPPED -> WarningSurface.TopBanner             // ← NEW arm (Phase 4 Slice 3)
     }
 
     @Test fun storage_low_mid_rec_resolves_to_top_banner() {
