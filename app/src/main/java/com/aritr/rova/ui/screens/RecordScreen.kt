@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +35,7 @@ import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
+import com.aritr.rova.ui.warnings.ThermalTipsSheet
 import com.aritr.rova.ui.warnings.WarningCenter
 import com.aritr.rova.ui.warnings.WarningCenterViewModel
 import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
@@ -78,6 +80,13 @@ fun RecordScreen(
             },
         )
         val snoozedSet by warningVm.snoozedForever.collectAsStateWithLifecycle()
+
+        // Phase 4 Slice 3 — host state for the thermal tips bottom sheet.
+        // rememberSaveable so it survives configuration changes (e.g. rotation
+        // while the sheet is open). The lambda is passed to both WarningCenter
+        // mounts so either the Idle echo banner or (future) the active HUD can
+        // trigger it.
+        var showTipsSheet by rememberSaveable { mutableStateOf(false) }
 
         // Phase 4 Slice 2 — refresh the auto-stop echo signal on ON_RESUME
         // so a session that auto-stopped while the user was backgrounded
@@ -577,6 +586,7 @@ fun RecordScreen(
                             onStopRecording = {},
                             vm = warningVm,
                             onNavigateToHistory = onNavigateToHistory,
+                            onOpenThermalTips = { showTipsSheet = true },
                         )
                     }
                 }
@@ -621,6 +631,7 @@ fun RecordScreen(
                                 onStopRecording = { viewModel.stopRecording() },
                                 vm = warningVm,
                                 onNavigateToHistory = onNavigateToHistory,
+                                onOpenThermalTips = { showTipsSheet = true },
                             )
                             RecordActiveHud(
                                 state = hudState,
@@ -737,6 +748,12 @@ fun RecordScreen(
                 // (mockups/new_uiux/02-settings-sheet.html). Always emitted;
                 // SettingsSheet owns its slide animation via `visible`. Edits
                 // write through immediately; Save / handle-drag / back dismiss.
+                // Phase 4 Slice 3 — thermal tips bottom sheet. Hosted here so
+                // the sheet survives the same HUD transitions as SettingsSheet.
+                if (showTipsSheet) {
+                    ThermalTipsSheet(onDismiss = { showTipsSheet = false })
+                }
+
                 SettingsSheet(
                     visible = combinedOpen,
                     durationSeconds = duration,
