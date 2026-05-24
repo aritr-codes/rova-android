@@ -65,6 +65,16 @@ class RovaSettings(context: Context) {
             .takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" } ?: "Portrait"
         set(value) = runtimePrefs.edit { putString("mode", value) }
 
+    /**
+     * Phase 4.1c — persistent "Don't show again" set, keyed by [com.aritr.rova.ui.warnings.WarningId.name].
+     * Backed by [RUNTIME_PREFS_NAME] so reinstall resets the choice (same policy
+     * `mode` follows; see backup_rules.xml + data_extraction_rules.xml).
+     * Spec: docs/superpowers/specs/2026-05-24-phase-4-1c-snooze-persistence-design.md §4.1
+     */
+    var snoozedWarningIds: Set<String>
+        get() = runtimePrefs.getStringSet("snoozed_warning_ids", emptySet()) ?: emptySet()
+        set(value) = runtimePrefs.edit { putStringSet("snoozed_warning_ids", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }
