@@ -285,6 +285,25 @@ class RovaSettingsTest {
         assertEquals(setOf("C"), s.snoozedWarningIds)
     }
 
+    // ─── dismissedAutoStopEchoIds (Phase 4 Slice 2) ─────────────────
+
+    @Test fun `dismissedAutoStopEchoIds default is empty set`() {
+        assertEquals(emptySet<String>(), settings().dismissedAutoStopEchoIds)
+    }
+
+    @Test fun `dismissedAutoStopEchoIds round-trips a 2-id set`() {
+        val s = settings()
+        s.dismissedAutoStopEchoIds = setOf("session-a", "session-b")
+        assertEquals(setOf("session-a", "session-b"), s.dismissedAutoStopEchoIds)
+    }
+
+    @Test fun `dismissedAutoStopEchoIds setter replaces, does not merge`() {
+        val s = settings()
+        s.dismissedAutoStopEchoIds = setOf("a", "b")
+        s.dismissedAutoStopEchoIds = setOf("c")
+        assertEquals(setOf("c"), s.dismissedAutoStopEchoIds)
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────
 
     /**

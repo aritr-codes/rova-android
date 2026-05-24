@@ -13,10 +13,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +55,8 @@ internal fun WarningTopBannerV3(
     severityColor: Color,
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Phase 4 Slice 2 — called when user taps an overflow menu item. Null = overflow ⋯ icon hidden. */
+    onOverflow: ((ActionTarget) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -120,6 +131,41 @@ internal fun WarningTopBannerV3(
                     fontWeight = FontWeight.SemiBold,
                     color = severityColor.copy(alpha = 0.95f),
                 )
+            }
+        }
+
+        // Phase 4 Slice 2 — overflow ⋯ icon rendered when content.overflow
+        // is non-empty AND a handler is wired. Tapping opens a DropdownMenu
+        // listing each WarningAction; selecting an item dispatches via
+        // onOverflow with the action's ActionTarget.
+        if (content.overflow.isNotEmpty() && onOverflow != null) {
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "More options",
+                        tint = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    content.overflow.forEach { action ->
+                        DropdownMenuItem(
+                            text = { Text(action.label) },
+                            onClick = {
+                                expanded = false
+                                onOverflow(action.target)
+                            },
+                        )
+                    }
+                }
             }
         }
     }

@@ -75,6 +75,18 @@ class RovaSettings(context: Context) {
         get() = runtimePrefs.getStringSet("snoozed_warning_ids", emptySet()) ?: emptySet()
         set(value) = runtimePrefs.edit { putStringSet("snoozed_warning_ids", value) }
 
+    /**
+     * Phase 4 Slice 2 — persistent per-session-id dismissal set for the
+     * STORAGE_FULL_AUTOSTOPPED echo banner. Values are session ids
+     * ([com.aritr.rova.data.SessionManifest.sessionId]). Backed by
+     * [RUNTIME_PREFS_NAME] so reinstall resets (same policy as `mode` +
+     * `snoozedWarningIds` — see backup_rules.xml + data_extraction_rules.xml).
+     * Spec: docs/superpowers/specs/2026-05-24-phase-4-slice2-storage-full-autostopped-design.md §4.1
+     */
+    var dismissedAutoStopEchoIds: Set<String>
+        get() = runtimePrefs.getStringSet("dismissed_autostop_echo_ids", emptySet()) ?: emptySet()
+        set(value) = runtimePrefs.edit { putStringSet("dismissed_autostop_echo_ids", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }

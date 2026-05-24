@@ -79,6 +79,21 @@ fun RecordScreen(
         )
         val snoozedSet by warningVm.snoozedForever.collectAsStateWithLifecycle()
 
+        // Phase 4 Slice 2 — refresh the auto-stop echo signal on ON_RESUME
+        // so a session that auto-stopped while the user was backgrounded
+        // surfaces as soon as they return. The signal is reason-agnostic;
+        // WarningPrecedence filters to LOW_STORAGE.
+        val autoStopLifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(autoStopLifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    warningCenterApp.autoStopEchoSignal.refresh()
+                }
+            }
+            autoStopLifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { autoStopLifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
     // Slice 2 — read-only echo of the existing app-level recovery
     // report. No new RecoveryViewModel ownership; the History tab
     // remains the sole owner of Discard. RovaApp.instance is set in
@@ -561,6 +576,7 @@ fun RecordScreen(
                             hudState = RecordHudState.Idle,
                             onStopRecording = {},
                             vm = warningVm,
+                            onNavigateToHistory = onNavigateToHistory,
                         )
                     }
                 }
@@ -604,6 +620,7 @@ fun RecordScreen(
                                 hudState = hudState,
                                 onStopRecording = { viewModel.stopRecording() },
                                 vm = warningVm,
+                                onNavigateToHistory = onNavigateToHistory,
                             )
                             RecordActiveHud(
                                 state = hudState,

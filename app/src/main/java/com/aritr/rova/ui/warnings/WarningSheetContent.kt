@@ -39,7 +39,8 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
-    WarningId.STORAGE_LOW_MID_REC -> WarningSurface.TopBanner       // ← NEW arm in the TopBanner cluster
+    WarningId.STORAGE_LOW_MID_REC,
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSurface.TopBanner       // ← NEW arm (Phase 4 Slice 2)
 }
 
 internal data class WarningAction(val label: String, val target: ActionTarget)
@@ -51,6 +52,12 @@ internal enum class ActionTarget {
     APP_DETAILS_SETTINGS,
     /** VM-only target — routes to [WarningCenterViewModel.snoozeForever]. NOT an Intent. */
     SNOOZE_FOREVER,
+    /** Phase 4 Slice 2 — Intent target: opens system storage settings (with APPLICATION_DETAILS fallback). */
+    STORAGE_SETTINGS,
+    /** Phase 4 Slice 2 — VM-only target: routes to [WarningCenterViewModel.dismissAutoStopEcho]. NOT an Intent. */
+    DISMISS_AUTOSTOP_ECHO,
+    /** Phase 4 Slice 2 — host-navigation target: opens History (host wires via onNavigateToHistory). NOT an Intent. */
+    REVIEW_SESSION,
 }
 
 internal data class WarningSheetContent(
@@ -156,6 +163,15 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSheetContent(
+        // Defensive — STORAGE_FULL_AUTOSTOPPED is TopBanner-only (rendered
+        // on Idle, not as a sheet). This arm keeps warningSheetContent
+        // exhaustive over WarningId; never renders as a sheet.
+        Icons.Default.Storage, "Recording stopped",
+        "Storage filled up.",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        null,
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
@@ -164,13 +180,20 @@ internal data class TopBannerContent(
     val icon: ImageVector,
     val title: String,
     val sub: String,
-    val cta: String,            // "Stop" for all R2 ids
+    val cta: String,
     /**
      * Optional auto-action countdown — when non-null, the banner renders a
      * countdown ring instead of the trailing CTA pill. Phase 4.4 will wire a
      * real seconds-source; this slice ships a static placeholder.
      */
     val autoAction: AutoAction? = null,
+    /**
+     * Phase 4 Slice 2 — overflow ⋯ menu items (top-right of banner). Empty
+     * list = no overflow icon rendered. Each action targets either an Intent
+     * (`launchActionTarget`) or a VM-only target like
+     * [ActionTarget.DISMISS_AUTOSTOP_ECHO] (handled by the routing call site).
+     */
+    val overflow: List<WarningAction> = emptyList(),
 )
 
 /**
@@ -233,6 +256,14 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
         Icons.Default.Storage, "Storage running low",
         "Free space on this device.", "Stop",
+    )
+    WarningId.STORAGE_FULL_AUTOSTOPPED -> TopBannerContent(
+        Icons.Default.Storage, "Recording stopped",
+        "Storage filled up.", "Free up space",
+        overflow = listOf(
+            WarningAction("Don't show again", ActionTarget.DISMISS_AUTOSTOP_ECHO),
+            WarningAction("Review session", ActionTarget.REVIEW_SESSION),
+        ),
     )
     // All other WarningIds are NOT TopBanner-mapped — calling midRecBannerContent on them is a caller bug.
     WarningId.CAMERA_PERMISSION_DENIED,

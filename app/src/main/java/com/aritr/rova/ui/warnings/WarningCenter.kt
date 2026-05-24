@@ -43,6 +43,8 @@ fun WarningCenter(
     // When null (legacy callers, previews), the factory below constructs one
     // wired straight to RovaSettings.
     vm: WarningCenterViewModel? = null,
+    /** Phase 4 Slice 2 — host-wired callback for the echo banner's "Review session" overflow item. Null = item still rendered but tap is a no-op (the underlying ActionTarget.REVIEW_SESSION is a host-nav target). */
+    onNavigateToHistory: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
@@ -56,8 +58,33 @@ fun WarningCenter(
     val surface = warningSurfaceFor(id)
 
     if (hudState is RecordHudState.Idle) {
-        // Idle branch — sheet / chip. TopBanner ids no-op here.
-        if (surface == WarningSurface.TopBanner) return
+        // Idle branch — sheet / chip / echo-banner.
+        if (surface == WarningSurface.TopBanner) {
+            // Phase 4 Slice 2 — STORAGE_FULL_AUTOSTOPPED is the one TopBanner
+            // id that renders on Idle (echo of past auto-stop). All other
+            // TopBanner ids are active-HUD only and suppress here.
+            if (id == WarningId.STORAGE_FULL_AUTOSTOPPED) {
+                val autoStopEcho by app.autoStopEchoSignal.state.collectAsStateWithLifecycle()
+                WarningTopBannerV3(
+                    content = midRecBannerContent(id),
+                    severityColor = RovaWarnings.advisory,
+                    onAction = { launchActionTarget(context, ActionTarget.STORAGE_SETTINGS) },
+                    onOverflow = { target ->
+                        when (target) {
+                            ActionTarget.DISMISS_AUTOSTOP_ECHO -> {
+                                val sid = autoStopEcho?.sessionId ?: return@WarningTopBannerV3
+                                resolvedVm.dismissAutoStopEcho(sid)
+                            }
+                            ActionTarget.REVIEW_SESSION -> onNavigateToHistory?.invoke()
+                            else -> launchActionTarget(context, target)
+                        }
+                    },
+                    modifier = modifier,
+                )
+                return
+            }
+            return
+        }
 
         val dismissed by resolvedVm.dismissedWarnings.collectAsStateWithLifecycle()
         if (id in dismissed) {
@@ -103,9 +130,11 @@ fun WarningCenter(
     }
 }
 
-/** Launches the system Intent for [target]. NO-OP for [ActionTarget.SNOOZE_FOREVER]. */
+/** Launches the system Intent for [target]. NO-OP for VM-only / host-nav targets. */
 private fun launchActionTarget(context: Context, target: ActionTarget) {
     if (target == ActionTarget.SNOOZE_FOREVER) return
+    if (target == ActionTarget.DISMISS_AUTOSTOP_ECHO) return
+    if (target == ActionTarget.REVIEW_SESSION) return
     val pkgUri = Uri.fromParts("package", context.packageName, null)
     val intent: Intent = when (target) {
         ActionTarget.EXACT_ALARM_SETTINGS ->
@@ -123,7 +152,14 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
         ActionTarget.APP_DETAILS_SETTINGS ->
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
-        ActionTarget.SNOOZE_FOREVER -> return    // unreachable (guarded above) — for `when` exhaustiveness
+        ActionTarget.STORAGE_SETTINGS -> {
+            val primary = Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+            if (primary.resolveActivity(context.packageManager) != null) primary
+            else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+        }
+        ActionTarget.SNOOZE_FOREVER -> return                    // VM-only; guarded above
+        ActionTarget.DISMISS_AUTOSTOP_ECHO -> return             // VM-only; routed by overflow handler
+        ActionTarget.REVIEW_SESSION -> return                    // host-nav; routed at call site
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
 }
@@ -142,7 +178,7 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
  */
 internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
     val settings = RovaSettings(app)
-    val initial: Set<WarningId> = settings.snoozedWarningIds
+    val initialSnoozed: Set<WarningId> = settings.snoozedWarningIds
         .mapNotNull { runCatching { WarningId.valueOf(it) }.getOrNull() }
         .toSet()
     return WarningCenterViewModel(
@@ -156,9 +192,14 @@ internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
         notificationsGranted = app.notificationPermissionSignal.state,
         batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
         storageLowMidRec = app.storageLowMidRecSignal.isLow,
-        initialSnoozedIds = initial,
+        autoStopEcho = app.autoStopEchoSignal.state,                  // ← NEW (Phase 4 Slice 2)
+        initialSnoozedIds = initialSnoozed,
         onSnoozeChanged = { set ->
             settings.snoozedWarningIds = set.map(WarningId::name).toSet()
+        },
+        onAutoStopDismissed = { sessionId ->                          // ← NEW (Phase 4 Slice 2)
+            settings.dismissedAutoStopEchoIds = settings.dismissedAutoStopEchoIds + sessionId
+            app.autoStopEchoSignal.markDismissed(sessionId)
         },
     )
 }

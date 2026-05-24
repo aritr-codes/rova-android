@@ -40,6 +40,7 @@ class WarningCenterViewModel(
     notificationsGranted: StateFlow<Boolean>,
     batteryOptimizationExempt: StateFlow<Boolean>,
     storageLowMidRec: StateFlow<Boolean>,           // ← NEW (R2 T5)
+    autoStopEcho: StateFlow<TerminalEcho?> = MutableStateFlow<TerminalEcho?>(null).asStateFlow(), // ← NEW (Phase 4 Slice 2 — 11th source; default keeps pre-T6 call sites green)
     // v3 — injectable scope so plain-JVM unit tests can pass
     // `Dispatchers.Unconfined`-backed CoroutineScope and avoid the
     // `Dispatchers.Main` requirement of `viewModelScope`. Production
@@ -52,6 +53,7 @@ class WarningCenterViewModel(
     // round-trip through RovaSettings.snoozedWarningIds.
     initialSnoozedIds: Set<WarningId> = emptySet(),
     private val onSnoozeChanged: ((Set<WarningId>) -> Unit)? = null,
+    private val onAutoStopDismissed: ((String) -> Unit)? = null,  // ← NEW (Phase 4 Slice 2 callback)
 ) : ViewModel() {
 
     private val activeScope: CoroutineScope get() = scope ?: viewModelScope
@@ -84,12 +86,24 @@ class WarningCenterViewModel(
         onSnoozeChanged?.invoke(emptySet())
     }
 
+    /**
+     * Phase 4 Slice 2 — invoked from the WarningCenter Idle-branch overflow
+     * router when the user taps "Don't show again" on the auto-stop echo
+     * banner. Routes to the factory-wired callback which persists the
+     * session id to `RovaSettings.dismissedAutoStopEchoIds` AND calls
+     * `app.autoStopEchoSignal.markDismissed(sessionId)` to clear the
+     * banner immediately.
+     */
+    fun dismissAutoStopEcho(sessionId: String) {
+        onAutoStopDismissed?.invoke(sessionId)
+    }
+
     private val _resolvedWarning: StateFlow<WarningId?> =
         aggregate(
             cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
             thermal, power, camera,
             microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
-            storageLowMidRec,                                    // ← NEW
+            storageLowMidRec, autoStopEcho,                      // ← NEW (Phase 4 Slice 2; last)
         ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     /**
@@ -139,17 +153,18 @@ class WarningCenterViewModel(
 
     companion object {
         /**
-         * Combine the ten source flows => highest-priority active
+         * Combine the eleven source flows => highest-priority active
          * [WarningId] via [WarningPrecedence.resolve]. WarningCenterContract
-         * NO-GO #6: a throw inside the combine logs and degrades to `null`
-         * — a failure to compute a banner must not itself become a banner.
+         * NO-GO #6: a throw inside the combine logic logs and degrades to
+         * `null` — a failure to compute a banner must not itself become a
+         * banner.
          *
          * kotlinx-coroutines has typed `combine` overloads only up to five
-         * flows, so six of the plain booleans are folded into one upstream
-         * `combine(vararg flows: Flow<Boolean>) -> Bools6` first (using the
-         * vararg overload), then a 5-arg
-         * `combine(bools6, batteryOptExempt, thermal, power, camera)` does
-         * the real work.
+         * flows. The six plain booleans are folded into a single upstream
+         * `Bools6` combine (vararg). The four non-boolean flows
+         * (thermal, power, camera, autoStopEcho — Phase 4 Slice 2 added
+         * the last) are folded into a single `NonBools4` combine. Outer
+         * 3-arg combine then resolves.
          */
         fun aggregate(
             cameraPermissionGranted: Flow<Boolean>,
@@ -161,7 +176,8 @@ class WarningCenterViewModel(
             microphonePermissionGranted: Flow<Boolean>,
             notificationsGranted: Flow<Boolean>,
             batteryOptimizationExempt: Flow<Boolean>,
-            storageLowMidRec: Flow<Boolean>,                // ← NEW (last param)
+            storageLowMidRec: Flow<Boolean>,
+            autoStopEcho: Flow<TerminalEcho?>,              // ← NEW (Phase 4 Slice 2; last)
         ): Flow<WarningId?> {
             val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
@@ -173,19 +189,25 @@ class WarningCenterViewModel(
             ) { arr: Array<Boolean> ->
                 Bools6(arr[0], arr[1], arr[2], arr[3], arr[4], arr[5])
             }
-            return combine(bools6, batteryOptimizationExempt, thermal, power, camera) { b, bo, th, pw, cm ->
+            val nonBools4: Flow<NonBools4> = combine(
+                thermal, power, camera, autoStopEcho,
+            ) { th, pw, cm, ae ->
+                NonBools4(th, pw, cm, ae)
+            }
+            return combine(bools6, batteryOptimizationExempt, nonBools4) { b, bo, n4 ->
                 runCatching {
                     WarningPrecedence.resolve(
                         cameraPermissionGranted = b.cameraPermissionGranted,
                         exactAlarmGranted = b.exactAlarmGranted,
                         storageInsufficient = b.storageInsufficient,
-                        thermal = th,
-                        power = pw,
-                        camera = cm,
+                        thermal = n4.thermal,
+                        power = n4.power,
+                        camera = n4.camera,
                         microphonePermissionGranted = b.microphonePermissionGranted,
                         notificationsGranted = b.notificationsGranted,
                         batteryOptimizationExempt = bo,
                         storageLowMidRec = b.storageLowMidRec,
+                        autoStopEcho = n4.autoStopEcho,
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)
@@ -204,4 +226,12 @@ private class Bools6(
     val microphonePermissionGranted: Boolean,
     val notificationsGranted: Boolean,
     val storageLowMidRec: Boolean,                  // ← NEW
+)
+
+/** Phase 4 Slice 2 — packs 4 non-Boolean source flows so the outer combine stays at 3 typed args. */
+private class NonBools4(
+    val thermal: ThermalStatus,
+    val power: PowerState,
+    val camera: CameraSignalState,
+    val autoStopEcho: TerminalEcho?,
 )
