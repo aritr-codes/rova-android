@@ -46,7 +46,12 @@ class SessionAutoStopEchoSignal(
     }
 
     private fun recompute() {
-        val latest = terminalEchoSource()
+        // Phase 4 Slice 2 — null-fallback for any throw in the source seam
+        // (corrupt manifest, IO error). Spec §6: a signal failure must not
+        // itself become a banner / crash the app. ctor init-block calls this
+        // unconditionally, so a throw here would crash the lazy initializer
+        // in RovaApp.
+        val latest = runCatching { terminalEchoSource() }.getOrNull()
         _state.value = latest?.takeIf { it.sessionId !in dismissed }
     }
 }
