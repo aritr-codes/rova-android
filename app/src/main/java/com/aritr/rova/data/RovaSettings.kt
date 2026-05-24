@@ -6,6 +6,47 @@ import androidx.core.content.edit
 class RovaSettings(context: Context) {
     private val prefs = context.getSharedPreferences("rova_settings", Context.MODE_PRIVATE)
 
+    // Phase 4 fresh-install fix: `mode` is intentionally NOT backed up. It
+    // lives in a separate SharedPreferences file (rova_runtime_prefs) that
+    // is excluded from Auto Backup + device-transfer (see backup_rules.xml
+    // and data_extraction_rules.xml). Without the split, reinstalling the
+    // APK on the same Google account restored `mode=PortraitLandscape` from
+    // a prior session and the app opened in DualShot — defeating the
+    // documented Portrait default. All OTHER user config (resolution,
+    // duration, intervals, presets, etc.) still backs up normally.
+    private val runtimePrefs = context.getSharedPreferences(
+        RUNTIME_PREFS_NAME,
+        Context.MODE_PRIVATE,
+    )
+
+    init {
+        // Legacy-key cleanup. Pre-mode-split installs stored the `mode`
+        // value in `prefs` (rova_settings.xml), which IS backed up by
+        // Android Auto Backup. After a reinstall, the restored backup
+        // brought back the prior `mode=PortraitLandscape` and the app
+        // opened in DualShot -- the bug this whole patch chain exists
+        // to kill. The new authoritative location is `runtimePrefs`
+        // (rova_runtime_prefs.xml), which is excluded from backup, so
+        // a reinstall finds it empty and the getter falls through to
+        // the documented Portrait default.
+        //
+        // We DELIBERATELY do not migrate the legacy value forward
+        // here. Auto Backup snapshots run on a schedule (~24 h, idle +
+        // charging) so a user who installs this patch, sets a mode,
+        // and then reinstalls before the next snapshot would have
+        // their PRE-PATCH backup restored -- with `mode=PortraitLandscape`
+        // intact in `prefs` and no marker. A faithful "copy legacy ->
+        // runtime" migration would dutifully preserve that stale P+L
+        // value and defeat the fix. Dropping the legacy key without
+        // copying it gives the documented Portrait default on every
+        // reinstall and on every in-place update from a pre-split
+        // build. The one-time cost is a single setting reset on update;
+        // worth it for the predictable fresh-install behavior.
+        if (prefs.contains("mode")) {
+            prefs.edit { remove("mode") }
+        }
+    }
+
     var durationSeconds: Int
         get() = prefs.getInt("duration", 10)
         set(value) = prefs.edit { putInt("duration", value) }
@@ -20,9 +61,9 @@ class RovaSettings(context: Context) {
 
     /** Coerces unknown persisted values to the default — defends against stale/version-mismatched reads. */
     var mode: String
-        get() = (prefs.getString("mode", "Portrait") ?: "Portrait")
+        get() = (runtimePrefs.getString("mode", "Portrait") ?: "Portrait")
             .takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" } ?: "Portrait"
-        set(value) = prefs.edit { putString("mode", value) }
+        set(value) = runtimePrefs.edit { putString("mode", value) }
 
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
@@ -78,6 +119,11 @@ class RovaSettings(context: Context) {
     var exportFolderName: String
         get() = prefs.getString("export_folder_name", "") ?: ""
         set(value) = prefs.edit { putString("export_folder_name", value) }
+
+    companion object {
+        /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
+        const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
+    }
 }
 
 data class RovaPreset(

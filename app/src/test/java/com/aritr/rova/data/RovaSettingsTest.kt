@@ -143,8 +143,72 @@ class RovaSettingsTest {
     }
 
     @Test fun `mode coerces unknown value to Portrait`() {
-        val s = settings(mapOf("mode" to "P + L"))
+        val s = settingsWithRuntime(runtime = hashMapOf<String, Any?>("mode" to "P + L"))
         assertEquals("Portrait", s.mode)
+    }
+
+    // ─── Mode-split + legacy-key cleanup (Phase 4 fresh-install fix) ─
+
+    @Test fun `mode setter writes to runtime prefs not main prefs`() {
+        val runtime = HashMap<String, Any?>()
+        val main = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        s.mode = "Landscape"
+        assertEquals("Landscape", runtime["mode"])
+        assertFalse("main prefs must not store mode after the split", main.containsKey("mode"))
+    }
+
+    @Test fun `mode read uses runtime prefs only`() {
+        val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape") // legacy key (will be deleted)
+        val runtime = hashMapOf<String, Any?>("mode" to "Landscape")
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("Landscape", s.mode)
+    }
+
+    @Test fun `init deletes legacy mode key from main prefs and does NOT copy to runtime`() {
+        // Models the bug we're killing: a pre-split install (or its backup
+        // restore) has `mode=PortraitLandscape` in main prefs. The legacy
+        // value MUST NOT migrate forward, because Auto Backup snapshots run
+        // ~24h on a schedule and the restored main prefs is typically a
+        // pre-patch snapshot. Migrating would faithfully re-introduce the
+        // stale P+L preference on every reinstall — defeating the fix.
+        val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
+        val runtime = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertFalse("legacy mode key must be removed from main prefs", main.containsKey("mode"))
+        assertFalse("legacy value must NOT migrate into runtime prefs", runtime.containsKey("mode"))
+        assertEquals("mode must default to Portrait after cleanup", "Portrait", s.mode)
+    }
+
+    @Test fun `init is idempotent when no legacy mode key is present`() {
+        val main = HashMap<String, Any?>()
+        val runtime = HashMap<String, Any?>()
+        settingsWithRuntime(main = main, runtime = runtime)
+        assertFalse(main.containsKey("mode"))
+        assertFalse(runtime.containsKey("mode"))
+    }
+
+    @Test fun `reinstall-after-backup defaults to Portrait`() {
+        // Reinstall path: Auto Backup restored main prefs (may still have a
+        // stale `mode=PortraitLandscape` from a pre-patch snapshot). Runtime
+        // prefs is empty because it's backup-excluded. Init must wipe the
+        // legacy key and leave runtime empty so the getter defaults Portrait.
+        val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
+        val runtime = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("Portrait", s.mode)
+        assertFalse(main.containsKey("mode"))
+        assertFalse(runtime.containsKey("mode"))
+    }
+
+    @Test fun `second construction does not clobber a user-set runtime mode`() {
+        val main = HashMap<String, Any?>()
+        val runtime = HashMap<String, Any?>()
+        val s1 = settingsWithRuntime(main = main, runtime = runtime)
+        s1.mode = "Landscape"
+        val s2 = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("Landscape", s2.mode)
+        assertEquals("Landscape", runtime["mode"])
     }
 
     // ─── Round-trip: 3 UI-pending keys ────────────────────────────
@@ -201,14 +265,43 @@ class RovaSettingsTest {
 
     // ─── Helpers ──────────────────────────────────────────────────
 
+    /**
+     * Single-store helper for legacy tests that only touch keys in the
+     * main rova_settings file. Builds an empty runtime store under the
+     * RUNTIME_PREFS_NAME bucket so the mode getter defaults to Portrait
+     * unless a test routes through [settingsWithRuntime] instead.
+     */
     private fun settings(initial: Map<String, Any?> = emptyMap()): RovaSettings {
-        val prefs = FakeSharedPreferences(HashMap(initial))
-        return RovaSettings(FakeContext(prefs))
+        val main = HashMap<String, Any?>(initial)
+        return settingsWithRuntime(main = main, runtime = HashMap())
+    }
+
+    /**
+     * Multi-store helper introduced for the mode-split migration tests.
+     * Caller passes mutable maps so tests can assert post-migration state.
+     */
+    private fun settingsWithRuntime(
+        main: MutableMap<String, Any?> = HashMap(),
+        runtime: MutableMap<String, Any?> = HashMap(),
+    ): RovaSettings {
+        val mainPrefs = FakeSharedPreferences(main)
+        val runtimePrefs = FakeSharedPreferences(runtime)
+        return RovaSettings(
+            FakeContext(
+                mapOf(
+                    "rova_settings" to mainPrefs,
+                    RovaSettings.RUNTIME_PREFS_NAME to runtimePrefs,
+                )
+            )
+        )
     }
 }
 
-private class FakeContext(private val prefs: SharedPreferences) : ContextWrapper(null) {
-    override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = prefs
+private class FakeContext(
+    private val byName: Map<String, SharedPreferences>,
+) : ContextWrapper(null) {
+    override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+        byName[name] ?: error("FakeContext: no SharedPreferences registered for name=$name")
 }
 
 private class FakeSharedPreferences(

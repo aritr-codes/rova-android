@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 /**
  * Phase 4.1 / 4.1b / R2-T5 — the unified WarningCenter aggregator. Consumes
@@ -38,15 +40,53 @@ class WarningCenterViewModel(
     notificationsGranted: StateFlow<Boolean>,
     batteryOptimizationExempt: StateFlow<Boolean>,
     storageLowMidRec: StateFlow<Boolean>,           // ← NEW (R2 T5)
+    // v3 — injectable scope so plain-JVM unit tests can pass
+    // `Dispatchers.Unconfined`-backed CoroutineScope and avoid the
+    // `Dispatchers.Main` requirement of `viewModelScope`. Production
+    // call-sites construct the VM via `viewModel(factory = ...)` and
+    // omit this argument so `viewModelScope` is used as before.
+    private val scope: CoroutineScope? = null,
 ) : ViewModel() {
 
-    val activeWarning: StateFlow<WarningId?> =
+    private val activeScope: CoroutineScope get() = scope ?: viewModelScope
+
+    // ── v3 — "Why this matters" expand toggle (in-memory; survives only while VM is in scope) ──
+    private val _expandedWhy = MutableStateFlow<Set<WarningId>>(emptySet())
+    val expandedWhy: StateFlow<Set<WarningId>> = _expandedWhy.asStateFlow()
+
+    fun toggleExpandWhy(id: WarningId) {
+        _expandedWhy.update { if (id in it) it - id else it + id }
+    }
+
+    // ── v3 — "Don't show again" snooze (in-memory only; Phase 4.1c will persist) ──
+    private val _snoozedForever = MutableStateFlow<Set<WarningId>>(emptySet())
+    val snoozedForever: StateFlow<Set<WarningId>> = _snoozedForever.asStateFlow()
+
+    fun snoozeForever(id: WarningId) {
+        _snoozedForever.update { it + id }
+    }
+
+    private val _resolvedWarning: StateFlow<WarningId?> =
         aggregate(
             cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
             thermal, power, camera,
             microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
             storageLowMidRec,                                    // ← NEW
-        ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), null)
+        ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
+
+    /**
+     * v3 — public sheet/banner render-path signal. Filters [_resolvedWarning]
+     * by [_snoozedForever] so a "Don't show again" snooze hides the surface.
+     * The Start-gate in `RecordScreen.kt` does NOT collect this — it reads
+     * leaf signals (cameraPermissionSignal / storageSignal) directly — so
+     * snoozing CAMERA_PERMISSION_DENIED does NOT open Start. Invariant
+     * preserved across A7.
+     */
+    val activeWarning: StateFlow<WarningId?> = combine(
+        _resolvedWarning,
+        _snoozedForever,
+    ) { resolved, snoozed -> resolved?.takeIf { it !in snoozed } }
+        .stateIn(activeScope, SharingStarted.Eagerly, null)
 
     /**
      * Per-session dismiss state — the set of [WarningId]s the user has

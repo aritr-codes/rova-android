@@ -5,11 +5,24 @@
     and private export temp files must NEVER flow through Auto Backup.
 
     Domains:
-      external  -> getExternalFilesDir() — contains videos/ (segments + manifests)
-                   and export/ (Tier 2/3 private temp). Excluded entirely.
-      sharedpref-> RovaSettings (user config: interval, duration, presets).
-                   Allowed to back up; this is user-facing config, not session state.
+      external           -> getExternalFilesDir() — contains videos/
+                            (segments + manifests) and export/ (Tier 2/3
+                            private temp). Excluded entirely.
+      sharedpref / main  -> RovaSettings rova_settings.xml (user config:
+                            interval, duration, presets). Allowed to back
+                            up; this is user-facing config, not session
+                            state.
+      sharedpref / runtime -> rova_runtime_prefs.xml. Holds the `mode` key
+                              (Portrait / Landscape / PortraitLandscape).
+                              EXCLUDED so reinstalls always default to
+                              Portrait — without this, a prior session's
+                              PortraitLandscape would be restored from
+                              Google account backup and the app would
+                              open in DualShot on a fresh APK install.
+                              Must stay in sync with the file name in
+                              RovaSettings.RUNTIME_PREFS_NAME.
 -->
 <full-backup-content>
     <exclude domain="external" path="." />
+    <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
 </full-backup-content>

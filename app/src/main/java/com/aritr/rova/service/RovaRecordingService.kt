@@ -390,13 +390,33 @@ class RovaRecordingService : Service(), LifecycleOwner {
             if (!surfaceProviderReady.isCompleted) {
                 surfaceProviderReady.complete(Unit)
             }
-            // If camera is already set up, just attach the surface provider to the existing preview.
-            // Otherwise, launch full camera setup (which will pick up currentSurfaceProvider).
+            // If camera is already set up, attach the surface provider to the
+            // existing preview. Otherwise, launch full camera setup (which
+            // will pick up currentSurfaceProvider).
             val existingPreview = preview
             if (existingPreview != null) {
-                // CameraX's own teardown drives release of the previous surface
-                // via its provideSurface result callback — no eager release here.
-                existingPreview.setSurfaceProvider(surfaceProvider)
+                if (boundToDummy) {
+                    // DUMMY -> UI swap. CameraX's Preview.setSurfaceProvider
+                    // hot-swap does not reliably re-cycle a fresh SurfaceRequest
+                    // to the new provider on many devices, leaving PreviewView
+                    // black for the entire session (see boundToDummy field
+                    // docs + the record-start forceReconfigureCamera pattern
+                    // in startPeriodicRecording). Cold-start with denied
+                    // CAMERA permission keeps PreviewView unmounted, so the
+                    // 500 ms surface grace in startCameraPreview expires and
+                    // setupCamera binds to DUMMY; the user then grants the
+                    // permission in system Settings and returns -- the UI
+                    // surface arrives here, into a preview already bound to
+                    // DUMMY. Rebind cleanly so the new SurfaceRequest fires.
+                    RovaLog.d("setSurfaceProvider: DUMMY -> UI, forcing camera reconfigure")
+                    serviceScope.launch { forceReconfigureCamera() }
+                } else {
+                    // UI -> UI hot-swap (config change, screen rotation). Safe.
+                    // CameraX's own teardown drives release of the previous
+                    // surface via its provideSurface result callback -- no
+                    // eager release here.
+                    existingPreview.setSurfaceProvider(surfaceProvider)
+                }
             } else {
                 serviceScope.launch { setupCamera() }
             }
@@ -1213,6 +1233,28 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupCamera: Binding failed", e)
+                // Null out dangling use cases. Preview / VideoCapture were
+                // constructed above before bindToLifecycle threw, so they
+                // exist as objects even though the camera was never bound.
+                // If we leave them set, the next setSurfaceProvider call
+                // sees `preview != null && !boundToDummy` and takes the
+                // hot-swap branch, attaching the UI surface to a Preview
+                // that has no camera feeding it -- PreviewView stays black
+                // forever. The fresh-install cold-launch path hits exactly
+                // this race: CAMERA permission is denied at startup, the
+                // service's startCameraPreview grace expires and setupCamera
+                // runs without permission, bindToLifecycle throws, and the
+                // user's later permission grant + return arrives into
+                // dangling preview state. Clear it so the post-grant
+                // setSurfaceProvider falls through to the else-branch that
+                // launches a fresh setupCamera.
+                try { provider.unbindAll() } catch (_: Exception) {}
+                markCameraUnbound()
+                preview = null
+                videoCapture = null
+                camera = null
+                configuredResolution = null
+                boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }
@@ -1456,6 +1498,23 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupDualCamera: Binding failed", e)
+                // Same dangling-state cleanup as setupSingleCamera's catch
+                // (see comment there). UseCaseGroup carries the Preview +
+                // DualVideoRecorder effect; on bind failure all references
+                // need to be cleared so the next setSurfaceProvider call
+                // re-launches setupCamera with the freshly-granted
+                // permission rather than hot-swapping into an unbound
+                // Preview.
+                try { provider.unbindAll() } catch (_: Exception) {}
+                currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
+                currentDualRecording = null
+                currentDualRecorder?.release()
+                currentDualRecorder = null
+                markCameraUnbound()
+                preview = null
+                camera = null
+                configuredResolution = null
+                boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
         }

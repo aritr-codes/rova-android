@@ -3,6 +3,7 @@ package com.aritr.rova.ui.warnings
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -121,5 +124,55 @@ class WarningCenterAggregateTest {
         yield()
         job.cancelAndJoin()
         assertEquals(listOf<WarningId?>(WarningId.BATTERY_LOW), emissions)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // v3 — Task A7: expandedWhy + snoozeForever VM-level behaviour
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Construct a [WarningCenterViewModel] with `Dispatchers.Unconfined` so
+     * `stateIn`-backed flows resolve synchronously on the caller thread —
+     * the same posture as `RecoveryViewModelTest`. We inject a custom
+     * `CoroutineScope` because `viewModelScope` defaults to
+     * `Dispatchers.Main.immediate`, which is unavailable in plain-JVM
+     * unit tests (no `kotlinx-coroutines-test` dependency in this module).
+     */
+    private fun makeVm(notificationsGranted: Boolean = true): WarningCenterViewModel {
+        val s = sources()
+        s.nt.value = notificationsGranted
+        return WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+    }
+
+    @Test
+    fun toggleExpandWhy_adds_and_removes_from_set() {
+        val vm = makeVm()
+        assertTrue(WarningId.NOTIFICATIONS_DENIED !in vm.expandedWhy.value)
+        vm.toggleExpandWhy(WarningId.NOTIFICATIONS_DENIED)
+        assertTrue(WarningId.NOTIFICATIONS_DENIED in vm.expandedWhy.value)
+        vm.toggleExpandWhy(WarningId.NOTIFICATIONS_DENIED)
+        assertTrue(WarningId.NOTIFICATIONS_DENIED !in vm.expandedWhy.value)
+    }
+
+    @Test
+    fun snoozeForever_hides_id_from_activeWarning() {
+        // notificationsGranted = false drives NOTIFICATIONS_DENIED into _resolvedWarning;
+        // snoozeForever should then filter it from the public activeWarning.
+        val vm = makeVm(notificationsGranted = false)
+        assertEquals(WarningId.NOTIFICATIONS_DENIED, vm.activeWarning.value)
+        vm.snoozeForever(WarningId.NOTIFICATIONS_DENIED)
+        assertNull(vm.activeWarning.value)
     }
 }
