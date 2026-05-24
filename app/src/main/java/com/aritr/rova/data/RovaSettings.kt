@@ -6,6 +6,39 @@ import androidx.core.content.edit
 class RovaSettings(context: Context) {
     private val prefs = context.getSharedPreferences("rova_settings", Context.MODE_PRIVATE)
 
+    // Phase 4 fresh-install fix: `mode` is intentionally NOT backed up. It
+    // lives in a separate SharedPreferences file (rova_runtime_prefs) that
+    // is excluded from Auto Backup + device-transfer (see backup_rules.xml
+    // and data_extraction_rules.xml). Without the split, reinstalling the
+    // APK on the same Google account restored `mode=PortraitLandscape` from
+    // a prior session and the app opened in DualShot — defeating the
+    // documented Portrait default. All OTHER user config (resolution,
+    // duration, intervals, presets, etc.) still backs up normally.
+    private val runtimePrefs = context.getSharedPreferences(
+        RUNTIME_PREFS_NAME,
+        Context.MODE_PRIVATE,
+    )
+
+    init {
+        // One-time migration for installs that pre-date the mode split.
+        // If we haven't stamped the migration marker yet, copy any
+        // legacy `mode` value from `prefs` into `runtimePrefs`, then
+        // delete the legacy key and stamp the marker. The marker
+        // travels via Auto Backup along with the rest of `prefs`, so
+        // post-backup restores skip this branch and the new install
+        // correctly defaults `runtimePrefs.mode` to Portrait.
+        if (!prefs.getBoolean(MODE_MIGRATED_V1, false)) {
+            val legacyMode = prefs.getString("mode", null)
+            if (legacyMode != null) {
+                runtimePrefs.edit { putString("mode", legacyMode) }
+            }
+            prefs.edit {
+                remove("mode")
+                putBoolean(MODE_MIGRATED_V1, true)
+            }
+        }
+    }
+
     var durationSeconds: Int
         get() = prefs.getInt("duration", 10)
         set(value) = prefs.edit { putInt("duration", value) }
@@ -20,9 +53,9 @@ class RovaSettings(context: Context) {
 
     /** Coerces unknown persisted values to the default — defends against stale/version-mismatched reads. */
     var mode: String
-        get() = (prefs.getString("mode", "Portrait") ?: "Portrait")
+        get() = (runtimePrefs.getString("mode", "Portrait") ?: "Portrait")
             .takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" } ?: "Portrait"
-        set(value) = prefs.edit { putString("mode", value) }
+        set(value) = runtimePrefs.edit { putString("mode", value) }
 
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
@@ -78,6 +111,12 @@ class RovaSettings(context: Context) {
     var exportFolderName: String
         get() = prefs.getString("export_folder_name", "") ?: ""
         set(value) = prefs.edit { putString("export_folder_name", value) }
+
+    companion object {
+        /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
+        const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
+        private const val MODE_MIGRATED_V1 = "mode_migrated_v1"
+    }
 }
 
 data class RovaPreset(

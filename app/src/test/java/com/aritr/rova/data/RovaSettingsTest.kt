@@ -143,8 +143,77 @@ class RovaSettingsTest {
     }
 
     @Test fun `mode coerces unknown value to Portrait`() {
-        val s = settings(mapOf("mode" to "P + L"))
+        val s = settingsWithRuntime(runtime = hashMapOf<String, Any?>("mode" to "P + L"))
         assertEquals("Portrait", s.mode)
+    }
+
+    // ─── Mode-split + migration (Phase 4 fresh-install fix) ────────
+
+    @Test fun `mode setter writes to runtime prefs not main prefs`() {
+        val runtime = HashMap<String, Any?>()
+        val main = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        s.mode = "Landscape"
+        assertEquals("Landscape", runtime["mode"])
+        assertFalse("main prefs must not store mode after the split", main.containsKey("mode"))
+    }
+
+    @Test fun `mode read prefers runtime prefs over legacy main prefs`() {
+        // Migration marker present + runtime has value → runtime wins.
+        val main = hashMapOf<String, Any?>("mode_migrated_v1" to true)
+        val runtime = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("PortraitLandscape", s.mode)
+    }
+
+    @Test fun `migration moves legacy mode from main prefs to runtime prefs and stamps marker`() {
+        // Simulates an install that pre-dates the split: main prefs has `mode`,
+        // no marker, runtime prefs is empty.
+        val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
+        val runtime = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("PortraitLandscape", s.mode)
+        assertEquals("PortraitLandscape", runtime["mode"])
+        assertFalse("legacy mode key must be removed from main prefs after migration", main.containsKey("mode"))
+        assertEquals(true, main["mode_migrated_v1"])
+    }
+
+    @Test fun `migration without legacy mode key just stamps the marker`() {
+        val main = HashMap<String, Any?>()
+        val runtime = HashMap<String, Any?>()
+        settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals(true, main["mode_migrated_v1"])
+        assertFalse("runtime mode must stay absent when no legacy value existed", runtime.containsKey("mode"))
+    }
+
+    @Test fun `reinstall-after-backup defaults to Portrait when marker is restored`() {
+        // Models the backup-restore scenario: main prefs was backed up
+        // including the migration marker, runtime prefs is empty (excluded
+        // from backup), and a stale `mode` could even exist in main if the
+        // backup snapshot pre-dated the migration. Migration must be
+        // skipped (marker present) and mode must read from runtime (empty)
+        // — defaulting to Portrait.
+        val main = hashMapOf<String, Any?>(
+            "mode_migrated_v1" to true,
+            "mode" to "PortraitLandscape", // stale leftover from a pre-migration backup snapshot
+        )
+        val runtime = HashMap<String, Any?>()
+        val s = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("Portrait", s.mode)
+        // The stale legacy key is left untouched (migration is skipped); the
+        // read path simply ignores it. Safe to leave — no production path
+        // reads `mode` from main prefs.
+    }
+
+    @Test fun `migration is idempotent across multiple RovaSettings constructions`() {
+        val main = hashMapOf<String, Any?>("mode" to "Landscape")
+        val runtime = HashMap<String, Any?>()
+        val s1 = settingsWithRuntime(main = main, runtime = runtime)
+        s1.mode = "PortraitLandscape"
+        // Second construction must not re-run migration and clobber the user value.
+        val s2 = settingsWithRuntime(main = main, runtime = runtime)
+        assertEquals("PortraitLandscape", s2.mode)
+        assertEquals("PortraitLandscape", runtime["mode"])
     }
 
     // ─── Round-trip: 3 UI-pending keys ────────────────────────────
@@ -201,14 +270,45 @@ class RovaSettingsTest {
 
     // ─── Helpers ──────────────────────────────────────────────────
 
+    /**
+     * Single-store helper preserved for legacy tests that only touch keys
+     * in the main rova_settings file. Per the Phase 4 mode split, this
+     * helper auto-stamps `mode_migrated_v1` on the main store so the
+     * migration init block skips and does not write to the runtime store
+     * (the FakeContext serves a fresh empty runtime store under the
+     * RUNTIME_PREFS_NAME bucket).
+     */
     private fun settings(initial: Map<String, Any?> = emptyMap()): RovaSettings {
-        val prefs = FakeSharedPreferences(HashMap(initial))
-        return RovaSettings(FakeContext(prefs))
+        val main = HashMap<String, Any?>(initial).apply { putIfAbsent("mode_migrated_v1", true) }
+        return settingsWithRuntime(main = main, runtime = HashMap())
+    }
+
+    /**
+     * Multi-store helper introduced for the mode-split migration tests.
+     * Caller passes mutable maps so tests can assert post-migration state.
+     */
+    private fun settingsWithRuntime(
+        main: MutableMap<String, Any?> = HashMap(),
+        runtime: MutableMap<String, Any?> = HashMap(),
+    ): RovaSettings {
+        val mainPrefs = FakeSharedPreferences(main)
+        val runtimePrefs = FakeSharedPreferences(runtime)
+        return RovaSettings(
+            FakeContext(
+                mapOf(
+                    "rova_settings" to mainPrefs,
+                    RovaSettings.RUNTIME_PREFS_NAME to runtimePrefs,
+                )
+            )
+        )
     }
 }
 
-private class FakeContext(private val prefs: SharedPreferences) : ContextWrapper(null) {
-    override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = prefs
+private class FakeContext(
+    private val byName: Map<String, SharedPreferences>,
+) : ContextWrapper(null) {
+    override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+        byName[name] ?: error("FakeContext: no SharedPreferences registered for name=$name")
 }
 
 private class FakeSharedPreferences(

@@ -8,15 +8,27 @@
     cloud-backup     -> Google account auto-backup.
     device-transfer  -> D2D restore on new device setup-wizard.
 
-    Both branches exclude the entire external domain (getExternalFilesDir),
-    which covers videos/ (segments + manifests) and export/ (Tier 2/3 temp).
-    sharedpref domain is allowed to back up (RovaSettings = user config).
+    Both branches exclude:
+      external                       -> getExternalFilesDir (videos/ +
+                                        export/ — segments, manifests,
+                                        Tier 2/3 temp).
+      sharedpref rova_runtime_prefs  -> holds the `mode` key. Excluded so
+                                        reinstalls default to Portrait
+                                        instead of restoring a prior
+                                        PortraitLandscape session. Must
+                                        stay in sync with the file name
+                                        in RovaSettings.RUNTIME_PREFS_NAME.
+
+    sharedpref rova_settings.xml is allowed to back up (RovaSettings =
+    user config: interval, duration, resolution, presets, etc.).
 -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="external" path="." />
+        <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="external" path="." />
+        <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
     </device-transfer>
 </data-extraction-rules>
