@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.screens.BatteryOptimizationHelper
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -73,10 +74,17 @@ fun WarningCenter(
             //  • THERMAL_AUTOSTOPPED      (Slice 3) → CTA opens ThermalTipsSheet via host.
             // All other TopBanner ids are active-HUD only and suppress here.
             val autoStopEcho by app.autoStopEchoSignal.state.collectAsStateWithLifecycle()
-            when (id) {
+            // Phase 4 Slice 3 follow-up — promote a pending echo over the
+            // precedence pick when the pick is an active-state TopBanner id
+            // (THERMAL_*/BATTERY_*/CAMERA_IN_USE etc.). Precedence ranks those
+            // at rows #4-11 ABOVE the #12-13 echoes; on Idle those ids hit the
+            // `else -> Unit` suppression below, swallowing the echo entirely.
+            // See [effectiveIdleTopBannerId] KDoc for the precedence rationale.
+            val effectiveId = effectiveIdleTopBannerId(id, autoStopEcho)
+            when (effectiveId) {
                 WarningId.STORAGE_FULL_AUTOSTOPPED -> {
                     WarningTopBannerV3(
-                        content = midRecBannerContent(id),
+                        content = midRecBannerContent(effectiveId),
                         severityColor = RovaWarnings.advisory,
                         onAction = { launchActionTarget(context, ActionTarget.STORAGE_SETTINGS) },
                         onOverflow = { target ->
@@ -87,7 +95,7 @@ fun WarningCenter(
                 }
                 WarningId.THERMAL_AUTOSTOPPED -> {
                     WarningTopBannerV3(
-                        content = midRecBannerContent(id),
+                        content = midRecBannerContent(effectiveId),
                         severityColor = RovaWarnings.advisory,
                         onAction = { onOpenThermalTips?.invoke() },
                         onOverflow = { target ->
@@ -179,6 +187,33 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.OPEN_THERMAL_TIPS -> return                 // VM-only; guarded above (Phase 4 Slice 3)
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
+}
+
+/**
+ * Phase 4 Slice 3 follow-up — pure resolver for the Idle TopBanner branch.
+ * Returns the id that SHOULD render on Idle given (a) what
+ * `WarningPrecedence.resolve` produced and (b) whether an auto-stop echo
+ * is pending in `SessionAutoStopEchoSignal`.
+ *
+ * Rationale: `WarningPrecedence` ranks active-state thermal/battery/camera
+ * TopBanner ids (rows #4-11) ABOVE the auto-stop echoes (rows #12-13). On
+ * Idle, the active ids are suppressed (active-HUD-only), so if precedence
+ * returned one of them, the echo gets swallowed. This helper promotes the
+ * echo to the rendered id in that case — the user keeps the post-stop
+ * affordance even if the underlying condition (e.g. device still hot)
+ * hasn't cleared yet. When no echo is pending, behaviour is unchanged.
+ *
+ * Pure-JVM testable per ADR-0007.
+ */
+internal fun effectiveIdleTopBannerId(
+    precedenceId: WarningId,
+    autoStopEcho: TerminalEcho?,
+): WarningId = when (autoStopEcho?.stopReason) {
+    StopReason.LOW_STORAGE -> WarningId.STORAGE_FULL_AUTOSTOPPED
+    StopReason.THERMAL -> WarningId.THERMAL_AUTOSTOPPED
+    null,
+    StopReason.USER, StopReason.PERMISSION_REVOKED,
+    StopReason.INIT_FAILED, StopReason.NONE -> precedenceId
 }
 
 /**
