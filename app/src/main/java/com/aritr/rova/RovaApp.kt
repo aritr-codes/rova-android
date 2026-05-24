@@ -26,6 +26,8 @@ import com.aritr.rova.service.export.Tier2Exporter
 import com.aritr.rova.service.export.Tier3Exporter
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.RecoveryScanner
+import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.data.latestTerminalSession
 import com.aritr.rova.ui.signals.BatteryOptimizationSignal
 import com.aritr.rova.ui.signals.CameraPermissionSignal
 import com.aritr.rova.ui.signals.CameraStateSignal
@@ -33,6 +35,7 @@ import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
+import com.aritr.rova.ui.signals.SessionAutoStopEchoSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
@@ -240,6 +243,23 @@ class RovaApp : Application() {
      */
     val storageLowMidRecSignal: StorageLowMidRecSignal by lazy {
         StorageLowMidRecSignal.forContext(this)
+    }
+
+    /**
+     * Phase 4 Slice 2 — auto-stop echo signal. Reads the most-recent terminal
+     * session manifest at lazy-init and surfaces it as a [TerminalEcho?],
+     * filtered against the persistent dismissed-id set from [RovaSettings].
+     * Refresh triggers: RecordScreen ON_RESUME (see RecordScreen.kt T6),
+     * + future service terminal-transition observers.
+     *
+     * Spec: docs/superpowers/specs/2026-05-24-phase-4-slice2-storage-full-autostopped-design.md §4.5
+     */
+    val autoStopEchoSignal: SessionAutoStopEchoSignal by lazy {
+        val settings = RovaSettings(this)
+        SessionAutoStopEchoSignal(
+            terminalEchoSource = { sessionStore.latestTerminalSession() },
+            initialDismissedIds = settings.dismissedAutoStopEchoIds,
+        )
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
