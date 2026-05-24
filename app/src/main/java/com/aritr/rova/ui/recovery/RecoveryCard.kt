@@ -94,15 +94,20 @@ fun RecoveryCard(
                 shape = RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius),
             ),
     ) {
-        // Top glow bloom — replaces the v2 severity stripe. The -20dp
-        // top padding shifts the saturated peak of the gradient above
-        // the visible card so only the fall-off is rendered inside the
-        // card frame, matching the mockup's soft bloom.
+        // Top glow bloom — replaces the v2 severity stripe. The
+        // verticalGradient paints the severity-tinted peak at y=0
+        // (top of the 60dp box) and fades to Transparent at the
+        // bottom; combined with the 28dp blur this gives the soft
+        // top-edge bloom the v3 spec calls for. (An earlier draft
+        // used Modifier.padding(top = (-20).dp) to "shift the peak
+        // above the card", but negative padding shrinks the content
+        // area downward rather than translating it, and the outer
+        // card's clip would have swallowed any real upward offset
+        // anyway — so the modifier is intentionally absent here.)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(RovaWarningsV3.recoveryCardGlowHeight)
-                .padding(top = (-20).dp)
                 .blur(RovaWarningsV3.recoveryCardGlowBlur)
                 .background(brush = RovaWarningsV3.recoveryGlow(severityColor)),
         )
@@ -213,20 +218,25 @@ private fun tagLabelFor(kind: RecoveryCardKind): String = when (kind) {
 private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
     // Mirror the WarningSnoozeChip pulse — same animation spec / label
     // pattern, scoped to this composable so the transition is
-    // recomposition-stable.
-    val dotAlpha: Float = if (pulsing) {
-        val transition = rememberInfiniteTransition(label = "recovery-tag-pulse")
-        val alpha by transition.animateFloat(
-            initialValue = 0.6f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1500),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "recovery-tag-pulse-alpha",
-        )
-        alpha
-    } else 1f
+    // recomposition-stable. The transition + animateFloat are hoisted
+    // unconditionally above the `pulsing` branch: rememberInfiniteTransition
+    // is a @Composable call and Compose's slot-positional rule forbids
+    // calling it inside a conditional (if the same slot is reused for a
+    // card whose `pulsing` flag flips between recompositions, Compose
+    // emits a runtime warning and the lint check trips). Gating only
+    // the value selection costs a single unused Float animator when
+    // pulsing == false, which is negligible.
+    val infiniteTransition = rememberInfiniteTransition(label = "recovery-tag-pulse")
+    val pulsingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "recovery-tag-pulse-alpha",
+    )
+    val dotAlpha: Float = if (pulsing) pulsingAlpha else 1f
 
     Row(
         modifier = Modifier
