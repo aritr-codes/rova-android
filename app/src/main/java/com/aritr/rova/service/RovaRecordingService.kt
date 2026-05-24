@@ -390,13 +390,33 @@ class RovaRecordingService : Service(), LifecycleOwner {
             if (!surfaceProviderReady.isCompleted) {
                 surfaceProviderReady.complete(Unit)
             }
-            // If camera is already set up, just attach the surface provider to the existing preview.
-            // Otherwise, launch full camera setup (which will pick up currentSurfaceProvider).
+            // If camera is already set up, attach the surface provider to the
+            // existing preview. Otherwise, launch full camera setup (which
+            // will pick up currentSurfaceProvider).
             val existingPreview = preview
             if (existingPreview != null) {
-                // CameraX's own teardown drives release of the previous surface
-                // via its provideSurface result callback — no eager release here.
-                existingPreview.setSurfaceProvider(surfaceProvider)
+                if (boundToDummy) {
+                    // DUMMY -> UI swap. CameraX's Preview.setSurfaceProvider
+                    // hot-swap does not reliably re-cycle a fresh SurfaceRequest
+                    // to the new provider on many devices, leaving PreviewView
+                    // black for the entire session (see boundToDummy field
+                    // docs + the record-start forceReconfigureCamera pattern
+                    // in startPeriodicRecording). Cold-start with denied
+                    // CAMERA permission keeps PreviewView unmounted, so the
+                    // 500 ms surface grace in startCameraPreview expires and
+                    // setupCamera binds to DUMMY; the user then grants the
+                    // permission in system Settings and returns -- the UI
+                    // surface arrives here, into a preview already bound to
+                    // DUMMY. Rebind cleanly so the new SurfaceRequest fires.
+                    RovaLog.d("setSurfaceProvider: DUMMY -> UI, forcing camera reconfigure")
+                    serviceScope.launch { forceReconfigureCamera() }
+                } else {
+                    // UI -> UI hot-swap (config change, screen rotation). Safe.
+                    // CameraX's own teardown drives release of the previous
+                    // surface via its provideSurface result callback -- no
+                    // eager release here.
+                    existingPreview.setSurfaceProvider(surfaceProvider)
+                }
             } else {
                 serviceScope.launch { setupCamera() }
             }
