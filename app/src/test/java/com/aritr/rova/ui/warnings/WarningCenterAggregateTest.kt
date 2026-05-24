@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.warnings
 
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.ThermalStatus
@@ -18,41 +19,43 @@ import org.junit.Test
 /**
  * Tests [WarningCenterViewModel.aggregate] — the combine logic — with fake
  * [MutableStateFlow]s and no `viewModelScope`. Same plain-JVM coroutine
- * idiom as the Phase 3 signal tests. 10 source flows after R2 T5.
+ * idiom as the Phase 3 signal tests. 11 source flows after Phase 4 Slice 2.
  */
 class WarningCenterAggregateTest {
 
     private fun clearPower() = PowerState(percent = 80, charging = false, powerSaveMode = false)
 
-    private data class TenSources(
-        val cameraPerm: MutableStateFlow<Boolean>,   // cameraPermissionGranted
-        val ea: MutableStateFlow<Boolean>,           // exactAlarmGranted
-        val storage: MutableStateFlow<Boolean>,      // storageInsufficient
-        val th: MutableStateFlow<ThermalStatus>,     // thermal
-        val pw: MutableStateFlow<PowerState>,        // power
-        val camState: MutableStateFlow<CameraSignalState>, // camera (state)
-        val mic: MutableStateFlow<Boolean>,          // microphonePermissionGranted
-        val nt: MutableStateFlow<Boolean>,           // notificationsGranted
-        val bo: MutableStateFlow<Boolean>,           // batteryOptimizationExempt
-        val storageLowMidRec: MutableStateFlow<Boolean>,  // storageLowMidRec — NEW
+    private data class ElevenSources(
+        val cameraPerm: MutableStateFlow<Boolean>,
+        val ea: MutableStateFlow<Boolean>,
+        val storage: MutableStateFlow<Boolean>,
+        val th: MutableStateFlow<ThermalStatus>,
+        val pw: MutableStateFlow<PowerState>,
+        val camState: MutableStateFlow<CameraSignalState>,
+        val mic: MutableStateFlow<Boolean>,
+        val nt: MutableStateFlow<Boolean>,
+        val bo: MutableStateFlow<Boolean>,
+        val storageLowMidRec: MutableStateFlow<Boolean>,
+        val autoStopEcho: MutableStateFlow<TerminalEcho?>,        // ← NEW
     )
 
-    private fun sources() = TenSources(
-        MutableStateFlow(true),                       // cameraPerm — granted
-        MutableStateFlow(true),                       // ea — exact alarm granted
-        MutableStateFlow(false),                      // storage — not insufficient
-        MutableStateFlow(ThermalStatus.NONE),         // thermal
-        MutableStateFlow(clearPower()),               // power
-        MutableStateFlow(CameraSignalState.OK),       // camera state
-        MutableStateFlow(true),                       // mic — granted
-        MutableStateFlow(true),                       // notificationsGranted
-        MutableStateFlow(true),                       // batteryOptimizationExempt
-        MutableStateFlow(false),                      // storageLowMidRec — NEW
+    private fun sources() = ElevenSources(
+        MutableStateFlow(true),
+        MutableStateFlow(true),
+        MutableStateFlow(false),
+        MutableStateFlow(ThermalStatus.NONE),
+        MutableStateFlow(clearPower()),
+        MutableStateFlow(CameraSignalState.OK),
+        MutableStateFlow(true),
+        MutableStateFlow(true),
+        MutableStateFlow(true),
+        MutableStateFlow(false),
+        MutableStateFlow<TerminalEcho?>(null),                    // ← NEW
     )
 
-    private suspend fun TenSources.collectInto(emissions: MutableList<WarningId?>) =
+    private suspend fun ElevenSources.collectInto(emissions: MutableList<WarningId?>) =
         WarningCenterViewModel.aggregate(
-            cameraPerm, ea, storage, th, pw, camState, mic, nt, bo, storageLowMidRec,
+            cameraPerm, ea, storage, th, pw, camState, mic, nt, bo, storageLowMidRec, autoStopEcho,
         ).collect { emissions += it }
 
     @Test fun `emits null when all sources are clear`() = runBlocking {
@@ -152,6 +155,7 @@ class WarningCenterAggregateTest {
             notificationsGranted = s.nt,
             batteryOptimizationExempt = s.bo,
             storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,                        // ← NEW (positional 11th source)
             scope = CoroutineScope(Dispatchers.Unconfined),
         )
     }
@@ -198,6 +202,7 @@ class WarningCenterAggregateTest {
             notificationsGranted = s.nt,
             batteryOptimizationExempt = s.bo,
             storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
             scope = CoroutineScope(Dispatchers.Unconfined),
             initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
         )
@@ -221,6 +226,7 @@ class WarningCenterAggregateTest {
             notificationsGranted = s.nt,
             batteryOptimizationExempt = s.bo,
             storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
             scope = CoroutineScope(Dispatchers.Unconfined),
             initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
             onSnoozeChanged = { received += it },
@@ -245,10 +251,59 @@ class WarningCenterAggregateTest {
             notificationsGranted = s.nt,
             batteryOptimizationExempt = s.bo,
             storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
             scope = CoroutineScope(Dispatchers.Unconfined),
             onSnoozeChanged = { received += it },
         )
         vm.snoozeForever(WarningId.NOTIFICATIONS_DENIED)
         assertEquals(listOf(setOf(WarningId.NOTIFICATIONS_DENIED)), received)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4 Slice 2 — autoStopEcho source + dismissAutoStopEcho mutator
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun autoStopEcho_source_flow_drives_STORAGE_FULL_AUTOSTOPPED_into_activeWarning() {
+        val s = sources()
+        s.autoStopEcho.value = TerminalEcho("session-a", StopReason.LOW_STORAGE)
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+        assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, vm.activeWarning.value)
+    }
+
+    @Test
+    fun dismissAutoStopEcho_mutator_invokes_onAutoStopDismissed_callback_with_sessionId() {
+        val s = sources()
+        val received = mutableListOf<String>()
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            onAutoStopDismissed = { received += it },
+        )
+        vm.dismissAutoStopEcho("session-xyz")
+        assertEquals(listOf("session-xyz"), received)
     }
 }
