@@ -38,6 +38,7 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
+    WarningId.THERMAL_AUTOSTOPPED,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
     WarningId.STORAGE_LOW_MID_REC,
     WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSurface.TopBanner       // ← NEW arm (Phase 4 Slice 2)
@@ -58,6 +59,8 @@ internal enum class ActionTarget {
     DISMISS_AUTOSTOP_ECHO,
     /** Phase 4 Slice 2 — host-navigation target: opens History (host wires via onNavigateToHistory). NOT an Intent. */
     REVIEW_SESSION,
+    /** Phase 4 Slice 3 — VM-only target: routes to RecordScreen's ThermalTipsSheet host (via WarningCenter's onOpenThermalTips param). NOT an Intent. */
+    OPEN_THERMAL_TIPS,
 }
 
 internal data class WarningSheetContent(
@@ -172,6 +175,15 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
+    WarningId.THERMAL_AUTOSTOPPED -> WarningSheetContent(
+        // Defensive — THERMAL_AUTOSTOPPED is TopBanner-only (rendered on
+        // Idle, not as a sheet). This arm keeps warningSheetContent
+        // exhaustive over WarningId; never renders as a sheet.
+        Icons.Default.Thermostat, "Recording stopped",
+        "Device overheated.",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        null,
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
@@ -260,6 +272,14 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.STORAGE_FULL_AUTOSTOPPED -> TopBannerContent(
         Icons.Default.Storage, "Recording stopped",
         "Storage filled up.", "Free up space",
+        overflow = listOf(
+            WarningAction("Don't show again", ActionTarget.DISMISS_AUTOSTOP_ECHO),
+            WarningAction("Review session", ActionTarget.REVIEW_SESSION),
+        ),
+    )
+    WarningId.THERMAL_AUTOSTOPPED -> TopBannerContent(
+        Icons.Default.Thermostat, "Recording stopped",
+        "Device overheated.", "Tips to cool down",
         overflow = listOf(
             WarningAction("Don't show again", ActionTarget.DISMISS_AUTOSTOP_ECHO),
             WarningAction("Review session", ActionTarget.REVIEW_SESSION),
