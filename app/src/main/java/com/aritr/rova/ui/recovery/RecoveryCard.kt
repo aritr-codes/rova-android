@@ -1,61 +1,77 @@
 package com.aritr.rova.ui.recovery
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.theme.RovaWarningsV3
 
 /**
- * Phase 2 Slice 2.1a — Compose surface for a single recovery card.
+ * Phase 4 warning re-skin v3 (PR B / Task B1) — Library recovery card.
  *
- * Pure-presentation: takes a [RecoveryCardState] (built by
- * [RecoveryUiStateMapper]) plus a Discard callback. No `RovaApp`
- * reference, no `SessionStore` coupling.
+ * Re-skinned to the v3 chrome canon (ADR-0013, spec
+ * `docs/superpowers/specs/2026-05-23-phase-4-warning-reskin-v3-design.md` §3.9):
  *
- * Internal beta correction (smoke 2026-05-03): the Merge button is
- * removed for beta — no service-side merge API exists yet and the
- * placeholder snackbar made the UI feel incomplete. Discard is wired
- * for real via the wiring layer. The card now exposes only the
- * Discard affordance.
+ *  - Top **glow bloom** (severity-tinted vertical gradient, blurred and
+ *    shifted above the visible card) replaces the v2 4dp left stripe.
+ *  - **Severity tag chip** with a leading dot; the dot pulses for hard
+ *    severity, mirroring `WarningSnoozeChip` (pattern preserves the
+ *    same `rememberInfiniteTransition`/`animateFloat` motif).
+ *  - **Clip-progress strip** with a numeric "N / N" chip right-aligned
+ *    when the underlying `survivingArtifacts` list is non-empty. Each
+ *    artifact line is one filled cell; if no artifacts survive, the
+ *    strip section is suppressed entirely.
+ *  - Destructive **primary CTA** ("Discard recording") in the hard red,
+ *    full width across the row. The vendor-help affordance — supplied
+ *    by the wiring layer for `KILLED_BY_SYSTEM` cards only — renders
+ *    as an **optional extra row** beneath the CTA.
  *
- * Slice 4 (UI redesign) — softened visual treatment per the accepted
- * mockup. Background is a neutral surface tone (`surfaceVariant`)
- * with a 4 dp `error` left stripe; the title uses a neutral
- * `onSurface` color so the card no longer reads like a full red
- * alert. The destructive `Discard recording` button retains the full
- * `error` background so the consequential action remains
- * unmistakable. Behavior, callbacks, and KDoc invariants are
- * unchanged from Slice 2.1a.
+ * Signature preserved byte-for-byte from the v2 composable so
+ * `HistoryScreen.kt` call sites (and `RecoveryCardList` below) do not
+ * change. `RecoveryViewModel` / `RecoveryUiState` / `RecoveryViewSource`
+ * are untouched — this is a render-only re-skin.
  *
- * `vendorHelpSlot` is rendered only when the underlying state has
- * `showVendorHelpSlot == true` (currently only
- * [RecoveryCardKind.KILLED_BY_SYSTEM]) AND the consumer supplies a
- * non-null slot.
+ * Deviations from the plan template (`docs/superpowers/plans/2026-05-23-phase-4-warning-reskin-v3.md`
+ * Task B1) are intentional and load-bearing — the real `RecoveryCardState`
+ * does not carry `tagLabel` / `timestamp` / `description` / `clipsSaved` /
+ * `clipsTotal` / `primaryLabel` / `secondaryLabel`, only:
+ * `sessionId, kind, title, body, discardLabel, showVendorHelpSlot,
+ * survivingArtifacts: List<String>`. Severity is derived from `kind`
+ * (HARD ⇐ KILLED_BY_SYSTEM; SOFT ⇐ KILLED_FORCE_STOP, USER_STOPPED).
+ * The tag label is derived from `kind` too. Timestamp is omitted (no
+ * source field). The clip-progress strip falls back to the artifact-
+ * count, which is the closest "recovered-N-segments" signal the
+ * existing state exposes.
  */
 @Composable
 fun RecoveryCard(
@@ -64,85 +80,270 @@ fun RecoveryCard(
     modifier: Modifier = Modifier,
     vendorHelpSlot: (@Composable () -> Unit)? = null
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+    val severityColor: Color = severityColorFor(state.kind)
+    val isHardSeverity: Boolean = state.kind == RecoveryCardKind.KILLED_BY_SYSTEM
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius))
+            .background(Color(0xFF0B0D14).copy(alpha = 0.94f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius),
+            ),
     ) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.error)
+        // Top glow bloom — replaces the v2 severity stripe. The
+        // verticalGradient paints the severity-tinted peak at y=0
+        // (top of the 60dp box) and fades to Transparent at the
+        // bottom; combined with the 28dp blur this gives the soft
+        // top-edge bloom the v3 spec calls for. (An earlier draft
+        // used Modifier.padding(top = (-20).dp) to "shift the peak
+        // above the card", but negative padding shrinks the content
+        // area downward rather than translating it, and the outer
+        // card's clip would have swallowed any real upward offset
+        // anyway — so the modifier is intentionally absent here.)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(RovaWarningsV3.recoveryCardGlowHeight)
+                .blur(RovaWarningsV3.recoveryCardGlowBlur)
+                .background(brush = RovaWarningsV3.recoveryGlow(severityColor)),
+        )
+
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+        ) {
+            // Severity tag chip. Timestamp omitted — RecoveryCardState
+            // does not carry one; introducing a derived "moments ago"
+            // would couple the composable to a Clock seam, which is
+            // explicitly out of scope for B1.
+            SeverityTag(
+                label = tagLabelFor(state.kind),
+                accent = severityColor,
+                pulsing = isHardSeverity,
             )
-            Column(
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = state.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.92f),
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            // Description — the existing data class names this `body`.
+            Text(
+                text = state.body,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.45f),
+            )
+
+            // Clip-progress strip — only rendered when there is at
+            // least one surviving artifact line. RecoveryCardState
+            // does not expose numeric saved/total; using artifact-count
+            // as the N is the closest signal available without a state
+            // refactor (out of scope for B1).
+            if (state.survivingArtifacts.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                ProgressStrip(
+                    artifactCount = state.survivingArtifacts.size,
+                    accent = severityColor,
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Primary CTA. The existing signature only exposes
+            // `onDiscard`; there is no merge / fix-background callback,
+            // so the v3 "primary + secondary" two-button row collapses
+            // to a single full-width destructive button. The button is
+            // tinted with the hard severity colour to match the
+            // mockup's destructive-action treatment, and retains the
+            // semantics description from the v2 card for accessibility.
+            DestructiveCta(
+                label = state.discardLabel,
+                onClick = onDiscard,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.WarningAmber,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = state.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = state.body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    .semantics {
+                        contentDescription =
+                            "${state.discardLabel}. This action is permanent."
+                    },
+            )
 
-                if (state.survivingArtifacts.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Column {
-                        state.survivingArtifacts.forEach { line ->
-                            Text(
-                                text = "• $line",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    if (state.showVendorHelpSlot && vendorHelpSlot != null) {
-                        vendorHelpSlot()
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    // Slice 4 — destructive treatment retained so the
-                    // permanent action remains unmistakable on the
-                    // softened card.
-                    Button(
-                        onClick = onDiscard,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        modifier = Modifier.semantics {
-                            contentDescription =
-                                "${state.discardLabel}. This action is permanent."
-                        }
-                    ) {
-                        Text(state.discardLabel)
-                    }
-                }
+            // Optional extra row — only rendered when the underlying
+            // state requests the vendor-help slot AND the caller
+            // supplies one. The wiring layer in HistoryScreen.kt
+            // supplies an OutlinedButton for KILLED_BY_SYSTEM only;
+            // we keep that exact contract (no chevron ExtraRow) so the
+            // caller's `OutlinedButton(...)` slot renders intact.
+            if (state.showVendorHelpSlot && vendorHelpSlot != null) {
+                Spacer(Modifier.height(10.dp))
+                vendorHelpSlot()
             }
         }
+    }
+}
+
+/**
+ * Severity colour for the card glow + tag accent. Hard = red for
+ * `KILLED_BY_SYSTEM` (the user did not stop, the OS did, and the
+ * card asks for vendor-guidance follow-up). Soft = amber for the
+ * other two terminator kinds where the user took action or the
+ * app was force-stopped.
+ */
+private fun severityColorFor(kind: RecoveryCardKind): Color = when (kind) {
+    RecoveryCardKind.KILLED_BY_SYSTEM -> RovaWarnings.hard
+    RecoveryCardKind.KILLED_FORCE_STOP -> RovaWarnings.soft
+    RecoveryCardKind.USER_STOPPED -> RovaWarnings.soft
+}
+
+/**
+ * Tag-chip label derived from `kind`. Short, uppercased in the chip
+ * itself; this helper returns mixed-case so the same string could be
+ * reused in other contexts without re-casing.
+ */
+private fun tagLabelFor(kind: RecoveryCardKind): String = when (kind) {
+    RecoveryCardKind.KILLED_BY_SYSTEM -> "System-killed"
+    RecoveryCardKind.KILLED_FORCE_STOP -> "Force-stopped"
+    RecoveryCardKind.USER_STOPPED -> "User-stopped"
+}
+
+@Composable
+private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
+    // Mirror the WarningSnoozeChip pulse — same animation spec / label
+    // pattern, scoped to this composable so the transition is
+    // recomposition-stable. The transition + animateFloat are hoisted
+    // unconditionally above the `pulsing` branch: rememberInfiniteTransition
+    // is a @Composable call and Compose's slot-positional rule forbids
+    // calling it inside a conditional (if the same slot is reused for a
+    // card whose `pulsing` flag flips between recompositions, Compose
+    // emits a runtime warning and the lint check trips). Gating only
+    // the value selection costs a single unused Float animator when
+    // pulsing == false, which is negligible.
+    val infiniteTransition = rememberInfiniteTransition(label = "recovery-tag-pulse")
+    val pulsingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "recovery-tag-pulse-alpha",
+    )
+    val dotAlpha: Float = if (pulsing) pulsingAlpha else 1f
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(accent.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(accent.copy(alpha = dotAlpha)),
+        )
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = accent.copy(alpha = 0.95f),
+        )
+    }
+}
+
+/**
+ * Clip-progress strip with leading "CLIPS RECOVERED" label + numeric
+ * `N / N` chip + a row of [artifactCount] saved cells.
+ *
+ * The data layer does not expose a saved/total split today — every
+ * surviving artifact is, by definition, a recovered segment, so all
+ * cells render as saved. When a richer signal lands (e.g. expected
+ * vs recovered segment counts), only the `clipsSaved` / `clipsTotal`
+ * decomposition here needs to change.
+ */
+@Composable
+private fun ProgressStrip(artifactCount: Int, accent: Color) {
+    val cellCount = artifactCount.coerceAtLeast(1)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "CLIPS RECOVERED",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.36f),
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "$artifactCount / $artifactCount",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.78f),
+                    modifier = Modifier.defaultMinSize(
+                        minWidth = RovaWarningsV3.recoveryNumericChipMinWidth,
+                    ),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.recoveryProgressCellGap),
+        ) {
+            repeat(cellCount) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(RovaWarningsV3.recoveryProgressCellHeight)
+                        .clip(RoundedCornerShape(RovaWarningsV3.recoveryProgressCellRadius))
+                        .background(accent.copy(alpha = 0.55f)),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Full-width destructive primary CTA. Hard-red fill + white text.
+ * Mirrors the v3 PrimaryButton chrome (40dp height, 12dp radius)
+ * but uses `RovaWarnings.hard` instead of `0xFF5B7FFF` because this
+ * single CTA is destructive ("Discard recording"), not advisory.
+ */
+@Composable
+private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier = modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(RovaWarnings.hard)
+            .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+        )
     }
 }
 
@@ -159,6 +360,10 @@ fun RecoveryCard(
  * `vendorHelpSlotFor` is invoked with the visible card's `sessionId`;
  * consumers without a vendor helper pass `{ _ -> null }` (or omit;
  * the default is `null`).
+ *
+ * Phase 4 v3 re-skin (PR B / B1): signature unchanged. Footer text
+ * tone shifted from `onSurfaceVariant` to a low-alpha white so it
+ * sits cleanly under the v3 dark-glass card body.
  */
 @Composable
 fun RecoveryCardList(
@@ -182,7 +387,7 @@ fun RecoveryCardList(
             Text(
                 text = "+${state.hiddenCount} older interrupted sessions",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.45f),
                 modifier = Modifier.padding(start = 4.dp)
             )
         }
