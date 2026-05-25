@@ -508,4 +508,42 @@ class WarningCenterAggregateTest {
         // Settings still shows it (proves the call did not mutate any global state).
         assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.MICROPHONE_DENIED))
     }
+
+    @Test
+    fun `signal down-edge clears History dismissal so next active edge re-surfaces`() = runBlocking {
+        val s = sources()
+        s.nt.value = false  // notifications denied → NOTIFICATIONS_DENIED active
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+
+        // Active, user dismisses on History strip.
+        assertTrue(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+
+        // Signal flips off (user granted notifications). Card already absent.
+        s.nt.value = true
+        yield()
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+
+        // Signal flips on again (revoked) — card must re-appear (dismissal auto-cleared on down-edge).
+        s.nt.value = false
+        yield()
+        assertTrue(
+            "Re-activation after down-edge must clear the prior session dismissal",
+            vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED),
+        )
+    }
 }

@@ -8,6 +8,7 @@ import com.aritr.rova.ui.signals.PowerState
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.ThermalStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -166,6 +167,25 @@ class WarningCenterViewModel(
     ) { all, snoozed ->
         all.filter { it in SETTINGS_WARNINGS && it !in snoozed }
     }.stateIn(activeScope, SharingStarted.Eagerly, emptyList())
+
+    init {
+        // Phase 4.2 — watch _allActive for down-edges (ids that were active
+        // last emission and aren't now) and clear matching entries in the
+        // History strip dismissed set. Effect: a fresh up-edge re-surfaces
+        // the card. Settings has no dismissed set, so this only affects
+        // History routing.
+        activeScope.launch {
+            var previous: Set<WarningId> = emptySet()
+            _allActive.collect { current ->
+                val now = current.toSet()
+                val downEdges = previous - now
+                if (downEdges.isNotEmpty()) {
+                    _historyStripDismissedThisSession.update { it - downEdges }
+                }
+                previous = now
+            }
+        }
+    }
 
     /**
      * Phase 4.2 — per-screen multi-active flow. Returns the ordinal-sorted
