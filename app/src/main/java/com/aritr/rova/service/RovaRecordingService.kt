@@ -2836,6 +2836,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 is ExportResult.PendingInsertFailed,
                 is ExportResult.FinalizeFailed,
                 is ExportResult.ManifestWriteFailed,
+                is ExportResult.InsufficientStorage,
                 is ExportResult.UnknownSession -> {
                     // No terminal write — manifest is in FAILED (or
                     // intermediate) state. Cold-launch ExportRecoveryRunner
