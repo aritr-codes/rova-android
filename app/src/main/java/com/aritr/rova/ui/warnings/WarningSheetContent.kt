@@ -33,10 +33,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 enum class WarningSurface { HardBlockSheet, SoftSheet, AdvisorySheet, TopBanner }
 
+/**
+ * Phase 4.3 — visual style hint for a [WarningAction]. Defaults to
+ * [Primary] so all existing sheets compile without change. [Link]
+ * renders as the destructive-text-only treatment (red, transparent
+ * background, underlined) used by C2.4 §2.4 "Discard session".
+ */
+internal enum class WarningActionStyle { Primary, Secondary, Link }
+
 fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED, WarningId.EXACT_ALARM_DENIED, WarningId.STORAGE_INSUFFICIENT -> WarningSurface.HardBlockSheet
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
-    WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
+    WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE,
+    WarningId.CANT_MERGE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
     WarningId.THERMAL_AUTOSTOPPED,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
@@ -44,7 +53,11 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSurface.TopBanner       // ← NEW arm (Phase 4 Slice 2)
 }
 
-internal data class WarningAction(val label: String, val target: ActionTarget)
+internal data class WarningAction(
+    val label: String,
+    val target: ActionTarget,
+    val style: WarningActionStyle = WarningActionStyle.Primary,
+)
 
 internal enum class ActionTarget {
     EXACT_ALARM_SETTINGS,
@@ -61,6 +74,10 @@ internal enum class ActionTarget {
     REVIEW_SESSION,
     /** Phase 4 Slice 3 — VM-only target: routes to RecordScreen's ThermalTipsSheet host (via WarningCenter's onOpenThermalTips param). NOT an Intent. */
     OPEN_THERMAL_TIPS,
+    /** Phase 4.3 — VM-only target: routes to RecoveryViewModel.keepRaw(sessionId). NOT an Intent. */
+    KEEP_SEGMENTS_ONLY,
+    /** Phase 4.3 — VM-only target: routes to RecoveryViewModel.dismiss(sessionId). NOT an Intent. */
+    DISCARD_RECOVERY_SESSION,
 }
 
 internal data class WarningSheetContent(
@@ -72,6 +89,12 @@ internal data class WarningSheetContent(
     val primary: WarningAction,
     /** Secondary CTA — present for HardBlock/Soft/Advisory sheets ("Not now" / "Continue without audio"); may be null for TopBanner. */
     val secondary: WarningAction?,
+    /**
+     * Phase 4.3 — optional third CTA, stacked under [secondary]. Used by
+     * C2.4 ("Can't merge yet") for the "Discard session" destructive-link.
+     * Null = no third row rendered (back-compat for all existing sheets).
+     */
+    val tertiary: WarningAction? = null,
     /**
      * Overflow ⋯ menu items (top-right of sheet). Empty list = no menu rendered.
      * Each action targets either an Intent (`launchActionTarget`) or
@@ -184,6 +207,13 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
+    WarningId.CANT_MERGE -> WarningSheetContent(
+        Icons.Default.Storage, "Can't merge yet",
+        "Free space and retry, or keep the raw segments for later.",
+        primary = WarningAction("Free space & retry", ActionTarget.STORAGE_SETTINGS),
+        secondary = WarningAction("Save segments only", ActionTarget.KEEP_SEGMENTS_ONLY, WarningActionStyle.Secondary),
+        tertiary = WarningAction("Discard session", ActionTarget.DISCARD_RECOVERY_SESSION, WarningActionStyle.Link),
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
@@ -292,7 +322,8 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.MICROPHONE_DENIED,
     WarningId.BATTERY_OPTIMIZATION_ON,
     WarningId.POWER_SAVE_MODE,
-    WarningId.NOTIFICATIONS_DENIED ->
+    WarningId.NOTIFICATIONS_DENIED,
+    WarningId.CANT_MERGE ->
         error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
 }
 

@@ -26,9 +26,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.StopReason
+import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.ui.recovery.RecoveryViewSource
+import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -87,6 +90,10 @@ fun RecordScreen(
         // mounts so either the Idle echo banner or (future) the active HUD can
         // trigger it.
         var showTipsSheet by rememberSaveable { mutableStateOf(false) }
+
+        // Phase 4.3 — session id pending CANT_MERGE resolution (C2.4 sheet).
+        // Null when no recovery merge has failed pre-flight with InsufficientStorage.
+        val pendingSid by warningVm.pendingCantMergeSessionId.collectAsStateWithLifecycle()
 
         // Phase 4 Slice 2 — refresh the auto-stop echo signal on ON_RESUME
         // so a session that auto-stopped while the user was backgrounded
@@ -587,6 +594,33 @@ fun RecordScreen(
                             vm = warningVm,
                             onNavigateToHistory = onNavigateToHistory,
                             onOpenThermalTips = { showTipsSheet = true },
+                            onKeepRawFromSheet = { sessionId ->
+                                scope.launch {
+                                    try {
+                                        val store = rovaApp?.takeIf { it.videosRoot != null }?.sessionStore
+                                        store?.markTerminated(
+                                            sessionId = sessionId,
+                                            terminated = Terminated.MULTI_SEGMENT_KEPT,
+                                            stopReason = StopReason.NONE,
+                                        )
+                                        rovaApp?.recoveryMergeOutcomeSignal?.acknowledge(sessionId)
+                                    } catch (t: Throwable) {
+                                        RovaLog.w("C2.4 keepRaw failed for $sessionId", t)
+                                    }
+                                }
+                            },
+                            onDiscardFromSheet = { sessionId ->
+                                scope.launch {
+                                    try {
+                                        val store = rovaApp?.takeIf { it.videosRoot != null }?.sessionStore
+                                        store?.discardSession(sessionId)
+                                        rovaApp?.recoveryMergeOutcomeSignal?.acknowledge(sessionId)
+                                    } catch (t: Throwable) {
+                                        RovaLog.w("C2.4 discard failed for $sessionId", t)
+                                    }
+                                }
+                            },
+                            pendingCantMergeSessionId = pendingSid,
                         )
                     }
                 }

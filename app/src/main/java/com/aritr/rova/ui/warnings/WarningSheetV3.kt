@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -56,7 +57,7 @@ import com.aritr.rova.ui.theme.RovaWarningsV3
  * Layout:
  *   handle → overflow ⋯ (if hasOverflow) → icon-with-glow → severity chip →
  *   title → body → optional "Why this matters" expander → primary CTA →
- *   secondary CTA (if present).
+ *   secondary CTA (if present) → tertiary CTA (if present, Phase 4.3).
  *
  * Hard-block sheets are NOT swipe-dismissible (`confirmValueChange`).
  *
@@ -70,6 +71,8 @@ internal fun WarningSheetV3(
     expanded: Boolean,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
+    /** Phase 4.3 — C2.4 CANT_MERGE tertiary "Discard session" link. No-op (default) for all other warnings. */
+    onTertiary: () -> Unit = {},
     onOverflow: (ActionTarget) -> Unit,
     onToggleWhy: () -> Unit,
     onDismissRequest: () -> Unit,
@@ -179,6 +182,37 @@ internal fun WarningSheetV3(
                 content.secondary?.let { sec ->
                     Spacer(Modifier.height(8.dp))
                     SecondaryCta(label = sec.label, onClick = onSecondary)
+                }
+
+                // Phase 4.3 — tertiary CTA (e.g. C2.4 CANT_MERGE "Discard session").
+                // Only Link style is used for tertiary in this slice; the when-block is
+                // exhaustive so future styles (Secondary/Primary) compile cleanly.
+                content.tertiary?.let { ter ->
+                    when (ter.style) {
+                        WarningActionStyle.Link -> {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = ter.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = RovaWarnings.hard,
+                                textDecoration = TextDecoration.Underline,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .clickable { onTertiary() },
+                            )
+                        }
+                        WarningActionStyle.Secondary -> {
+                            Spacer(Modifier.height(8.dp))
+                            SecondaryCta(label = ter.label, onClick = onTertiary)
+                        }
+                        WarningActionStyle.Primary -> {
+                            Spacer(Modifier.height(8.dp))
+                            PrimaryCta(label = ter.label, accent = accent, onClick = onTertiary)
+                        }
+                    }
                 }
             }
         }

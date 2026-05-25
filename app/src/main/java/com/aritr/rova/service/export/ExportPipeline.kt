@@ -4,12 +4,14 @@ import android.content.ContentResolver
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.os.storage.StorageManager
 import androidx.annotation.RequiresApi
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.data.currentExportTier
 import com.aritr.rova.utils.VideoMerger
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -122,6 +124,88 @@ internal object ExportPipeline {
                 )
             }
         }
+    }
+
+    /**
+     * Phase 4.3 — recovery merge entry. Same tier dispatch as [export] but
+     * runs an eager storage pre-flight before opening any muxer; returns
+     * [ExportResult.InsufficientStorage] if the destination cannot hold
+     * the merged file. Caller maps this to `WarningId.CANT_MERGE` via
+     * [RecoveryMergeOutcomeSignal].
+     *
+     * The 5% headroom over `sum(segment.length())` accounts for muxer
+     * overhead (track tables, moov atom, padding).
+     */
+    suspend fun exportRecovered(
+        context: Context,
+        sessionStore: SessionStore,
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
+        onProgress: (Float) -> Unit,
+    ): ExportResult {
+        val required = (segments.sumOf { it.length() } * 1.05).toLong()
+        val available = availableSpaceFor(context, sessionDir)
+        if (available < required) {
+            return ExportResult.InsufficientStorage(requiredBytes = required, availableBytes = available)
+        }
+        // Recovery merge reuses live tier dispatch verbatim once pre-flight clears.
+        // `side = null` because recovery merge is never a P+L per-side resume.
+        return export(
+            context = context,
+            sessionStore = sessionStore,
+            sessionId = sessionId,
+            sessionDir = sessionDir,
+            segments = segments,
+            mediaScanWaiter = mediaScanWaiter,
+            side = null,
+            onProgress = onProgress,
+        )
+    }
+
+    /**
+     * Phase 4.3 — storage probe for `exportRecovered` pre-flight. Prefers
+     * [StorageManager.getAllocatableBytes] on API 26+ (reports bytes the
+     * OS could free by purging cache content if needed — more accurate
+     * than raw free space), falls back to [File.usableSpace] on API 24/25
+     * and on any failure of the allocatable probe. Returns 0 only if the
+     * fallback itself reports 0 — both paths guarantee a non-negative
+     * value.
+     */
+    private fun availableSpaceFor(context: Context, sessionDir: File): Long {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
+                if (sm != null) {
+                    val uuid = sm.getUuidForPath(sessionDir)
+                    return sm.getAllocatableBytes(uuid)
+                }
+            } catch (_: IOException) {
+                // fall through to usableSpace
+            }
+        }
+        return sessionDir.usableSpace
+    }
+
+    /**
+     * Phase 4.3 — pure test seam. Same shape as [exportRecovered] but with
+     * the storage probe and merge step injected as lambdas so the pre-flight
+     * branch can be verified without `Context` / `SessionStore` / `MediaMuxer`
+     * dependencies.
+     */
+    internal suspend fun exportRecoveredForTest(
+        segments: List<File>,
+        availableBytesProvider: () -> Long,
+        performMerge: suspend (List<File>, (Float) -> Unit) -> ExportResult,
+        onProgress: (Float) -> Unit,
+    ): ExportResult {
+        val required = (segments.sumOf { it.length() } * 1.05).toLong()
+        val available = availableBytesProvider()
+        if (available < required) {
+            return ExportResult.InsufficientStorage(requiredBytes = required, availableBytes = available)
+        }
+        return performMerge(segments, onProgress)
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)

@@ -35,6 +35,7 @@ import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.SessionAutoStopEchoSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
@@ -260,6 +261,16 @@ class RovaApp : Application() {
             terminalEchoSource = { sessionStore.latestTerminalSession() },
             initialDismissedIds = settings.dismissedAutoStopEchoIds,
         )
+    }
+
+    /**
+     * Phase 4.3 — push signal for the recovery merge lifecycle. Lives here
+     * as a lazy singleton; producer is [com.aritr.rova.service.RovaRecordingService]
+     * running [com.aritr.rova.service.recovery.RecoveryMerger] inside the FGS.
+     * Consumers (Task 9+): RecoveryViewModel + WarningCenterViewModel.
+     */
+    val recoveryMergeOutcomeSignal: RecoveryMergeOutcomeSignal by lazy {
+        RecoveryMergeOutcomeSignal()
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

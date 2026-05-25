@@ -3,6 +3,7 @@ package com.aritr.rova.ui.warnings
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.ThermalStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,13 +20,13 @@ import org.junit.Test
 /**
  * Tests [WarningCenterViewModel.aggregate] — the combine logic — with fake
  * [MutableStateFlow]s and no `viewModelScope`. Same plain-JVM coroutine
- * idiom as the Phase 3 signal tests. 11 source flows after Phase 4 Slice 2.
+ * idiom as the Phase 3 signal tests. 12 source flows after Phase 4.3.
  */
 class WarningCenterAggregateTest {
 
     private fun clearPower() = PowerState(percent = 80, charging = false, powerSaveMode = false)
 
-    private data class ElevenSources(
+    private data class TwelveSources(
         val cameraPerm: MutableStateFlow<Boolean>,
         val ea: MutableStateFlow<Boolean>,
         val storage: MutableStateFlow<Boolean>,
@@ -36,10 +37,11 @@ class WarningCenterAggregateTest {
         val nt: MutableStateFlow<Boolean>,
         val bo: MutableStateFlow<Boolean>,
         val storageLowMidRec: MutableStateFlow<Boolean>,
-        val autoStopEcho: MutableStateFlow<TerminalEcho?>,        // ← NEW
+        val autoStopEcho: MutableStateFlow<TerminalEcho?>,
+        val cantMergeActive: MutableStateFlow<Boolean>,           // ← NEW (Phase 4.3)
     )
 
-    private fun sources() = ElevenSources(
+    private fun sources() = TwelveSources(
         MutableStateFlow(true),
         MutableStateFlow(true),
         MutableStateFlow(false),
@@ -50,12 +52,14 @@ class WarningCenterAggregateTest {
         MutableStateFlow(true),
         MutableStateFlow(true),
         MutableStateFlow(false),
-        MutableStateFlow<TerminalEcho?>(null),                    // ← NEW
+        MutableStateFlow<TerminalEcho?>(null),
+        MutableStateFlow(false),                                  // ← NEW (Phase 4.3)
     )
 
-    private suspend fun ElevenSources.collectInto(emissions: MutableList<WarningId?>) =
+    private suspend fun TwelveSources.collectInto(emissions: MutableList<WarningId?>) =
         WarningCenterViewModel.aggregate(
             cameraPerm, ea, storage, th, pw, camState, mic, nt, bo, storageLowMidRec, autoStopEcho,
+            cantMergeActive,                                      // ← NEW (Phase 4.3)
         ).collect { emissions += it }
 
     @Test fun `emits null when all sources are clear`() = runBlocking {
@@ -141,7 +145,11 @@ class WarningCenterAggregateTest {
      * `Dispatchers.Main.immediate`, which is unavailable in plain-JVM
      * unit tests (no `kotlinx-coroutines-test` dependency in this module).
      */
-    private fun makeVm(notificationsGranted: Boolean = true): WarningCenterViewModel {
+    private fun makeVm(
+        notificationsGranted: Boolean = true,
+        recoveryMergeOutcomeSignal: MutableStateFlow<RecoveryMergeOutcomeSignal.State> =
+            MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
+    ): WarningCenterViewModel {
         val s = sources()
         s.nt.value = notificationsGranted
         return WarningCenterViewModel(
@@ -155,7 +163,8 @@ class WarningCenterAggregateTest {
             notificationsGranted = s.nt,
             batteryOptimizationExempt = s.bo,
             storageLowMidRec = s.storageLowMidRec,
-            autoStopEcho = s.autoStopEcho,                        // ← NEW (positional 11th source)
+            autoStopEcho = s.autoStopEcho,
+            recoveryMergeOutcomeSignal = recoveryMergeOutcomeSignal,  // ← NEW (Phase 4.3)
             scope = CoroutineScope(Dispatchers.Unconfined),
         )
     }
@@ -354,5 +363,44 @@ class WarningCenterAggregateTest {
             scope = CoroutineScope(Dispatchers.Unconfined),
         )
         assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, vm.activeWarning.value)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.3 — CANT_MERGE aggregate + pendingCantMergeSessionId
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun recoveryMergeOutcomeSignal_InsufficientStorage_drives_CANT_MERGE_into_activeWarning() {
+        val signalFlow = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = "session-cm",
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage(
+                    requiredBytes = 100L,
+                    availableBytes = 10L,
+                ),
+            )
+        )
+        val vm = makeVm(recoveryMergeOutcomeSignal = signalFlow)
+        assertEquals(WarningId.CANT_MERGE, vm.activeWarning.value)
+        assertEquals("session-cm", vm.pendingCantMergeSessionId.value)
+    }
+
+    @Test
+    fun recoveryMergeOutcomeSignal_Idle_yields_null_pendingCantMergeSessionId() {
+        val vm = makeVm()
+        assertNull(vm.pendingCantMergeSessionId.value)
+    }
+
+    @Test
+    fun recoveryMergeOutcomeSignal_Succeeded_does_not_drive_CANT_MERGE() {
+        val signalFlow = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = "session-ok",
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.Succeeded,
+            )
+        )
+        val vm = makeVm(recoveryMergeOutcomeSignal = signalFlow)
+        assertNull(vm.activeWarning.value)
+        assertNull(vm.pendingCantMergeSessionId.value)
     }
 }

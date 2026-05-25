@@ -12,6 +12,7 @@ import com.aritr.rova.service.recovery.TerminalAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -79,7 +80,8 @@ class RecoveryUiStateMapperTest {
         Terminated.USER_STOPPED,
         Terminated.COMPLETED,
         Terminated.KILLED_BY_SYSTEM,
-        Terminated.KILLED_FORCE_STOP
+        Terminated.KILLED_FORCE_STOP,
+        Terminated.MULTI_SEGMENT_KEPT   // Phase 4.3
     )
 
     private val allEligibilities: List<DiscardEligibility> = listOf(
@@ -110,7 +112,7 @@ class RecoveryUiStateMapperTest {
             Terminated.KILLED_FORCE_STOP to DiscardEligibility.OFFER_DISCARD
         )
         assertEquals(expectedRender, rendering.toSet())
-        assertEquals(15 - 3, hiding.size)
+        assertEquals(18 - 3, hiding.size)   // Phase 4.3: 6 terminators × 3 eligibilities − 3 renderable
     }
 
     // ─── hide branches ────────────────────────────────────────────
@@ -577,5 +579,62 @@ class RecoveryUiStateMapperTest {
                 body.contains("permanent")
             )
         }
+    }
+
+    // ─── Phase 4.3 — merge / keepRaw labels ───────────────────────
+
+    @Test
+    fun `mapper populates mergeLabel and keepRawLabel when survivingArtifacts non-empty`() {
+        val state = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "sess-1",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    appendedSegmentFilenames = listOf("seg_0.mp4", "seg_1.mp4"),
+                )
+            )
+        )
+        val card = state.cards.single()
+        assertEquals("Merge segments", card.mergeLabel)
+        assertEquals("Keep as raw clips", card.keepRawLabel)
+        assertNull(card.mergeInProgress)
+        assertNull(card.mergeFailedReason)
+    }
+
+    @Test
+    fun `mapper leaves mergeLabel null when no surviving artifacts`() {
+        val state = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "sess-2",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    appendedSegmentFilenames = emptyList(),
+                )
+            )
+        )
+        val card = state.cards.single()
+        assertNull(card.mergeLabel)
+        assertNull(card.keepRawLabel)
+    }
+
+    // ─── Phase 4.3 — MULTI_SEGMENT_KEPT hide rule ─────────────────
+
+    @Test
+    fun `MULTI_SEGMENT_KEPT terminated hides the card`() {
+        // Phase 4.3 — user chose keep-as-raw-clips; no recovery card
+        // should surface. isEligible returns false, map returns Empty.
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "sess-msk",
+                    terminated = Terminated.MULTI_SEGMENT_KEPT,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    appendedSegmentFilenames = listOf("seg_0.mp4")
+                )
+            )
+        )
+        assertEquals("MULTI_SEGMENT_KEPT must not surface a card", RecoveryUiState.Empty, ui)
     }
 }

@@ -80,6 +80,18 @@ sealed class ExportResult {
      * should not write a terminal value.
      */
     data class UnknownSession(val sessionId: String) : ExportResult()
+
+    /**
+     * Phase 4.3 — recovery merge pre-flight refused the run because
+     * available storage at the destination is below the required size +
+     * overhead. No `MediaMuxer` was opened; nothing was written. Caller
+     * routes this to [RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage]
+     * which surfaces `WarningId.CANT_MERGE` on the next Idle.
+     */
+    data class InsufficientStorage(
+        val requiredBytes: Long,
+        val availableBytes: Long,
+    ) : ExportResult()
 }
 
 /**

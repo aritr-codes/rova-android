@@ -60,7 +60,15 @@ data class RecoveryCardState(
     val body: String,
     val discardLabel: String,
     val showVendorHelpSlot: Boolean,
-    val survivingArtifacts: List<String>
+    val survivingArtifacts: List<String>,
+    /** Phase 4.3 — null when there's nothing to merge (no surviving artifacts). */
+    val mergeLabel: String? = null,
+    /** Phase 4.3 — null when there's nothing to keep. Always co-set with [mergeLabel]. */
+    val keepRawLabel: String? = null,
+    /** Phase 4.3 — null=idle; 0..1=merge in progress (strip fills, buttons disabled). */
+    val mergeInProgress: Float? = null,
+    /** Phase 4.3 — non-null=last merge failed; body+button flip to retry copy. */
+    val mergeFailedReason: String? = null,
 )
 
 /**
@@ -133,6 +141,7 @@ object RecoveryUiStateMapper {
     private fun isEligible(view: RecoverySessionView): Boolean {
         val terminated = view.manifest.terminated ?: return false
         if (terminated == Terminated.COMPLETED) return false
+        if (terminated == Terminated.MULTI_SEGMENT_KEPT) return false   // Phase 4.3 — kept raw, no recovery card
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return false
         // Hotfix 2026-05-08 — finalized exports never surface as
         // recovery cards. See KDoc above.
@@ -163,6 +172,7 @@ object RecoveryUiStateMapper {
             Terminated.KILLED_BY_SYSTEM -> RecoveryCardKind.KILLED_BY_SYSTEM
             Terminated.KILLED_FORCE_STOP -> RecoveryCardKind.KILLED_FORCE_STOP
             Terminated.COMPLETED -> return null
+            Terminated.MULTI_SEGMENT_KEPT -> return null   // Phase 4.3 — defensive (isEligible already filters)
         }
 
         return RecoveryCardState(
@@ -172,7 +182,9 @@ object RecoveryUiStateMapper {
             body = bodyFor(kind),
             discardLabel = DISCARD_LABEL,
             showVendorHelpSlot = (kind == RecoveryCardKind.KILLED_BY_SYSTEM),
-            survivingArtifacts = summarize(view.classification)
+            survivingArtifacts = summarize(view.classification),
+            mergeLabel = if (view.classification.appendedSegmentFilenames.isNotEmpty()) MERGE_LABEL else null,
+            keepRawLabel = if (view.classification.appendedSegmentFilenames.isNotEmpty()) KEEP_RAW_LABEL else null,
         )
     }
 
@@ -228,4 +240,10 @@ object RecoveryUiStateMapper {
     // names what the action removes, matching the body copy that
     // also calls out the action by full name.
     private const val DISCARD_LABEL = "Discard recording"
+
+    // Phase 4.3 — merge affordance labels. Null-gated on
+    // appendedSegmentFilenames.isNotEmpty() so the UI only shows
+    // merge controls when there are actual segments to merge.
+    private const val MERGE_LABEL = "Merge segments"
+    private const val KEEP_RAW_LABEL = "Keep as raw clips"
 }
