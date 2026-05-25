@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.ui.signals.CameraSignalState
 import com.aritr.rova.ui.signals.PowerState
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.ThermalStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
@@ -41,6 +43,8 @@ class WarningCenterViewModel(
     batteryOptimizationExempt: StateFlow<Boolean>,
     storageLowMidRec: StateFlow<Boolean>,           // ← NEW (R2 T5)
     autoStopEcho: StateFlow<TerminalEcho?> = MutableStateFlow<TerminalEcho?>(null).asStateFlow(), // ← NEW (Phase 4 Slice 2 — 11th source; default keeps pre-T6 call sites green)
+    recoveryMergeOutcomeSignal: StateFlow<RecoveryMergeOutcomeSignal.State> =                    // ← NEW (Phase 4.3 — 12th source)
+        MutableStateFlow<RecoveryMergeOutcomeSignal.State>(RecoveryMergeOutcomeSignal.State.Idle).asStateFlow(),
     // v3 — injectable scope so plain-JVM unit tests can pass
     // `Dispatchers.Unconfined`-backed CoroutineScope and avoid the
     // `Dispatchers.Main` requirement of `viewModelScope`. Production
@@ -98,12 +102,38 @@ class WarningCenterViewModel(
         onAutoStopDismissed?.invoke(sessionId)
     }
 
+    /**
+     * Phase 4.3 — the session id that is pending a CANT_MERGE dismissal.
+     * Non-null only when the signal state is [RecoveryMergeOutcomeSignal.State.Outcome]
+     * with outcome [RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage].
+     * All other signal states (Idle, InProgress, other Outcome subtypes) yield null.
+     */
+    val pendingCantMergeSessionId: StateFlow<String?> = recoveryMergeOutcomeSignal
+        .map { state ->
+            when (state) {
+                is RecoveryMergeOutcomeSignal.State.Outcome ->
+                    (state.outcome as? RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage)
+                        ?.let { state.sessionId }
+                else -> null
+            }
+        }
+        .stateIn(activeScope, SharingStarted.Eagerly, null)
+
+    /** Phase 4.3 — derive a Boolean active flag for the precedence resolver. */
+    private val _cantMergeActive: StateFlow<Boolean> = recoveryMergeOutcomeSignal
+        .map { state ->
+            state is RecoveryMergeOutcomeSignal.State.Outcome &&
+                state.outcome is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage
+        }
+        .stateIn(activeScope, SharingStarted.Eagerly, false)
+
     private val _resolvedWarning: StateFlow<WarningId?> =
         aggregate(
             cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
             thermal, power, camera,
             microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
-            storageLowMidRec, autoStopEcho,                      // ← NEW (Phase 4 Slice 2; last)
+            storageLowMidRec, autoStopEcho,                      // ← Phase 4 Slice 2
+            _cantMergeActive,                                    // ← NEW (Phase 4.3)
         ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     /**
@@ -153,7 +183,7 @@ class WarningCenterViewModel(
 
     companion object {
         /**
-         * Combine the eleven source flows => highest-priority active
+         * Combine the twelve source flows => highest-priority active
          * [WarningId] via [WarningPrecedence.resolve]. WarningCenterContract
          * NO-GO #6: a throw inside the combine logic logs and degrades to
          * `null` — a failure to compute a banner must not itself become a
@@ -164,7 +194,8 @@ class WarningCenterViewModel(
          * `Bools6` combine (vararg). The four non-boolean flows
          * (thermal, power, camera, autoStopEcho — Phase 4 Slice 2 added
          * the last) are folded into a single `NonBools4` combine. Outer
-         * 3-arg combine then resolves.
+         * 4-arg combine then resolves (Phase 4.3 adds `cantMergeActive`
+         * as the 4th arg, keeping the outer arity within the typed overloads).
          */
         fun aggregate(
             cameraPermissionGranted: Flow<Boolean>,
@@ -177,7 +208,8 @@ class WarningCenterViewModel(
             notificationsGranted: Flow<Boolean>,
             batteryOptimizationExempt: Flow<Boolean>,
             storageLowMidRec: Flow<Boolean>,
-            autoStopEcho: Flow<TerminalEcho?>,              // ← NEW (Phase 4 Slice 2; last)
+            autoStopEcho: Flow<TerminalEcho?>,              // ← Phase 4 Slice 2
+            cantMergeActive: Flow<Boolean>,                 // ← NEW (Phase 4.3)
         ): Flow<WarningId?> {
             val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
@@ -194,7 +226,7 @@ class WarningCenterViewModel(
             ) { th, pw, cm, ae ->
                 NonBools4(th, pw, cm, ae)
             }
-            return combine(bools6, batteryOptimizationExempt, nonBools4) { b, bo, n4 ->
+            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive) { b, bo, n4, cm ->
                 runCatching {
                     WarningPrecedence.resolve(
                         cameraPermissionGranted = b.cameraPermissionGranted,
@@ -208,6 +240,7 @@ class WarningCenterViewModel(
                         batteryOptimizationExempt = bo,
                         storageLowMidRec = b.storageLowMidRec,
                         autoStopEcho = n4.autoStopEcho,
+                        cantMergeActive = cm,                // ← NEW (Phase 4.3)
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)

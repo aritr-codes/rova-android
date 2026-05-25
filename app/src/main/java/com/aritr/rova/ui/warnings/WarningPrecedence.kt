@@ -41,7 +41,7 @@ import com.aritr.rova.ui.signals.ThermalStatus
 internal object WarningPrecedence {
     /**
      * Resolves the single highest-priority active [WarningId] from the
-     * current snapshot of all 17 rows (10 source signals after R2 T5).
+     * current snapshot of all 20 rows (12 source signals after Phase 4.3).
      * [storageLowMidRec] is the last param with a `= false` default so
      * existing positional call sites remain unambiguous.
      */
@@ -57,6 +57,7 @@ internal object WarningPrecedence {
         batteryOptimizationExempt: Boolean,
         storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
         autoStopEcho: TerminalEcho? = null,            // ← NEW (Phase 4 Slice 2)
+        cantMergeActive: Boolean = false,              // ← NEW (Phase 4.3 — recovery merge pre-flight failed)
     ): WarningId? {
         if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
         if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
@@ -89,12 +90,13 @@ internal object WarningPrecedence {
                 StopReason.INIT_FAILED, StopReason.NONE -> Unit
             }
         }
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #13
-        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #14
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #15
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #16
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #17
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #18
+        if (cantMergeActive) return WarningId.CANT_MERGE                                   // #14 ← NEW (Phase 4.3)
+        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #15
+        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #16
+        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #17
+        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #18
+        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #19
+        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #20
         return null
     }
 }

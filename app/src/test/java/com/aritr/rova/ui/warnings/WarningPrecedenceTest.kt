@@ -30,6 +30,7 @@ class WarningPrecedenceTest {
         batteryOptimizationExempt: Boolean = true,
         storageLowMidRec: Boolean = false,                  // ← NEW
         autoStopEcho: TerminalEcho? = null,                 // ← NEW (Phase 4 Slice 2)
+        cantMergeActive: Boolean = false,                   // ← NEW (Phase 4.3)
     ): WarningId? = WarningPrecedence.resolve(
         cameraPermissionGranted = cameraPermissionGranted,
         exactAlarmGranted = exactAlarmGranted,
@@ -42,6 +43,7 @@ class WarningPrecedenceTest {
         batteryOptimizationExempt = batteryOptimizationExempt,
         storageLowMidRec = storageLowMidRec,                // ← NEW (passed positionally to WarningPrecedence.resolve)
         autoStopEcho = autoStopEcho,                        // ← NEW (Phase 4 Slice 2)
+        cantMergeActive = cantMergeActive,                  // ← NEW (Phase 4.3)
     )
 
     @Test fun `everything clear returns null`() = assertNull(resolve())
@@ -245,5 +247,28 @@ class WarningPrecedenceTest {
             autoStopEcho = TerminalEcho("session-s", StopReason.LOW_STORAGE),
         )
         assertEquals(WarningId.STORAGE_FULL_AUTOSTOPPED, resolved)
+    }
+
+    // ── Phase 4.3 — CANT_MERGE (ordinal 13, row #14) ──────────────────
+
+    @Test fun `CANT_MERGE resolves when cantMergeActive=true and no higher-priority warning`() {
+        val resolved = resolve(cantMergeActive = true)
+        assertEquals(WarningId.CANT_MERGE, resolved)
+    }
+
+    @Test fun `CANT_MERGE loses to THERMAL_AUTOSTOPPED (lower ordinal wins)`() {
+        val resolved = resolve(
+            cantMergeActive = true,
+            autoStopEcho = TerminalEcho("session-t", StopReason.THERMAL),
+        )
+        assertEquals(WarningId.THERMAL_AUTOSTOPPED, resolved)
+    }
+
+    @Test fun `CANT_MERGE wins over THERMAL_SEVERE (higher precedence in advisory band)`() {
+        val resolved = resolve(
+            cantMergeActive = true,
+            thermal = ThermalStatus.SEVERE,
+        )
+        assertEquals(WarningId.CANT_MERGE, resolved)
     }
 }

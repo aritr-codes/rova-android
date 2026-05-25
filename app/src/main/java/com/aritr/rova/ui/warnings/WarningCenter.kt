@@ -272,7 +272,8 @@ internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
         notificationsGranted = app.notificationPermissionSignal.state,
         batteryOptimizationExempt = app.batteryOptimizationSignal.isExempt,
         storageLowMidRec = app.storageLowMidRecSignal.isLow,
-        autoStopEcho = app.autoStopEchoSignal.state,                  // ← NEW (Phase 4 Slice 2)
+        autoStopEcho = app.autoStopEchoSignal.state,                  // ← Phase 4 Slice 2
+        recoveryMergeOutcomeSignal = app.recoveryMergeOutcomeSignal.state, // ← NEW (Phase 4.3)
         initialSnoozedIds = initialSnoozed,
         onSnoozeChanged = { set ->
             settings.snoozedWarningIds = set.map(WarningId::name).toSet()
