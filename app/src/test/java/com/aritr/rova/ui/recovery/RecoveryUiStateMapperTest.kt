@@ -79,7 +79,8 @@ class RecoveryUiStateMapperTest {
         Terminated.USER_STOPPED,
         Terminated.COMPLETED,
         Terminated.KILLED_BY_SYSTEM,
-        Terminated.KILLED_FORCE_STOP
+        Terminated.KILLED_FORCE_STOP,
+        Terminated.MULTI_SEGMENT_KEPT   // Phase 4.3
     )
 
     private val allEligibilities: List<DiscardEligibility> = listOf(
@@ -110,7 +111,7 @@ class RecoveryUiStateMapperTest {
             Terminated.KILLED_FORCE_STOP to DiscardEligibility.OFFER_DISCARD
         )
         assertEquals(expectedRender, rendering.toSet())
-        assertEquals(15 - 3, hiding.size)
+        assertEquals(18 - 3, hiding.size)   // Phase 4.3: 6 terminators × 3 eligibilities − 3 renderable
     }
 
     // ─── hide branches ────────────────────────────────────────────
@@ -577,5 +578,24 @@ class RecoveryUiStateMapperTest {
                 body.contains("permanent")
             )
         }
+    }
+
+    // ─── Phase 4.3 — MULTI_SEGMENT_KEPT hide rule ─────────────────
+
+    @Test
+    fun `MULTI_SEGMENT_KEPT terminated hides the card`() {
+        // Phase 4.3 — user chose keep-as-raw-clips; no recovery card
+        // should surface. isEligible returns false, map returns Empty.
+        val ui = RecoveryUiStateMapper.map(
+            listOf(
+                view(
+                    sessionId = "sess-msk",
+                    terminated = Terminated.MULTI_SEGMENT_KEPT,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    appendedSegmentFilenames = listOf("seg_0.mp4")
+                )
+            )
+        )
+        assertEquals("MULTI_SEGMENT_KEPT must not surface a card", RecoveryUiState.Empty, ui)
     }
 }

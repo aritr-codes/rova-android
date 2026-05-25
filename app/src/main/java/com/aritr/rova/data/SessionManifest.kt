@@ -314,7 +314,16 @@ enum class Terminated {
     USER_STOPPED,
     COMPLETED,
     KILLED_BY_SYSTEM,
-    KILLED_FORCE_STOP
+    KILLED_FORCE_STOP,
+    /**
+     * Phase 4.3 — user chose to keep recovered segments as N separate
+     * files instead of running the merge. Atomically written by the
+     * `Keep as raw clips` / `Save segments only` CTAs via
+     * `SessionStore.markTerminated(MULTI_SEGMENT_KEPT, StopReason.NONE)`.
+     * Recovery card mapper hides it (no card emitted); Library row
+     * enumeration is out-of-scope for this slice (see spec §4.11).
+     */
+    MULTI_SEGMENT_KEPT,
 }
 
 /**

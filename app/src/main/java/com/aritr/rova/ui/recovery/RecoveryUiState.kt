@@ -133,6 +133,7 @@ object RecoveryUiStateMapper {
     private fun isEligible(view: RecoverySessionView): Boolean {
         val terminated = view.manifest.terminated ?: return false
         if (terminated == Terminated.COMPLETED) return false
+        if (terminated == Terminated.MULTI_SEGMENT_KEPT) return false   // Phase 4.3 — kept raw, no recovery card
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return false
         // Hotfix 2026-05-08 — finalized exports never surface as
         // recovery cards. See KDoc above.
@@ -163,6 +164,7 @@ object RecoveryUiStateMapper {
             Terminated.KILLED_BY_SYSTEM -> RecoveryCardKind.KILLED_BY_SYSTEM
             Terminated.KILLED_FORCE_STOP -> RecoveryCardKind.KILLED_FORCE_STOP
             Terminated.COMPLETED -> return null
+            Terminated.MULTI_SEGMENT_KEPT -> return null   // Phase 4.3 — defensive (isEligible already filters)
         }
 
         return RecoveryCardState(
