@@ -546,4 +546,34 @@ class WarningCenterAggregateTest {
             vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED),
         )
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — multi-active aggregation via recovery-merge signal
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `multi-active aggregation — 3 simultaneous warnings ordinal-sorted on History list`() {
+        val recoverySignal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = "sess-multi",
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage(
+                    requiredBytes = 100L,
+                    availableBytes = 50L,
+                ),
+            )
+        )
+        val vm = makeVm(
+            storageInsufficient = true,                  // #3 STORAGE_INSUFFICIENT (history allowlist)
+            notificationsGranted = false,                 // #20 NOTIFICATIONS_DENIED (history allowlist)
+            recoveryMergeOutcomeSignal = recoverySignal, // #14 CANT_MERGE (history allowlist) via signal
+        )
+        assertEquals(
+            listOf(
+                WarningId.STORAGE_INSUFFICIENT,
+                WarningId.CANT_MERGE,
+                WarningId.NOTIFICATIONS_DENIED,
+            ),
+            vm.activeWarningsFor(WarningScreen.History).value,
+        )
+    }
 }
