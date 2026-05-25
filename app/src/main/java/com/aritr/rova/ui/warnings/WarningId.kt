@@ -1,13 +1,13 @@
 package com.aritr.rova.ui.warnings
 
 /**
- * The 17 Record-screen warning banners, in PRECEDENCE ORDER (highest
+ * The 18 Record-screen warning banners, in PRECEDENCE ORDER (highest
  * first). Declaration order IS the contract — [WarningPrecedence.resolve]
  * returns the first active one, and `WarningIdOrderTest` pins the
  * ordinals so a reorder cannot slip through review.
  *
  * Order mirrors NEW_UI_BACKEND_REPLAN.md the "Phase 4" "Banner precedence"
- * table (owner-signed 2026-05-11), rows 1..19. As of Phase 4 Slice 3 all 17
+ * table (owner-signed 2026-05-11), rows 1..20. As of Phase 4 Slice 3 all 17
  * rows are reachable from [WarningPrecedence.resolve]. R2 (2026-05-13)
  * inserts row #11 STORAGE_LOW_MID_REC per ADR 0007 amendment.
  *
@@ -39,12 +39,13 @@ enum class WarningId(val tier: WarningTier, val gatesStart: Boolean = false) {
     STORAGE_LOW_MID_REC(WarningTier.ADVISORY),          // #11  ← (R2 — ADR 0007 amendment 2026-05-13)
     STORAGE_FULL_AUTOSTOPPED(WarningTier.ADVISORY),     // #12  ← (Phase 4 Slice 2 — echo of past auto-stop)
     THERMAL_AUTOSTOPPED(WarningTier.ADVISORY),          // #13  ← NEW (Phase 4 Slice 3 — echo of thermal auto-stop)
-    THERMAL_SEVERE(WarningTier.ADVISORY),               // #14
-    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #15
-    BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #16
-    POWER_SAVE_MODE(WarningTier.ADVISORY),              // #17
-    THERMAL_MODERATE(WarningTier.ADVISORY),             // #18
-    NOTIFICATIONS_DENIED(WarningTier.ADVISORY)          // #19
+    CANT_MERGE(WarningTier.ADVISORY),                   // #14  ← NEW (Phase 4.3 — recovery merge pre-flight failed)
+    THERMAL_SEVERE(WarningTier.ADVISORY),               // #15
+    MICROPHONE_DENIED(WarningTier.ADVISORY),            // #16
+    BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #17
+    POWER_SAVE_MODE(WarningTier.ADVISORY),              // #18
+    THERMAL_MODERATE(WarningTier.ADVISORY),             // #19
+    NOTIFICATIONS_DENIED(WarningTier.ADVISORY)          // #20
 }
 
 /** Visual tier for the banner chrome. NOT the priority axis — that is [WarningId.ordinal]. */

@@ -36,7 +36,8 @@ enum class WarningSurface { HardBlockSheet, SoftSheet, AdvisorySheet, TopBanner 
 fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED, WarningId.EXACT_ALARM_DENIED, WarningId.STORAGE_INSUFFICIENT -> WarningSurface.HardBlockSheet
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
-    WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE -> WarningSurface.AdvisorySheet
+    WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE,
+    WarningId.CANT_MERGE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
     WarningId.THERMAL_AUTOSTOPPED,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
@@ -184,6 +185,12 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
+    WarningId.CANT_MERGE -> WarningSheetContent(
+        // Placeholder — Task 3 (Phase 4.3) finalizes real sheet copy.
+        Icons.Default.Storage, "Can't merge yet", "",
+        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+    )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
 }
@@ -292,7 +299,8 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.MICROPHONE_DENIED,
     WarningId.BATTERY_OPTIMIZATION_ON,
     WarningId.POWER_SAVE_MODE,
-    WarningId.NOTIFICATIONS_DENIED ->
+    WarningId.NOTIFICATIONS_DENIED,
+    WarningId.CANT_MERGE ->
         error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
 }
 

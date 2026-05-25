@@ -28,12 +28,13 @@ class WarningIdOrderTest {
                 "STORAGE_LOW_MID_REC",       // #11 — (R2)
                 "STORAGE_FULL_AUTOSTOPPED",  // #12 — (Phase 4 Slice 2)
                 "THERMAL_AUTOSTOPPED",       // #13 — NEW (Phase 4 Slice 3)
-                "THERMAL_SEVERE",            // #14
-                "MICROPHONE_DENIED",         // #15
-                "BATTERY_OPTIMIZATION_ON",   // #16
-                "POWER_SAVE_MODE",           // #17
-                "THERMAL_MODERATE",          // #18
-                "NOTIFICATIONS_DENIED"       // #19
+                "CANT_MERGE",               // #14 — NEW (Phase 4.3 — recovery merge pre-flight failed)
+                "THERMAL_SEVERE",            // #15
+                "MICROPHONE_DENIED",         // #16
+                "BATTERY_OPTIMIZATION_ON",   // #17
+                "POWER_SAVE_MODE",           // #18
+                "THERMAL_MODERATE",          // #19
+                "NOTIFICATIONS_DENIED"       // #20
             ),
             WarningId.values().map { it.name }
         )
@@ -53,6 +54,7 @@ class WarningIdOrderTest {
         assertEquals(WarningTier.ADVISORY, WarningId.STORAGE_LOW_MID_REC.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.STORAGE_FULL_AUTOSTOPPED.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.THERMAL_AUTOSTOPPED.tier)
+        assertEquals(WarningTier.ADVISORY, WarningId.CANT_MERGE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.THERMAL_SEVERE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.MICROPHONE_DENIED.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.BATTERY_OPTIMIZATION_ON.tier)
