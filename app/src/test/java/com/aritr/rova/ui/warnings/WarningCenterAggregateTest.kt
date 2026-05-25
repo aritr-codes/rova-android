@@ -147,11 +147,20 @@ class WarningCenterAggregateTest {
      */
     private fun makeVm(
         notificationsGranted: Boolean = true,
+        storageInsufficient: Boolean = false,
+        microphonePermissionGranted: Boolean = true,
+        batteryOptimizationExempt: Boolean = true,
+        autoStopEcho: TerminalEcho? = null,
+        initialSnoozedIds: Set<WarningId> = emptySet(),
         recoveryMergeOutcomeSignal: MutableStateFlow<RecoveryMergeOutcomeSignal.State> =
             MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
     ): WarningCenterViewModel {
         val s = sources()
         s.nt.value = notificationsGranted
+        s.storage.value = storageInsufficient
+        s.mic.value = microphonePermissionGranted
+        s.bo.value = batteryOptimizationExempt
+        s.autoStopEcho.value = autoStopEcho
         return WarningCenterViewModel(
             cameraPermissionGranted = s.cameraPerm,
             exactAlarmGranted = s.ea,
@@ -166,6 +175,7 @@ class WarningCenterAggregateTest {
             autoStopEcho = s.autoStopEcho,
             recoveryMergeOutcomeSignal = recoveryMergeOutcomeSignal,  // ← NEW (Phase 4.3)
             scope = CoroutineScope(Dispatchers.Unconfined),
+            initialSnoozedIds = initialSnoozedIds,
         )
     }
 
@@ -402,5 +412,63 @@ class WarningCenterAggregateTest {
         val vm = makeVm(recoveryMergeOutcomeSignal = signalFlow)
         assertNull(vm.activeWarning.value)
         assertNull(vm.pendingCantMergeSessionId.value)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — activeWarningsFor(screen) per-surface filtering
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `activeWarningsFor History returns ordinal-sorted history-allowlist IDs only`() {
+        val vm = makeVm(
+            storageInsufficient = true,          // history allowlist (#3)
+            notificationsGranted = false,         // history allowlist (#20)
+            microphonePermissionGranted = false,  // NOT in history allowlist (#16)
+        )
+        assertEquals(
+            listOf(WarningId.STORAGE_INSUFFICIENT, WarningId.NOTIFICATIONS_DENIED),
+            vm.activeWarningsFor(WarningScreen.History).value,
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor Settings returns ordinal-sorted settings-allowlist IDs only`() {
+        val vm = makeVm(
+            microphonePermissionGranted = false,  // settings allowlist (#16)
+            batteryOptimizationExempt = false,    // settings allowlist (#17)
+            storageInsufficient = true,           // settings allowlist (#3 — overlaps history)
+            autoStopEcho = TerminalEcho("s1", StopReason.LOW_STORAGE),  // NOT in settings allowlist (#12)
+        )
+        assertEquals(
+            listOf(
+                WarningId.STORAGE_INSUFFICIENT,
+                WarningId.MICROPHONE_DENIED,
+                WarningId.BATTERY_OPTIMIZATION_ON,
+            ),
+            vm.activeWarningsFor(WarningScreen.Settings).value,
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor excludes snoozed IDs`() {
+        val vm = makeVm(
+            notificationsGranted = false,
+            initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
+        )
+        assertTrue(
+            vm.activeWarningsFor(WarningScreen.History).value
+                .none { it == WarningId.NOTIFICATIONS_DENIED }
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor Record returns empty list — Record uses activeWarning`() {
+        val vm = makeVm(storageInsufficient = true)
+        assertEquals(
+            emptyList<WarningId>(),
+            vm.activeWarningsFor(WarningScreen.Record).value,
+        )
+        // Record still reads the single-active StateFlow:
+        assertEquals(WarningId.STORAGE_INSUFFICIENT, vm.activeWarning.value)
     }
 }

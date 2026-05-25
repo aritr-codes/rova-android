@@ -136,6 +136,40 @@ class WarningCenterViewModel(
             _cantMergeActive,                                    // ← NEW (Phase 4.3)
         ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
 
+    /** Phase 4.2 — multi-active stream parallel to [_resolvedWarning]; Eagerly so tests can read .value synchronously. */
+    private val _allActive: StateFlow<List<WarningId>> = aggregateAllActive(
+        cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
+        thermal, power, camera,
+        microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
+        storageLowMidRec, autoStopEcho,
+        _cantMergeActive,
+    ).stateIn(activeScope, SharingStarted.Eagerly, emptyList())
+
+    private val _historyActive: StateFlow<List<WarningId>> = combine(
+        _allActive, _snoozedForever,
+    ) { all, snoozed ->
+        all.filter { it in HISTORY_WARNINGS && it !in snoozed }
+    }.stateIn(activeScope, SharingStarted.Eagerly, emptyList())
+
+    private val _settingsActive: StateFlow<List<WarningId>> = combine(
+        _allActive, _snoozedForever,
+    ) { all, snoozed ->
+        all.filter { it in SETTINGS_WARNINGS && it !in snoozed }
+    }.stateIn(activeScope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * Phase 4.2 — per-screen multi-active flow. Returns the ordinal-sorted
+     * list of currently-active WarningIds filtered to the screen's allowlist,
+     * minus any IDs snoozed forever. Record always returns empty — Record
+     * consumes [activeWarning] (single resolved id), the existing hard
+     * invariant.
+     */
+    internal fun activeWarningsFor(screen: WarningScreen): StateFlow<List<WarningId>> = when (screen) {
+        WarningScreen.Record -> EmptyActiveList
+        WarningScreen.History -> _historyActive
+        WarningScreen.Settings -> _settingsActive
+    }
+
     /**
      * v3 — public sheet/banner render-path signal. Filters [_resolvedWarning]
      * by [_snoozedForever] so a "Don't show again" snooze hides the surface.
@@ -182,6 +216,69 @@ class WarningCenterViewModel(
     }
 
     companion object {
+        /** Phase 4.2 — shared empty list flow for [activeWarningsFor]`(Record)` (no per-call allocation). */
+        private val EmptyActiveList: StateFlow<List<WarningId>> =
+            MutableStateFlow<List<WarningId>>(emptyList()).asStateFlow()
+
+        /**
+         * Phase 4.2 — parallel to [aggregate]: emits the full ordinal-sorted
+         * active set via [WarningPrecedence.allActive]. Same combine plumbing
+         * as [aggregate] (Bools6 + NonBools4 packing); only the terminal
+         * mapper differs. Failure inside the combine logs and degrades to
+         * `emptyList()` — never a banner-from-failure.
+         */
+        fun aggregateAllActive(
+            cameraPermissionGranted: Flow<Boolean>,
+            exactAlarmGranted: Flow<Boolean>,
+            storageInsufficient: Flow<Boolean>,
+            thermal: Flow<ThermalStatus>,
+            power: Flow<PowerState>,
+            camera: Flow<CameraSignalState>,
+            microphonePermissionGranted: Flow<Boolean>,
+            notificationsGranted: Flow<Boolean>,
+            batteryOptimizationExempt: Flow<Boolean>,
+            storageLowMidRec: Flow<Boolean>,
+            autoStopEcho: Flow<TerminalEcho?>,
+            cantMergeActive: Flow<Boolean>,
+        ): Flow<List<WarningId>> {
+            val bools6: Flow<Bools6> = combine(
+                cameraPermissionGranted,
+                exactAlarmGranted,
+                storageInsufficient,
+                microphonePermissionGranted,
+                notificationsGranted,
+                storageLowMidRec,
+            ) { arr: Array<Boolean> ->
+                Bools6(arr[0], arr[1], arr[2], arr[3], arr[4], arr[5])
+            }
+            val nonBools4: Flow<NonBools4> = combine(
+                thermal, power, camera, autoStopEcho,
+            ) { th, pw, cm, ae ->
+                NonBools4(th, pw, cm, ae)
+            }
+            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive) { b, bo, n4, cm ->
+                runCatching {
+                    WarningPrecedence.allActive(
+                        cameraPermissionGranted = b.cameraPermissionGranted,
+                        exactAlarmGranted = b.exactAlarmGranted,
+                        storageInsufficient = b.storageInsufficient,
+                        thermal = n4.thermal,
+                        power = n4.power,
+                        camera = n4.camera,
+                        microphonePermissionGranted = b.microphonePermissionGranted,
+                        notificationsGranted = b.notificationsGranted,
+                        batteryOptimizationExempt = bo,
+                        storageLowMidRec = b.storageLowMidRec,
+                        autoStopEcho = n4.autoStopEcho,
+                        cantMergeActive = cm,
+                    )
+                }.getOrElse { e ->
+                    Log.w("WarningCenter", "warning resolution failed", e)
+                    emptyList()
+                }
+            }
+        }
+
         /**
          * Combine the twelve source flows => highest-priority active
          * [WarningId] via [WarningPrecedence.resolve]. WarningCenterContract
