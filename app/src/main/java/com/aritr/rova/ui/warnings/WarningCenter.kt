@@ -152,10 +152,14 @@ fun WarningCenter(
                 resolvedVm.dismiss(id)
             },
             onSecondary = {
-                // Phase 4.3 — secondary on CANT_MERGE is KEEP_SEGMENTS_ONLY; dispatch before dismiss.
-                warningSheetContent(id).secondary?.let { sec ->
+                // Phase 4.3 — only dispatch secondary target for recovery-specific
+                // VM-only targets. Pre-existing "Not now" secondaries point to
+                // APP_DETAILS_SETTINGS as a placeholder and must remain dismiss-only.
+                val secondaryTarget = warningSheetContent(id).secondary?.target
+                if (secondaryTarget == ActionTarget.KEEP_SEGMENTS_ONLY ||
+                    secondaryTarget == ActionTarget.DISCARD_RECOVERY_SESSION) {
                     launchActionTarget(
-                        context, sec.target,
+                        context, secondaryTarget,
                         pendingCantMergeSessionId = pendingCantMergeSessionId,
                         onKeepRawFromSheet = onKeepRawFromSheet,
                         onDiscardFromSheet = onDiscardFromSheet,
