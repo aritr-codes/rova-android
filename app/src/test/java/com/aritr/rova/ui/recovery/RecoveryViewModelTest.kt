@@ -8,9 +8,13 @@ import com.aritr.rova.service.recovery.DiscardEligibility
 import com.aritr.rova.service.recovery.RecoveryReport
 import com.aritr.rova.service.recovery.SessionClassification
 import com.aritr.rova.service.recovery.TerminalAction
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -230,5 +234,102 @@ class RecoveryViewModelTest {
         )
         vm.dismiss("s")
         assertTrue(vm.uiState.value.cards.isEmpty())
+    }
+
+    // ─── keepRaw / merge / signal combine ──────────────────────────
+
+    @Test
+    fun `keepRaw invokes markKeptRaw seam with sessionId`() = runBlocking {
+        val seen = mutableListOf<String>()
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(null),
+            loadManifest = { null },
+            markKeptRaw = { id -> seen += id },
+            startRecoveryMergeFn = { },
+            mergeOutcome = MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        vm.keepRaw("sess-1")
+        assertEquals(listOf("sess-1"), seen)
+    }
+
+    @Test
+    fun `merge invokes startRecoveryMergeFn with sessionId`() = runBlocking {
+        val seen = mutableListOf<String>()
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(null),
+            loadManifest = { null },
+            markKeptRaw = { },
+            startRecoveryMergeFn = { id -> seen += id },
+            mergeOutcome = MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        vm.merge("sess-2")
+        assertEquals(listOf("sess-2"), seen)
+    }
+
+    @Test
+    fun `InProgress outcome flows into mergeInProgress on the matching card`() = runBlocking {
+        val sid = "sess-3"
+        val recoveryReport = report(classification(sid))
+        val signal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.InProgress(sid, 0.42f)
+        )
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(recoveryReport),
+            loadManifest = { id ->
+                if (id == sid) manifest(sid, Terminated.USER_STOPPED, terminatedAt = 100L) else null
+            },
+            markKeptRaw = { },
+            startRecoveryMergeFn = { },
+            mergeOutcome = signal,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        val card = vm.uiState.value.cards.single()
+        assertEquals(0.42f, card.mergeInProgress!!, 0f)
+    }
+
+    @Test
+    fun `InProgress for a different session does not affect this card`() = runBlocking {
+        val sid = "sess-A"
+        val recoveryReport = report(classification(sid))
+        val signal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.InProgress("sess-OTHER", 0.7f)
+        )
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(recoveryReport),
+            loadManifest = { id ->
+                if (id == sid) manifest(sid, Terminated.USER_STOPPED, terminatedAt = 100L) else null
+            },
+            markKeptRaw = { },
+            startRecoveryMergeFn = { },
+            mergeOutcome = signal,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        assertNull(vm.uiState.value.cards.single().mergeInProgress)
+    }
+
+    @Test
+    fun `MuxFailed outcome surfaces mergeFailedReason on the matching card`() = runBlocking {
+        val sid = "sess-fail"
+        val recoveryReport = report(classification(sid))
+        val signal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = sid,
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed(RuntimeException("encoder")),
+            )
+        )
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(recoveryReport),
+            loadManifest = { id ->
+                if (id == sid) manifest(sid, Terminated.USER_STOPPED, terminatedAt = 100L) else null
+            },
+            markKeptRaw = { },
+            startRecoveryMergeFn = { },
+            mergeOutcome = signal,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        val card = vm.uiState.value.cards.single()
+        assertNotNull(card.mergeFailedReason)
     }
 }

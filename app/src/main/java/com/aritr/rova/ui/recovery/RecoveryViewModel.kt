@@ -3,6 +3,7 @@ package com.aritr.rova.ui.recovery
 import androidx.lifecycle.ViewModel
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.service.recovery.RecoveryReport
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -44,19 +45,55 @@ class RecoveryViewModel(
     recoveryReport: StateFlow<RecoveryReport?>,
     loadManifest: (String) -> SessionManifest?,
     private val discardSession: suspend (String) -> Unit = {},
+    /** Phase 4.3 — writes Terminated.MULTI_SEGMENT_KEPT for the Keep-as-raw + Save-segments-only flows. */
+    private val markKeptRaw: suspend (String) -> Unit = {},
+    /** Phase 4.3 — fires RovaRecordingService.startRecoveryMerge(context, sid). NOT suspended. */
+    private val startRecoveryMergeFn: (String) -> Unit = {},
+    /** Phase 4.3 — push signal from the recovery merge lifecycle. */
+    private val mergeOutcome: StateFlow<RecoveryMergeOutcomeSignal.State> =
+        MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val dismissedIds = MutableStateFlow<Set<String>>(emptySet())
 
-    val uiState: StateFlow<RecoveryUiState> = combine(recoveryReport, dismissedIds) { report, dismissed ->
-        RecoveryViewSource.buildUiState(report, dismissed, loadManifest)
-    }.stateIn(
-        scope = scope,
-        started = SharingStarted.Eagerly,
-        initialValue = RecoveryUiState.Empty,
-    )
+    val uiState: StateFlow<RecoveryUiState> =
+        combine(recoveryReport, dismissedIds, mergeOutcome) { report, dismissed, merge ->
+            val base = RecoveryViewSource.buildUiState(report, dismissed, loadManifest)
+            applyMergeOutcome(base, merge)
+        }.stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = RecoveryUiState.Empty,
+        )
+
+    private fun applyMergeOutcome(
+        base: RecoveryUiState,
+        merge: RecoveryMergeOutcomeSignal.State,
+    ): RecoveryUiState = when (merge) {
+        RecoveryMergeOutcomeSignal.State.Idle -> base
+        is RecoveryMergeOutcomeSignal.State.InProgress -> base.copy(
+            cards = base.cards.map { c ->
+                if (c.sessionId == merge.sessionId) c.copy(mergeInProgress = merge.progress) else c
+            },
+        )
+        is RecoveryMergeOutcomeSignal.State.Outcome -> base.copy(
+            cards = base.cards.map { c ->
+                if (c.sessionId != merge.sessionId) c
+                else when (val o = merge.outcome) {
+                    is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed ->
+                        c.copy(mergeInProgress = null, mergeFailedReason = o.cause.message ?: "merge failed")
+                    is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage ->
+                        c.copy(mergeInProgress = null)   // CANT_MERGE sheet handles the user surface
+                    RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.Succeeded,
+                    RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.ServiceBusy,
+                    RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.UnknownSession ->
+                        c.copy(mergeInProgress = null, mergeFailedReason = null)
+                }
+            },
+        )
+    }
 
     /**
      * Hide the visible recovery card immediately and delete its
@@ -77,6 +114,30 @@ class RecoveryViewModel(
                 discardSession(sessionId)
             } catch (t: Throwable) {
                 RovaLog.w("RecoveryViewModel.dismiss: discardSession failed for $sessionId", t)
+            }
+        }
+    }
+
+    /**
+     * Phase 4.3 — fires the injected [startRecoveryMergeFn] lambda.
+     * Non-suspending; the service emits the merge lifecycle back via
+     * [mergeOutcome] which is already combined into [uiState].
+     */
+    fun merge(sessionId: String) {
+        startRecoveryMergeFn(sessionId)
+    }
+
+    /**
+     * Phase 4.3 — writes [com.aritr.rova.data.Terminated.MULTI_SEGMENT_KEPT]
+     * via the injected [markKeptRaw] lambda. Best-effort: a failure logs
+     * but does not crash the VM.
+     */
+    fun keepRaw(sessionId: String) {
+        scope.launch {
+            try {
+                markKeptRaw(sessionId)
+            } catch (t: Throwable) {
+                RovaLog.w("RecoveryViewModel.keepRaw: failed for $sessionId", t)
             }
         }
     }
