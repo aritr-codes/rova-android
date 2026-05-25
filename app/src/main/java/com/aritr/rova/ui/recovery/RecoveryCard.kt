@@ -78,7 +78,10 @@ fun RecoveryCard(
     state: RecoveryCardState,
     onDiscard: () -> Unit,
     modifier: Modifier = Modifier,
-    vendorHelpSlot: (@Composable () -> Unit)? = null
+    vendorHelpSlot: (@Composable () -> Unit)? = null,
+    /** Phase 4.3 — null = button hidden (back-compat). When non-null with [onKeepRaw] non-null, the CTA row becomes a 3-button stack. */
+    onMerge: (() -> Unit)? = null,
+    onKeepRaw: (() -> Unit)? = null,
 ) {
     val severityColor: Color = severityColorFor(state.kind)
     val isHardSeverity: Boolean = state.kind == RecoveryCardKind.KILLED_BY_SYSTEM
@@ -153,27 +156,21 @@ fun RecoveryCard(
                 ProgressStrip(
                     artifactCount = state.survivingArtifacts.size,
                     accent = severityColor,
+                    progress = state.mergeInProgress,
                 )
             }
 
             Spacer(Modifier.height(14.dp))
 
-            // Primary CTA. The existing signature only exposes
-            // `onDiscard`; there is no merge / fix-background callback,
-            // so the v3 "primary + secondary" two-button row collapses
-            // to a single full-width destructive button. The button is
-            // tinted with the hard severity colour to match the
-            // mockup's destructive-action treatment, and retains the
-            // semantics description from the v2 card for accessibility.
-            DestructiveCta(
-                label = state.discardLabel,
-                onClick = onDiscard,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription =
-                            "${state.discardLabel}. This action is permanent."
-                    },
+            // CTA row — collapses to a single destructive button when
+            // onMerge/onKeepRaw are null (pre-Phase-4.3 back-compat),
+            // or expands to a 3-button stack when both are non-null and
+            // the state carries both labels.
+            CtaRow(
+                state = state,
+                onMerge = onMerge,
+                onKeepRaw = onKeepRaw,
+                onDiscard = onDiscard,
             )
 
             // Optional extra row — only rendered when the underlying
@@ -262,18 +259,30 @@ private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
 }
 
 /**
- * Clip-progress strip with leading "CLIPS RECOVERED" label + numeric
- * `N / N` chip + a row of [artifactCount] saved cells.
+ * Clip-progress strip with leading header label + numeric `N / N` chip
+ * + a row of cells.
+ *
+ * When [progress] is null (idle / post-merge), all cells are filled and
+ * the header reads "CLIPS RECOVERED" (existing behaviour, back-compat).
+ * When [progress] is non-null (merge in flight), the header flips to
+ * "MERGING" and the filled-cell count is proportional to [progress] ∈
+ * [0,1], giving a discrete progress bar effect over the segment cells.
  *
  * The data layer does not expose a saved/total split today — every
  * surviving artifact is, by definition, a recovered segment, so all
- * cells render as saved. When a richer signal lands (e.g. expected
- * vs recovered segment counts), only the `clipsSaved` / `clipsTotal`
- * decomposition here needs to change.
+ * cells render as saved when idle. When a richer signal lands (e.g.
+ * expected vs recovered segment counts), only the `clipsSaved` /
+ * `clipsTotal` decomposition here needs to change.
  */
 @Composable
-private fun ProgressStrip(artifactCount: Int, accent: Color) {
+private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = null) {
     val cellCount = artifactCount.coerceAtLeast(1)
+    val filledCells = if (progress != null) {
+        (progress.coerceIn(0f, 1f) * cellCount).toInt()
+    } else {
+        cellCount
+    }
+    val headerLabel = if (progress != null) "MERGING" else "CLIPS RECOVERED"
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -281,7 +290,7 @@ private fun ProgressStrip(artifactCount: Int, accent: Color) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "CLIPS RECOVERED",
+                text = headerLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.36f),
             )
@@ -308,13 +317,14 @@ private fun ProgressStrip(artifactCount: Int, accent: Color) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.recoveryProgressCellGap),
         ) {
-            repeat(cellCount) {
+            repeat(cellCount) { index ->
+                val isFilled = index < filledCells
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(RovaWarningsV3.recoveryProgressCellHeight)
                         .clip(RoundedCornerShape(RovaWarningsV3.recoveryProgressCellRadius))
-                        .background(accent.copy(alpha = 0.55f)),
+                        .background(accent.copy(alpha = if (isFilled) 0.55f else 0.15f)),
                 )
             }
         }
@@ -348,6 +358,124 @@ private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifie
 }
 
 /**
+ * Phase 4.3 — CTA row. Collapses to the single destructive Discard
+ * button when [onMerge]/[onKeepRaw] are null (pre-Phase-4.3 back-compat).
+ * Expands to a 3-button stack when all four conditions are met:
+ *   1. [onMerge] != null
+ *   2. [onKeepRaw] != null
+ *   3. [state.mergeLabel] != null
+ *   4. [state.keepRawLabel] != null
+ *
+ * Discard is always LAST in the stack — permanent destructive action
+ * anchored at the bottom regardless of stack height.
+ *
+ * Button enabled state: [state.mergeInProgress] != null means a merge
+ * is in flight — Merge + Keep-as-raw are disabled (visual + click-guard);
+ * Discard remains tappable.
+ *
+ * Retry flavour: when [state.mergeFailedReason] != null, the primary
+ * CTA label flips to "Retry merge" while the target remains [onMerge].
+ */
+@Composable
+private fun CtaRow(
+    state: RecoveryCardState,
+    onMerge: (() -> Unit)?,
+    onKeepRaw: (() -> Unit)?,
+    onDiscard: () -> Unit,
+) {
+    val showThreeCtaStack = onMerge != null && onKeepRaw != null &&
+        state.mergeLabel != null && state.keepRawLabel != null
+    val inFlight = state.mergeInProgress != null
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showThreeCtaStack) {
+            // 1. Merge segments (primary; ink fill). Label flips to
+            //    "Retry merge" when last merge failed.
+            val mergeLabel = if (state.mergeFailedReason != null) "Retry merge" else state.mergeLabel!!
+            PrimaryMergeCta(
+                label = mergeLabel,
+                enabled = !inFlight,
+                onClick = { if (!inFlight) onMerge!!.invoke() },
+            )
+            // 2. Keep as raw clips (ghost; hairline border).
+            GhostCta(
+                label = state.keepRawLabel!!,
+                enabled = !inFlight,
+                onClick = { if (!inFlight) onKeepRaw!!.invoke() },
+            )
+        }
+        // 3. Discard recording — always present, last in stack.
+        DestructiveCta(
+            label = state.discardLabel,
+            onClick = onDiscard,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "${state.discardLabel}. This action is permanent."
+                },
+        )
+    }
+}
+
+/**
+ * Phase 4.3 — primary advisory-ink filled CTA for Merge segments.
+ * Uses [RovaWarnings.advisory] (`0xFF5B7FFF`) — the same token the
+ * existing file already imports for the advisory severity colour.
+ * Height + corner radius mirror the [DestructiveCta] chrome (40dp / 12dp).
+ */
+@Composable
+private fun PrimaryMergeCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val accent = RovaWarnings.advisory  // 0xFF5B7FFF — v3 primary ink token
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(accent.copy(alpha = if (enabled) 1f else 0.40f))
+            .clickable(enabled = enabled) { onClick() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White.copy(alpha = if (enabled) 1f else 0.55f),
+        )
+    }
+}
+
+/**
+ * Phase 4.3 — ghost (hairline-border) CTA for Keep as raw clips.
+ * Transparent fill + 1dp white-alpha border. Height + corner radius
+ * mirror [DestructiveCta] (40dp / 12dp).
+ */
+@Composable
+private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = if (enabled) 0.20f else 0.10f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(enabled = enabled) { onClick() },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White.copy(alpha = if (enabled) 0.80f else 0.40f),
+        )
+    }
+}
+
+/**
  * Renders the (at most one) recovery card from [state] plus a small
  * footer line when [RecoveryUiState.hiddenCount] > 0 so the user
  * sees that older interrupted sessions exist without a stacking red
@@ -364,13 +492,21 @@ private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifie
  * Phase 4 v3 re-skin (PR B / B1): signature unchanged. Footer text
  * tone shifted from `onSurfaceVariant` to a low-alpha white so it
  * sits cleanly under the v3 dark-glass card body.
+ *
+ * Phase 4.3: [onMerge] and [onKeepRaw] default to null — back-compat
+ * for callers not yet wired to the merge service. When non-null, each
+ * invocation receives the card's `sessionId` for routing.
  */
 @Composable
 fun RecoveryCardList(
     state: RecoveryUiState,
     onDiscard: (sessionId: String) -> Unit,
     modifier: Modifier = Modifier,
-    vendorHelpSlotFor: (sessionId: String) -> (@Composable () -> Unit)? = { null }
+    vendorHelpSlotFor: (sessionId: String) -> (@Composable () -> Unit)? = { null },
+    /** Phase 4.3 — non-null to enable the per-card Merge CTA. Card-local invocation passes the sessionId. */
+    onMerge: ((sessionId: String) -> Unit)? = null,
+    /** Phase 4.3 — non-null to enable the per-card Keep-as-raw CTA. */
+    onKeepRaw: ((sessionId: String) -> Unit)? = null,
 ) {
     if (state.cards.isEmpty() && state.hiddenCount == 0) return
     Column(modifier = modifier.fillMaxWidth()) {
@@ -379,7 +515,9 @@ fun RecoveryCardList(
             RecoveryCard(
                 state = card,
                 onDiscard = { onDiscard(card.sessionId) },
-                vendorHelpSlot = vendorHelpSlotFor(card.sessionId)
+                vendorHelpSlot = vendorHelpSlotFor(card.sessionId),
+                onMerge = onMerge?.let { fn -> { fn(card.sessionId) } },
+                onKeepRaw = onKeepRaw?.let { fn -> { fn(card.sessionId) } },
             )
         }
         if (state.hiddenCount > 0) {
