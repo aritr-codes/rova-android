@@ -54,6 +54,24 @@ fun WarningCenter(
      * callers); the CTA becomes a no-op.
      */
     onOpenThermalTips: (() -> Unit)? = null,
+    /**
+     * Phase 4.3 — invoked when the C2.4 CANT_MERGE sheet's secondary CTA
+     * ("Save segments only") is tapped. Receives [pendingCantMergeSessionId].
+     * Null = CTA still renders but dispatch is a no-op (back-compat).
+     */
+    onKeepRawFromSheet: ((sessionId: String) -> Unit)? = null,
+    /**
+     * Phase 4.3 — invoked when the C2.4 CANT_MERGE sheet's tertiary CTA
+     * ("Discard session") is tapped. Receives [pendingCantMergeSessionId].
+     * Null = CTA still renders but dispatch is a no-op (back-compat).
+     */
+    onDiscardFromSheet: ((sessionId: String) -> Unit)? = null,
+    /**
+     * Phase 4.3 — current pending CANT_MERGE session ID from
+     * [WarningCenterViewModel.pendingCantMergeSessionId]. Null when no
+     * recovery merge has failed pre-flight.
+     */
+    pendingCantMergeSessionId: String? = null,
 ) {
     val context = LocalContext.current
     val app = remember(context) { context.applicationContext as? RovaApp } ?: return
@@ -125,10 +143,38 @@ fun WarningCenter(
             surface = surface,
             expanded = id in expandedWhy,
             onPrimary = {
-                launchActionTarget(context, warningSheetContent(id).primary.target)
+                launchActionTarget(
+                    context, warningSheetContent(id).primary.target,
+                    pendingCantMergeSessionId = pendingCantMergeSessionId,
+                    onKeepRawFromSheet = onKeepRawFromSheet,
+                    onDiscardFromSheet = onDiscardFromSheet,
+                )
                 resolvedVm.dismiss(id)
             },
-            onSecondary = { resolvedVm.dismiss(id) },
+            onSecondary = {
+                // Phase 4.3 — secondary on CANT_MERGE is KEEP_SEGMENTS_ONLY; dispatch before dismiss.
+                warningSheetContent(id).secondary?.let { sec ->
+                    launchActionTarget(
+                        context, sec.target,
+                        pendingCantMergeSessionId = pendingCantMergeSessionId,
+                        onKeepRawFromSheet = onKeepRawFromSheet,
+                        onDiscardFromSheet = onDiscardFromSheet,
+                    )
+                }
+                resolvedVm.dismiss(id)
+            },
+            onTertiary = {
+                // Phase 4.3 — tertiary on CANT_MERGE is DISCARD_RECOVERY_SESSION.
+                warningSheetContent(id).tertiary?.let { ter ->
+                    launchActionTarget(
+                        context, ter.target,
+                        pendingCantMergeSessionId = pendingCantMergeSessionId,
+                        onKeepRawFromSheet = onKeepRawFromSheet,
+                        onDiscardFromSheet = onDiscardFromSheet,
+                    )
+                }
+                resolvedVm.dismiss(id)
+            },
             onOverflow = { target ->
                 if (target == ActionTarget.SNOOZE_FOREVER) {
                     resolvedVm.snoozeForever(id)
@@ -153,14 +199,32 @@ fun WarningCenter(
     }
 }
 
-/** Launches the system Intent for [target]. NO-OP for VM-only / host-nav targets. */
-private fun launchActionTarget(context: Context, target: ActionTarget) {
+/**
+ * Launches the system Intent for [target]. NO-OP for VM-only / host-nav targets.
+ *
+ * Phase 4.3 — [onKeepRawFromSheet] / [onDiscardFromSheet] / [pendingCantMergeSessionId]
+ * are optional; they are only passed from the sheet call-site for the two recovery targets.
+ * Overflow and primary calls that don't concern recovery omit them (default null = no-op).
+ */
+private fun launchActionTarget(
+    context: Context,
+    target: ActionTarget,
+    pendingCantMergeSessionId: String? = null,
+    onKeepRawFromSheet: ((sessionId: String) -> Unit)? = null,
+    onDiscardFromSheet: ((sessionId: String) -> Unit)? = null,
+) {
     if (target == ActionTarget.SNOOZE_FOREVER) return
     if (target == ActionTarget.DISMISS_AUTOSTOP_ECHO) return
     if (target == ActionTarget.REVIEW_SESSION) return
     if (target == ActionTarget.OPEN_THERMAL_TIPS) return
-    if (target == ActionTarget.KEEP_SEGMENTS_ONLY) return        // VM-only; Task 13 wires RecoveryViewModel
-    if (target == ActionTarget.DISCARD_RECOVERY_SESSION) return  // VM-only; Task 13 wires RecoveryViewModel
+    if (target == ActionTarget.KEEP_SEGMENTS_ONLY) {
+        pendingCantMergeSessionId?.let { sid -> onKeepRawFromSheet?.invoke(sid) }
+        return
+    }
+    if (target == ActionTarget.DISCARD_RECOVERY_SESSION) {
+        pendingCantMergeSessionId?.let { sid -> onDiscardFromSheet?.invoke(sid) }
+        return
+    }
     val pkgUri = Uri.fromParts("package", context.packageName, null)
     val intent: Intent = when (target) {
         ActionTarget.EXACT_ALARM_SETTINGS ->
@@ -187,8 +251,8 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.DISMISS_AUTOSTOP_ECHO -> return             // VM-only; routed by overflow handler
         ActionTarget.REVIEW_SESSION -> return                    // host-nav; routed at call site
         ActionTarget.OPEN_THERMAL_TIPS -> return                 // VM-only; guarded above (Phase 4 Slice 3)
-        ActionTarget.KEEP_SEGMENTS_ONLY -> return                // VM-only; guarded above (Phase 4.3)
-        ActionTarget.DISCARD_RECOVERY_SESSION -> return          // VM-only; guarded above (Phase 4.3)
+        ActionTarget.KEEP_SEGMENTS_ONLY -> return                // VM-only; dispatched above (Phase 4.3)
+        ActionTarget.DISCARD_RECOVERY_SESSION -> return          // VM-only; dispatched above (Phase 4.3)
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
 }
