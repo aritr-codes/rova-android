@@ -618,6 +618,35 @@ class RovaRecordingService : Service(), LifecycleOwner {
         const val FLASH_MODE_ON = 1
         const val FLASH_MODE_AUTO = 2
 
+        // Phase 4.3 — recovery-merge action + notification ID.
+        const val ACTION_RECOVER_MERGE = "com.aritr.rova.service.ACTION_RECOVER_MERGE"
+        const val EXTRA_RECOVERY_SESSION_ID = "recovery_session_id"
+        private const val NOTIFICATION_ID_RECOVERY_MERGE = 4096
+
+        /**
+         * Phase 4.3 — starts the FGS in recovery-merge mode for [sessionId].
+         * The service's `onStartCommand` branches on [ACTION_RECOVER_MERGE]
+         * and dispatches via [recoveryMergeStartGate]; the decision drives
+         * either a merge launch or an immediate signal emission + stopSelf.
+         */
+        fun startRecoveryMerge(context: Context, sessionId: String) {
+            val intent = Intent(context, RovaRecordingService::class.java).apply {
+                action = ACTION_RECOVER_MERGE
+                putExtra(EXTRA_RECOVERY_SESSION_ID, sessionId)
+            }
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: IllegalStateException) {
+                val isFgsRestricted =
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        e is android.app.ForegroundServiceStartNotAllowedException
+                RovaCrashReporter.recordException(
+                    e,
+                    if (isFgsRestricted) "FGS start not allowed (recovery, API 31+)" else "FGS start ISE (recovery)"
+                )
+            }
+        }
+
         private fun isAppVisible(context: Context): Boolean {
             val processInfo = ActivityManager.RunningAppProcessInfo()
             ActivityManager.getMyMemoryState(processInfo)
@@ -643,7 +672,102 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    // -------------------------------------------------------------------------
+    // Phase 4.3 — recovery-merge FGS branch
+    // -------------------------------------------------------------------------
+
+    /**
+     * Handles an [ACTION_RECOVER_MERGE] intent. Pure gate logic is in
+     * [recoveryMergeStartGate] (JVM-testable); this method owns the
+     * Android-side effects (startForeground, coroutine launch, stopSelf).
+     *
+     * Uses `_serviceState.value.isPeriodicActive` as the "recording active"
+     * guard — that flag is true for the full recording session lifetime
+     * (set in startPeriodicRecording, cleared on session end / onDestroy).
+     */
+    private fun handleRecoveryMergeStart(sessionId: String, startId: Int): Int {
+        val app = application as RovaApp
+        val signal = app.recoveryMergeOutcomeSignal
+        val decision = recoveryMergeStartGate(
+            isRecordingActive = _serviceState.value.isPeriodicActive,
+            sessionId = sessionId,
+        )
+        return when (decision) {
+            is RecoveryMergeStartDecision.Reject -> {
+                signal.emitOutcome(sessionId, decision.outcome)
+                stopSelf(startId)
+                START_NOT_STICKY
+            }
+            is RecoveryMergeStartDecision.Accept -> {
+                startForegroundForRecoveryMerge(decision.sessionId)
+                serviceScope.launch {
+                    val merger = com.aritr.rova.service.recovery.RecoveryMerger(
+                        loadSegments = { sid ->
+                            val manifest = sessionStore.loadManifest(sid)
+                            val dir = sessionStore.sessionDir(sid)
+                            manifest?.segments
+                                ?.map { java.io.File(dir, it.filename) }
+                                ?.filter { it.exists() && it.length() > 0 }
+                                ?: emptyList()
+                        },
+                        sessionDirOf = { sid -> sessionStore.sessionDir(sid) },
+                        exportRecovered = { dir, segs, onProgress ->
+                            com.aritr.rova.service.export.ExportPipeline.exportRecovered(
+                                context = this@RovaRecordingService,
+                                sessionStore = sessionStore,
+                                sessionId = decision.sessionId,
+                                sessionDir = dir,
+                                segments = segs,
+                                onProgress = onProgress,
+                            )
+                        },
+                        signal = signal,
+                    )
+                    try {
+                        merger.run(decision.sessionId)
+                    } finally {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
+                        stopSelf(startId)
+                    }
+                }
+                START_NOT_STICKY
+            }
+        }
+    }
+
+    private fun startForegroundForRecoveryMerge(sessionId: String) {
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Merging recovered clips")
+            .setContentText("Session ${sessionId.take(8)}…")
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setOngoing(true)
+            .build()
+        try {
+            startForeground(NOTIFICATION_ID_RECOVERY_MERGE, notif)
+        } catch (e: IllegalStateException) {
+            val isFgsRestricted =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    e is android.app.ForegroundServiceStartNotAllowedException
+            val tag = if (isFgsRestricted) "FGS start not allowed (recovery service-side, API 31+)" else "FGS start ISE (recovery service-side)"
+            RovaCrashReporter.recordException(e, tag)
+            stopSelf()
+        } catch (e: SecurityException) {
+            RovaCrashReporter.recordException(e, "FGS type SecurityException (recovery)")
+            stopSelf()
+        }
+    }
+
+    // -------------------------------------------------------------------------
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Phase 4.3 — recovery-merge branch. Handled before the recording
+        // path so the FGS-type / camera-permission guards don't apply.
+        if (intent?.action == ACTION_RECOVER_MERGE) {
+            val sessionId = intent.getStringExtra(EXTRA_RECOVERY_SESSION_ID).orEmpty()
+            return handleRecoveryMergeStart(sessionId, startId)
+        }
+
         // Phase 1.3 — legacy ACTION_STOP intent path removed. All stop
         // signals now arrive via RovaStopReceiver, which forwards through
         // SessionController.requestStop. Receiver-driven path avoids the
