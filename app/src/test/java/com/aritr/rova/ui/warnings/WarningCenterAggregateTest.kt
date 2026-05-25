@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -470,5 +471,41 @@ class WarningCenterAggregateTest {
         )
         // Record still reads the single-active StateFlow:
         assertEquals(WarningId.STORAGE_INSUFFICIENT, vm.activeWarning.value)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — dismissOnHistoryStrip per-session dismissal
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `dismissOnHistoryStrip removes id from History list but not Settings list`() {
+        val vm = makeVm(storageInsufficient = true)
+        // Before dismiss: STORAGE_INSUFFICIENT is on both surfaces (overlap).
+        assertTrue(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.STORAGE_INSUFFICIENT))
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.STORAGE_INSUFFICIENT))
+
+        vm.dismissOnHistoryStrip(WarningId.STORAGE_INSUFFICIENT)
+
+        // After: gone from History, still on Settings.
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.STORAGE_INSUFFICIENT))
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.STORAGE_INSUFFICIENT))
+    }
+
+    @Test
+    fun `dismissOnHistoryStrip is idempotent`() {
+        val vm = makeVm(notificationsGranted = false)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+    }
+
+    @Test
+    fun `dismissOnHistoryStrip ignores non-History allowlist ids`() {
+        val vm = makeVm(microphonePermissionGranted = false)
+        // MICROPHONE_DENIED is not in HISTORY_WARNINGS — call is silently no-op.
+        vm.dismissOnHistoryStrip(WarningId.MICROPHONE_DENIED)
+        // Settings still shows it (proves the call did not mutate any global state).
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.MICROPHONE_DENIED))
     }
 }

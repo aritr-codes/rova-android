@@ -145,10 +145,20 @@ class WarningCenterViewModel(
         _cantMergeActive,
     ).stateIn(activeScope, SharingStarted.Eagerly, emptyList())
 
+    /**
+     * Phase 4.2 — per-session dismissals from the History strip's X button.
+     * In-memory only, no persistence. Distinct from [_dismissedWarnings]
+     * which collapses sheets-to-chips on the Record screen.
+     *
+     * Cleared on signal down-edge (Task 5) so the next signal up-edge
+     * re-surfaces the card.
+     */
+    private val _historyStripDismissedThisSession = MutableStateFlow<Set<WarningId>>(emptySet())
+
     private val _historyActive: StateFlow<List<WarningId>> = combine(
-        _allActive, _snoozedForever,
-    ) { all, snoozed ->
-        all.filter { it in HISTORY_WARNINGS && it !in snoozed }
+        _allActive, _snoozedForever, _historyStripDismissedThisSession,
+    ) { all, snoozed, dismissed ->
+        all.filter { it in HISTORY_WARNINGS && it !in snoozed && it !in dismissed }
     }.stateIn(activeScope, SharingStarted.Eagerly, emptyList())
 
     private val _settingsActive: StateFlow<List<WarningId>> = combine(
@@ -213,6 +223,17 @@ class WarningCenterViewModel(
     /** Re-expand [id] to its sheet — called when the user taps the collapsed chip. */
     fun restore(id: WarningId) {
         _dismissedWarnings.value = _dismissedWarnings.value - id
+    }
+
+    /**
+     * Phase 4.2 — user tapped the X on a History strip card. Removes
+     * [id] from the History list until either: the signal flips off
+     * and back on (down-edge auto-clear, Task 5), or the app restarts.
+     * No-op when [id] is not in [HISTORY_WARNINGS] (defensive guard).
+     */
+    internal fun dismissOnHistoryStrip(id: WarningId) {
+        if (id !in HISTORY_WARNINGS) return
+        _historyStripDismissedThisSession.update { it + id }
     }
 
     companion object {
