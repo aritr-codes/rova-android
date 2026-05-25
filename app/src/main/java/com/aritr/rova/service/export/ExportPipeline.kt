@@ -124,6 +124,64 @@ internal object ExportPipeline {
         }
     }
 
+    /**
+     * Phase 4.3 — recovery merge entry. Same tier dispatch as [export] but
+     * runs an eager storage pre-flight before opening any muxer; returns
+     * [ExportResult.InsufficientStorage] if the destination cannot hold
+     * the merged file. Caller maps this to `WarningId.CANT_MERGE` via
+     * [RecoveryMergeOutcomeSignal].
+     *
+     * The 5% headroom over `sum(segment.length())` accounts for muxer
+     * overhead (track tables, moov atom, padding).
+     */
+    suspend fun exportRecovered(
+        context: Context,
+        sessionStore: SessionStore,
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
+        onProgress: (Float) -> Unit,
+    ): ExportResult {
+        val required = (segments.sumOf { it.length() } * 1.05).toLong()
+        val available = sessionDir.usableSpace
+        if (available < required) {
+            return ExportResult.InsufficientStorage(requiredBytes = required, availableBytes = available)
+        }
+        // Recovery merge reuses live tier dispatch verbatim once pre-flight clears.
+        // `side = null` because recovery merge is never a P+L per-side resume.
+        return export(
+            context = context,
+            sessionStore = sessionStore,
+            sessionId = sessionId,
+            sessionDir = sessionDir,
+            segments = segments,
+            mediaScanWaiter = mediaScanWaiter,
+            side = null,
+            onProgress = onProgress,
+        )
+    }
+
+    /**
+     * Phase 4.3 — pure test seam. Same shape as [exportRecovered] but with
+     * the storage probe and merge step injected as lambdas so the pre-flight
+     * branch can be verified without `Context` / `SessionStore` / `MediaMuxer`
+     * dependencies.
+     */
+    internal suspend fun exportRecoveredForTest(
+        segments: List<File>,
+        availableBytesProvider: () -> Long,
+        performMerge: suspend (List<File>, (Float) -> Unit) -> ExportResult,
+        onProgress: (Float) -> Unit,
+    ): ExportResult {
+        val required = (segments.sumOf { it.length() } * 1.05).toLong()
+        val available = availableBytesProvider()
+        if (available < required) {
+            return ExportResult.InsufficientStorage(requiredBytes = required, availableBytes = available)
+        }
+        return performMerge(segments, onProgress)
+    }
+
     @RequiresApi(Build.VERSION_CODES.Q)
     private suspend fun exportTier1(
         resolver: ContentResolver,
