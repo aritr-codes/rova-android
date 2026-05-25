@@ -15,11 +15,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Phase 4.2 — "Permissions & status" section rendered at the top of
@@ -91,4 +94,52 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/**
+ * Phase 4.2 — sheet host for Settings "Permissions & status" chip taps.
+ * Simpler than [HistoryWarningSheetHost] because SETTINGS_WARNINGS does
+ * NOT include CANT_MERGE — no recovery callbacks are required.
+ */
+@Composable
+internal fun SettingsPermissionsSheetHost(
+    id: WarningId,
+    vm: WarningCenterViewModel,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val surface = warningSurfaceFor(id)
+    val expandedSet by vm.expandedWhy.collectAsStateWithLifecycle()
+    val expanded = id in expandedSet
+
+    WarningSheetV3(
+        id = id,
+        surface = surface,
+        expanded = expanded,
+        onPrimary = {
+            launchActionTarget(
+                context = context,
+                target = warningSheetContent(id).primary.target,
+            )
+            onDismiss()
+        },
+        onSecondary = {
+            // Settings allowlist has no recovery targets — secondary is dismiss-only.
+            onDismiss()
+        },
+        onTertiary = {
+            // Settings allowlist has no tertiary CTAs.
+            onDismiss()
+        },
+        onOverflow = { target ->
+            if (target == ActionTarget.SNOOZE_FOREVER) {
+                vm.snoozeForever(id)
+            } else {
+                launchActionTarget(context = context, target = target)
+            }
+            onDismiss()
+        },
+        onToggleWhy = { vm.toggleExpandWhy(id) },
+        onDismissRequest = onDismiss,
+    )
 }

@@ -66,8 +66,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.BuildConfig
+import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.warnings.SettingsPermissionsSection
+import com.aritr.rova.ui.warnings.SettingsPermissionsSheetHost
+import com.aritr.rova.ui.warnings.WarningCenterViewModel
+import com.aritr.rova.ui.warnings.WarningId
+import com.aritr.rova.ui.warnings.WarningScreen
+import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -93,6 +100,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}) {
     val context = LocalContext.current
+    // Phase 4.2 — WarningCenter VM for Settings "Permissions & status" routing.
+    val app = remember(context) { context.applicationContext as RovaApp }
+    val warningVm: WarningCenterViewModel = remember(app) { buildWarningCenterViewModel(app) }
+    val settingsWarnings by warningVm.activeWarningsFor(WarningScreen.Settings)
+        .collectAsStateWithLifecycle()
+    var sheetWarningId by remember { mutableStateOf<WarningId?>(null) }
     val scope = rememberCoroutineScope()
     val enableBeeps by settingsViewModel.enableBeeps.collectAsStateWithLifecycle()
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
@@ -150,6 +163,10 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 28.dp)
         ) {
+            SettingsPermissionsSection(
+                warningIds = settingsWarnings,
+                onOpenSheet = { sheetWarningId = it },
+            )
             SettingsSection(label = "Recording behavior") {
                 SettingsRow(
                     icon = Icons.Default.Smartphone,
@@ -326,6 +343,14 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
             }
         }
+    }
+
+    sheetWarningId?.let { id ->
+        SettingsPermissionsSheetHost(
+            id = id,
+            vm = warningVm,
+            onDismiss = { sheetWarningId = null },
+        )
     }
 
     if (showBatteryDialog) {
