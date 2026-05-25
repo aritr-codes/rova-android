@@ -4,12 +4,14 @@ import android.content.ContentResolver
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.os.storage.StorageManager
 import androidx.annotation.RequiresApi
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.data.currentExportTier
 import com.aritr.rova.utils.VideoMerger
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -144,7 +146,7 @@ internal object ExportPipeline {
         onProgress: (Float) -> Unit,
     ): ExportResult {
         val required = (segments.sumOf { it.length() } * 1.05).toLong()
-        val available = sessionDir.usableSpace
+        val available = availableSpaceFor(context, sessionDir)
         if (available < required) {
             return ExportResult.InsufficientStorage(requiredBytes = required, availableBytes = available)
         }
@@ -160,6 +162,30 @@ internal object ExportPipeline {
             side = null,
             onProgress = onProgress,
         )
+    }
+
+    /**
+     * Phase 4.3 — storage probe for `exportRecovered` pre-flight. Prefers
+     * [StorageManager.getAllocatableBytes] on API 26+ (reports bytes the
+     * OS could free by purging cache content if needed — more accurate
+     * than raw free space), falls back to [File.usableSpace] on API 24/25
+     * and on any failure of the allocatable probe. Returns 0 only if the
+     * fallback itself reports 0 — both paths guarantee a non-negative
+     * value.
+     */
+    private fun availableSpaceFor(context: Context, sessionDir: File): Long {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
+                if (sm != null) {
+                    val uuid = sm.getUuidForPath(sessionDir)
+                    return sm.getAllocatableBytes(uuid)
+                }
+            } catch (_: IOException) {
+                // fall through to usableSpace
+            }
+        }
+        return sessionDir.usableSpace
     }
 
     /**
