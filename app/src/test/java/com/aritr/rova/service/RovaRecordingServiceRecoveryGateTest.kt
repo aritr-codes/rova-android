@@ -33,4 +33,15 @@ class RovaRecordingServiceRecoveryGateTest {
             outcome,
         )
     }
+
+    @Test
+    fun `gate rejects whitespace-only sessionId`() {
+        val outcome = recoveryMergeStartGate(isRecordingActive = false, sessionId = "   ")
+        assertEquals(
+            RecoveryMergeStartDecision.Reject(
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.UnknownSession,
+            ),
+            outcome,
+        )
+    }
 }

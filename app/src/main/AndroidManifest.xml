@@ -62,7 +62,7 @@
         <!-- BACKGROUND SERVICE -->
         <service
             android:name=".service.RovaRecordingService"
-            android:foregroundServiceType="camera|microphone"
+            android:foregroundServiceType="camera|microphone|dataSync"
             android:exported="false" />
 
         <!-- Phase 1.2: alarm tick receiver. exported=false so only the OS

@@ -75,6 +75,7 @@ import com.aritr.rova.service.surface.HeadlessPreviewSurfaces
 import com.aritr.rova.service.export.ExportPipeline
 import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.service.wakelock.WakeLockPolicy
+import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import androidx.camera.video.VideoRecordEvent
@@ -192,6 +193,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // gate a one-shot rebind in `startPeriodicRecording` once it's safe (no
     // active recording → no VideoCapture mid-segment teardown).
     private var boundToDummy = false
+
+    // Phase 4.3 — second guard: prevent two concurrent recovery merges;
+    // isPeriodicActive only covers live-recording sessions.
+    @Volatile private var recoveryMergeInFlight: Boolean = false
 
     // C13 / ADR 0002: headless Preview.SurfaceProvider for background recording.
     // Per-request surface lifecycle is internal to HeadlessPreviewSurface; the
@@ -689,7 +694,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val app = application as RovaApp
         val signal = app.recoveryMergeOutcomeSignal
         val decision = recoveryMergeStartGate(
-            isRecordingActive = _serviceState.value.isPeriodicActive,
+            isRecordingActive = (_serviceState.value.isPeriodicActive || recoveryMergeInFlight),
             sessionId = sessionId,
         )
         return when (decision) {
@@ -699,7 +704,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 START_NOT_STICKY
             }
             is RecoveryMergeStartDecision.Accept -> {
-                startForegroundForRecoveryMerge(decision.sessionId)
+                if (!startForegroundForRecoveryMerge(decision.sessionId)) {
+                    // FGS start blocked (e.g. ForegroundServiceStartNotAllowedException) —
+                    // surface to consumer so it doesn't hang waiting for an outcome.
+                    signal.emitOutcome(
+                        decision.sessionId,
+                        RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.ServiceBusy,
+                    )
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
+                recoveryMergeInFlight = true
                 serviceScope.launch {
                     val merger = com.aritr.rova.service.recovery.RecoveryMerger(
                         loadSegments = { sid ->
@@ -726,6 +741,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     try {
                         merger.run(decision.sessionId)
                     } finally {
+                        recoveryMergeInFlight = false
                         @Suppress("DEPRECATION")
                         stopForeground(true)
                         stopSelf(startId)
@@ -736,25 +752,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    private fun startForegroundForRecoveryMerge(sessionId: String) {
+    private fun startForegroundForRecoveryMerge(sessionId: String): Boolean {
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Merging recovered clips")
             .setContentText("Session ${sessionId.take(8)}…")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .build()
-        try {
-            startForeground(NOTIFICATION_ID_RECOVERY_MERGE, notif)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID_RECOVERY_MERGE, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID_RECOVERY_MERGE, notif)
+            }
+            true
         } catch (e: IllegalStateException) {
             val isFgsRestricted =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     e is android.app.ForegroundServiceStartNotAllowedException
             val tag = if (isFgsRestricted) "FGS start not allowed (recovery service-side, API 31+)" else "FGS start ISE (recovery service-side)"
             RovaCrashReporter.recordException(e, tag)
-            stopSelf()
+            false
         } catch (e: SecurityException) {
             RovaCrashReporter.recordException(e, "FGS type SecurityException (recovery)")
-            stopSelf()
+            false
         }
     }
 
