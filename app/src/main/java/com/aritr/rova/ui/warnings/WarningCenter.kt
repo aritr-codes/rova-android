@@ -159,6 +159,8 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
     if (target == ActionTarget.DISMISS_AUTOSTOP_ECHO) return
     if (target == ActionTarget.REVIEW_SESSION) return
     if (target == ActionTarget.OPEN_THERMAL_TIPS) return
+    if (target == ActionTarget.KEEP_SEGMENTS_ONLY) return        // VM-only; Task 13 wires RecoveryViewModel
+    if (target == ActionTarget.DISCARD_RECOVERY_SESSION) return  // VM-only; Task 13 wires RecoveryViewModel
     val pkgUri = Uri.fromParts("package", context.packageName, null)
     val intent: Intent = when (target) {
         ActionTarget.EXACT_ALARM_SETTINGS ->
@@ -185,6 +187,8 @@ private fun launchActionTarget(context: Context, target: ActionTarget) {
         ActionTarget.DISMISS_AUTOSTOP_ECHO -> return             // VM-only; routed by overflow handler
         ActionTarget.REVIEW_SESSION -> return                    // host-nav; routed at call site
         ActionTarget.OPEN_THERMAL_TIPS -> return                 // VM-only; guarded above (Phase 4 Slice 3)
+        ActionTarget.KEEP_SEGMENTS_ONLY -> return                // VM-only; guarded above (Phase 4.3)
+        ActionTarget.DISCARD_RECOVERY_SESSION -> return          // VM-only; guarded above (Phase 4.3)
     }
     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) {}
 }

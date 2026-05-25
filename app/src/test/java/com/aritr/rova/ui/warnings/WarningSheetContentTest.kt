@@ -46,4 +46,25 @@ class WarningSheetContentTest {
         assertEquals("OK", c.primary.label)
         assertNull("secondary should be null on TopBanner-only arm", c.secondary)
     }
+
+    @Test
+    fun `CANT_MERGE sheet renders 3 CTAs with link-styled tertiary`() {
+        val content = warningSheetContent(WarningId.CANT_MERGE)
+        assertEquals("Can't merge yet", content.title)
+        assertEquals("Free space and retry, or keep the raw segments for later.", content.body)
+        assertEquals("Free space & retry", content.primary.label)
+        assertEquals(ActionTarget.STORAGE_SETTINGS, content.primary.target)
+        assertNotNull(content.secondary)
+        assertEquals("Save segments only", content.secondary!!.label)
+        assertEquals(ActionTarget.KEEP_SEGMENTS_ONLY, content.secondary!!.target)
+        assertNotNull(content.tertiary)
+        assertEquals("Discard session", content.tertiary!!.label)
+        assertEquals(ActionTarget.DISCARD_RECOVERY_SESSION, content.tertiary!!.target)
+        assertEquals(WarningActionStyle.Link, content.tertiary!!.style)
+    }
+
+    @Test
+    fun `CANT_MERGE surface is AdvisorySheet`() {
+        assertEquals(WarningSurface.AdvisorySheet, warningSurfaceFor(WarningId.CANT_MERGE))
+    }
 }

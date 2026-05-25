@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.warnings
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -145,5 +146,11 @@ class WarningSheetContentV3Test {
     @Test fun midRecBanner_autoAction_for_THERMAL_SEVERE_is_null() {
         // Only EMERGENCY / SHUTDOWN auto-stop; SEVERE keeps CTA.
         assertNull(midRecBannerContent(WarningId.THERMAL_SEVERE).autoAction)
+    }
+
+    @Test
+    fun `WarningAction defaults to Primary style`() {
+        val a = WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS)
+        assertEquals(WarningActionStyle.Primary, a.style)
     }
 }

@@ -84,4 +84,9 @@ class MidRecBannerContentTest {
         assertEquals(ActionTarget.DISMISS_AUTOSTOP_ECHO, c.overflow[0].target)
         assertEquals(ActionTarget.REVIEW_SESSION, c.overflow[1].target)
     }
+
+    @Test(expected = IllegalStateException::class)
+    fun `CANT_MERGE throws — never renders mid-rec`() {
+        midRecBannerContent(WarningId.CANT_MERGE)
+    }
 }
