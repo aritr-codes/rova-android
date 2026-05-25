@@ -44,6 +44,10 @@ internal object WarningPrecedence {
      * current snapshot of all 20 rows (12 source signals after Phase 4.3).
      * [storageLowMidRec] is the last param with a `= false` default so
      * existing positional call sites remain unambiguous.
+     *
+     * Delegates to [allActive] and returns `firstOrNull()` — the single
+     * highest-priority id, or `null` if none is active. Invariant:
+     * `resolve(...) == allActive(...).firstOrNull()` for every input.
      */
     fun resolve(
         cameraPermissionGranted: Boolean,
@@ -58,25 +62,52 @@ internal object WarningPrecedence {
         storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
         autoStopEcho: TerminalEcho? = null,            // ← NEW (Phase 4 Slice 2)
         cantMergeActive: Boolean = false,              // ← NEW (Phase 4.3 — recovery merge pre-flight failed)
-    ): WarningId? {
-        if (!cameraPermissionGranted) return WarningId.CAMERA_PERMISSION_DENIED            // #1
-        if (!exactAlarmGranted) return WarningId.EXACT_ALARM_DENIED                         // #2
-        if (storageInsufficient) return WarningId.STORAGE_INSUFFICIENT                      // #3
-        when (thermal) {                                                                   // #4 / #5 / #6
-            ThermalStatus.SHUTDOWN -> return WarningId.THERMAL_SHUTDOWN
-            ThermalStatus.EMERGENCY -> return WarningId.THERMAL_EMERGENCY
-            ThermalStatus.CRITICAL -> return WarningId.THERMAL_CRITICAL
+    ): WarningId? = allActive(
+        cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
+        thermal, power, camera, microphonePermissionGranted,
+        notificationsGranted, batteryOptimizationExempt, storageLowMidRec,
+        autoStopEcho, cantMergeActive,
+    ).firstOrNull()
+
+    /**
+     * Phase 4.2 — emit every currently-active [WarningId] ordinal-sorted.
+     * The single condition-wiring source: [resolve] returns `firstOrNull()`
+     * of this list. Pure function — no flow plumbing.
+     */
+    fun allActive(
+        cameraPermissionGranted: Boolean,
+        exactAlarmGranted: Boolean,
+        storageInsufficient: Boolean,
+        thermal: ThermalStatus,
+        power: PowerState,
+        camera: CameraSignalState,
+        microphonePermissionGranted: Boolean,
+        notificationsGranted: Boolean,
+        batteryOptimizationExempt: Boolean,
+        storageLowMidRec: Boolean = false,
+        autoStopEcho: TerminalEcho? = null,
+        cantMergeActive: Boolean = false,
+    ): List<WarningId> {
+        val result = mutableListOf<WarningId>()
+        if (!cameraPermissionGranted) result += WarningId.CAMERA_PERMISSION_DENIED          // #1
+        if (!exactAlarmGranted) result += WarningId.EXACT_ALARM_DENIED                      // #2
+        if (storageInsufficient) result += WarningId.STORAGE_INSUFFICIENT                   // #3
+        when (thermal) {                                                                     // #4 / #5 / #6 (mutually exclusive)
+            ThermalStatus.SHUTDOWN -> result += WarningId.THERMAL_SHUTDOWN
+            ThermalStatus.EMERGENCY -> result += WarningId.THERMAL_EMERGENCY
+            ThermalStatus.CRITICAL -> result += WarningId.THERMAL_CRITICAL
             else -> Unit
         }
         val pct = power.percent
-        if (pct != null && pct < 5 && !power.charging) return WarningId.BATTERY_CRITICAL   // #7
-        when (camera) {                                                                    // #8 / #9
-            CameraSignalState.IN_USE -> return WarningId.CAMERA_IN_USE
-            CameraSignalState.DISABLED -> return WarningId.CAMERA_DISABLED
+        if (pct != null && pct < 5 && !power.charging) result += WarningId.BATTERY_CRITICAL // #7
+        when (camera) {                                                                      // #8 / #9 (mutually exclusive)
+            CameraSignalState.IN_USE -> result += WarningId.CAMERA_IN_USE
+            CameraSignalState.DISABLED -> result += WarningId.CAMERA_DISABLED
             else -> Unit
         }
-        if (pct != null && pct < 15 && !power.charging) return WarningId.BATTERY_LOW        // #10
-        if (storageLowMidRec) return WarningId.STORAGE_LOW_MID_REC                         // #11
+        // #10 — skip low when critical already emitted (pct < 5 implies pct < 15; emit only critical)
+        if (pct != null && pct >= 5 && pct < 15 && !power.charging) result += WarningId.BATTERY_LOW
+        if (storageLowMidRec) result += WarningId.STORAGE_LOW_MID_REC                      // #11
         // #12-13 — auto-stop echoes. Slice 2: LOW_STORAGE → STORAGE_FULL_AUTOSTOPPED.
         // Slice 3: THERMAL → THERMAL_AUTOSTOPPED. Other StopReasons (USER,
         // PERMISSION_REVOKED, INIT_FAILED, NONE) do not yield an echo banner —
@@ -84,19 +115,19 @@ internal object WarningPrecedence {
         // reasons either pre-empt the start path or have no banner contract.
         autoStopEcho?.let { echo ->
             when (echo.stopReason) {
-                StopReason.LOW_STORAGE -> return WarningId.STORAGE_FULL_AUTOSTOPPED
-                StopReason.THERMAL -> return WarningId.THERMAL_AUTOSTOPPED
+                StopReason.LOW_STORAGE -> result += WarningId.STORAGE_FULL_AUTOSTOPPED
+                StopReason.THERMAL -> result += WarningId.THERMAL_AUTOSTOPPED
                 StopReason.USER, StopReason.PERMISSION_REVOKED,
                 StopReason.INIT_FAILED, StopReason.NONE -> Unit
             }
         }
-        if (cantMergeActive) return WarningId.CANT_MERGE                                   // #14 ← NEW (Phase 4.3)
-        if (thermal == ThermalStatus.SEVERE) return WarningId.THERMAL_SEVERE                // #15
-        if (!microphonePermissionGranted) return WarningId.MICROPHONE_DENIED               // #16
-        if (!batteryOptimizationExempt) return WarningId.BATTERY_OPTIMIZATION_ON           // #17
-        if (power.powerSaveMode) return WarningId.POWER_SAVE_MODE                           // #18
-        if (thermal == ThermalStatus.MODERATE) return WarningId.THERMAL_MODERATE           // #19
-        if (!notificationsGranted) return WarningId.NOTIFICATIONS_DENIED                   // #20
-        return null
+        if (cantMergeActive) result += WarningId.CANT_MERGE                                // #14
+        if (thermal == ThermalStatus.SEVERE) result += WarningId.THERMAL_SEVERE             // #15
+        if (!microphonePermissionGranted) result += WarningId.MICROPHONE_DENIED             // #16
+        if (!batteryOptimizationExempt) result += WarningId.BATTERY_OPTIMIZATION_ON        // #17
+        if (power.powerSaveMode) result += WarningId.POWER_SAVE_MODE                        // #18
+        if (thermal == ThermalStatus.MODERATE) result += WarningId.THERMAL_MODERATE        // #19
+        if (!notificationsGranted) result += WarningId.NOTIFICATIONS_DENIED                // #20
+        return result
     }
 }
