@@ -82,6 +82,9 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.StopReason
+import com.aritr.rova.data.Terminated
+import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.recovery.RecoveryCardKind
@@ -132,10 +135,27 @@ fun HistoryScreen(
                 } else {
                     { _ -> }
                 }
+                val markKeptRaw: suspend (String) -> Unit = if (sessionStoreAvailable) {
+                    { id ->
+                        app.sessionStore.markTerminated(
+                            sessionId = id,
+                            terminated = Terminated.MULTI_SEGMENT_KEPT,
+                            stopReason = StopReason.NONE,
+                        )
+                    }
+                } else {
+                    { _ -> }
+                }
+                val startRecoveryMergeFn: (String) -> Unit = { id ->
+                    RovaRecordingService.startRecoveryMerge(context, id)
+                }
                 RecoveryViewModel(
                     recoveryReport = app.recoveryReport,
                     loadManifest = loadManifest,
                     discardSession = discardSession,
+                    markKeptRaw = markKeptRaw,
+                    startRecoveryMergeFn = startRecoveryMergeFn,
+                    mergeOutcome = app.recoveryMergeOutcomeSignal.state,
                 )
             }
         }
@@ -147,6 +167,8 @@ fun HistoryScreen(
     val onRecoveryDiscard: (String) -> Unit = { sessionId ->
         recoveryViewModel.dismiss(sessionId)
     }
+    val onMerge: (String) -> Unit = { sessionId -> recoveryViewModel.merge(sessionId) }
+    val onKeepRaw: (String) -> Unit = { sessionId -> recoveryViewModel.keepRaw(sessionId) }
     val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
         val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
         if (card?.kind == RecoveryCardKind.KILLED_BY_SYSTEM) {
@@ -385,6 +407,8 @@ fun HistoryScreen(
                             state = recoveryUiState,
                             onDiscard = onRecoveryDiscard,
                             vendorHelpSlotFor = vendorHelpSlotFor,
+                            onMerge = onMerge,
+                            onKeepRaw = onKeepRaw,
                         )
                     }
                     LibraryEmptyState(onStartRecording = onNavigateToRecord)
@@ -403,6 +427,8 @@ fun HistoryScreen(
                                 state = recoveryUiState,
                                 onDiscard = onRecoveryDiscard,
                                 vendorHelpSlotFor = vendorHelpSlotFor,
+                                onMerge = onMerge,
+                                onKeepRaw = onKeepRaw,
                             )
                         }
                     }
