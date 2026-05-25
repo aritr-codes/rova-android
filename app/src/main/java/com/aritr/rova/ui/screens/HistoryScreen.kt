@@ -93,7 +93,14 @@ import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import com.aritr.rova.ui.share.safeShareUri
 import com.aritr.rova.ui.theme.RovaTheme
+import com.aritr.rova.ui.warnings.HistoryWarningSheetHost
+import com.aritr.rova.ui.warnings.HistoryWarningStrip
+import com.aritr.rova.ui.warnings.WarningCenterViewModel
+import com.aritr.rova.ui.warnings.WarningId
+import com.aritr.rova.ui.warnings.WarningScreen
+import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -161,6 +168,15 @@ fun HistoryScreen(
         }
     )
     val recoveryUiState by recoveryViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Phase 4.2 — WarningCenter VM for History strip routing.
+    val warningVm: WarningCenterViewModel? = remember(app) { buildWarningCenterViewModel(app) }
+    val historyWarnings by (warningVm?.activeWarningsFor(WarningScreen.History) ?: MutableStateFlow(emptyList()))
+        .collectAsStateWithLifecycle()
+    val pendingCantMergeSessionId by (warningVm?.pendingCantMergeSessionId ?: MutableStateFlow(null))
+        .collectAsStateWithLifecycle()
+    var sheetWarningId by remember { mutableStateOf<WarningId?>(null) }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -402,6 +418,11 @@ fun HistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    HistoryWarningStrip(
+                        warningIds = historyWarnings,
+                        onDismiss = { warningVm?.dismissOnHistoryStrip(it) },
+                        onOpenSheet = { sheetWarningId = it },
+                    )
                     if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
                         RecoveryCardList(
                             state = recoveryUiState,
@@ -421,6 +442,15 @@ fun HistoryScreen(
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    if (historyWarnings.isNotEmpty()) {
+                        item(key = "warning-strip") {
+                            HistoryWarningStrip(
+                                warningIds = historyWarnings,
+                                onDismiss = { warningVm?.dismissOnHistoryStrip(it) },
+                                onOpenSheet = { sheetWarningId = it },
+                            )
+                        }
+                    }
                     if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
                         item(key = "recovery-cards") {
                             RecoveryCardList(
@@ -512,6 +542,19 @@ fun HistoryScreen(
             config = cfg,
             onDismiss = { viewSettingsConfig = null }
         )
+    }
+
+    sheetWarningId?.let { id ->
+        if (warningVm != null) {
+            HistoryWarningSheetHost(
+                id = id,
+                vm = warningVm,
+                pendingCantMergeSessionId = pendingCantMergeSessionId,
+                onKeepRawFromSheet = onKeepRaw,
+                onDiscardFromSheet = onRecoveryDiscard,
+                onDismiss = { sheetWarningId = null },
+            )
+        }
     }
 }
 

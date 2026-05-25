@@ -19,7 +19,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -127,4 +130,77 @@ internal fun severityLabelFor(surface: WarningSurface): String = when (surface) 
     WarningSurface.SoftSheet -> "SOFT"
     WarningSurface.AdvisorySheet -> "ADVISORY"
     WarningSurface.TopBanner -> "ESCALATING"
+}
+
+/**
+ * Phase 4.2 — sheet host for History strip taps. Reuses [WarningSheetV3]
+ * with callbacks wired so CANT_MERGE's KEEP_SEGMENTS_ONLY (secondary) and
+ * DISCARD_RECOVERY_SESSION (tertiary) route to the host-provided
+ * recovery handlers. All other targets route through [launchActionTarget].
+ */
+@Composable
+internal fun HistoryWarningSheetHost(
+    id: WarningId,
+    vm: WarningCenterViewModel,
+    pendingCantMergeSessionId: String?,
+    onKeepRawFromSheet: (sessionId: String) -> Unit,
+    onDiscardFromSheet: (sessionId: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val surface = warningSurfaceFor(id)
+    val expandedSet by vm.expandedWhy.collectAsStateWithLifecycle()
+    val expanded = id in expandedSet
+
+    WarningSheetV3(
+        id = id,
+        surface = surface,
+        expanded = expanded,
+        onPrimary = {
+            launchActionTarget(
+                context = context,
+                target = warningSheetContent(id).primary.target,
+                pendingCantMergeSessionId = pendingCantMergeSessionId,
+                onKeepRawFromSheet = onKeepRawFromSheet,
+                onDiscardFromSheet = onDiscardFromSheet,
+            )
+            onDismiss()
+        },
+        onSecondary = {
+            val secondaryTarget = warningSheetContent(id).secondary?.target
+            if (secondaryTarget == ActionTarget.KEEP_SEGMENTS_ONLY ||
+                secondaryTarget == ActionTarget.DISCARD_RECOVERY_SESSION) {
+                launchActionTarget(
+                    context = context,
+                    target = secondaryTarget,
+                    pendingCantMergeSessionId = pendingCantMergeSessionId,
+                    onKeepRawFromSheet = onKeepRawFromSheet,
+                    onDiscardFromSheet = onDiscardFromSheet,
+                )
+            }
+            onDismiss()
+        },
+        onTertiary = {
+            warningSheetContent(id).tertiary?.let { ter ->
+                launchActionTarget(
+                    context = context,
+                    target = ter.target,
+                    pendingCantMergeSessionId = pendingCantMergeSessionId,
+                    onKeepRawFromSheet = onKeepRawFromSheet,
+                    onDiscardFromSheet = onDiscardFromSheet,
+                )
+            }
+            onDismiss()
+        },
+        onOverflow = { target ->
+            if (target == ActionTarget.SNOOZE_FOREVER) {
+                vm.snoozeForever(id)
+            } else {
+                launchActionTarget(context = context, target = target)
+            }
+            onDismiss()
+        },
+        onToggleWhy = { vm.toggleExpandWhy(id) },
+        onDismissRequest = onDismiss,
+    )
 }
