@@ -232,23 +232,45 @@ If any of these escalates to a Hard severity (storage drops past full → C2.3, 
 
 ### 6.3 `history`
 
-Recovery cards (stacked, top of grid):
+Phase 4.2 — top warning strip above the recovery card list. The `WarningCenterViewModel.activeWarningsFor(WarningScreen.History)` flow drives the strip; the existing precedence-resolved `activeWarning` flow remains the Record-screen single-active source.
+
+History allowlist (`HISTORY_WARNINGS` in `WarningScreen.kt`, 5 ids):
+- C2.1 `STORAGE_INSUFFICIENT`
+- C2.3 `STORAGE_FULL_AUTOSTOPPED`
+- C3.5 `THERMAL_AUTOSTOPPED`
+- C2.4 `CANT_MERGE`
+- C1.3 `NOTIFICATIONS_DENIED`
+
+Recovery cards (stacked below the strip, top of grid) — unchanged pre-Phase-4.2:
 - C4.1 Killed by system
 - C4.2 Force stopped
 - C4.4 Merge failed
-- C2.3 Storage full / aborted
-- C2.4 Can't merge yet (3-way)
+- C2.3 Storage full / aborted (terminal-manifest path, distinct from the live echo)
+- C2.4 Can't merge yet (3-way) — paired with the strip card
 
 Inline-row decorations (per affected session):
 - C5.3 Export to gallery failed
+
+Strip dismissibility: each card has an X button → per-session in-memory dismiss. The dismissal is cleared automatically when the underlying signal flips off then on again (down-edge), so a recurrence re-surfaces the card. `SNOOZE_FOREVER` still applies globally — snoozed ids are excluded from the strip too.
 
 > Mockup states #16 ("Stop Recording?" confirmation) and #18b ("SD Card Removed") are intentionally absent — see §4.6.
 
 ### 6.4 `settings`
 
-Section anchor — Reliability:
-- C3.1 Battery optimization on (existing — re-homed under WarningCenter)
-- C1.4 Exact alarm denied (link to system settings)
+Phase 4.2 — "Permissions & status" section at the top of SettingsScreen, above "Recording behavior". The `WarningCenterViewModel.activeWarningsFor(WarningScreen.Settings)` flow drives the section; empty list hides the section entirely.
+
+Settings allowlist (`SETTINGS_WARNINGS` in `WarningScreen.kt`, 7 ids):
+- C1.1 `CAMERA_PERMISSION_DENIED`
+- C1.4 `EXACT_ALARM_DENIED`
+- C2.1 `STORAGE_INSUFFICIENT`
+- C1.2 `MICROPHONE_DENIED`
+- C3.1 `BATTERY_OPTIMIZATION_ON`
+- C3.2 `POWER_SAVE_MODE`
+- C1.3 `NOTIFICATIONS_DENIED`
+
+Chips are not dismissable — each chip disappears only when its underlying signal flips off. `SNOOZE_FOREVER` still applies globally.
+
+Multi-active surfacing: Record reads single-resolved `activeWarning`; History and Settings consume the per-screen ordinal-sorted multi-active flow `activeWarningsFor(screen)`. Hard invariant: `activeWarning == WarningPrecedence.allActive(...).firstOrNull()`.
 
 ### 6.5 `onboarding`
 
