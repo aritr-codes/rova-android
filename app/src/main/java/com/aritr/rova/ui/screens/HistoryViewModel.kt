@@ -70,7 +70,17 @@ data class VideoItem(
      * collide on the same shared (null) pointers and surface
      * Unavailable.
      */
-    val side: VideoSide? = null
+    val side: VideoSide? = null,
+    /**
+     * Milestone 2 — non-null for rows derived from a `MULTI_SEGMENT_KEPT`
+     * session's per-segment fanout. Identifies which segment of the session
+     * this row represents. Null for all other rows (single-mode, P+L, legacy).
+     *
+     * Delete handler uses this to remove the per-segment file
+     * (`sessionDir/segment_$segmentIndex.mp4`) and update the manifest's
+     * segments list.
+     */
+    val segmentIndex: Int? = null,
 )
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -211,7 +221,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             resolution = cached?.second ?: VideoMetadataUtils.UNKNOWN_RESOLUTION,
             shareUri = rec.shareUri,
             sessionId = rec.sessionId,
-            side = rec.side
+            side = rec.side,
+            segmentIndex = rec.segmentIndex
         )
     }
 
@@ -279,7 +290,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         // Phase 6.1b smoke-fix #3 — non-null for P+L rows (one per
         // side); null for single-mode rows and legacy file-only
         // entries. Threaded into [VideoItem.side] via [buildItem].
-        val side: VideoSide? = null
+        val side: VideoSide? = null,
+        // Milestone 2 — non-null for rows derived from a
+        // MULTI_SEGMENT_KEPT session's per-segment fanout; null for
+        // single-mode, P+L, and legacy rows. Threaded into
+        // [VideoItem.segmentIndex] via [buildItem].
+        val segmentIndex: Int? = null
     )
 
     private fun manifestDrivenArtifacts(
@@ -292,6 +308,33 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             }
         return HistoryArtifactMapper.finalizedManifests(manifests)
             .flatMap { m ->
+                // Milestone 2 — MULTI_SEGMENT_KEPT fanout. Each kept segment
+                // becomes a standalone library row. Composition with the
+                // existing single-mode / P+L branches: the per-segment helper
+                // returns emptyList() for non-MULTI_SEGMENT_KEPT terminals,
+                // so the existing single/P+L paths are unaffected.
+                val perSegment = HistoryArtifactMapper.resolveArtifactsPerSegment(m)
+                if (perSegment.isNotEmpty()) {
+                    return@flatMap perSegment.map { seg ->
+                        val sessionDir = sessionStore.sessionDir(seg.sessionId)
+                        val file = java.io.File(sessionDir, seg.filename)
+                        // Task 3.1 — no inner file.exists() guard: the outer
+                        // .filter { rec.file.exists() && rec.file.length() > 0L }
+                        // below enforces existence AND zero-length filtering
+                        // uniformly across single-mode / P+L / per-segment paths.
+                        // sizeBytes intentionally dropped — UI shows duration +
+                        // thumbnail only; consistent with PerSideArtifact which
+                        // also omits size. Plan §3 scope.
+                        ResolvedRecording(
+                            file = file,
+                            // Segments are app-private; no MediaStore URI.
+                            shareUri = null,
+                            sessionId = seg.sessionId,
+                            side = null,
+                            segmentIndex = seg.segmentIndex
+                        )
+                    }
+                }
                 // Phase 6.1b T16 — branch on the persisted mode. P+L
                 // sessions fan out to per-side rows (0/1/2 cards per
                 // manifest); single-mode keeps the pre-T16 single-card

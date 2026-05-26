@@ -68,7 +68,17 @@ internal object HistoryArtifactMapper {
             val isDualWithArtifacts = m.config.mode == "PortraitLandscape" &&
                 m.terminated == Terminated.COMPLETED &&
                 (m.portraitPublicTargetPath != null || m.landscapePublicTargetPath != null)
-            isFinalized || isDualWithArtifacts
+            // Milestone 2 — MULTI_SEGMENT_KEPT sessions never reach
+            // ExportState.FINALIZED (their merge failed and segments were
+            // retained on disk by the user's "Keep as raw clips" choice).
+            // Admit them here so the per-segment fanout in
+            // [resolveArtifactsPerSegment] can emit one library row per
+            // kept segment. The segments themselves live under the
+            // per-session directory and are surfaced via the
+            // HistoryViewModel pipeline's MULTI_SEGMENT_KEPT branch.
+            val isMultiSegmentKept = m.terminated == Terminated.MULTI_SEGMENT_KEPT &&
+                m.segments.isNotEmpty()
+            isFinalized || isDualWithArtifacts || isMultiSegmentKept
         }
 
     /**
@@ -185,5 +195,54 @@ internal object HistoryArtifactMapper {
         val side: VideoSide,
         val file: File,
         val shareUri: String?
+    )
+
+    /**
+     * Milestone 2 — per-segment artifact fanout for `MULTI_SEGMENT_KEPT` sessions.
+     *
+     * Phase 4.3 introduced `Terminated.MULTI_SEGMENT_KEPT` (ordinal 4) for
+     * recovery-merge sessions whose merge failed and whose individual segments
+     * are kept on disk. Milestone 2 surfaces those segments as flat 1-per-segment
+     * library rows (each independently playable + deletable).
+     *
+     * For sessions terminated as `MULTI_SEGMENT_KEPT`: emits N entries where
+     * N = `manifest.segments.size`. Each entry carries the bare segment
+     * filename plus already-persisted segment metadata; the caller wraps the
+     * filename with the session directory to obtain the playable path.
+     *
+     * For all other terminal states: emits an empty list. The caller falls
+     * back to [resolveArtifactFile] (single-mode) or [resolveArtifactsPerSide]
+     * (P+L) — same composition pattern as the existing fanout.
+     *
+     * Spec: `docs/superpowers/specs/2026-05-26-merge-reliability-bundle-design.md` §5 #4 + §6.4.
+     */
+    fun resolveArtifactsPerSegment(manifest: SessionManifest): List<PerSegmentArtifact> {
+        if (manifest.terminated != Terminated.MULTI_SEGMENT_KEPT) return emptyList()
+        return manifest.segments.mapIndexed { index, segment ->
+            PerSegmentArtifact(
+                sessionId = manifest.sessionId,
+                segmentIndex = index,
+                filename = segment.filename,
+                durationMs = segment.durationMs,
+                sizeBytes = segment.sizeBytes,
+            )
+        }
+    }
+
+    /**
+     * Milestone 2 — emitted row from [resolveArtifactsPerSegment]. One per
+     * kept segment in a `MULTI_SEGMENT_KEPT` session. Carries enough data
+     * for the caller to construct a [VideoItem] + perform delete.
+     *
+     * [filename] is the bare segment filename (`segment_0.mp4`, etc.);
+     * the caller wraps it with the session directory via
+     * `File(sessionDir, filename)` to get the playable path.
+     */
+    data class PerSegmentArtifact(
+        val sessionId: String,
+        val segmentIndex: Int,
+        val filename: String,
+        val durationMs: Long,
+        val sizeBytes: Long,
     )
 }

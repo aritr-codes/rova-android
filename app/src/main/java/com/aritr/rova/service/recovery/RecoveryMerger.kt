@@ -3,28 +3,63 @@ package com.aritr.rova.service.recovery
 import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal.RecoveryMergeOutcome
+import kotlinx.coroutines.delay
 import java.io.File
 
 /**
- * Phase 4.3 — wraps the `ExportPipeline.exportRecovered` call for a
- * single recovery merge session. Owns:
+ * Phase 4.3 + Milestone 2 — wraps the `ExportPipeline.exportRecovered` call
+ * for a single recovery merge session. Owns:
  *  - Segment list lookup (via [loadSegments]) from `SessionStore`.
  *  - Session-directory resolution (via [sessionDirOf]).
- *  - Translation from `ExportResult` to `RecoveryMergeOutcome`.
+ *  - Milestone 2 retry loop: classifier-driven transient/permanent
+ *    dispatch over [ExportResult] with [MergeRetryPolicy] backoff.
+ *  - Milestone 2 separate InsufficientStorage flow: storage-poll via
+ *    [pollForStorage] callback, 30-second polling cadence, 10-minute cap.
+ *  - Translation from terminal [ExportResult] → user-surface
+ *    [RecoveryMergeOutcome] (existing Phase 4.3 contract).
  *  - Push to [RecoveryMergeOutcomeSignal] for both progress + final.
  *
  * Constructor seams keep this JVM-testable: production wires
- * `ExportPipeline.exportRecovered` + `app.sessionStore` lambdas;
- * tests inject pure-function fakes. `onProgress` is split out so tests
- * can capture progress without subclassing the final `RecoveryMergeOutcomeSignal`.
+ * `ExportPipeline.exportRecovered` + real polling lambdas; tests inject
+ * pure-function fakes plus a `backoffMillisOverride` to fast-forward
+ * exponential delays.
  *
- * Hosted by `RovaRecordingService.handleRecoveryMergeStart` (Task 8).
+ * Hosted by `RovaRecordingService.handleRecoveryMergeStart`.
+ *
+ * Spec: `docs/superpowers/specs/2026-05-26-merge-reliability-bundle-design.md` §6.
+ * ADR: `docs/adr/0018-recovery-merge-retry-classifier-preflight.md`.
  */
 class RecoveryMerger(
     private val loadSegments: (sessionId: String) -> List<File>,
     private val sessionDirOf: (sessionId: String) -> File,
     private val exportRecovered: suspend (sessionDir: File, segments: List<File>, onProgress: (Float) -> Unit) -> ExportResult,
     private val signal: RecoveryMergeOutcomeSignal,
+    /**
+     * Storage-poll callback. Called per 30-second tick during the
+     * InsufficientStorage flow. Returns `true` when sufficient space is
+     * available (the merge can retry from `attempt = 1`). The merger
+     * stops polling after this returns true OR after the 10-minute cap.
+     *
+     * Production wiring (Service): query
+     * `StorageManager.getAllocatableBytes(externalRoot)` and compare
+     * against `requiredBytes`.
+     */
+    private val pollForStorage: suspend (requiredBytes: Long, availableBytesEstimate: Long) -> Boolean = { _, _ -> false },
+    /**
+     * Override [MergeRetryPolicy.backoffMillisFor] for tests. Production
+     * call sites omit this argument so the real exponential schedule
+     * applies. Tests pass `{ 0L }` to fast-forward.
+     */
+    private val backoffMillisOverride: ((attempt: Int) -> Long)? = null,
+    /**
+     * Poll cap in milliseconds. Production: 10 minutes. Tests can override
+     * to bound runtime.
+     */
+    private val pollCapMillis: Long = 10L * 60L * 1000L,
+    /**
+     * Poll cadence in milliseconds. Production: 30 seconds. Tests pass 0L.
+     */
+    private val pollIntervalMillis: Long = 30L * 1000L,
     private val onProgress: (String, Float) -> Unit = signal::emitInProgress,
 ) {
 
@@ -36,12 +71,64 @@ class RecoveryMerger(
             return outcome
         }
         val sessionDir = sessionDirOf(sessionId)
-        val result = exportRecovered(sessionDir, segments) { progress ->
-            onProgress(sessionId, progress)
+
+        var attempt = 1
+        while (true) {
+            val result = exportRecovered(sessionDir, segments) { progress ->
+                onProgress(sessionId, progress)
+            }
+            when (val classified = classifyMergeFailure(result)) {
+                is MergeFailureClass.Terminal -> {
+                    val outcome = RecoveryMergeOutcome.Succeeded
+                    signal.emitOutcome(sessionId, outcome)
+                    return outcome
+                }
+                is MergeFailureClass.Transient -> {
+                    if (attempt < MergeRetryPolicy.MAX_ATTEMPTS) {
+                        val backoff = backoffMillisOverride?.invoke(attempt)
+                            ?: MergeRetryPolicy.backoffMillisFor(attempt)
+                        delay(backoff)
+                        attempt += 1
+                        continue
+                    }
+                    // Exhausted — translate the LAST transient ExportResult to user surface.
+                    val outcome = classified.cause.toRecoveryOutcome()
+                    signal.emitOutcome(sessionId, outcome)
+                    return outcome
+                }
+                is MergeFailureClass.InsufficientStorage -> {
+                    val freed = waitForStorage(classified.requiredBytes, classified.availableBytes)
+                    if (freed) {
+                        // Reset attempt counter and re-enter the retry loop.
+                        attempt = 1
+                        continue
+                    }
+                    val outcome = RecoveryMergeOutcome.InsufficientStorage(
+                        classified.requiredBytes, classified.availableBytes
+                    )
+                    signal.emitOutcome(sessionId, outcome)
+                    return outcome
+                }
+                is MergeFailureClass.Permanent -> {
+                    val outcome = classified.cause.toRecoveryOutcome()
+                    signal.emitOutcome(sessionId, outcome)
+                    return outcome
+                }
+            }
         }
-        val outcome = result.toRecoveryOutcome()
-        signal.emitOutcome(sessionId, outcome)
-        return outcome
+        @Suppress("UNREACHABLE_CODE")
+        error("unreachable — retry loop always returns")
+    }
+
+    private suspend fun waitForStorage(requiredBytes: Long, lastAvailable: Long): Boolean {
+        val deadline = pollCapMillis
+        var elapsed = 0L
+        while (elapsed < deadline) {
+            if (pollForStorage(requiredBytes, lastAvailable)) return true
+            delay(pollIntervalMillis)
+            elapsed += pollIntervalMillis
+        }
+        return false
     }
 
     private fun ExportResult.toRecoveryOutcome(): RecoveryMergeOutcome = when (this) {
@@ -50,11 +137,6 @@ class RecoveryMerger(
             RecoveryMergeOutcome.InsufficientStorage(requiredBytes, availableBytes)
         is ExportResult.MuxFailed -> RecoveryMergeOutcome.MuxFailed(cause)
         is ExportResult.UnknownSession -> RecoveryMergeOutcome.UnknownSession
-        // All remaining ExportResult variants collapse to MuxFailed for the
-        // user-facing recovery surface — the UI cannot distinguish them and
-        // the user action is identical (retry or keep raw). The underlying
-        // ExportResult is still recorded by the pipeline's failure path;
-        // only the user-surface compresses.
         is ExportResult.CopyFailed -> RecoveryMergeOutcome.MuxFailed(cause)
         is ExportResult.RenameFailed -> RecoveryMergeOutcome.MuxFailed(IllegalStateException("rename failed"))
         is ExportResult.PendingInsertFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("pending insert failed"))

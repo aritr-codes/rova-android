@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * and sessionId-scoped — acknowledging a different session does nothing,
  * so a late acknowledgement for a stale outcome cannot wipe a fresher one.
  */
-class RecoveryMergeOutcomeSignal {
+open class RecoveryMergeOutcomeSignal {
 
     sealed class State {
         object Idle : State()
@@ -43,11 +43,11 @@ class RecoveryMergeOutcomeSignal {
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
 
-    fun emitInProgress(sessionId: String, progress: Float) {
+    open fun emitInProgress(sessionId: String, progress: Float) {
         _state.value = State.InProgress(sessionId, progress.coerceIn(0f, 1f))
     }
 
-    fun emitOutcome(sessionId: String, outcome: RecoveryMergeOutcome) {
+    open fun emitOutcome(sessionId: String, outcome: RecoveryMergeOutcome) {
         _state.value = State.Outcome(sessionId, outcome)
     }
 
