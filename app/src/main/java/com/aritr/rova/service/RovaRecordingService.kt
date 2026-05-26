@@ -704,6 +704,28 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 START_NOT_STICKY
             }
             is RecoveryMergeStartDecision.Accept -> {
+                // Milestone 2 — preflight headroom gate. Spec §5 #3.
+                val manifest = sessionStore.loadManifest(decision.sessionId)
+                if (manifest != null) {
+                    val available = queryAllocatableBytes()
+                    val accumulated = com.aritr.rova.data.StorageEstimator.accumulatedSessionBytes(
+                        sessionDir = sessionStore.sessionDir(decision.sessionId),
+                        segmentCount = manifest.segments.size,
+                        durationSeconds = manifest.segments.sumOf { it.durationMs } / 1000L,
+                        resolution = manifest.config.resolution,
+                    )
+                    if (!com.aritr.rova.service.recovery.StoragePreflight.hasHeadroom(available, accumulated)) {
+                        signal.emitOutcome(
+                            decision.sessionId,
+                            RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage(
+                                requiredBytes = accumulated + com.aritr.rova.service.recovery.StoragePreflight.FINALIZE_HEADROOM_BYTES,
+                                availableBytes = available,
+                            ),
+                        )
+                        stopSelf(startId)
+                        return START_NOT_STICKY
+                    }
+                }
                 if (!startForegroundForRecoveryMerge(decision.sessionId)) {
                     // FGS start blocked (e.g. ForegroundServiceStartNotAllowedException) —
                     // surface to consumer so it doesn't hang waiting for an outcome.
@@ -718,9 +740,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 serviceScope.launch {
                     val merger = com.aritr.rova.service.recovery.RecoveryMerger(
                         loadSegments = { sid ->
-                            val manifest = sessionStore.loadManifest(sid)
+                            val mf = sessionStore.loadManifest(sid)
                             val dir = sessionStore.sessionDir(sid)
-                            manifest?.segments
+                            mf?.segments
                                 ?.map { java.io.File(dir, it.filename) }
                                 ?.filter { it.exists() && it.length() > 0 }
                                 ?: emptyList()
@@ -737,6 +759,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             )
                         },
                         signal = signal,
+                        pollForStorage = { required, _ ->
+                            val current = queryAllocatableBytes()
+                            current >= required
+                        },
+                        onProgress = { sid, fraction ->
+                            signal.emitInProgress(sid, fraction)
+                            updateMergeNotification(sid, fraction)
+                        },
                     )
                     try {
                         merger.run(decision.sessionId)
@@ -750,6 +780,55 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 START_NOT_STICKY
             }
         }
+    }
+
+    /**
+     * Milestone 2 — query free bytes on the external storage root. Uses
+     * `StorageManager.getAllocatableBytes` on API 26+ (project minSdk is
+     * 24 so this version check is needed) with `usableSpace` fallback for
+     * API 24-25. Sources external root via `RovaApp.externalRoot` per
+     * ADR-0006 (B21) — direct `getExternalFilesDir` in the Service is
+     * forbidden.
+     */
+    private fun queryAllocatableBytes(): Long {
+        val externalRoot = (application as RovaApp).externalRoot ?: return 0L
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val sm = getSystemService(android.content.Context.STORAGE_SERVICE) as android.os.storage.StorageManager
+                val uuid = sm.getUuidForPath(externalRoot)
+                sm.getAllocatableBytes(uuid)
+            } catch (t: Throwable) {
+                externalRoot.usableSpace
+            }
+        } else {
+            externalRoot.usableSpace
+        }
+    }
+
+    // Milestone 2 — notification-update throttle state.
+    private var lastMergeNotifyMillis: Long = 0L
+    private val MERGE_NOTIFY_THROTTLE_MS = 500L
+
+    /**
+     * Milestone 2 — progress-aware merge notification update. Throttled
+     * to 500ms; final tick (`fraction >= 1f`) bypasses throttle. Reuses
+     * the existing channel + NOTIFICATION_ID_RECOVERY_MERGE.
+     */
+    private fun updateMergeNotification(sessionId: String, fraction: Float) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val isFinal = fraction >= 1f
+        if (!isFinal && now - lastMergeNotifyMillis < MERGE_NOTIFY_THROTTLE_MS) return
+        lastMergeNotifyMillis = now
+        val percent = (fraction.coerceIn(0f, 1f) * 100f).toInt()
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Merging recovered clips")
+            .setContentText("Merging $percent%")
+            .setProgress(100, percent, false)
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setOngoing(true)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID_RECOVERY_MERGE, notif)
     }
 
     private fun startForegroundForRecoveryMerge(sessionId: String): Boolean {
