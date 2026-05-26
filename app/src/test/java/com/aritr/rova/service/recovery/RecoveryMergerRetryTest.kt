@@ -36,11 +36,22 @@ class RecoveryMergerRetryTest {
 
     private val FAKE_FILE = File("/fake/segment.mp4")
 
-    /** Builds a RecoveryMerger with programmable per-attempt ExportResults and storage-poll outcomes. */
+    /** Builds a RecoveryMerger with programmable per-attempt ExportResults and storage-poll outcomes.
+     *
+     *  Task 2.1 fold-in (2026-05-26): pollCapMillis / pollIntervalMillis defaults overridden to 1L
+     *  so the waitForStorage loop fast-forwards to a single iteration. Spec §7.2 mandates tests
+     *  bounded to <1 second total; production defaults (600_000ms cap / 30_000ms interval) would
+     *  have made the poll-timeout test run ~10 minutes of wall time.
+     *
+     *  Loop math (RecoveryMerger.waitForStorage): `while (elapsed < deadline)` with
+     *  `elapsed += pollIntervalMillis`. Both must be > 0 for the loop to (a) execute at least
+     *  once and (b) terminate. Using 1L / 1L gives exactly one iteration. */
     private fun buildMerger(
         results: List<ExportResult>,
         pollOutcomes: List<Boolean> = emptyList(),   // true == space freed; false == not yet
         backoffOverride: (Int) -> Long = { 0L },     // fast-forward in tests
+        pollCapMillis: Long = 1L,                    // fast-forward: single-iteration poll cap
+        pollIntervalMillis: Long = 1L,               // fast-forward: 1ms delay between polls
     ): Pair<RecoveryMerger, CapturingSignal> {
         val signal = CapturingSignal()
         val queue = ArrayDeque(results)
@@ -54,6 +65,8 @@ class RecoveryMergerRetryTest {
             signal = signal,
             backoffMillisOverride = backoffOverride,
             pollForStorage = { _, _ -> pollQueue.pollFirst() ?: false },
+            pollCapMillis = pollCapMillis,
+            pollIntervalMillis = pollIntervalMillis,
         )
         return merger to signal
     }
