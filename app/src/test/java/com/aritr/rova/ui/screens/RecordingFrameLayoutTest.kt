@@ -104,4 +104,25 @@ class RecordingFrameLayoutTest {
         assertTrue("recording rect not centred vertically: top=${layout.recordingRect.top}, height=${layout.recordingRect.height}, expected centreY≈112.5f",
             abs(centreY - 225f / 2f) < EPS)
     }
+
+    @Test
+    fun nan_or_infinite_input_produces_empty_layout() {
+        // IEEE 754: Float.NaN <= 0f is false — NaN must be caught by isFinite check.
+        val nanLayout = recordingFrameLayout(
+            zoneWidth = Float.NaN, zoneHeight = 100f, recordingAspect = 9f / 16f,
+        )
+        assertTrue(nanLayout.scrimRegions.isEmpty())
+        assertEquals(0f, nanLayout.recordingRect.width, EPS)
+
+        val infLayout = recordingFrameLayout(
+            zoneWidth = 100f, zoneHeight = Float.POSITIVE_INFINITY, recordingAspect = 9f / 16f,
+        )
+        assertTrue(infLayout.scrimRegions.isEmpty())
+        assertEquals(0f, infLayout.recordingRect.height, EPS)
+
+        val nanAspectLayout = recordingFrameLayout(
+            zoneWidth = 100f, zoneHeight = 100f, recordingAspect = Float.NaN,
+        )
+        assertTrue(nanAspectLayout.scrimRegions.isEmpty())
+    }
 }

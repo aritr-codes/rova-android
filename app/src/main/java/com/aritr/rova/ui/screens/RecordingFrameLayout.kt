@@ -36,7 +36,9 @@ internal fun recordingFrameLayout(
     zoneHeight: Float,
     recordingAspect: Float,
 ): RecordingFrameLayout {
-    if (zoneWidth <= 0f || zoneHeight <= 0f || recordingAspect <= 0f) {
+    if (!zoneWidth.isFinite() || !zoneHeight.isFinite() || !recordingAspect.isFinite() ||
+        zoneWidth <= 0f || zoneHeight <= 0f || recordingAspect <= 0f
+    ) {
         return EMPTY_LAYOUT
     }
     val zoneAspect = zoneWidth / zoneHeight

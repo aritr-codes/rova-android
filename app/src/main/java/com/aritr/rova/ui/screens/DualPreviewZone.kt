@@ -1,25 +1,30 @@
 // app/src/main/java/com/aritr/rova/ui/screens/DualPreviewZone.kt
 package com.aritr.rova.ui.screens
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.view.Surface
 import android.view.TextureView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aritr.rova.service.dualrecord.VideoSide
@@ -58,12 +63,13 @@ fun DualPreviewZone(
                 .fillMaxWidth()
                 .weight(352f),
         )
-        // Divider per mockup .cam-split-divider — 2 dp, white 14% alpha.
+        // Divider per mockup .cam-split-divider — softened to alpha 0.06f
+        // in Milestone 1 (spec §5 #4). Token: [RecordChromeTokens.camSplitDividerAlpha].
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(2.dp)
-                .background(Color.White.copy(alpha = 0.14f))
+                .background(Color.White.copy(alpha = RecordChromeTokens.camSplitDividerAlpha))
         )
         // Bottom zone — landscape preview, weight 225 of 352:225.
         PreviewZone(
@@ -138,16 +144,22 @@ private fun PreviewZone(
 
 /**
  * Recording-frame guide — overlay drawn unconditionally in each P+L zone.
- * Marks the recorded sub-rectangle of the wider preview with a faint 1 dp
- * gray outline plus a low-alpha black scrim over the non-recorded margin.
- * Independent of the decorative "Camera guides" app-setting: this is
- * functional (capture-bounds indicator), not decorative.
+ * Marks the recorded sub-rectangle by darkening the non-recorded margins
+ * with a subtle scrim (alpha 0.11f) and, on API 31+, applying a 12.dp
+ * Gaussian blur to the scrim regions so the camera content beneath reads
+ * as soft frosted glass. Independent of the decorative "Camera guides"
+ * app-setting: this is functional (capture-bounds indicator), not
+ * decorative — always-on per spec §5 #5.
  *
- * Stateless and non-interactive. Pure layout math from the zone's measured
- * size + the side's recording aspect — no GL, no Compose state, recomposes
- * only when the host zone resizes.
+ * Stateless and non-interactive. Pure layout math via
+ * [recordingFrameLayout]; recomposes only when the host zone resizes.
  *
- * See ADR-0010 and
+ * Milestone 1 (spec `docs/superpowers/specs/2026-05-26-dualshot-frame-polish-design.md`):
+ * the prior 1.dp gray outline (`recordingFrameOutline` / `recordingFrameStrokeWidth`)
+ * is removed; the prior 0.22f scrim is halved to 0.11f; API 31+ devices
+ * additionally render a frosted-glass blur over the scrim regions.
+ *
+ * See also ADR-0010 and the original
  * `docs/superpowers/specs/2026-05-22-dualshot-preview-crop-fill-design.md` §5.3.
  */
 @Composable
@@ -156,47 +168,52 @@ private fun RecordingFrameGuide(side: VideoSide, modifier: Modifier = Modifier) 
         VideoSide.PORTRAIT -> 9f / 16f
         VideoSide.LANDSCAPE -> 16f / 9f
     }
-    val outlineColor = RecordChromeTokens.recordingFrameOutline
-    val scrimColor = RecordChromeTokens.recordingFrameScrim
-    val strokeWidthDp = RecordChromeTokens.recordingFrameStrokeWidth
 
-    Canvas(modifier = modifier) {
-        val zoneW = size.width
-        val zoneH = size.height
-        if (zoneW <= 0f || zoneH <= 0f) return@Canvas
-        val zoneAspect = zoneW / zoneH
-
-        // Fit the recording-aspect rectangle inside the zone, centred.
-        val (recW, recH) = if (recordingAspect < zoneAspect) {
-            // Recording narrower than zone → fit by height, side scrims.
-            zoneH * recordingAspect to zoneH
-        } else {
-            // Recording wider than zone → fit by width, top/bottom scrims.
-            zoneW to zoneW / recordingAspect
+    BoxWithConstraints(modifier = modifier) {
+        val density = LocalDensity.current
+        val zoneWidthPx = with(density) { maxWidth.toPx() }
+        val zoneHeightPx = with(density) { maxHeight.toPx() }
+        val layout = recordingFrameLayout(zoneWidthPx, zoneHeightPx, recordingAspect)
+        layout.scrimRegions.forEach { region ->
+            ScrimRegion(region = region)
         }
-        val recLeft = (zoneW - recW) / 2f
-        val recTop = (zoneH - recH) / 2f
-
-        // Scrim over the non-recorded margin.
-        if (recW < zoneW) {
-            // Side scrims (portrait case).
-            drawRect(scrimColor, topLeft = Offset(0f, 0f),               size = Size(recLeft, zoneH))
-            drawRect(scrimColor, topLeft = Offset(recLeft + recW, 0f),   size = Size(zoneW - recLeft - recW, zoneH))
-        }
-        if (recH < zoneH) {
-            // Top/bottom scrims (landscape case).
-            drawRect(scrimColor, topLeft = Offset(0f, 0f),               size = Size(zoneW, recTop))
-            drawRect(scrimColor, topLeft = Offset(0f, recTop + recH),    size = Size(zoneW, zoneH - recTop - recH))
-        }
-
-        // Recording-rect outline. `Stroke.width = strokeWidthDp.toPx()` is the
-        // device-pixel thickness; for 1.dp on the Samsung SM-A176B (density
-        // ~1.7) that lands on ~2 device pixels.
-        drawRect(
-            color = outlineColor,
-            topLeft = Offset(recLeft, recTop),
-            size = Size(recW, recH),
-            style = Stroke(width = strokeWidthDp.toPx()),
-        )
     }
+}
+
+/**
+ * Single scrim region — a Box positioned with absolute offset over the
+ * non-recorded margin area. On API 31+ applies a `RenderEffect.createBlurEffect`
+ * via `Modifier.graphicsLayer` so the live camera content beneath blurs.
+ * On API <31 (Build.VERSION_CODES.S = 31, project minSdk = 24) the modifier
+ * is a no-op pass-through; the flat 0.11f scrim alone provides the cue.
+ *
+ * `Shader.TileMode.CLAMP` prevents edge-darkening at the recording-rect
+ * boundary (per spec §6.3).
+ */
+@Composable
+private fun ScrimRegion(region: FrameRect) {
+    val density = LocalDensity.current
+    val offsetX = with(density) { region.left.toDp() }
+    val offsetY = with(density) { region.top.toDp() }
+    val widthDp = with(density) { region.width.toDp() }
+    val heightDp = with(density) { region.height.toDp() }
+    val blurRadiusPx = with(density) { RecordChromeTokens.recordingFrameBlurRadius.toPx() }
+
+    val blurModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Modifier.graphicsLayer {
+            renderEffect = RenderEffect
+                .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
+                .asComposeRenderEffect()
+        }
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = Modifier
+            .offset(x = offsetX, y = offsetY)
+            .size(width = widthDp, height = heightDp)
+            .then(blurModifier)
+            .background(RecordChromeTokens.recordingFrameScrim),
+    )
 }
