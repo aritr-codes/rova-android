@@ -315,21 +315,24 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // so the existing single/P+L paths are unaffected.
                 val perSegment = HistoryArtifactMapper.resolveArtifactsPerSegment(m)
                 if (perSegment.isNotEmpty()) {
-                    return@flatMap perSegment.mapNotNull { seg ->
+                    return@flatMap perSegment.map { seg ->
                         val sessionDir = sessionStore.sessionDir(seg.sessionId)
                         val file = java.io.File(sessionDir, seg.filename)
-                        if (file.exists()) {
-                            ResolvedRecording(
-                                file = file,
-                                // Segments are app-private; no MediaStore URI.
-                                shareUri = null,
-                                sessionId = seg.sessionId,
-                                side = null,
-                                segmentIndex = seg.segmentIndex
-                            )
-                        } else {
-                            null
-                        }
+                        // Task 3.1 — no inner file.exists() guard: the outer
+                        // .filter { rec.file.exists() && rec.file.length() > 0L }
+                        // below enforces existence AND zero-length filtering
+                        // uniformly across single-mode / P+L / per-segment paths.
+                        // sizeBytes intentionally dropped — UI shows duration +
+                        // thumbnail only; consistent with PerSideArtifact which
+                        // also omits size. Plan §3 scope.
+                        ResolvedRecording(
+                            file = file,
+                            // Segments are app-private; no MediaStore URI.
+                            shareUri = null,
+                            sessionId = seg.sessionId,
+                            side = null,
+                            segmentIndex = seg.segmentIndex
+                        )
                     }
                 }
                 // Phase 6.1b T16 — branch on the persisted mode. P+L
