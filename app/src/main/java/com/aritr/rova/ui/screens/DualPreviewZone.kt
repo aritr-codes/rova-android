@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -173,9 +174,21 @@ private fun RecordingFrameGuide(side: VideoSide, modifier: Modifier = Modifier) 
         val density = LocalDensity.current
         val zoneWidthPx = with(density) { maxWidth.toPx() }
         val zoneHeightPx = with(density) { maxHeight.toPx() }
+        val blurRadiusPx = with(density) { RecordChromeTokens.recordingFrameBlurRadius.toPx() }
+        // Cache the native RenderEffect — without remember, a fresh native
+        // Skia filter would be allocated each recomposition while the
+        // TextureView underneath drives continuous redraws. Stable until
+        // blurRadiusPx changes (density change → recomposition with new key).
+        val blurRenderEffect = remember(blurRadiusPx) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                RenderEffect
+                    .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
+                    .asComposeRenderEffect()
+            } else null
+        }
         val layout = recordingFrameLayout(zoneWidthPx, zoneHeightPx, recordingAspect)
         layout.scrimRegions.forEach { region ->
-            ScrimRegion(region = region)
+            ScrimRegion(region = region, blurRenderEffect = blurRenderEffect)
         }
     }
 }
@@ -191,20 +204,18 @@ private fun RecordingFrameGuide(side: VideoSide, modifier: Modifier = Modifier) 
  * boundary (per spec §6.3).
  */
 @Composable
-private fun ScrimRegion(region: FrameRect) {
+private fun ScrimRegion(
+    region: FrameRect,
+    blurRenderEffect: androidx.compose.ui.graphics.RenderEffect?,
+) {
     val density = LocalDensity.current
     val offsetX = with(density) { region.left.toDp() }
     val offsetY = with(density) { region.top.toDp() }
     val widthDp = with(density) { region.width.toDp() }
     val heightDp = with(density) { region.height.toDp() }
-    val blurRadiusPx = with(density) { RecordChromeTokens.recordingFrameBlurRadius.toPx() }
 
-    val blurModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        Modifier.graphicsLayer {
-            renderEffect = RenderEffect
-                .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
-                .asComposeRenderEffect()
-        }
+    val blurModifier = if (blurRenderEffect != null) {
+        Modifier.graphicsLayer { renderEffect = blurRenderEffect }
     } else {
         Modifier
     }

@@ -120,6 +120,12 @@ class RecordingFrameLayoutTest {
         assertTrue(infLayout.scrimRegions.isEmpty())
         assertEquals(0f, infLayout.recordingRect.height, EPS)
 
+        val negInfLayout = recordingFrameLayout(
+            zoneWidth = 100f, zoneHeight = Float.NEGATIVE_INFINITY, recordingAspect = 9f / 16f,
+        )
+        assertTrue(negInfLayout.scrimRegions.isEmpty())
+        assertEquals(0f, negInfLayout.recordingRect.height, EPS)
+
         val nanAspectLayout = recordingFrameLayout(
             zoneWidth = 100f, zoneHeight = 100f, recordingAspect = Float.NaN,
         )
