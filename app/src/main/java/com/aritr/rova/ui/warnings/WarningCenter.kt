@@ -210,7 +210,9 @@ fun WarningCenter(
  * are optional; they are only passed from the sheet call-site for the two recovery targets.
  * Overflow and primary calls that don't concern recovery omit them (default null = no-op).
  */
-private fun launchActionTarget(
+// Phase 4.2 — bumped from private to internal so HistoryScreen / SettingsScreen
+// strip+chip sheet hosts can dispatch warning actions through the same path.
+internal fun launchActionTarget(
     context: Context,
     target: ActionTarget,
     pendingCantMergeSessionId: String? = null,

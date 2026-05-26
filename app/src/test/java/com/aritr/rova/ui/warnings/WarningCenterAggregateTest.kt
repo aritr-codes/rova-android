@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -147,11 +148,20 @@ class WarningCenterAggregateTest {
      */
     private fun makeVm(
         notificationsGranted: Boolean = true,
+        storageInsufficient: Boolean = false,
+        microphonePermissionGranted: Boolean = true,
+        batteryOptimizationExempt: Boolean = true,
+        autoStopEcho: TerminalEcho? = null,
+        initialSnoozedIds: Set<WarningId> = emptySet(),
         recoveryMergeOutcomeSignal: MutableStateFlow<RecoveryMergeOutcomeSignal.State> =
             MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
     ): WarningCenterViewModel {
         val s = sources()
         s.nt.value = notificationsGranted
+        s.storage.value = storageInsufficient
+        s.mic.value = microphonePermissionGranted
+        s.bo.value = batteryOptimizationExempt
+        s.autoStopEcho.value = autoStopEcho
         return WarningCenterViewModel(
             cameraPermissionGranted = s.cameraPerm,
             exactAlarmGranted = s.ea,
@@ -166,6 +176,7 @@ class WarningCenterAggregateTest {
             autoStopEcho = s.autoStopEcho,
             recoveryMergeOutcomeSignal = recoveryMergeOutcomeSignal,  // ← NEW (Phase 4.3)
             scope = CoroutineScope(Dispatchers.Unconfined),
+            initialSnoozedIds = initialSnoozedIds,
         )
     }
 
@@ -402,5 +413,167 @@ class WarningCenterAggregateTest {
         val vm = makeVm(recoveryMergeOutcomeSignal = signalFlow)
         assertNull(vm.activeWarning.value)
         assertNull(vm.pendingCantMergeSessionId.value)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — activeWarningsFor(screen) per-surface filtering
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `activeWarningsFor History returns ordinal-sorted history-allowlist IDs only`() {
+        val vm = makeVm(
+            storageInsufficient = true,          // history allowlist (#3)
+            notificationsGranted = false,         // history allowlist (#20)
+            microphonePermissionGranted = false,  // NOT in history allowlist (#16)
+        )
+        assertEquals(
+            listOf(WarningId.STORAGE_INSUFFICIENT, WarningId.NOTIFICATIONS_DENIED),
+            vm.activeWarningsFor(WarningScreen.History).value,
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor Settings returns ordinal-sorted settings-allowlist IDs only`() {
+        val vm = makeVm(
+            microphonePermissionGranted = false,  // settings allowlist (#16)
+            batteryOptimizationExempt = false,    // settings allowlist (#17)
+            storageInsufficient = true,           // settings allowlist (#3 — overlaps history)
+            autoStopEcho = TerminalEcho("s1", StopReason.LOW_STORAGE),  // NOT in settings allowlist (#12)
+        )
+        assertEquals(
+            listOf(
+                WarningId.STORAGE_INSUFFICIENT,
+                WarningId.MICROPHONE_DENIED,
+                WarningId.BATTERY_OPTIMIZATION_ON,
+            ),
+            vm.activeWarningsFor(WarningScreen.Settings).value,
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor excludes snoozed IDs`() {
+        val vm = makeVm(
+            notificationsGranted = false,
+            initialSnoozedIds = setOf(WarningId.NOTIFICATIONS_DENIED),
+        )
+        assertTrue(
+            vm.activeWarningsFor(WarningScreen.History).value
+                .none { it == WarningId.NOTIFICATIONS_DENIED }
+        )
+    }
+
+    @Test
+    fun `activeWarningsFor Record returns empty list — Record uses activeWarning`() {
+        val vm = makeVm(storageInsufficient = true)
+        assertEquals(
+            emptyList<WarningId>(),
+            vm.activeWarningsFor(WarningScreen.Record).value,
+        )
+        // Record still reads the single-active StateFlow:
+        assertEquals(WarningId.STORAGE_INSUFFICIENT, vm.activeWarning.value)
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — dismissOnHistoryStrip per-session dismissal
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `dismissOnHistoryStrip removes id from History list but not Settings list`() {
+        val vm = makeVm(storageInsufficient = true)
+        // Before dismiss: STORAGE_INSUFFICIENT is on both surfaces (overlap).
+        assertTrue(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.STORAGE_INSUFFICIENT))
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.STORAGE_INSUFFICIENT))
+
+        vm.dismissOnHistoryStrip(WarningId.STORAGE_INSUFFICIENT)
+
+        // After: gone from History, still on Settings.
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.STORAGE_INSUFFICIENT))
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.STORAGE_INSUFFICIENT))
+    }
+
+    @Test
+    fun `dismissOnHistoryStrip is idempotent`() {
+        val vm = makeVm(notificationsGranted = false)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+    }
+
+    @Test
+    fun `dismissOnHistoryStrip ignores non-History allowlist ids`() {
+        val vm = makeVm(microphonePermissionGranted = false)
+        // MICROPHONE_DENIED is not in HISTORY_WARNINGS — call is silently no-op.
+        vm.dismissOnHistoryStrip(WarningId.MICROPHONE_DENIED)
+        // Settings still shows it (proves the call did not mutate any global state).
+        assertTrue(vm.activeWarningsFor(WarningScreen.Settings).value.contains(WarningId.MICROPHONE_DENIED))
+    }
+
+    @Test
+    fun `signal down-edge clears History dismissal so next active edge re-surfaces`() = runBlocking {
+        val s = sources()
+        s.nt.value = false  // notifications denied → NOTIFICATIONS_DENIED active
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+        )
+
+        // Active, user dismisses on History strip.
+        assertTrue(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+        vm.dismissOnHistoryStrip(WarningId.NOTIFICATIONS_DENIED)
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+
+        // Signal flips off (user granted notifications). Card already absent.
+        s.nt.value = true
+        yield()
+        assertFalse(vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED))
+
+        // Signal flips on again (revoked) — card must re-appear (dismissal auto-cleared on down-edge).
+        s.nt.value = false
+        yield()
+        assertTrue(
+            "Re-activation after down-edge must clear the prior session dismissal",
+            vm.activeWarningsFor(WarningScreen.History).value.contains(WarningId.NOTIFICATIONS_DENIED),
+        )
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Phase 4.2 — multi-active aggregation via recovery-merge signal
+    // ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `multi-active aggregation — 3 simultaneous warnings ordinal-sorted on History list`() {
+        val recoverySignal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = "sess-multi",
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage(
+                    requiredBytes = 100L,
+                    availableBytes = 50L,
+                ),
+            )
+        )
+        val vm = makeVm(
+            storageInsufficient = true,                  // #3 STORAGE_INSUFFICIENT (history allowlist)
+            notificationsGranted = false,                 // #20 NOTIFICATIONS_DENIED (history allowlist)
+            recoveryMergeOutcomeSignal = recoverySignal, // #14 CANT_MERGE (history allowlist) via signal
+        )
+        assertEquals(
+            listOf(
+                WarningId.STORAGE_INSUFFICIENT,
+                WarningId.CANT_MERGE,
+                WarningId.NOTIFICATIONS_DENIED,
+            ),
+            vm.activeWarningsFor(WarningScreen.History).value,
+        )
     }
 }

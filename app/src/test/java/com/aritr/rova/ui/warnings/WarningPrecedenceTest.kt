@@ -271,4 +271,66 @@ class WarningPrecedenceTest {
         )
         assertEquals(WarningId.CANT_MERGE, resolved)
     }
+
+    // ── Phase 4.2 — allActive multi-emission ─────────────────────────
+
+    /** All-clear defaults; override one knob per test. Returns List<WarningId>. */
+    private fun allActive(
+        cameraPermissionGranted: Boolean = true,
+        exactAlarmGranted: Boolean = true,
+        storageInsufficient: Boolean = false,
+        thermal: ThermalStatus = ThermalStatus.NONE,
+        percent: Int? = 80,
+        charging: Boolean = false,
+        powerSaveMode: Boolean = false,
+        camera: CameraSignalState = CameraSignalState.OK,
+        microphonePermissionGranted: Boolean = true,
+        notificationsGranted: Boolean = true,
+        batteryOptimizationExempt: Boolean = true,
+        storageLowMidRec: Boolean = false,
+        autoStopEcho: TerminalEcho? = null,
+        cantMergeActive: Boolean = false,
+    ): List<WarningId> = WarningPrecedence.allActive(
+        cameraPermissionGranted = cameraPermissionGranted,
+        exactAlarmGranted = exactAlarmGranted,
+        storageInsufficient = storageInsufficient,
+        thermal = thermal,
+        power = PowerState(percent = percent, charging = charging, powerSaveMode = powerSaveMode),
+        camera = camera,
+        microphonePermissionGranted = microphonePermissionGranted,
+        notificationsGranted = notificationsGranted,
+        batteryOptimizationExempt = batteryOptimizationExempt,
+        storageLowMidRec = storageLowMidRec,
+        autoStopEcho = autoStopEcho,
+        cantMergeActive = cantMergeActive,
+    )
+
+    @Test fun `allActive returns empty list when no inputs active`() {
+        assertEquals(emptyList<WarningId>(), allActive())
+    }
+
+    @Test fun `allActive returns ordinal-sorted full list when multiple inputs active`() {
+        val active = allActive(
+            storageInsufficient = true,        // #3 STORAGE_INSUFFICIENT
+            notificationsGranted = false,      // #20 NOTIFICATIONS_DENIED
+            cantMergeActive = true,            // #14 CANT_MERGE
+        )
+        assertEquals(
+            listOf(
+                WarningId.STORAGE_INSUFFICIENT,
+                WarningId.CANT_MERGE,
+                WarningId.NOTIFICATIONS_DENIED,
+            ),
+            active,
+        )
+    }
+
+    @Test fun `resolve equals allActive firstOrNull for representative fixtures`() {
+        // Each pair: (resolve helper call, allActive helper call) — should match.
+        assertEquals(resolve(), allActive().firstOrNull())
+        assertEquals(resolve(storageInsufficient = true), allActive(storageInsufficient = true).firstOrNull())
+        assertEquals(resolve(cameraPermissionGranted = false), allActive(cameraPermissionGranted = false).firstOrNull())
+        assertEquals(resolve(cantMergeActive = true), allActive(cantMergeActive = true).firstOrNull())
+        assertEquals(resolve(thermal = ThermalStatus.CRITICAL, percent = 3), allActive(thermal = ThermalStatus.CRITICAL, percent = 3).firstOrNull())
+    }
 }
