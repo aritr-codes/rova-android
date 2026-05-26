@@ -222,19 +222,25 @@ object RecordChromeTokens {
     /** `.focus-frame` corner-bracket stroke width — CSS `border-width: 1.5px`. */
     val focusFrameStrokeWidth = 1.5.dp
 
-    // ── Recording-frame guide (P+L mode — always on, ADR-0010) ─────────
-    /**
-     * Recording-frame outline colour — faint light-gray, low alpha. Per
-     * `docs/superpowers/specs/2026-05-22-dualshot-preview-crop-fill-design.md`
-     * §5.3 / §5.4. Deliberately subtle so it does not compete with the live
-     * preview; pairs with [recordingFrameStrokeWidth].
-     */
-    val recordingFrameOutline = Color(0xFFB0B4BC).copy(alpha = 0.38f)
-    /** Recording-frame outline stroke width. */
-    val recordingFrameStrokeWidth = 1.dp
+    // ── Recording-frame guide (P+L mode — always on, ADR-0010 + Milestone 1) ─────────
     /**
      * Recording-frame scrim — faint black over the non-recorded preview
-     * margin. Signals "this part isn't captured".
+     * margin. Signals "this part isn't captured". Halved from the prior
+     * 0.22f baseline as part of Milestone 1 polish (subtle scrim + API 31+
+     * blur replaces the prior 1.dp outline + 0.22f scrim combination).
+     * Spec: `docs/superpowers/specs/2026-05-26-dualshot-frame-polish-design.md` §7.
      */
-    val recordingFrameScrim = Color.Black.copy(alpha = 0.22f)
+    val recordingFrameScrim = Color.Black.copy(alpha = 0.11f)
+    /**
+     * Recording-frame blur radius — applied via `RenderEffect.createBlurEffect`
+     * on API 31+ only. The blur runs over scrim regions only (live camera
+     * content beneath the scrim). Subtle frosted-glass effect; see spec §5 #1.
+     */
+    val recordingFrameBlurRadius = 12.dp
+    /**
+     * `.cam-split-divider` alpha — soft separator between portrait and
+     * landscape zones in P+L mode. Reduced from the prior 0.14f (literal in
+     * `DualPreviewZone`) to honour the softer-chrome direction. Spec §5 #4.
+     */
+    val camSplitDividerAlpha = 0.06f
 }
