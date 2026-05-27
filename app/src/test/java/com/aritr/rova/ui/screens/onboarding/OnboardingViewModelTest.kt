@@ -8,8 +8,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * M4 (2026-05-27) — pure-JVM tests for [OnboardingViewModel] after
- * the 7 → 3 step shrink. Test count: 14 (was 12 in Phase 2.6 — +2 net
- * for the two `skipWalkthroughToCamera` cases).
+ * the 7 → 3 step shrink. Test count: 16 (was 12 in Phase 2.6 — +2 for
+ * `skipWalkthroughToCamera`, +2 for `setStep` HorizontalPager seam).
  *
  * Coverage:
  *  - initial state
@@ -24,6 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *  - goBack after completed is a no-op
  *  - skipWalkthroughToCamera (NEW) jumps from any walkthrough step to PERM_CAMERA
  *  - skipWalkthroughToCamera is a no-op from PERM_CAMERA (already past)
+ *  - setStep (M4 owner-feedback) transitions to the specified step
+ *  - setStep is a no-op once completed (HorizontalPager swipe-settle
+ *    after onCompleted cannot regress state)
  *  - OnboardingStep next/previous round-trips on every entry
  *  - OnboardingStep walkthrough and permission flags partition the enum
  *
@@ -133,6 +136,27 @@ class OnboardingViewModelTest {
         vm.advance(); vm.advance() // → PERM_CAMERA
         vm.skipWalkthroughToCamera()
         assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
+    }
+
+    // M4 (2026-05-27) owner-feedback follow-up — HorizontalPager seam.
+    // Pager swipe settle drives state back into VM via setStep.
+
+    @Test fun `setStep transitions to specified step`() {
+        val vm = newVm()
+        vm.setStep(OnboardingStep.PERM_CAMERA)
+        assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
+        assertFalse(vm.uiState.value.completed)
+    }
+
+    @Test fun `setStep is no-op when completed`() {
+        // A delayed swipe-settle that fires after onCompleted has already
+        // navigated away must not regress state — guard mirrors advance/
+        // goBack/skipWalkthroughToCamera/complete idempotency.
+        val vm = newVm()
+        vm.complete()
+        val captured = vm.uiState.value
+        vm.setStep(OnboardingStep.WALKTHROUGH_1)
+        assertEquals(captured, vm.uiState.value)
     }
 
     @Test fun `OnboardingStep next previous round-trips on every entry`() {

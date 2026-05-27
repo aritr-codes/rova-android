@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -86,6 +89,13 @@ internal fun WalkthroughSlide(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Owner feedback 2026-05-27 — MainActivity is edge-to-edge, so
+            // content extends behind status + nav bars. safeDrawing accounts
+            // for both system bars + display cutout. Pairs with the immersive
+            // sticky controller in OnboardingScreen — when bars are hidden the
+            // insets are zero (no extra padding); when the user swipes-from-edge
+            // and bars transiently reappear, the content shifts to clear them.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 26.dp)
     ) {
         Row(
@@ -153,6 +163,10 @@ internal fun CameraRationaleSlide(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Owner feedback 2026-05-27 — safeDrawing keeps the rationale
+            // clear of edge-to-edge system bars + display cutout. Pairs with
+            // the immersive sticky controller in OnboardingScreen.
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(96.dp))

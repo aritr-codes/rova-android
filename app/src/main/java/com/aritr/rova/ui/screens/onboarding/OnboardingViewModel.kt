@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * M4 (2026-05-27) Onboarding redesign — VM for the 3-step first-launch flow.
  *
  * Holds the current [OnboardingStep] in a [StateFlow] and exposes
- * [advance] / [goBack] / [complete] / [skipWalkthroughToCamera]
- * transitions. The completion side-effect
+ * [advance] / [goBack] / [complete] / [skipWalkthroughToCamera] /
+ * [setStep] transitions. The completion side-effect
  * (`RovaSettings.onboardingCompleted = true`) is injected as a
  * [markCompleted] seam so the VM stays pure-Kotlin and the unit test
  * passes a counting lambda — same pattern as
@@ -24,11 +24,11 @@ import kotlinx.coroutines.flow.asStateFlow
  * unconditionally available API 1+, so no SDK gating is needed.
  *
  * Idempotency contract: [advance] / [complete] /
- * [skipWalkthroughToCamera] / [goBack] are all no-ops once
- * [OnboardingUiState.completed] flips true. Without this guard, a
- * delayed permission-launcher result firing after the user has
- * already exited could re-fire navigation or double-write the
- * settings flag.
+ * [skipWalkthroughToCamera] / [goBack] / [setStep] are all no-ops
+ * once [OnboardingUiState.completed] flips true. Without this guard,
+ * a delayed permission-launcher result OR a HorizontalPager
+ * swipe-settle event firing after the user has already exited could
+ * re-fire navigation or double-write the settings flag.
  */
 class OnboardingViewModel(
     private val markCompleted: () -> Unit
@@ -81,6 +81,24 @@ class OnboardingViewModel(
         if (current.completed) return
         if (!current.step.isWalkthrough) return
         _uiState.value = current.copy(step = OnboardingStep.PERM_CAMERA)
+    }
+
+    /**
+     * M4 (2026-05-27 owner feedback) — direct step setter used by the
+     * [androidx.compose.foundation.pager.HorizontalPager] in
+     * [com.aritr.rova.ui.screens.onboarding.OnboardingScreen] to push
+     * settled user-swipe page index back into VM state.
+     *
+     * Idempotent (no-op on equal step) so tap-driven scrolls — where
+     * VM is already on target — don't re-emit; and respects the
+     * completion guard so a delayed swipe-settle after onCompleted
+     * cannot regress state.
+     */
+    fun setStep(step: OnboardingStep) {
+        val current = _uiState.value
+        if (current.completed) return
+        if (current.step == step) return
+        _uiState.value = current.copy(step = step)
     }
 
     companion object {
