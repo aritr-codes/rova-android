@@ -821,6 +821,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var lastMergeNotifyMillis: Long = 0L
     private val MERGE_NOTIFY_THROTTLE_MS = 500L
 
+    // Milestone 5 §6 — session-channel rate-limit (~1Hz) with transition flush.
+    @Volatile private var lastSessionNotifyMillis: Long = 0L
+    @Volatile private var lastNotifiedState: NotificationState? = null
+    private val MIN_SESSION_NOTIFY_INTERVAL_MS = 950L  // ~1Hz; just under a second to absorb scheduler jitter
+
     /**
      * Milestone 2 — progress-aware merge notification update. Throttled
      * to 500ms; final tick (`fraction >= 1f`) bypasses throttle. Reuses
@@ -2844,6 +2849,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // preserved for the String-based updateNotification(contentText)
     // overload above; do not remove it.
     private fun updateNotification(state: NotificationState) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val previousState = lastNotifiedState
+        lastNotifiedState = state
+        val sameStateClass = previousState != null && previousState::class == state::class
+        if (!sameStateClass) {
+            lastSessionNotifyMillis = 0L  // force-emit on transition
+        }
+        val isSessionChannel = state.toChannelId() == NotificationChannelConfig.SESSION_CHANNEL_ID
+        val isHighRate = state is NotificationState.ClipRecording || state is NotificationState.GapWaiting
+        if (isSessionChannel && isHighRate) {
+            if (now - lastSessionNotifyMillis < MIN_SESSION_NOTIFY_INTERVAL_MS) return
+            lastSessionNotifyMillis = now
+        }
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
             createNotification(state, currentSessionId)
