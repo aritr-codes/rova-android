@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,11 +86,25 @@ class ThermalStatusSignal(
     val state: StateFlow<ThermalStatus> = _state.asStateFlow()
 
     /**
+     * Milestone 3 (ADR-0019) — hysteresis state held in-signal. `stable`
+     * mirrors `_state.value` (invariant); `dwellEnteredAtMs` is non-null
+     * only while a fall-dwell is in flight. Initial snapshot uses the
+     * same [currentValue] read as `_state` to avoid NONE-flash on hot
+     * launch.
+     */
+    private var hysteresisState: HysteresisState =
+        HysteresisState(stable = _state.value, dwellEnteredAtMs = null)
+
+    /**
      * Re-read the thermal status and publish if changed. Call from
-     * `ON_RESUME`. Idempotent on unchanged status.
+     * `ON_RESUME`. Idempotent on unchanged status. Milestone 3 (ADR-0019):
+     * resets the in-signal hysteresis state to match — refresh represents
+     * the authoritative "current OS truth" and clears any in-flight dwell.
      */
     fun refresh() {
-        _state.value = currentValue()
+        val current = currentValue()
+        _state.value = current
+        hysteresisState = HysteresisState(stable = current, dwellEnteredAtMs = null)
     }
 
     /** Opaque listener token held so [stop] can unregister it. */
@@ -107,8 +122,11 @@ class ThermalStatusSignal(
     fun start() {
         if (sdkInt < Build.VERSION_CODES.Q) return
         if (registeredListenerToken != null) return
-        val callback: (Int) -> Unit = { raw ->
-            _state.value = ThermalStatus.fromRaw(raw)
+        val callback: (Int) -> Unit = { rawInt ->
+            val raw = ThermalStatus.fromRaw(rawInt)
+            val now = SystemClock.elapsedRealtime()
+            hysteresisState = applyThermalHysteresis(raw, hysteresisState, now)
+            _state.value = hysteresisState.stable
         }
         registeredListenerToken = addListener(callback)
     }
