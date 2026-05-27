@@ -38,6 +38,7 @@ import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.NotificationChannelConfig
 import com.aritr.rova.service.notification.NotificationState
 import com.aritr.rova.service.notification.toCopy
 import com.aritr.rova.service.scheduler.AlarmScheduler
@@ -2634,14 +2635,39 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Rova Background Recording",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val mgr = getSystemService(NotificationManager::class.java)
+
+        // Legacy channel — kept registered (and unused) so existing user
+        // importance/sound overrides are not nuked silently on M5 install.
+        // Cleanup deletion is a follow-on slice after one release.
+        val legacy = NotificationChannel(
+            CHANNEL_ID,
+            "Rova Background Recording",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        mgr.createNotificationChannel(legacy)
+
+        // M5 §4 — new dual-channel topology.
+        val session = NotificationChannel(
+            NotificationChannelConfig.SESSION_CHANNEL_ID,
+            getString(R.string.notification_channel_session_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = getString(R.string.notification_channel_session_desc)
+            setShowBadge(false)
         }
+        mgr.createNotificationChannel(session)
+
+        val complete = NotificationChannel(
+            NotificationChannelConfig.COMPLETE_CHANNEL_ID,
+            getString(R.string.notification_channel_complete_name),
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = getString(R.string.notification_channel_complete_desc)
+            setShowBadge(true)
+        }
+        mgr.createNotificationChannel(complete)
     }
 
     /**
