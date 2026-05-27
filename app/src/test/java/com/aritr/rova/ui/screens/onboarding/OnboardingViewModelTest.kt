@@ -106,9 +106,15 @@ class OnboardingViewModelTest {
     }
 
     @Test fun `goBack after completed is a no-op`() {
+        // Codex review 2026-05-27: advance to PERM_CAMERA before completing,
+        // so the no-op assertion isn't trivially satisfied by also being on
+        // WALKTHROUGH_1 (which has no previous step regardless of the guard).
         val vm = newVm()
+        vm.advance(); vm.advance() // → PERM_CAMERA
         vm.complete()
         val captured = vm.uiState.value
+        assertEquals(OnboardingStep.PERM_CAMERA, captured.step)
+        assertTrue(captured.completed)
         vm.goBack()
         assertEquals(captured, vm.uiState.value)
     }

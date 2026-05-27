@@ -54,10 +54,13 @@ fun MainScreen() {
             startDestination = startDestination,
             modifier = Modifier
         ) {
-            // Phase 2.6 — onboarding gate. Completion (and Skip)
-            // navigates to `record` and pops the onboarding entry off
-            // the back-stack so a system-back from `record` does not
-            // re-enter the flow. UI_NAV_GRAPH §5 back-stack table.
+            // Phase 2.6 / M4 (2026-05-27) — onboarding gate. Completion
+            // (advance past PERM_CAMERA or "Not now" on Camera rationale)
+            // navigates to `record` and pops the onboarding entry off the
+            // back-stack so a system-back from `record` does not re-enter
+            // the flow. M4 NOTE: Walkthrough Skip now jumps to PERM_CAMERA
+            // (NOT past it via the old `complete()` path) — Camera is a
+            // hard-block, must be prompted. UI_NAV_GRAPH §5 back-stack table.
             composable("onboarding") {
                 OnboardingScreen(
                     onCompleted = {

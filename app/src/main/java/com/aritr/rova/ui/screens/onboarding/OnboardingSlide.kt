@@ -38,8 +38,11 @@ import com.aritr.rova.R
  * "Allow Camera" CTA + "Not now" link.
  *
  * Mockup contract: `mockups/new_uiux/08b-onboarding.html`. CTA height
- * 52 dp (WCAG 2.2 ≥48 dp). All copy via `stringResource` — no
- * hardcoded user-visible text in this file.
+ * 52 dp (WCAG 2.2 ≥48 dp). All copy via `stringResource` EXCEPT the
+ * walkthrough-CTA trailing arrow `" →"` glued at the composable site —
+ * an explicitly-deferred i18n nit (plan §Out-of-scope #8: RTL would
+ * want this flipped or omitted). Moving the arrow into the string
+ * resource is the future i18n polish item.
  */
 
 @Composable

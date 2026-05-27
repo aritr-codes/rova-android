@@ -73,12 +73,28 @@ fun OnboardingClockOrbit(
                 style = Stroke(width = 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f)))
             )
 
-            // top + bottom arcs
+            // top + bottom arcs (with directional arrowheads — codex review 2026-05-27)
             val arcStroke = Stroke(width = 2.8f, cap = StrokeCap.Round)
             val arcTopLeft = Offset(cx - 63f * scale, cy - 63f * scale)
             val arcSize = Size(126f * scale, 126f * scale)
             drawArc(Indigo.copy(alpha = 0.55f), 200f, 140f, false, arcTopLeft, arcSize, style = arcStroke)
             drawArc(Indigo.copy(alpha = 0.55f), 20f, 140f, false, arcTopLeft, arcSize, style = arcStroke)
+            val arrowStroke = Stroke(width = 2.2f, cap = StrokeCap.Round)
+            val arrowColor = Indigo.copy(alpha = 0.55f)
+            // top-right arrowhead — SVG: M 162 80 L 167 88 L 157 87
+            val topArrowhead = Path().apply {
+                moveTo(162f * scale, 80f * scale)
+                lineTo(167f * scale, 88f * scale)
+                lineTo(157f * scale, 87f * scale)
+            }
+            drawPath(topArrowhead, color = arrowColor, style = arrowStroke)
+            // bottom-left arrowhead — SVG: M 48 130 L 43 122 L 53 123
+            val bottomArrowhead = Path().apply {
+                moveTo(48f * scale, 130f * scale)
+                lineTo(43f * scale, 122f * scale)
+                lineTo(53f * scale, 123f * scale)
+            }
+            drawPath(bottomArrowhead, color = arrowColor, style = arrowStroke)
 
             // center clock face
             drawCircle(Indigo.copy(alpha = 0.07f), radius = 36f * scale, center = Offset(cx, cy))
