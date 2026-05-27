@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
                 MainScreen(initialTab = initialTab)
             }
         }
+        handleNotificationAction(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -32,6 +33,24 @@ class MainActivity : ComponentActivity() {
         // MainScreen recomposing — we intentionally do not call setContent
         // again. If a future redesign needs runtime tab selection, lift
         // initialTab into a StateFlow and observe.
+        handleNotificationAction(intent)
+    }
+
+    /**
+     * M5 §5 — routes notification action intents to [RovaApp] thin
+     * wrappers. Called from both [onCreate] and [onNewIntent] so both
+     * cold-start and warm-resume taps are handled.
+     */
+    private fun handleNotificationAction(intent: Intent?) {
+        when (intent?.action) {
+            com.aritr.rova.service.RovaStopReceiver.ACTION_STOP -> {
+                (application as RovaApp).requestUserStopIfRunning(this)
+            }
+            com.aritr.rova.service.RovaRecordingService.ACTION_SHARE_RECORDING -> {
+                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+                if (sessionId != null) (application as RovaApp).shareRecording(this, sessionId)
+            }
+        }
     }
 
     private fun readInitialTab(intent: Intent?): InitialTab {

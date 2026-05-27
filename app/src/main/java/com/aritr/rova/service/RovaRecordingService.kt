@@ -38,9 +38,17 @@ import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.NotificationActionKey
+import com.aritr.rova.service.notification.NotificationActionSpec
 import com.aritr.rova.service.notification.NotificationChannelConfig
 import com.aritr.rova.service.notification.NotificationState
+import com.aritr.rova.service.notification.toAccent
+import com.aritr.rova.service.notification.toActionSpecs
+import com.aritr.rova.service.notification.toChannelId
 import com.aritr.rova.service.notification.toCopy
+import com.aritr.rova.service.notification.toIconRes
+import com.aritr.rova.service.notification.toProgress
+import com.aritr.rova.service.notification.isDismissible
 import com.aritr.rova.service.scheduler.AlarmScheduler
 import android.os.Binder
 import kotlinx.coroutines.CompletableDeferred
@@ -500,6 +508,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         private const val LEGACY_NOTIFICATION_TITLE = "🎥 Rova Recording Active"
         // Phase 1.3 — legacy ACTION_STOP service-intent constant removed.
         // Stop arrives via RovaStopReceiver.ACTION_STOP (broadcast).
+        // M5 §5 — share action routed through MainActivity so the chooser
+        // builder has access to an Activity context.
+        const val ACTION_SHARE_RECORDING = "com.aritr.rova.action.SHARE_RECORDING"
         private const val WAKE_LOCK_RELAX_THRESHOLD_SECONDS = 120
         private const val WAKE_LOCK_FINAL_COUNTDOWN_SECONDS = 10
         private const val WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS = 30
@@ -2671,6 +2682,92 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
+     * M5 §5 — per-state builder. Derives channel, accent, icon, progress,
+     * and action specs from [state] via the pure-helper extension functions;
+     * routes every action intent through [buildActionIntent] so the activity
+     * handles stop and share without the service touching chooser APIs.
+     */
+    private fun createNotification(state: NotificationState, sessionId: String?): Notification {
+        val copy = state.toCopy()
+        val channelId = state.toChannelId()
+        val accent = state.toAccent()
+        val iconRes = state.toIconRes()
+        val ongoing = !state.isDismissible()
+        val autoCancel = state.isDismissible()
+
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setContentTitle(copy.title)
+            .setContentText(copy.body)
+            .setSmallIcon(iconRes)
+            .setColor(accent)
+            .setColorized(state is NotificationState.MergeComplete)
+            .setContentIntent(openPendingIntent)
+            .setOngoing(ongoing)
+            .setAutoCancel(autoCancel)
+            .setOnlyAlertOnce(state !is NotificationState.MergeComplete)
+            .setVisibility(
+                if (state is NotificationState.MergeComplete) NotificationCompat.VISIBILITY_PRIVATE
+                else NotificationCompat.VISIBILITY_PUBLIC
+            )
+            .setShowWhen(state is NotificationState.MergeComplete)
+
+        state.toProgress()?.let { p ->
+            builder.setProgress(p.max, p.current, p.indeterminate)
+        }
+
+        state.toActionSpecs().forEach { spec ->
+            val intent = buildActionIntent(spec, sessionId)
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                spec.key.ordinal + 100,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val action = NotificationCompat.Action.Builder(spec.iconRes, getString(spec.labelRes), pendingIntent)
+                .build()
+            builder.addAction(action)
+        }
+
+        return builder.build()
+    }
+
+    private fun buildActionIntent(spec: NotificationActionSpec, sessionIdContext: String?): Intent {
+        return when (spec.key) {
+            NotificationActionKey.STOP, NotificationActionKey.STOP_EARLY ->
+                // Reuses the existing user-stop broadcast pipeline.
+                // RovaStopReceiver.ACTION_STOP is the canonical entry point;
+                // the in-app Stop FAB already routes through it.
+                Intent(this, MainActivity::class.java)
+                    .setAction(RovaStopReceiver.ACTION_STOP)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.OPEN ->
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.VIEW_IN_LIBRARY ->
+                Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HISTORY)
+                    .also { i -> spec.sessionIdExtra?.let { i.putExtra(MainActivity.EXTRA_SESSION_ID, it) } }
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.SHARE -> {
+                // Share routes through MainActivity so chooser construction
+                // has access to Activity context.
+                Intent(this, MainActivity::class.java)
+                    .setAction(ACTION_SHARE_RECORDING)
+                    .also { i -> spec.sessionIdExtra?.let { i.putExtra(MainActivity.EXTRA_SESSION_ID, it) } }
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        }
+    }
+
+    /**
      * Phase 1.3 — STOP action is gated on a non-null [sessionId].
      *
      * The init-window problem this solves: onStartCommand calls
@@ -2738,12 +2835,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
         )
     }
 
-    // Phase 3.1 — typed overload for the 4 mockup happy-path states.
+    // M5 §5 — typed overload delegates to the per-state builder.
+    // The legacy createNotification(title, body, sessionId) path is
+    // preserved for the String-based updateNotification(contentText)
+    // overload above; do not remove it.
     private fun updateNotification(state: NotificationState) {
-        val copy = state.toCopy()
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
-            createNotification(copy.title, copy.body, currentSessionId)
+            createNotification(state, currentSessionId)
         )
     }
 
