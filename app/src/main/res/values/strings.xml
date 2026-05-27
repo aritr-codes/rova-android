@@ -1,3 +1,28 @@
 <resources>
     <string name="app_name">Rova</string>
+
+    <!-- M4 (2026-05-27) Onboarding redesign — see mockups/new_uiux/08b-onboarding.html.
+         Copy verified at Flesch-Kincaid grade 5-6 (NN/g target for mainstream
+         non-technical users). Ban list: "grant", "permission" (the system word),
+         "background", "foreground", "schedule" (the system word), "drift",
+         "session", "loop" (audio collision), all-caps Android constants. -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_continue">Continue</string>
+
+    <string name="onboarding_walkthrough_1_title">Records on a schedule</string>
+    <string name="onboarding_walkthrough_1_body">Choose how long each clip is, the gap between, and how many to record.</string>
+
+    <string name="onboarding_walkthrough_2_title">One video at the end</string>
+    <string name="onboarding_walkthrough_2_body">When recording finishes, your clips combine into a single video — ready to share.</string>
+
+    <string name="onboarding_camera_title">Camera</string>
+    <string name="onboarding_camera_body">Rova uses your camera to record video. Without it, the app can\'t work.</string>
+    <string name="onboarding_camera_allow">Allow Camera</string>
+    <string name="onboarding_camera_not_now">Not now</string>
+
+    <!-- contentDescription strings for illustrations -->
+    <string name="onboarding_illustration_clock_orbit">Clock with timing badges</string>
+    <string name="onboarding_illustration_clip_merge">Three clips combine into one video file</string>
+    <string name="onboarding_illustration_camera">Camera</string>
 </resources>
