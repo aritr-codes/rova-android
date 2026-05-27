@@ -1214,7 +1214,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
 
                     _serviceState.update { it.copy(currentLoop = segmentCount + 1) }
-                    updateNotification(NotificationState.ClipRecording(segmentCount + 1, limitLoops.takeIf { it != -1 }))
+                    updateNotification(NotificationState.ClipRecording(
+                        current = segmentCount + 1,
+                        total = limitLoops.takeIf { it != -1 },
+                        etaSecondsRemaining = nSeconds.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    ))
 
                     // ADR 0006 B-fix-4: retry loop now branches on
                     // SegmentResult. RetryableFailure → reconfigure +
@@ -3139,7 +3143,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var mergeSucceeded = false
         try {
             _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
-            updateNotification(NotificationState.Merging(done = 0, total = segments.size))
+            updateNotification(NotificationState.Merging(done = 0, total = segments.size, mergeProgressPercent = 0))
 
             // Phase 1.7 commit-7 — single live entry into the tier
             // export pipeline. ExportPipeline.export dispatches by
@@ -3164,12 +3168,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 side = null
             ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
-                updateNotification(NotificationState.Merging((progress * segments.size).toInt(), segments.size))
+                updateNotification(NotificationState.Merging(
+                    done = (progress * segments.size).toInt().coerceIn(0, segments.size),
+                    total = segments.size,
+                    mergeProgressPercent = (progress * 100f).toInt().coerceIn(0, 100)
+                ))
             }
 
             when (result) {
                 is ExportResult.Success -> {
-                    updateNotification(NotificationState.MergeComplete(clipCount = segments.size))
+                    updateNotification(NotificationState.MergeComplete(
+                        clipCount = segments.size,
+                        totalDurationSeconds = null, // segments: List<File> — durationMs not available here
+                        sessionId = currentSessionId
+                    ))
                     withContext(Dispatchers.IO) {
                         segments.forEach {
                             if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
@@ -3328,7 +3340,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // X always means "clips within the saved content", not "raw
             // segments across all output streams."
             val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
-            updateNotification(NotificationState.Merging(done = 0, total = userClipCount))
+            updateNotification(NotificationState.Merging(done = 0, total = userClipCount, mergeProgressPercent = 0))
 
             val sid = currentSessionId
             val sessionDir = currentSessionDir
@@ -3355,8 +3367,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val overall = progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = (overall * userClipCount).toInt(),
-                            total = userClipCount
+                            done = (overall * userClipCount).toInt().coerceIn(0, userClipCount),
+                            total = userClipCount,
+                            mergeProgressPercent = (overall * 100f).toInt().coerceIn(0, 100)
                         )
                     )
                 }
@@ -3378,8 +3391,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val overall = 0.5f + progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = (overall * userClipCount).toInt(),
-                            total = userClipCount
+                            done = (overall * userClipCount).toInt().coerceIn(0, userClipCount),
+                            total = userClipCount,
+                            mergeProgressPercent = (overall * 100f).toInt().coerceIn(0, 100)
                         )
                     )
                 }
@@ -3422,7 +3436,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
                     }
                 }
-                updateNotification(NotificationState.MergeComplete(clipCount = userClipCount))
+                updateNotification(NotificationState.MergeComplete(
+                    clipCount = userClipCount,
+                    totalDurationSeconds = null, // portraitSegments/landscapeSegments: List<File> — durationMs not available here
+                    sessionId = currentSessionId
+                ))
                 delay(1000)
             } else {
                 // TODO T17: when both sides failed, advance shared
@@ -3716,7 +3734,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
             while (remaining > 0 && kotlinx.coroutines.currentCoroutineContext().isActive) {
                 val step = minOf(remaining, WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS)
                 _serviceState.update { it.copy(nextRecordingCountdown = remaining.toLong()) }
-                updateNotification(NotificationState.GapWaiting(segmentCount + 1, formatCountdownSeconds(remaining), limitLoops.takeIf { it != -1 }))
+                updateNotification(NotificationState.GapWaiting(
+                    nextNumber = segmentCount + 1,
+                    nextInLabel = formatCountdownSeconds(remaining),
+                    total = limitLoops.takeIf { it != -1 },
+                    nextStartsInSeconds = remaining,
+                    gapTotalSeconds = waitSeconds.coerceAtLeast(0)
+                ))
                 delay(step * 1000L)
                 remaining -= step
             }
@@ -3789,7 +3813,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         acquireWakeLock()
         for (i in waitSeconds downTo 1) {
             if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
-            updateNotification(NotificationState.GapWaiting(segmentCount + 1, "${i}s", limitLoops.takeIf { it != -1 }))
+            updateNotification(NotificationState.GapWaiting(
+                    nextNumber = segmentCount + 1,
+                    nextInLabel = "${i}s",
+                    total = limitLoops.takeIf { it != -1 },
+                    nextStartsInSeconds = i,
+                    gapTotalSeconds = waitSeconds.coerceAtLeast(0)
+                ))
             _serviceState.update { it.copy(nextRecordingCountdown = i.toLong()) }
             delay(1000)
         }
