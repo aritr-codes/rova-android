@@ -1,7 +1,6 @@
 package com.aritr.rova.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -84,7 +83,10 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun RovaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,        // ← M4 (2026-05-27): pin dark.
+    // Was: `isSystemInDarkTheme()`. Light-mode users on fresh install were
+    // landing on the unfinished light scheme. Full Light/Dark/System
+    // switcher ships in a later milestone via RovaSettings.themeMode.
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {

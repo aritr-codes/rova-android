@@ -9,27 +9,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Phase 2.6 — VM for the first-launch onboarding flow.
+ * M4 (2026-05-27) Onboarding redesign — VM for the 3-step first-launch flow.
  *
  * Holds the current [OnboardingStep] in a [StateFlow] and exposes
- * advance / back / complete transitions. The completion side-effect
+ * [advance] / [goBack] / [complete] / [skipWalkthroughToCamera] /
+ * [setStep] transitions. The completion side-effect
  * (`RovaSettings.onboardingCompleted = true`) is injected as a
  * [markCompleted] seam so the VM stays pure-Kotlin and the unit test
- * can pass a counting lambda — same pattern as
- * [com.aritr.rova.ui.screens.player.PlayerViewModel] for testability.
+ * passes a counting lambda — same pattern as
+ * [com.aritr.rova.ui.screens.player.PlayerViewModel].
  *
- * SDK gating (POST_NOTIFICATIONS API 33+, SCHEDULE_EXACT_ALARM API 31+)
- * is intentionally NOT modeled here: the VM treats every step as
- * present and the Composable layer auto-advances unsupported steps
- * via [androidx.compose.runtime.LaunchedEffect]. Modeling SDK in the
- * VM would couple it to `Build.VERSION.SDK_INT` and break the JVM
- * test contract.
+ * Phase 2.6 had SDK-gating concerns for `PERM_NOTIFS` (API 33+) and
+ * `PERM_ALARM` (API 31+). Those steps are GONE in M4 — Camera is
+ * unconditionally available API 1+, so no SDK gating is needed.
  *
- * Idempotency contract: [advance] / [complete] / [goBack] are all
- * no-ops once [OnboardingUiState.completed] flips true. Without this
- * guard, a delayed permission-launcher result firing after the user
- * has already exited could re-fire navigation or double-write the
- * settings flag.
+ * Idempotency contract: [advance] / [complete] /
+ * [skipWalkthroughToCamera] / [goBack] / [setStep] are all no-ops
+ * once [OnboardingUiState.completed] flips true. Without this guard,
+ * a delayed permission-launcher result OR a HorizontalPager
+ * swipe-settle event firing after the user has already exited could
+ * re-fire navigation or double-write the settings flag.
  */
 class OnboardingViewModel(
     private val markCompleted: () -> Unit
@@ -38,11 +37,6 @@ class OnboardingViewModel(
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
-    /**
-     * Move to the next step. On the last step, transitions to
-     * [OnboardingUiState.completed] = true and invokes [markCompleted]
-     * exactly once. No-op once completed.
-     */
     fun advance() {
         val current = _uiState.value
         if (current.completed) return
@@ -55,11 +49,6 @@ class OnboardingViewModel(
         }
     }
 
-    /**
-     * Move to the previous step. No-op if already on the first step
-     * (back gesture on slide 1 is handled at the Composable layer per
-     * UI_NAV_GRAPH §4.1) or if completed.
-     */
     fun goBack() {
         val current = _uiState.value
         if (current.completed) return
@@ -68,11 +57,9 @@ class OnboardingViewModel(
     }
 
     /**
-     * Skip-to-end. Walkthrough Skip and any "exit early" path lands
-     * here. UI_NAV_GRAPH §4.1 + §8 open question 1 — Skip writes
-     * `onboardingCompleted = true` (matches the prototype) and the
-     * WarningCenter surfaces any still-missing permissions on record.
-     * Idempotent: [markCompleted] fires at most once per VM lifetime.
+     * "Not now" path on the Camera rationale slide AND any future
+     * "exit early" path. Idempotent: [markCompleted] fires at most
+     * once per VM lifetime.
      */
     fun complete() {
         val current = _uiState.value
@@ -81,12 +68,40 @@ class OnboardingViewModel(
         _uiState.value = current.copy(completed = true)
     }
 
+    /**
+     * M4 — Walkthrough "Skip" jumps to [OnboardingStep.PERM_CAMERA],
+     * NOT past it. Phase 2.6's Skip used [complete], which would
+     * bypass the Camera prompt — first-run failure on systems where
+     * the user then tapped Start with no Camera permission.
+     *
+     * No-op if already past walkthrough or already completed.
+     */
+    fun skipWalkthroughToCamera() {
+        val current = _uiState.value
+        if (current.completed) return
+        if (!current.step.isWalkthrough) return
+        _uiState.value = current.copy(step = OnboardingStep.PERM_CAMERA)
+    }
+
+    /**
+     * M4 (2026-05-27 owner feedback) — direct step setter used by the
+     * [androidx.compose.foundation.pager.HorizontalPager] in
+     * [com.aritr.rova.ui.screens.onboarding.OnboardingScreen] to push
+     * settled user-swipe page index back into VM state.
+     *
+     * Idempotent (no-op on equal step) so tap-driven scrolls — where
+     * VM is already on target — don't re-emit; and respects the
+     * completion guard so a delayed swipe-settle after onCompleted
+     * cannot regress state.
+     */
+    fun setStep(step: OnboardingStep) {
+        val current = _uiState.value
+        if (current.completed) return
+        if (current.step == step) return
+        _uiState.value = current.copy(step = step)
+    }
+
     companion object {
-        /**
-         * Same factory shape as [com.aritr.rova.ui.screens.player.PlayerViewModel.factory] —
-         * pulls [RovaSettings] off the [RovaApp] application context so
-         * the VM never sees `Context` directly.
-         */
         fun factory(app: RovaApp): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -100,11 +115,6 @@ class OnboardingViewModel(
     }
 }
 
-/**
- * Phase 2.6 UI state. [step] is the active step; [completed] flips
- * true exactly once when the user finishes (via [OnboardingViewModel.advance]
- * past the last step or [OnboardingViewModel.complete]).
- */
 data class OnboardingUiState(
     val step: OnboardingStep = OnboardingStep.WALKTHROUGH_1,
     val completed: Boolean = false
