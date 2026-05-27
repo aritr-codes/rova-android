@@ -1,69 +1,68 @@
 package com.aritr.rova.service.notification
 
 /**
- * Phase 3.1 (NEW_UI_BACKEND_REPLAN §5 row 3.1, §11.5) — typed copy
- * states for the foreground recording notification. Mockup
- * source-of-truth: `mockups/new_uiux/09-notification-export.html`
- * (rendered sibling under `UI_SCREENSHOTS/`).
+ * Phase 3.1 (NEW_UI_BACKEND_REPLAN §5 row 3.1) + M5 redesign
+ * (docs/superpowers/specs/2026-05-27-notification-redesign-v1-design.md)
+ * — typed copy states for the foreground recording notification.
+ * Mockup source-of-truth: `mockups/new_uiux/09-notification-export.html`.
  *
- * Sealed interface (not enum) chosen because each happy-path state
- * carries DIFFERENT params:
- *  - [ClipRecording]: current clip number + optional total
- *  - [GapWaiting]: next clip number + countdown label + optional total
- *  - [Merging]: done / total integers
- *  - [MergeComplete]: clip count for the saved video
+ * Sealed interface (not enum) — each happy-path state carries DIFFERENT
+ * params. M5 added optional numeric fields (eta / countdown / merge-% /
+ * total-duration / sessionId) wired from existing service state. Null
+ * defaults preserve back-compat with the Phase-3.1 callers.
  *
- * `total` is nullable on [ClipRecording] / [GapWaiting] because
- * unlimited periodic mode (`limitLoops == -1`) has no bound — the
- * mapper drops the `of N` suffix when total is unknown rather than
- * fabricating "of ∞" or "of -1". `total` on [Merging] is required:
- * once the merge starts, the segment count is concrete.
- *
- * NO additional state may be added without amending §11.5 (Phase 3.1
- * NO-GO list explicitly forbids a 5th notification surface). Error /
- * init / transient strings continue to flow through the existing
- * String-based `updateNotification(contentText)` overload — they are
- * NOT a 5th state, just legacy free-form copy retained for parity.
+ * NO additional state may be added without amending the replan §11.5
+ * (the 5th-state NO-GO holds). Error / init / transient strings continue
+ * to flow through the existing String-based `updateNotification(contentText)`
+ * overload.
  */
 sealed interface NotificationState {
-    data class ClipRecording(val current: Int, val total: Int? = null) : NotificationState
-    data class GapWaiting(val nextNumber: Int, val nextInLabel: String, val total: Int? = null) : NotificationState
-    data class Merging(val done: Int, val total: Int) : NotificationState
-    data class MergeComplete(val clipCount: Int) : NotificationState
+    data class ClipRecording(
+        val current: Int,
+        val total: Int? = null,
+        val etaSecondsRemaining: Int? = null
+    ) : NotificationState
+
+    data class GapWaiting(
+        val nextNumber: Int,
+        val nextInLabel: String,
+        val total: Int? = null,
+        val nextStartsInSeconds: Int? = null,
+        val gapTotalSeconds: Int? = null
+    ) : NotificationState
+
+    data class Merging(
+        val done: Int,
+        val total: Int,
+        val mergeProgressPercent: Int? = null
+    ) : NotificationState
+
+    data class MergeComplete(
+        val clipCount: Int,
+        val totalDurationSeconds: Int? = null,
+        val sessionId: String? = null
+    ) : NotificationState
 }
 
 /**
  * Pure (title, body) pair consumed by the service's
- * `NotificationCompat.Builder` chain. Builder calls (channel id,
- * ongoing flag, FGS type, action buttons, content intent) stay in
- * the service per Phase 3.1 fence (the `service/` tree is partially
- * open; `service/notification/` is the only new package).
+ * `NotificationCompat.Builder` chain. Builder calls (channel id, color,
+ * icon, action buttons, ongoing flag, FGS type, content intent) stay in
+ * the service; the only escapes from this file are the four `to*()`
+ * helpers in sibling files.
  */
 data class NotificationCopy(val title: String, val body: String)
 
-/**
- * Map a typed [NotificationState] to the verbatim mockup copy. Pure
- * data → pure strings: testable without Robolectric / Context.
- *
- * Body text divergences from the mockup (intentional, documented):
- *  - [NotificationState.ClipRecording]: mockup shows "0:18 remaining
- *    in this clip", which requires a per-clip elapsed timer the
- *    service does not currently surface. Body falls back to a static
- *    "Recording in progress" string. Wiring elapsed-clip-time is a
- *    follow-on slice.
- *  - [NotificationState.Merging]: mockup shows "About 15 seconds
- *    remaining", which requires an ETA the export pipeline does not
- *    expose. Body is a static "Processing — please wait".
- *  - [NotificationState.MergeComplete]: mockup shows
- *    "6 clips · 5:00 total · saved to Library"; total duration is
- *    not in scope at the call site (would require summing segment
- *    durations from the manifest). Body is "$N clips saved to Library"
- *    with singular handling for `clipCount == 1`.
- */
+private fun formatMmSs(totalSeconds: Int): String {
+    val s = totalSeconds.coerceAtLeast(0)
+    return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+}
+
 fun NotificationState.toCopy(): NotificationCopy = when (this) {
     is NotificationState.ClipRecording -> NotificationCopy(
         title = if (total != null) "Recording · Clip $current of $total" else "Recording · Clip $current",
-        body = "Recording in progress"
+        body = if (etaSecondsRemaining != null) "${formatMmSs(etaSecondsRemaining)} remaining in this clip"
+        else "Recording in progress"
     )
     is NotificationState.GapWaiting -> NotificationCopy(
         title = if (total != null) "Waiting · Clip $nextNumber of $total next" else "Waiting · Clip $nextNumber next",
@@ -75,6 +74,13 @@ fun NotificationState.toCopy(): NotificationCopy = when (this) {
     )
     is NotificationState.MergeComplete -> NotificationCopy(
         title = "Merge complete",
-        body = if (clipCount == 1) "1 clip saved to Library" else "$clipCount clips saved to Library"
+        body = when {
+            totalDurationSeconds != null && clipCount == 1 ->
+                "1 clip · ${formatMmSs(totalDurationSeconds)} total · saved to Library"
+            totalDurationSeconds != null ->
+                "$clipCount clips · ${formatMmSs(totalDurationSeconds)} total · saved to Library"
+            clipCount == 1 -> "1 clip saved to Library"
+            else -> "$clipCount clips saved to Library"
+        }
     )
 }
