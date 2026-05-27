@@ -25,4 +25,24 @@
     <string name="onboarding_illustration_clock_orbit">Clock with timing badges</string>
     <string name="onboarding_illustration_clip_merge">Three clips combine into one video file</string>
     <string name="onboarding_illustration_camera">Camera</string>
+
+    <!-- M5: Notification channel names + descriptions -->
+    <string name="notification_channel_session_name">Recording session</string>
+    <string name="notification_channel_session_desc">Ongoing notification while a recording session is active or merging.</string>
+    <string name="notification_channel_complete_name">Recording complete</string>
+    <string name="notification_channel_complete_desc">One-shot notification when a recorded session is ready in the Library.</string>
+
+    <!-- M5: Notification action labels -->
+    <string name="notification_action_stop">Stop</string>
+    <string name="notification_action_stop_early">Stop Early</string>
+    <string name="notification_action_open">Open</string>
+    <string name="notification_action_view_in_library">View in Library</string>
+    <string name="notification_action_share">Share</string>
+
+    <!-- M5: Notification action contentDescription (TalkBack) -->
+    <string name="notification_action_stop_cd">Stop the recording session</string>
+    <string name="notification_action_stop_early_cd">Stop before the next clip</string>
+    <string name="notification_action_open_cd">Open Rova</string>
+    <string name="notification_action_view_in_library_cd">View this recording in the Library</string>
+    <string name="notification_action_share_cd">Share this recording</string>
 </resources>
