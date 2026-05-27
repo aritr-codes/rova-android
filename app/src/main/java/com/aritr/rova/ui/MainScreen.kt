@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.aritr.rova.InitialTab
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.screens.HistoryScreen
@@ -23,7 +24,7 @@ import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
 
 @Composable
-fun MainScreen() {
+fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
     val navController = rememberNavController()
     // Phase 2.6 — onboarding gate. The first-launch flag drives the
     // NavHost start destination: a fresh install routes to the
@@ -38,7 +39,13 @@ fun MainScreen() {
     val initialOnboardingCompleted = remember(context) {
         RovaSettings(context).onboardingCompleted
     }
-    val startDestination = if (initialOnboardingCompleted) "record" else "onboarding"
+    val startTab = remember(initialTab) {
+        when (initialTab) {
+            InitialTab.HISTORY -> "history"
+            InitialTab.DEFAULT -> "record"
+        }
+    }
+    val startDestination = if (initialOnboardingCompleted) startTab else "onboarding"
     // R1 redesign — RecordViewModel is no longer hoisted here.
     // The Record screen renders its own bottom nav and owns its VM
     // via its `viewModel: RecordViewModel = viewModel()` default param.
