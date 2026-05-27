@@ -133,4 +133,11 @@ class NotificationCopyTest {
         ).toCopy()
         assertEquals("6 clips saved to Library", copy.body)
     }
+
+    @Test fun `ClipRecording with negative eta clamps to 0 00`() {
+        val copy = NotificationState.ClipRecording(
+            current = 1, total = 6, etaSecondsRemaining = -3
+        ).toCopy()
+        assertEquals("0:00 remaining in this clip", copy.body)
+    }
 }

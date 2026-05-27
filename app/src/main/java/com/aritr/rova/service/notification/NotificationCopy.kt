@@ -11,6 +11,17 @@ package com.aritr.rova.service.notification
  * total-duration / sessionId) wired from existing service state. Null
  * defaults preserve back-compat with the Phase-3.1 callers.
  *
+ * **M5 field-wiring map** (so the unwired fields don't read as oversight):
+ *  - [ClipRecording.etaSecondsRemaining] → [toCopy] body
+ *  - [GapWaiting.nextStartsInSeconds] + [GapWaiting.gapTotalSeconds] →
+ *    `NotificationChannelConfig.toProgress` (countdown progress bar)
+ *  - [Merging.mergeProgressPercent] →
+ *    `NotificationChannelConfig.toProgress` (determinate merge bar)
+ *  - [MergeComplete.totalDurationSeconds] → [toCopy] body
+ *  - [MergeComplete.sessionId] →
+ *    `NotificationActionSpec.toActionSpecs` (deep-link extras for
+ *    `VIEW_IN_LIBRARY` and `SHARE` actions)
+ *
  * NO additional state may be added without amending the replan §11.5
  * (the 5th-state NO-GO holds). Error / init / transient strings continue
  * to flow through the existing String-based `updateNotification(contentText)`
