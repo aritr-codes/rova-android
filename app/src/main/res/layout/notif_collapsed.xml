@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- M5 Phase 3 §4.1 — collapsed (48dp). Single row: title + tail.
-     Surface background applied at root; service swaps to the complete
-     variant via setBackgroundResource for MergeComplete. -->
+<!-- M5 Phase 3 §4.1 + Phase 3.1 §4.4 — collapsed layout.
+     Single row: title (weight=1, ellipsizes) + tail (right-aligned). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/notif_root"
     android:layout_width="match_parent"
@@ -19,6 +18,9 @@
         android:layout_marginEnd="8dp"
         android:singleLine="true"
         android:ellipsize="end"
+        android:textSize="14sp"
+        android:textColor="#EBFFFFFF"
+        android:textStyle="bold"
         style="@style/TextAppearance.Compat.Notification.Title" />
 
     <TextView
@@ -27,7 +29,8 @@
         android:layout_height="wrap_content"
         android:singleLine="true"
         android:ellipsize="end"
-        android:alpha="0.7"
+        android:textSize="11sp"
+        android:textColor="#A6FFFFFF"
         style="@style/TextAppearance.Compat.Notification" />
 
 </LinearLayout>

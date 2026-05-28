@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- M5 Phase 3 §4.2 + §4.3 + §4.4 — expanded layout.
-     Vertical stack: title, body, dots row (8 pre-allocated pill slots,
-     visibility toggled at bind time), progress (optional).
-     Surface background applied at root; complete variant swapped at runtime. -->
+<!-- M5 Phase 3 §4.2 + Phase 3.1 §4.2/§4.4 — expanded layout.
+     Vertical stack: title, body-OR-Chronometer (one visible at a time),
+     dots row (8 pre-allocated pill slots; weightSum bound at runtime),
+     progress (optional). Surface background applied at root. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/notif_root"
     android:layout_width="match_parent"
@@ -18,6 +18,9 @@
         android:layout_height="wrap_content"
         android:singleLine="true"
         android:ellipsize="end"
+        android:textSize="14sp"
+        android:textColor="#EBFFFFFF"
+        android:textStyle="bold"
         style="@style/TextAppearance.Compat.Notification.Title" />
 
     <TextView
@@ -27,11 +30,30 @@
         android:layout_marginTop="2dp"
         android:singleLine="true"
         android:ellipsize="end"
+        android:textSize="12sp"
+        android:textColor="#8CFFFFFF"
+        android:lineSpacingExtra="2dp"
         style="@style/TextAppearance.Compat.Notification" />
 
-    <!-- Dots row. 8 pre-allocated slots; service toggles visibility +
-         tint per state. The row itself is hidden via the wrapping
-         LinearLayout's visibility when plan.dots.visible == false. -->
+    <!-- Chronometer countdown — bound at runtime for ClipRecording +
+         GapWaiting; hidden for Merging + MergeComplete. Body TextView
+         above is hidden for the chrono states. One slot, two views. -->
+    <Chronometer
+        android:id="@+id/notif_chrono"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textSize="12sp"
+        android:textColor="#C2FFFFFF"
+        android:textStyle="normal"
+        android:visibility="gone"
+        style="@style/TextAppearance.Compat.Notification" />
+
+    <!-- Dots row. 8 pre-allocated slots; service binds weightSum + per-pill
+         visibility + tint per state. Pills use src + scaleType=fitXY so
+         setColorFilter actually tints them (Phase 3.1 §2 item 1). -->
     <LinearLayout
         android:id="@+id/notif_dots_row"
         android:layout_width="match_parent"
@@ -40,18 +62,14 @@
         android:orientation="horizontal"
         android:weightSum="8">
 
-        <ImageView android:id="@+id/notif_dot_0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_5" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
-        <ImageView android:id="@+id/notif_dot_6" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:background="@drawable/notif_dot_pill" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_5" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/notif_dot_6" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />
 
-        <!-- Last slot doubles as count-pill carrier: ImageView for tinted
-             pill background; TextView overlay added via FrameLayout would
-             complicate RemoteViews. Instead we keep two separate views
-             stacked horizontally and toggle visibility per plan. -->
         <FrameLayout
             android:id="@+id/notif_dot_7_container"
             android:layout_width="0dp"
@@ -62,7 +80,8 @@
                 android:id="@+id/notif_dot_7"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@drawable/notif_dot_pill"
+                android:src="@drawable/notif_dot_pill"
+                android:scaleType="fitXY"
                 android:importantForAccessibility="no" />
 
             <TextView
@@ -72,7 +91,7 @@
                 android:gravity="center"
                 android:singleLine="true"
                 android:textSize="8sp"
-                android:textColor="#8AFFFFFF"
+                android:textColor="#80FFFFFF"
                 android:visibility="gone"
                 android:importantForAccessibility="no" />
         </FrameLayout>
