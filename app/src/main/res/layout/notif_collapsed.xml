@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <!-- Accent rail: 4dp wide, full height. Tinted at runtime. -->
+    <ImageView
+        android:id="@+id/notif_rail"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:background="@drawable/notif_accent_rail"
+        android:importantForAccessibility="no"
+        android:contentDescription="@null" />
+
+    <!-- Chip: 32dp rounded-square, tinted at runtime, white icon centered. -->
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="12dp">
+
+        <ImageView
+            android:id="@+id/notif_chip_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/notif_chip_bg"
+            android:importantForAccessibility="no"
+            android:contentDescription="@null" />
+
+        <ImageView
+            android:id="@+id/notif_chip_icon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <!-- Title — takes remaining horizontal weight. -->
+    <TextView
+        android:id="@+id/notif_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        style="@style/TextAppearance.Compat.Notification.Title" />
+
+    <!-- Tail meta — right-aligned, dimmed via alpha. -->
+    <TextView
+        android:id="@+id/notif_tail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:alpha="0.7"
+        style="@style/TextAppearance.Compat.Notification" />
+
+</LinearLayout>
