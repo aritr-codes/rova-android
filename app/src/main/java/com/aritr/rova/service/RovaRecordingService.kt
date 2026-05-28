@@ -15,6 +15,7 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.view.Display
+import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import android.os.PowerManager
@@ -40,10 +41,13 @@ import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.DotState
+import com.aritr.rova.service.notification.DotsPlan
 import com.aritr.rova.service.notification.NotificationActionKey
 import com.aritr.rova.service.notification.NotificationActionSpec
 import com.aritr.rova.service.notification.NotificationBindPlan
 import com.aritr.rova.service.notification.NotificationChannelConfig
+import com.aritr.rova.service.notification.NotificationProgress
 import com.aritr.rova.service.notification.NotificationState
 import com.aritr.rova.service.notification.toActionSpecs
 import com.aritr.rova.service.notification.toBindPlan
@@ -2713,15 +2717,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val collapsed = renderRemoteView(plan, expanded = false)
         val expanded = renderRemoteView(plan, expanded = true)
 
+        // M5 Phase 3 §3.2: drop setColorized — title color + dots + green
+        // border on notif_surface_complete carry the celebratory signal.
         val builder = NotificationCompat.Builder(this, channelId)
-            // Title + text still set for accessibility fallback + lockscreen
-            // preview, even though DecoratedCustomViewStyle overrides the
-            // visible content area.
             .setContentTitle(plan.title)
             .setContentText(plan.body)
             .setSmallIcon(plan.iconRes)
             .setColor(plan.accent)
-            .setColorized(plan.isComplete)
             .setContentIntent(openPendingIntent)
             .setOngoing(ongoing)
             .setAutoCancel(autoCancel)
@@ -2755,14 +2757,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val layoutRes = if (expanded) plan.layoutExpandedRes else plan.layoutCollapsedRes
         val rv = RemoteViews(packageName, layoutRes)
 
-        // Title + body.
+        // Surface drawable — runtime swap between default + complete variant.
+        rv.setInt(R.id.notif_root, "setBackgroundResource", plan.surfaceRes)
+
+        // Title + optional explicit color (MergeComplete only).
         rv.setTextViewText(R.id.notif_title, plan.title)
+        plan.titleColor?.let { rv.setTextColor(R.id.notif_title, it) }
+
         if (expanded) {
             rv.setTextViewText(R.id.notif_body, plan.body)
-        }
-
-        // Tail meta (collapsed only).
-        if (!expanded) {
+            bindDotsRow(rv, plan.dots)
+            bindProgress(rv, plan.progress)
+        } else {
             if (plan.collapsedTail != null) {
                 rv.setTextViewText(R.id.notif_tail, plan.collapsedTail)
                 rv.setViewVisibility(R.id.notif_tail, View.VISIBLE)
@@ -2771,39 +2777,75 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
         }
 
-        // Accent rail tint — solid color filter on the ImageView background.
-        rv.setInt(R.id.notif_rail, "setBackgroundColor", plan.accent)
+        return rv
+    }
 
-        // Chip background tint — solid color filter on the ImageView background.
-        // Bg view itself stays importantForAccessibility="no"; the icon below
-        // is the semantic carrier that TalkBack reads.
-        rv.setInt(R.id.notif_chip_bg, "setBackgroundColor", plan.accent)
+    /**
+     * M5 Phase 3 §4.3 — bind 8 pre-allocated pill slots from [DotsPlan].
+     * Each slot: tint via setColorFilter on the background drawable +
+     * toggle visibility per pill state. Last slot (notif_dot_7) doubles
+     * as count-pill carrier via the overlay TextView.
+     */
+    private fun bindDotsRow(rv: RemoteViews, dots: DotsPlan) {
+        if (!dots.visible) {
+            rv.setViewVisibility(R.id.notif_dots_row, View.GONE)
+            return
+        }
+        rv.setViewVisibility(R.id.notif_dots_row, View.VISIBLE)
+        rv.setContentDescription(R.id.notif_dots_row, dots.contentDescription)
 
-        // Chip icon — also carries the chip contentDescription so TalkBack
-        // announces the state ("Recording in progress" etc.). The bg view
-        // is inert per layout markup; binding CD there would never surface.
-        rv.setImageViewResource(R.id.notif_chip_icon, plan.iconRes)
-        rv.setContentDescription(R.id.notif_chip_icon, getString(plan.chipContentDescriptionRes))
+        val slotIds = intArrayOf(
+            R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
+            R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7
+        )
 
-        // Progress (expanded only).
-        if (expanded) {
-            val progress = plan.progress
-            if (progress != null) {
-                rv.setProgressBar(R.id.notif_progress, progress.max, progress.current, progress.indeterminate)
-                rv.setViewVisibility(R.id.notif_progress, View.VISIBLE)
-                val cd = if (progress.indeterminate) {
-                    getString(R.string.notification_progress_cd_indeterminate)
-                } else {
-                    val percent = if (progress.max > 0) (progress.current * 100 / progress.max) else 0
-                    getString(R.string.notification_progress_cd_determinate, percent)
-                }
-                rv.setContentDescription(R.id.notif_progress, cd)
+        val doneColor = dots.accent
+        val currentColor = (dots.accent and 0x00FFFFFF) or 0x66000000  // 40% alpha
+        val todoColor = 0x1FFFFFFF                                      // 12% alpha white
+        val countBgColor = 0x14FFFFFF                                   // 8% alpha white
+
+        slotIds.forEachIndexed { index, viewId ->
+            val pill = dots.pills.getOrNull(index)
+            if (pill == null) {
+                rv.setViewVisibility(viewId, View.GONE)
+                // Make sure the count-overlay sibling on slot 7 is also hidden.
+                if (index == 7) rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
             } else {
-                rv.setViewVisibility(R.id.notif_progress, View.GONE)
+                rv.setViewVisibility(viewId, View.VISIBLE)
+                val tint = when (pill.kind) {
+                    DotState.Kind.DONE -> doneColor
+                    DotState.Kind.CURRENT -> currentColor
+                    DotState.Kind.TODO -> todoColor
+                    DotState.Kind.COUNT_PILL -> countBgColor
+                }
+                rv.setInt(viewId, "setColorFilter", tint)
+
+                if (index == 7) {
+                    if (pill.kind == DotState.Kind.COUNT_PILL && pill.countLabel != null) {
+                        rv.setTextViewText(R.id.notif_dot_count_label, pill.countLabel)
+                        rv.setViewVisibility(R.id.notif_dot_count_label, View.VISIBLE)
+                    } else {
+                        rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
+                    }
+                }
             }
         }
+    }
 
-        return rv
+    private fun bindProgress(rv: RemoteViews, progress: NotificationProgress?) {
+        if (progress == null) {
+            rv.setViewVisibility(R.id.notif_progress, View.GONE)
+            return
+        }
+        rv.setProgressBar(R.id.notif_progress, progress.max, progress.current, progress.indeterminate)
+        rv.setViewVisibility(R.id.notif_progress, View.VISIBLE)
+        val cd = if (progress.indeterminate) {
+            getString(R.string.notification_progress_cd_indeterminate)
+        } else {
+            val percent = if (progress.max > 0) (progress.current * 100 / progress.max) else 0
+            getString(R.string.notification_progress_cd_determinate, percent)
+        }
+        rv.setContentDescription(R.id.notif_progress, cd)
     }
 
     private fun buildActionIntent(spec: NotificationActionSpec, sessionIdContext: String?): Intent {

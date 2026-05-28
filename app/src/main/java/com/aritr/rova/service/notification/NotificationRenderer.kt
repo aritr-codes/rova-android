@@ -3,20 +3,21 @@ package com.aritr.rova.service.notification
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
-import androidx.annotation.StringRes
 import com.aritr.rova.R
 
 /**
- * M5 Phase 2 — bind-plan emitted by [toBindPlan]. Pure data; the
+ * M5 Phase 3 §7 — bind-plan emitted by [toBindPlan]. Pure data; the
  * service consumes it to inflate + bind a real RemoteViews tree. No
- * Android RemoteViews / Context calls in this file — the boundary
- * mirrors Phase 1's pure-helper / service-as-seam pattern.
+ * Android RemoteViews / Context calls in this file.
  *
- * Title + body + progress are forwarded from Phase 1 helpers
- * ([toCopy], [toProgress]) — never duplicated. Accent + icon + chip
- * CD + collapsedTail are Phase-2-specific.
+ * Phase 3 deltas vs Phase 2:
+ *   - REMOVED chipContentDescriptionRes (chip dropped from layouts)
+ *   - ADDED dots: DotsPlan (clip-progress row, per spec §4.3)
+ *   - ADDED titleColor: Int? (null = use Compat.Notification.Title default,
+ *                              non-null = MergeComplete green)
+ *   - ADDED surfaceRes: DrawableRes (notif_surface vs notif_surface_complete)
  *
- * Spec: docs/superpowers/specs/2026-05-27-notification-redesign-v1-design.md §7
+ * Spec: docs/superpowers/specs/2026-05-28-notification-redesign-phase3-design.md
  */
 data class NotificationBindPlan(
     @LayoutRes val layoutCollapsedRes: Int,
@@ -26,13 +27,16 @@ data class NotificationBindPlan(
     val collapsedTail: String?,
     @ColorInt val accent: Int,
     @DrawableRes val iconRes: Int,
-    @StringRes val chipContentDescriptionRes: Int,
     val progress: NotificationProgress?,
-    val isComplete: Boolean
+    val isComplete: Boolean,
+    val dots: DotsPlan,
+    @ColorInt val titleColor: Int?,
+    @DrawableRes val surfaceRes: Int
 )
 
 fun NotificationState.toBindPlan(): NotificationBindPlan {
     val copy = toCopy()
+    val complete = this is NotificationState.MergeComplete
     return NotificationBindPlan(
         layoutCollapsedRes = R.layout.notif_collapsed,
         layoutExpandedRes = R.layout.notif_expanded,
@@ -41,28 +45,19 @@ fun NotificationState.toBindPlan(): NotificationBindPlan {
         collapsedTail = collapsedTailFor(this),
         accent = toAccent(),
         iconRes = toIconRes(),
-        chipContentDescriptionRes = chipCdFor(this),
         progress = toProgress(),
-        isComplete = this is NotificationState.MergeComplete
+        isComplete = complete,
+        dots = toDotsPlan(),
+        titleColor = if (complete) NotificationChannelConfig.ACCENT_COMPLETE else null,
+        surfaceRes = if (complete) R.drawable.notif_surface_complete else R.drawable.notif_surface
     )
 }
 
-@StringRes
-private fun chipCdFor(state: NotificationState): Int = when (state) {
-    is NotificationState.ClipRecording -> R.string.notification_chip_cd_recording
-    is NotificationState.GapWaiting -> R.string.notification_chip_cd_waiting
-    is NotificationState.Merging -> R.string.notification_chip_cd_merging
-    is NotificationState.MergeComplete -> R.string.notification_chip_cd_complete
-}
-
 private fun collapsedTailFor(state: NotificationState): String? = when (state) {
-    is NotificationState.ClipRecording ->
-        state.etaSecondsRemaining?.let { "${formatMmSsForTail(it)} remaining" }
+    is NotificationState.ClipRecording -> state.etaSecondsRemaining?.let { "${formatMmSsForTail(it)} remaining" }
     is NotificationState.GapWaiting -> state.nextInLabel
-    is NotificationState.Merging ->
-        state.mergeProgressPercent?.let { "$it%" } ?: "${state.done} of ${state.total}"
-    is NotificationState.MergeComplete ->
-        if (state.clipCount == 1) "1 clip" else "${state.clipCount} clips"
+    is NotificationState.Merging -> state.mergeProgressPercent?.let { "$it%" } ?: "${state.done} of ${state.total}"
+    is NotificationState.MergeComplete -> if (state.clipCount == 1) "1 clip" else "${state.clipCount} clips"
 }
 
 private fun formatMmSsForTail(totalSeconds: Int): String {
