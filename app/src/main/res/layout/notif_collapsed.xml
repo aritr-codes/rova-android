@@ -21,6 +21,7 @@
         android:textSize="14sp"
         android:textColor="#EBFFFFFF"
         android:textStyle="bold"
+        android:fontFamily="@font/inter"
         style="@style/TextAppearance.Compat.Notification.Title" />
 
     <TextView
@@ -31,6 +32,7 @@
         android:ellipsize="end"
         android:textSize="11sp"
         android:textColor="#A6FFFFFF"
+        android:fontFamily="@font/inter"
         style="@style/TextAppearance.Compat.Notification" />
 
 </LinearLayout>
