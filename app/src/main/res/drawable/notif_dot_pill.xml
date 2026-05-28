@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M5 Phase 3 §4.3 — single dot pill in the clip-progress row. White
+     by default; the service tints via setColorFilter at runtime per
+     dot state (done = solid accent, current = translucent accent,
+     todo = white at low alpha). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="2dp" />
+</shape>
