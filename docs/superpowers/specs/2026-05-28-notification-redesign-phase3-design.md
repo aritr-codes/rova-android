@@ -1,7 +1,7 @@
 # Notification Redesign — Phase 3 (Mockup Alignment) — Design Spec
 
 **Date:** 2026-05-28
-**Status:** Draft (awaiting owner review)
+**Status:** Approved post-mockup review (mockup `mockups/new_uiux/10-notification-phase3.html`)
 **Branch:** `feat/notification-redesign-v1` (folds into M5 PR alongside Phase 1 + Phase 2)
 **Last commit (Phase 2 tip):** `5b876c8 fix(notif): bind chip contentDescription to icon view, not bg`
 **Inspiration:** `mockups/new_uiux/09-notification-export.html`
@@ -27,6 +27,8 @@ Phase 3 narrows the visual gap without re-architecting Phase 2: trim the custom 
 3. **Pure helper `NotificationDotsRow`** — emits a `DotsPlan` (state list per pill, accent color) from a `NotificationState`. JVM-testable.
 4. **Drop `chipContentDescriptionRes` from `NotificationBindPlan`** — dead field once chip is gone. Strings stay (no churn).
 5. Service binder cleanup: remove rail + chip `setInt`/`setContentDescription`/`setImageViewResource` calls; add `bindDotsRow(rv, plan)`.
+6. **Translucent surface drawable** (`notif_surface.xml`) — rounded shape with ~70% opaque dark fill + thin hairline border, applied as the root background of both `notif_collapsed.xml` and `notif_expanded.xml`. Contributes the "modern glass" feel inside the system-owned card (see §4.4 + §10 risks).
+7. **MergeComplete styling switch** — drop `setColorized(true)` from the builder for complete state; bind title text color to green via `RemoteViews.setTextColor`. Green dots row + green title + green hairline border replace the full-green card fill. See §3.2.
 
 ## 2.1 NO-GO (out of scope)
 
@@ -53,18 +55,18 @@ Sessions can have any `total`: typical 2-6, theoretical up to 50+. Three options
 
 **Recommended: A (cap at 8 visible).** Matches mockup at N=6, degrades gracefully at high N, keeps individual pill width readable. Implementation: layout pre-allocates 8 `ImageView` slots; helper emits up to 8 states or 7 + a count tag.
 
-### 3.2 MergeComplete styling
+### 3.2 MergeComplete styling — LOCKED to mockup style
 
-Current Phase 2 behavior uses `setColorized(true)` which paints the **whole notification background green** when system permits. That's visually punchier than the mockup's dark-card-with-green-accent treatment.
+**Decision (owner-approved at mockup review 2026-05-28):** drop `setColorized(true)`, apply mockup-style **dark translucent card + green title text + green dots row + green hairline border**.
 
-| Approach | Visual | Tradeoff |
-|---|---|---|
-| **Keep colorized green bg** (current Phase 2 behavior) | Strong celebratory signal — whole notification is green | Diverges from mockup |
-| **Switch to mockup style** (drop colorized, tint title text green via `setTextColor`) | Subtler — green card border + green title only | OEM-fragile; not every launcher respects card border tints |
+Implementation:
+- Builder no longer calls `.setColorized(true)` for MergeComplete (or for any state — leave unset across the board).
+- Title text color is bound at runtime per state via `rv.setTextColor(R.id.notif_title, plan.titleColor)`.
+  - `MergeComplete` → green (`NotificationChannelConfig.ACCENT_COMPLETE`, `#34D399`)
+  - Other states → default neutral (use the Compat.Notification.Title style's color; pass `null`/`Color.TRANSPARENT` sentinel to skip the explicit `setTextColor` call).
+- The translucent surface drawable (§2 item 6) gains a `@color/notif_border_complete` border variant for MergeComplete only — implementation either swaps drawables (`notif_surface_complete.xml`) OR binds the border color at runtime if practical. Simpler default: two drawables, swap via `RemoteViews.setInt(rootId, "setBackgroundResource", R.drawable.notif_surface_complete)` when `plan.isComplete`.
 
-**Recommended: keep colorized green bg.** The current MergeComplete screenshot looks great on-device; switching would be a regression in visual impact. The dots row will already carry the mockup's "all-green pills" signal. Surfacing two green treatments is louder than the mockup intends.
-
-If owner wants mockup-faithful, this is a one-task swap — flag at spec review.
+**Tradeoff accepted:** loses the punchy "full green card" celebratory signal, gains mockup-fidelity + consistent surface treatment across all 4 states.
 
 ## 4. Visual contract
 
@@ -117,6 +119,50 @@ For N > 8: show 7 state pills + 1 trailing count pill displaying "+N-7" text (e.
 
 For sessions where `total` is unknown (e.g. ClipRecording with no `total` field set): hide the entire dots row (`setViewVisibility(GONE)`).
 
+### 4.4 Translucent surface treatment ("modern glass" feel)
+
+**What we own vs what we don't:**
+
+- ❌ **The rounded notification card chrome** (outer edge, fill, drop shadow, rounded corners that contain everything including the system header). Android 12+ `DecoratedCustomViewStyle` mandate: the OS launcher owns this entirely. There is **no API** to apply `backdrop-filter`, blur, or override the card's fill from the app side.
+- ✅ **The custom content area's own background.** Our `notif_collapsed.xml` and `notif_expanded.xml` root `LinearLayout`s can carry a `ShapeDrawable` background. This sits INSIDE the system card but is still visible as a translucent inner surface.
+
+**The "glass" look on real Android comes from three stacked layers, two of which are free:**
+
+1. **Wallpaper / app content** (the bottom layer — whatever's behind the shade).
+2. **The OS shade** — already blurred at the system level on Android 12+ (`SystemUI` applies a backdrop blur to the entire shade pull).
+3. **The OS notification card** — system-owned, sits on top of the shade.
+4. **Our custom content surface** — a translucent ShapeDrawable inside the card.
+
+Layers 1–3 give us blur-for-free. Our contribution (layer 4) is to use a translucent dark fill instead of an opaque one so the card chrome above us reads as airy rather than blocky.
+
+**Drawable contract:**
+
+```xml
+<!-- res/drawable/notif_surface.xml -->
+<shape android:shape="rectangle">
+    <solid android:color="#B81C1E26" />     <!-- ~72% opaque dark surface -->
+    <stroke android:width="1dp"
+            android:color="#11FFFFFF" />     <!-- hairline border -->
+    <corners android:radius="14dp" />
+</shape>
+```
+
+```xml
+<!-- res/drawable/notif_surface_complete.xml — MergeComplete only -->
+<shape android:shape="rectangle">
+    <solid android:color="#B81C1E26" />     <!-- same fill -->
+    <stroke android:width="1dp"
+            android:color="#3334D399" />     <!-- green hairline -->
+    <corners android:radius="14dp" />
+</shape>
+```
+
+Both layouts gain `android:background="@drawable/notif_surface"` on the root `LinearLayout` + a small inner padding bump (`paddingHorizontal=14dp`, `paddingVertical=10dp`) so content doesn't touch the surface edge.
+
+**Risks we accept (see §10):**
+
+- Some OEMs (Xiaomi MIUI, Samsung One UI on darker themes) render the system notification card with a fully-opaque dark fill — our 72%-opaque inner surface against an opaque dark card may look indistinguishable from the chrome. We accept this: on those skins the result is still clean (just less "glass"), and on AOSP-aligned skins (Pixel, OnePlus, Motorola) the effect lands.
+
 ## 5. Accessibility
 
 - The dots row carries one combined contentDescription: e.g. `"Clip 2 of 6"` for ClipRecording, `"Merging, 4 of 6 done"` for Merging, `"All 6 clips complete"` for MergeComplete. Individual pills have `importantForAccessibility="no"`.
@@ -151,12 +197,14 @@ data class DotsPlan(
 internal fun NotificationState.toDotsPlan(): DotsPlan
 ```
 
-`NotificationBindPlan` (Phase 2 type) gains one field:
+`NotificationBindPlan` (Phase 2 type) gains two fields:
 
 ```kotlin
 data class NotificationBindPlan(
     // existing fields ...
-    val dots: DotsPlan
+    val dots: DotsPlan,
+    @ColorInt val titleColor: Int?,        // null = use Compat.Notification.Title default
+    @DrawableRes val surfaceRes: Int       // notif_surface or notif_surface_complete
 )
 ```
 
@@ -166,6 +214,15 @@ And LOSES one field (chip CD is dead):
 // REMOVE:
 val chipContentDescriptionRes: Int
 ```
+
+Renderer logic:
+- `surfaceRes = if (isComplete) R.drawable.notif_surface_complete else R.drawable.notif_surface`
+- `titleColor = if (isComplete) NotificationChannelConfig.ACCENT_COMPLETE else null`
+
+Service binder:
+- `rv.setInt(R.id.notif_root, "setBackgroundResource", plan.surfaceRes)`
+- `plan.titleColor?.let { rv.setTextColor(R.id.notif_title, it) }` — skip when null to keep the Compat text appearance default.
+- Builder: do **not** call `.setColorized(...)` for any state (decision §3.2).
 
 ## 8. Testing
 
@@ -185,6 +242,8 @@ val chipContentDescriptionRes: Int
 `NotificationRendererTest` (updated):
 - `chipContentDescriptionRes` field removed from `NotificationBindPlan` — drop the 4 tests that asserted on it
 - Add: `plan.dots` matches `state.toDotsPlan()` for each of the 4 states (delegation test, 4 tests)
+- Add: `plan.titleColor == ACCENT_COMPLETE` for MergeComplete; `null` for ClipRecording/GapWaiting/Merging (4 tests)
+- Add: `plan.surfaceRes == R.drawable.notif_surface_complete` for MergeComplete; `R.drawable.notif_surface` for the other 3 states (4 tests)
 
 ### 8.2 What we don't unit-test
 
@@ -196,13 +255,14 @@ val chipContentDescriptionRes: Int
 - [ ] ClipRecording at N=6 — dots show [▆ ▆ ░ ░ ░ ░] in blue.
 - [ ] GapWaiting at N=6 — dots show [▆ ▆ ░ ░ ░ ░] in blue (current advances to "next" position).
 - [ ] Merging at N=6, done=4 — dots show [▆ ▆ ▆ ▆ ▆-translucent ░] in blue + progress fills below.
-- [ ] MergeComplete at N=6 — dots show [▆ ▆ ▆ ▆ ▆ ▆] in green.
+- [ ] MergeComplete at N=6 — dots show [▆ ▆ ▆ ▆ ▆ ▆] in green; **title text is green** (not white-on-green); card is dark glass, not fully-green-bg.
+- [ ] MergeComplete shows green hairline border (subtle, not loud).
 - [ ] N=2 session — dots scale up; no thread-thin visuals.
 - [ ] N=10 session (synthetic) — 7 state pills + "+3" count pill; tail count readable.
 - [ ] No rail visible on any state. No secondary chip visible on any state.
+- [ ] Translucent surface visible on Pixel-class devices (card chrome reads as airy, not blocky). Acceptable to look "flat dark" on Xiaomi/Samsung skins with opaque card chrome (decision §4.4 risk).
 - [ ] Collapsed view still shows title + tail correctly; no orphan view.
 - [ ] System header still shows Rova + time + (stock app icon — flagged out-of-scope).
-- [ ] MergeComplete still uses colorized green bg (decision §3.2).
 - [ ] TalkBack — dots row announces "Clip N of M" / "Merging, N of M done" / "All N clips complete".
 - [ ] Font scale 2× — dots row height unchanged; title + body truncate.
 
@@ -222,20 +282,24 @@ No new `check*` tasks. The 4 `notification_chip_cd_*` strings become unreference
 | Dots row inflates layout beyond 252dp expanded budget on huge N | L | Capped at 8 pills, 4dp pill height — fits in <20dp. |
 | User has a session with `total = 0` (cold-launch edge) | L | Helper emits `visible=false`, layout hides row entirely. |
 | Removing rail + chip from the layout files breaks Phase 2 tests | M | Phase 2 `NotificationRendererTest` already drops the `chipContentDescriptionRes` assertions in Task 4 of the plan; renderer test rewrites land in same compile-gate split. |
+| Translucent surface looks identical to opaque card on OEM skins with non-AOSP card chrome (Xiaomi MIUI, Samsung One UI dark) | M | Accept — the result is still clean on those skins (just less "glass"). Documented in §4.4. |
+| `setTextColor` via RemoteViews on `R.id.notif_title` overrides the Compat.Notification.Title style's color-state-list, losing dark/light theme adaptation | M | Only bind `titleColor` when non-null (MergeComplete only). Other 3 states keep the default Compat text appearance and adapt to theme. |
+| `setBackgroundResource` via `RemoteViews.setInt` requires the target to be a view that supports `setBackgroundResource(int)` — verified for `LinearLayout` back to API 1; safe at minSdk=24 | L | Tag the root `LinearLayout` with `@id/notif_root` in both layouts; ensure shape drawables are pre-API-29-compatible (no `<gradient>` modes that fail on older versions). |
+| Dropping `setColorized(true)` removes the OS-injected "important notification" highlight on the lockscreen for MergeComplete | M | Accept — the title-color + dots row are sufficient celebratory signal. The post-merge notif also has `setVisibility(VISIBILITY_PRIVATE)` so lockscreen hides the body anyway. |
 
 ## 11. Acceptance criteria
 
-1. JVM tests pass (≥ 1310 / 0-0-0; Phase 2 baseline 1300 + ~10-14 new).
+1. JVM tests pass (≥ 1318 / 0-0-0; Phase 2 baseline 1300 + ~14-18 new for Renderer delegation + DotsRow + title-color/surface-res assertions).
 2. `:app:lintDebug` green; no new `UnusedResources` warnings.
 3. `:app:assembleDebug` green.
-4. Real-device smoke checklist §8.3 passes on Android 14+.
+4. Real-device smoke checklist §8.3 passes on Android 14+ (Pixel-class skin for glass effect verification).
 5. No file in `app/src/main/java/com/aritr/rova/service/notification/` exceeds 300 LoC.
 
 ## 12. Follow-on (out of scope)
 
-1. Rova launcher icon redesign (`mipmap-anydpi-v26` adaptive icon + monochrome).
-2. Mockup-faithful MergeComplete (drop colorized, dark card with green title).
-3. Mockup-faithful action button styling — would require fully-custom (Android-12+ retired path); revisit if Material 3 Expressive notifications ship a styled-action API.
+1. Rova launcher icon redesign (`mipmap-anydpi-v26` adaptive icon + monochrome icon for Android 13+ themed icons).
+2. Mockup-faithful action button styling — would require fully-custom (Android-12+ retired path); revisit if Material 3 Expressive notifications ship a styled-action API.
+3. Tune translucent surface alpha per Android OEM skin (if multi-device smoke surfaces visible regressions on Samsung/Xiaomi).
 
 ---
 
@@ -247,10 +311,11 @@ No new `check*` tasks. The 4 `notification_chip_cd_*` strings become unreference
 
 **3. Scope.** Single subsystem. No cross-cut. Fits in 4 implementation tasks; small enough for one plan.
 
-**4. Ambiguity.** Three judgment calls remain explicit and flagged for owner redirect:
-- §3.1 dot cap policy (default: cap at 8 visible).
-- §3.2 MergeComplete styling (default: keep colorized).
-- §6 dot-row CD strings (default: in-code, not in `strings.xml`).
-- §9 unused chip CD strings (default: delete).
+**4. Ambiguity.** Three judgment calls remain (one locked at mockup review):
+- §3.1 dot cap policy → **cap at 8 visible** (owner-approved at mockup review).
+- §3.2 MergeComplete styling → **LOCKED: dark glass card + green title** (owner-approved at mockup review).
+- §4.4 translucent surface → **LOCKED: 72%-opaque dark fill + hairline border** (owner-approved at mockup review).
+- §6 dot-row CD strings → default: in-code, not in `strings.xml`.
+- §9 unused chip CD strings → default: delete.
 
-Each has a "**Recommended:** …" line. None block the plan.
+Three above are locked; remaining two have a "**Recommended:** …" line and a sensible default. None block the plan.
