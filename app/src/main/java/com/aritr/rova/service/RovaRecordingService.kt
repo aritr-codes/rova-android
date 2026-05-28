@@ -15,6 +15,8 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.view.Display
+import android.view.View
+import android.widget.RemoteViews
 import android.os.PowerManager
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
@@ -40,14 +42,12 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.notification.NotificationActionKey
 import com.aritr.rova.service.notification.NotificationActionSpec
+import com.aritr.rova.service.notification.NotificationBindPlan
 import com.aritr.rova.service.notification.NotificationChannelConfig
 import com.aritr.rova.service.notification.NotificationState
-import com.aritr.rova.service.notification.toAccent
 import com.aritr.rova.service.notification.toActionSpecs
+import com.aritr.rova.service.notification.toBindPlan
 import com.aritr.rova.service.notification.toChannelId
-import com.aritr.rova.service.notification.toCopy
-import com.aritr.rova.service.notification.toIconRes
-import com.aritr.rova.service.notification.toProgress
 import com.aritr.rova.service.notification.isDismissible
 import com.aritr.rova.service.scheduler.AlarmScheduler
 import android.os.Binder
@@ -2697,10 +2697,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * handles stop and share without the service touching chooser APIs.
      */
     private fun createNotification(state: NotificationState, sessionId: String?): Notification {
-        val copy = state.toCopy()
+        val plan = state.toBindPlan()
         val channelId = state.toChannelId()
-        val accent = state.toAccent()
-        val iconRes = state.toIconRes()
         val ongoing = !state.isDismissible()
         val autoCancel = state.isDismissible()
 
@@ -2712,25 +2710,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val collapsed = renderRemoteView(plan, expanded = false)
+        val expanded = renderRemoteView(plan, expanded = true)
+
         val builder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(copy.title)
-            .setContentText(copy.body)
-            .setSmallIcon(iconRes)
-            .setColor(accent)
-            .setColorized(state is NotificationState.MergeComplete)
+            // Title + text still set for accessibility fallback + lockscreen
+            // preview, even though DecoratedCustomViewStyle overrides the
+            // visible content area.
+            .setContentTitle(plan.title)
+            .setContentText(plan.body)
+            .setSmallIcon(plan.iconRes)
+            .setColor(plan.accent)
+            .setColorized(plan.isComplete)
             .setContentIntent(openPendingIntent)
             .setOngoing(ongoing)
             .setAutoCancel(autoCancel)
-            .setOnlyAlertOnce(state !is NotificationState.MergeComplete)
+            .setOnlyAlertOnce(!plan.isComplete)
             .setVisibility(
-                if (state is NotificationState.MergeComplete) NotificationCompat.VISIBILITY_PRIVATE
+                if (plan.isComplete) NotificationCompat.VISIBILITY_PRIVATE
                 else NotificationCompat.VISIBILITY_PUBLIC
             )
-            .setShowWhen(state is NotificationState.MergeComplete)
-
-        state.toProgress()?.let { p ->
-            builder.setProgress(p.max, p.current, p.indeterminate)
-        }
+            .setShowWhen(plan.isComplete)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(expanded)
 
         state.toActionSpecs().forEach { spec ->
             val intent = buildActionIntent(spec, sessionId)
@@ -2746,6 +2749,57 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
 
         return builder.build()
+    }
+
+    private fun renderRemoteView(plan: NotificationBindPlan, expanded: Boolean): RemoteViews {
+        val layoutRes = if (expanded) plan.layoutExpandedRes else plan.layoutCollapsedRes
+        val rv = RemoteViews(packageName, layoutRes)
+
+        // Title + body.
+        rv.setTextViewText(R.id.notif_title, plan.title)
+        if (expanded) {
+            rv.setTextViewText(R.id.notif_body, plan.body)
+        }
+
+        // Tail meta (collapsed only).
+        if (!expanded) {
+            if (plan.collapsedTail != null) {
+                rv.setTextViewText(R.id.notif_tail, plan.collapsedTail)
+                rv.setViewVisibility(R.id.notif_tail, View.VISIBLE)
+            } else {
+                rv.setViewVisibility(R.id.notif_tail, View.GONE)
+            }
+        }
+
+        // Accent rail tint — solid color filter on the ImageView background.
+        rv.setInt(R.id.notif_rail, "setBackgroundColor", plan.accent)
+
+        // Chip background tint — solid color filter on the ImageView background.
+        rv.setInt(R.id.notif_chip_bg, "setBackgroundColor", plan.accent)
+        rv.setContentDescription(R.id.notif_chip_bg, getString(plan.chipContentDescriptionRes))
+
+        // Chip icon.
+        rv.setImageViewResource(R.id.notif_chip_icon, plan.iconRes)
+
+        // Progress (expanded only).
+        if (expanded) {
+            val progress = plan.progress
+            if (progress != null) {
+                rv.setProgressBar(R.id.notif_progress, progress.max, progress.current, progress.indeterminate)
+                rv.setViewVisibility(R.id.notif_progress, View.VISIBLE)
+                val cd = if (progress.indeterminate) {
+                    getString(R.string.notification_progress_cd_indeterminate)
+                } else {
+                    val percent = if (progress.max > 0) (progress.current * 100 / progress.max) else 0
+                    getString(R.string.notification_progress_cd_determinate, percent)
+                }
+                rv.setContentDescription(R.id.notif_progress, cd)
+            } else {
+                rv.setViewVisibility(R.id.notif_progress, View.GONE)
+            }
+        }
+
+        return rv
     }
 
     private fun buildActionIntent(spec: NotificationActionSpec, sessionIdContext: String?): Intent {
