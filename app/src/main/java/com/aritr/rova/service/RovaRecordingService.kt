@@ -2775,11 +2775,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
         rv.setInt(R.id.notif_rail, "setBackgroundColor", plan.accent)
 
         // Chip background tint — solid color filter on the ImageView background.
+        // Bg view itself stays importantForAccessibility="no"; the icon below
+        // is the semantic carrier that TalkBack reads.
         rv.setInt(R.id.notif_chip_bg, "setBackgroundColor", plan.accent)
-        rv.setContentDescription(R.id.notif_chip_bg, getString(plan.chipContentDescriptionRes))
 
-        // Chip icon.
+        // Chip icon — also carries the chip contentDescription so TalkBack
+        // announces the state ("Recording in progress" etc.). The bg view
+        // is inert per layout markup; binding CD there would never surface.
         rv.setImageViewResource(R.id.notif_chip_icon, plan.iconRes)
+        rv.setContentDescription(R.id.notif_chip_icon, getString(plan.chipContentDescriptionRes))
 
         // Progress (expanded only).
         if (expanded) {
