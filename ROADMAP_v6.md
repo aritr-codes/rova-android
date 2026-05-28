@@ -4,6 +4,36 @@
 
 ---
 
+## Status (live, 2026-05-28)
+
+| | |
+|---|---|
+| Master tip | `d54e051 Milestone 5 — Notification redesign v1.0 (#54)` |
+| Test baseline | 1322 / 0-0-0 (failures / errors / skipped) |
+| Lint baseline | 61 warnings + 1 hint + 0 errors |
+| ADRs | 0001–0019 (slot 0010 used for two siblings: canonical-uv-frame + crop-divergence) |
+| Static checks | 25 `check*` tasks wired into `preBuild` |
+
+### Milestones shipped (post-AGP-9-migration)
+
+| Milestone | PR | SHA | Summary |
+|---|---|---|---|
+| M5 | #54 | `d54e051` | Notification redesign v1.0 — semantic + a11y + visual skin + clip-dots row + Chronometer + branded launcher |
+| M4 | #53 | `12c12a9` | Onboarding redesign — 7 screens → 3 immersive |
+| M3 | #52 | `e1e121d` | Asymmetric thermal hysteresis (ADR-0019) |
+| M2 | #51 | `0347880` | Merge reliability bundle — retry + preflight + notification + library rows |
+| M1 | #50 | `b3fad71` | DualShot frame polish — blur + halved scrim |
+
+### UI/feature roadmap backlog
+
+See `NEW_UI_BACKEND_REPLAN.md` for the active UI/feature roadmap. v6 below is the reliability backbone.
+
+### Authority
+
+Phase-level checkboxes in v5 and v6 below remain authoritative. Their completion signal is: **does the matching `check*` task in `app/build.gradle.kts` exist and pass?** If yes → done. This roadmap does not duplicate that signal as ticked checkboxes.
+
+---
+
 ## What Changed from v5
 
 | # | v5 problem | v6 fix |
