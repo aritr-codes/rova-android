@@ -6,6 +6,19 @@ import androidx.annotation.LayoutRes
 import com.aritr.rova.R
 
 /**
+ * M5 Phase 3.1 §6 — countdown spec for Chronometer binding.
+ *
+ * [baseElapsedMs] is the absolute `SystemClock.elapsedRealtime()` value
+ * at which the countdown hits zero. The service binds it via
+ * `RemoteViews.setChronometer(viewId, base = baseElapsedMs, format = null, started = true)`
+ * + `setBoolean(viewId, "setCountDown", true)`. The widget then free-ticks
+ * per second without service round-trips.
+ *
+ * `null` plan → service hides Chronometer + shows static body TextView.
+ */
+data class ChronoSpec(val baseElapsedMs: Long)
+
+/**
  * M5 Phase 3 §7 — bind-plan emitted by [toBindPlan]. Pure data; the
  * service consumes it to inflate + bind a real RemoteViews tree. No
  * Android RemoteViews / Context calls in this file.
@@ -16,6 +29,9 @@ import com.aritr.rova.R
  *   - ADDED titleColor: Int? (null = use Compat.Notification.Title default,
  *                              non-null = MergeComplete green)
  *   - ADDED surfaceRes: DrawableRes (notif_surface vs notif_surface_complete)
+ *
+ * Phase 3.1 deltas vs Phase 3:
+ *   - ADDED chrono: ChronoSpec? (countdown Chronometer spec; null = static body)
  *
  * Spec: docs/superpowers/specs/2026-05-28-notification-redesign-phase3-design.md
  */
@@ -31,7 +47,8 @@ data class NotificationBindPlan(
     val isComplete: Boolean,
     val dots: DotsPlan,
     @ColorInt val titleColor: Int?,
-    @DrawableRes val surfaceRes: Int
+    @DrawableRes val surfaceRes: Int,
+    val chrono: ChronoSpec?
 )
 
 fun NotificationState.toBindPlan(): NotificationBindPlan {
@@ -49,8 +66,20 @@ fun NotificationState.toBindPlan(): NotificationBindPlan {
         isComplete = complete,
         dots = toDotsPlan(),
         titleColor = if (complete) NotificationChannelConfig.ACCENT_COMPLETE else null,
-        surfaceRes = if (complete) R.drawable.notif_surface_complete else R.drawable.notif_surface
+        surfaceRes = if (complete) R.drawable.notif_surface_complete else R.drawable.notif_surface,
+        chrono = toChronoSpec()
     )
+}
+
+internal fun NotificationState.toChronoSpec(
+    now: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+): ChronoSpec? = when (this) {
+    is NotificationState.ClipRecording ->
+        etaSecondsRemaining?.let { ChronoSpec(now() + it * 1000L) }
+    is NotificationState.GapWaiting ->
+        nextStartsInSeconds?.let { ChronoSpec(now() + it * 1000L) }
+    is NotificationState.Merging,
+    is NotificationState.MergeComplete -> null
 }
 
 private fun collapsedTailFor(state: NotificationState): String? = when (state) {

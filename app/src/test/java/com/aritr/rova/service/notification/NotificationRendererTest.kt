@@ -3,6 +3,7 @@ package com.aritr.rova.service.notification
 import com.aritr.rova.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -193,5 +194,55 @@ class NotificationRendererTest {
         assertEquals(R.drawable.notif_surface, NotificationState.GapWaiting(nextNumber = 1, nextInLabel = "1:00").toBindPlan().surfaceRes)
         assertEquals(R.drawable.notif_surface, NotificationState.Merging(done = 0, total = 6).toBindPlan().surfaceRes)
         assertEquals(R.drawable.notif_surface_complete, NotificationState.MergeComplete(clipCount = 1).toBindPlan().surfaceRes)
+    }
+
+    // ── Phase 3.1: ChronoSpec ─────────────────────────────────────
+
+    @Test fun `ClipRecording with eta emits ChronoSpec at now plus eta`() {
+        val state = NotificationState.ClipRecording(current = 1, etaSecondsRemaining = 18)
+        val chrono = state.toChronoSpec(now = { 1000L })
+        assertEquals(ChronoSpec(baseElapsedMs = 1000L + 18 * 1000L), chrono)
+    }
+
+    @Test fun `ClipRecording with eta=null emits chrono=null`() {
+        val state = NotificationState.ClipRecording(current = 1, etaSecondsRemaining = null)
+        assertNull(state.toChronoSpec(now = { 1000L }))
+    }
+
+    @Test fun `GapWaiting with countdown emits ChronoSpec at now plus countdown`() {
+        val state = NotificationState.GapWaiting(
+            nextNumber = 2, nextInLabel = "5:00",
+            nextStartsInSeconds = 300, gapTotalSeconds = 600
+        )
+        val chrono = state.toChronoSpec(now = { 5000L })
+        assertEquals(ChronoSpec(baseElapsedMs = 5000L + 300 * 1000L), chrono)
+    }
+
+    @Test fun `GapWaiting with countdown=null emits chrono=null`() {
+        val state = NotificationState.GapWaiting(
+            nextNumber = 2, nextInLabel = "1:00",
+            nextStartsInSeconds = null
+        )
+        assertNull(state.toChronoSpec(now = { 5000L }))
+    }
+
+    @Test fun `Merging always emits chrono=null`() {
+        val determinate = NotificationState.Merging(done = 4, total = 6, mergeProgressPercent = 67)
+        val indeterminate = NotificationState.Merging(done = 0, total = 6, mergeProgressPercent = null)
+        assertNull(determinate.toChronoSpec(now = { 1L }))
+        assertNull(indeterminate.toChronoSpec(now = { 1L }))
+    }
+
+    @Test fun `MergeComplete always emits chrono=null`() {
+        val state = NotificationState.MergeComplete(clipCount = 6, totalDurationSeconds = 300)
+        assertNull(state.toChronoSpec(now = { 1L }))
+    }
+
+    @Test fun `toBindPlan forwards chrono field from toChronoSpec`() {
+        val state: NotificationState = NotificationState.ClipRecording(current = 1, etaSecondsRemaining = 18)
+        val plan = state.toBindPlan()
+        // bind plan calls real SystemClock; we only verify chrono is non-null
+        // for an eta-bearing ClipRecording (matches toChronoSpec contract).
+        assertNotNull(plan.chrono)
     }
 }
