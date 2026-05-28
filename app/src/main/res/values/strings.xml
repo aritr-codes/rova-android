@@ -46,12 +46,6 @@
     <string name="notification_action_view_in_library_cd">View this recording in the Library</string>
     <string name="notification_action_share_cd">Share this recording</string>
 
-    <!-- M5 Phase 2: chip contentDescription per state -->
-    <string name="notification_chip_cd_recording">Recording in progress</string>
-    <string name="notification_chip_cd_waiting">Waiting for next clip</string>
-    <string name="notification_chip_cd_merging">Merging clips</string>
-    <string name="notification_chip_cd_complete">Recording complete</string>
-
     <!-- M5 Phase 2: progress contentDescription -->
     <string name="notification_progress_cd_determinate">Progress, %1$d percent</string>
     <string name="notification_progress_cd_indeterminate">In progress</string>
