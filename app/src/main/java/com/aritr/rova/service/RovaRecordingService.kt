@@ -41,6 +41,7 @@ import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.ChronoSpec
 import com.aritr.rova.service.notification.DotState
 import com.aritr.rova.service.notification.DotsPlan
 import com.aritr.rova.service.notification.NotificationActionKey
@@ -2766,7 +2767,68 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
         if (expanded) {
             rv.setTextViewText(R.id.notif_body, plan.body)
-            bindDotsRow(rv, plan.dots)
+
+            // Chronometer / body toggle (Phase 3.1 §4.2).
+            // ClipRecording + GapWaiting → Chronometer visible, body hidden.
+            // Merging + MergeComplete    → body visible, Chronometer hidden.
+            val chrono = plan.chrono
+            if (chrono != null) {
+                rv.setViewVisibility(R.id.notif_body, View.GONE)
+                rv.setViewVisibility(R.id.notif_chrono, View.VISIBLE)
+                rv.setChronometer(R.id.notif_chrono, chrono.baseElapsedMs, null, true)
+                rv.setBoolean(R.id.notif_chrono, "setCountDown", true)
+            } else {
+                rv.setViewVisibility(R.id.notif_chrono, View.GONE)
+                rv.setViewVisibility(R.id.notif_body, View.VISIBLE)
+            }
+
+            // Dots row (expanded only). Phase 3.1 §2 + §4.3:
+            //   - setColorFilter tints the src drawable (Phase 3.1 fix: src not background)
+            //   - setFloat(weightSum) makes visible pills fill the row regardless of count
+            val dots = plan.dots
+            if (!dots.visible) {
+                rv.setViewVisibility(R.id.notif_dots_row, View.GONE)
+            } else {
+                rv.setViewVisibility(R.id.notif_dots_row, View.VISIBLE)
+                val pills = dots.pills
+                val visibleCount = pills.size.coerceAtMost(8)
+                rv.setFloat(R.id.notif_dots_row, "setWeightSum", visibleCount.toFloat())
+
+                val slotIds = intArrayOf(
+                    R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
+                    R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7
+                )
+                val containerIds = intArrayOf(
+                    R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
+                    R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7_container
+                )
+
+                for (i in 0 until 8) {
+                    if (i < visibleCount) {
+                        rv.setViewVisibility(containerIds[i], View.VISIBLE)
+                        val pill = pills[i]
+                        val color = when (pill.kind) {
+                            DotState.Kind.DONE -> dots.accent
+                            DotState.Kind.CURRENT -> (dots.accent and 0x00FFFFFF) or 0x66000000
+                            DotState.Kind.TODO -> 0x1FFFFFFF
+                            DotState.Kind.COUNT_PILL -> 0x14FFFFFF
+                        }
+                        rv.setInt(slotIds[i], "setColorFilter", color)
+                    } else {
+                        rv.setViewVisibility(containerIds[i], View.GONE)
+                    }
+                }
+
+                // Count-pill label overlay: visible only when last visible pill is COUNT_PILL
+                val lastPill = pills.lastOrNull()
+                if (lastPill?.kind == DotState.Kind.COUNT_PILL && lastPill.countLabel != null) {
+                    rv.setTextViewText(R.id.notif_dot_count_label, lastPill.countLabel)
+                    rv.setViewVisibility(R.id.notif_dot_count_label, View.VISIBLE)
+                } else {
+                    rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
+                }
+            }
+
             bindProgress(rv, plan.progress)
         } else {
             if (plan.collapsedTail != null) {
@@ -2778,58 +2840,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
 
         return rv
-    }
-
-    /**
-     * M5 Phase 3 §4.3 — bind 8 pre-allocated pill slots from [DotsPlan].
-     * Each slot: tint via setColorFilter on the background drawable +
-     * toggle visibility per pill state. Last slot (notif_dot_7) doubles
-     * as count-pill carrier via the overlay TextView.
-     */
-    private fun bindDotsRow(rv: RemoteViews, dots: DotsPlan) {
-        if (!dots.visible) {
-            rv.setViewVisibility(R.id.notif_dots_row, View.GONE)
-            return
-        }
-        rv.setViewVisibility(R.id.notif_dots_row, View.VISIBLE)
-        rv.setContentDescription(R.id.notif_dots_row, dots.contentDescription)
-
-        val slotIds = intArrayOf(
-            R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
-            R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7
-        )
-
-        val doneColor = dots.accent
-        val currentColor = (dots.accent and 0x00FFFFFF) or 0x66000000  // 40% alpha
-        val todoColor = 0x1FFFFFFF                                      // 12% alpha white
-        val countBgColor = 0x14FFFFFF                                   // 8% alpha white
-
-        slotIds.forEachIndexed { index, viewId ->
-            val pill = dots.pills.getOrNull(index)
-            if (pill == null) {
-                rv.setViewVisibility(viewId, View.GONE)
-                // Make sure the count-overlay sibling on slot 7 is also hidden.
-                if (index == 7) rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
-            } else {
-                rv.setViewVisibility(viewId, View.VISIBLE)
-                val tint = when (pill.kind) {
-                    DotState.Kind.DONE -> doneColor
-                    DotState.Kind.CURRENT -> currentColor
-                    DotState.Kind.TODO -> todoColor
-                    DotState.Kind.COUNT_PILL -> countBgColor
-                }
-                rv.setInt(viewId, "setColorFilter", tint)
-
-                if (index == 7) {
-                    if (pill.kind == DotState.Kind.COUNT_PILL && pill.countLabel != null) {
-                        rv.setTextViewText(R.id.notif_dot_count_label, pill.countLabel)
-                        rv.setViewVisibility(R.id.notif_dot_count_label, View.VISIBLE)
-                    } else {
-                        rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
-                    }
-                }
-            }
-        }
     }
 
     private fun bindProgress(rv: RemoteViews, progress: NotificationProgress?) {
