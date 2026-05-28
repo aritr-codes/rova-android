@@ -82,4 +82,62 @@ class NotificationCopyTest {
         assertEquals(a, b)
         assertNotEquals(a, c)
     }
+
+    // M5 extensions — new optional numeric params
+
+    @Test fun `ClipRecording with eta renders MM SS remaining body`() {
+        val copy = NotificationState.ClipRecording(
+            current = 2, total = 6, etaSecondsRemaining = 18
+        ).toCopy()
+        assertEquals("0:18 remaining in this clip", copy.body)
+    }
+
+    @Test fun `ClipRecording without eta falls back to static body`() {
+        val copy = NotificationState.ClipRecording(
+            current = 2, total = 6, etaSecondsRemaining = null
+        ).toCopy()
+        assertEquals("Recording in progress", copy.body)
+    }
+
+    @Test fun `ClipRecording with eta over a minute renders M SS`() {
+        val copy = NotificationState.ClipRecording(
+            current = 1, total = 6, etaSecondsRemaining = 75
+        ).toCopy()
+        assertEquals("1:15 remaining in this clip", copy.body)
+    }
+
+    @Test fun `ClipRecording with eta zero renders 0 00`() {
+        val copy = NotificationState.ClipRecording(
+            current = 6, total = 6, etaSecondsRemaining = 0
+        ).toCopy()
+        assertEquals("0:00 remaining in this clip", copy.body)
+    }
+
+    @Test fun `MergeComplete with duration renders clips dot total dot saved`() {
+        val copy = NotificationState.MergeComplete(
+            clipCount = 6, totalDurationSeconds = 300
+        ).toCopy()
+        assertEquals("6 clips · 5:00 total · saved to Library", copy.body)
+    }
+
+    @Test fun `MergeComplete singular with duration uses 1 clip`() {
+        val copy = NotificationState.MergeComplete(
+            clipCount = 1, totalDurationSeconds = 30
+        ).toCopy()
+        assertEquals("1 clip · 0:30 total · saved to Library", copy.body)
+    }
+
+    @Test fun `MergeComplete without duration falls back to existing copy`() {
+        val copy = NotificationState.MergeComplete(
+            clipCount = 6, totalDurationSeconds = null
+        ).toCopy()
+        assertEquals("6 clips saved to Library", copy.body)
+    }
+
+    @Test fun `ClipRecording with negative eta clamps to 0 00`() {
+        val copy = NotificationState.ClipRecording(
+            current = 1, total = 6, etaSecondsRemaining = -3
+        ).toCopy()
+        assertEquals("0:00 remaining in this clip", copy.body)
+    }
 }

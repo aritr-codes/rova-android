@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M5 Phase 3 §4.1 + Phase 3.1 §4.4 — collapsed layout.
+     Single row: title (weight=1, ellipsizes) + tail (right-aligned). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notif_root"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="14dp"
+    android:background="@drawable/notif_surface">
+
+    <TextView
+        android:id="@+id/notif_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginEnd="8dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textSize="14sp"
+        android:textColor="#EBFFFFFF"
+        android:textStyle="bold"
+        android:fontFamily="@font/inter"
+        style="@style/TextAppearance.Compat.Notification.Title" />
+
+    <TextView
+        android:id="@+id/notif_tail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textSize="11sp"
+        android:textColor="#A6FFFFFF"
+        android:fontFamily="@font/inter"
+        style="@style/TextAppearance.Compat.Notification" />
+
+</LinearLayout>

@@ -599,6 +599,70 @@ class RovaApp : Application() {
         )
     }
 
+    /**
+     * M5 §5 — notification "Stop" / "Stop Early" actions route through here.
+     * Reuses the existing user-stop broadcast pipeline that the in-app Stop
+     * FAB takes. If no session is currently recording, the broadcast is a
+     * no-op (RovaStopReceiver checks active state).
+     */
+    fun requestUserStopIfRunning(context: android.content.Context) {
+        val intent = android.content.Intent().apply {
+            action = com.aritr.rova.service.RovaStopReceiver.ACTION_STOP
+            setPackage(context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
+
+    /**
+     * M5 §5 — notification "Share" action routes through here. Resolves
+     * the recorded artifact via the same tier-dispatch
+     * [com.aritr.rova.ui.screens.HistoryArtifactMapper] uses for the
+     * in-app share button, then hands off to the system share chooser.
+     *
+     * Tier 1: [com.aritr.rova.data.SessionManifest.pendingUri] is the
+     * MediaStore content URI; passed directly as the share URI.
+     * Tier 2/3: [com.aritr.rova.data.SessionManifest.publicTargetPath]
+     * is the on-disk path; a minimal ContentResolver query resolves it
+     * to a content URI, falling back to FileProvider if not indexed.
+     *
+     * No-op on missing manifest, unresolvable artifact, or null share URI.
+     */
+    fun shareRecording(activity: android.app.Activity, sessionId: String) {
+        val manifest = sessionStore.loadManifest(sessionId) ?: return
+        val file = com.aritr.rova.ui.screens.HistoryArtifactMapper.resolveArtifactFile(manifest) { uri ->
+            // Tier 1 _DATA resolution: query MediaStore for the path owned
+            // by this app's export row. Returns null if the row is gone.
+            try {
+                val contentUri = android.net.Uri.parse(uri)
+                @Suppress("DEPRECATION")
+                activity.contentResolver.query(
+                    contentUri,
+                    arrayOf(android.provider.MediaStore.Video.Media.DATA),
+                    null, null, null
+                )?.use { c ->
+                    if (c.moveToFirst()) {
+                        val path = c.getString(0)
+                        if (path.isNullOrEmpty()) null else java.io.File(path)
+                    } else null
+                }
+            } catch (_: Throwable) { null }
+        } ?: return
+        val shareUriString = com.aritr.rova.ui.screens.HistoryArtifactMapper.resolveShareUri(manifest)
+        val shareUri: android.net.Uri? = shareUriString?.let { android.net.Uri.parse(it) }
+            ?: try {
+                androidx.core.content.FileProvider.getUriForFile(
+                    activity, "${activity.packageName}.provider", file
+                )
+            } catch (_: IllegalArgumentException) { null }
+        shareUri ?: return
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "video/mp4"
+            putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        activity.startActivity(android.content.Intent.createChooser(send, null))
+    }
+
     companion object {
         @Volatile
         private var instance: RovaApp? = null

@@ -15,6 +15,9 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.view.Display
+import android.graphics.Color
+import android.view.View
+import android.widget.RemoteViews
 import android.os.PowerManager
 import android.os.StatFs
 import androidx.camera.core.CameraSelector
@@ -38,8 +41,19 @@ import androidx.lifecycle.Observer
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.notification.ChronoSpec
+import com.aritr.rova.service.notification.DotState
+import com.aritr.rova.service.notification.DotsPlan
+import com.aritr.rova.service.notification.NotificationActionKey
+import com.aritr.rova.service.notification.NotificationActionSpec
+import com.aritr.rova.service.notification.NotificationBindPlan
+import com.aritr.rova.service.notification.NotificationChannelConfig
+import com.aritr.rova.service.notification.NotificationProgress
 import com.aritr.rova.service.notification.NotificationState
-import com.aritr.rova.service.notification.toCopy
+import com.aritr.rova.service.notification.toActionSpecs
+import com.aritr.rova.service.notification.toBindPlan
+import com.aritr.rova.service.notification.toChannelId
+import com.aritr.rova.service.notification.isDismissible
 import com.aritr.rova.service.scheduler.AlarmScheduler
 import android.os.Binder
 import kotlinx.coroutines.CompletableDeferred
@@ -499,6 +513,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         private const val LEGACY_NOTIFICATION_TITLE = "🎥 Rova Recording Active"
         // Phase 1.3 — legacy ACTION_STOP service-intent constant removed.
         // Stop arrives via RovaStopReceiver.ACTION_STOP (broadcast).
+        // M5 §5 — share action routed through MainActivity so the chooser
+        // builder has access to an Activity context.
+        const val ACTION_SHARE_RECORDING = "com.aritr.rova.action.SHARE_RECORDING"
         private const val WAKE_LOCK_RELAX_THRESHOLD_SECONDS = 120
         private const val WAKE_LOCK_FINAL_COUNTDOWN_SECONDS = 10
         private const val WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS = 30
@@ -808,6 +825,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // Milestone 2 — notification-update throttle state.
     private var lastMergeNotifyMillis: Long = 0L
     private val MERGE_NOTIFY_THROTTLE_MS = 500L
+
+    // Milestone 5 §6 — session-channel rate-limit (~1Hz) with transition flush.
+    @Volatile private var lastSessionNotifyMillis: Long = 0L
+    @Volatile private var lastNotifiedState: NotificationState? = null
+    private val MIN_SESSION_NOTIFY_INTERVAL_MS = 950L  // ~1Hz; just under a second to absorb scheduler jitter
 
     /**
      * Milestone 2 — progress-aware merge notification update. Throttled
@@ -1202,7 +1224,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
 
                     _serviceState.update { it.copy(currentLoop = segmentCount + 1) }
-                    updateNotification(NotificationState.ClipRecording(segmentCount + 1, limitLoops.takeIf { it != -1 }))
+                    updateNotification(NotificationState.ClipRecording(
+                        current = segmentCount + 1,
+                        total = limitLoops.takeIf { it != -1 },
+                        etaSecondsRemaining = nSeconds.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    ))
 
                     // ADR 0006 B-fix-4: retry loop now branches on
                     // SegmentResult. RetryableFailure → reconfigure +
@@ -2634,13 +2660,229 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Rova Background Recording",
-                NotificationManager.IMPORTANCE_LOW
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val mgr = getSystemService(NotificationManager::class.java)
+
+        // Legacy channel — kept registered (and unused) so existing user
+        // importance/sound overrides are not nuked silently on M5 install.
+        // Cleanup deletion is a follow-on slice after one release.
+        val legacy = NotificationChannel(
+            CHANNEL_ID,
+            "Rova Background Recording",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        mgr.createNotificationChannel(legacy)
+
+        // M5 §4 — new dual-channel topology.
+        val session = NotificationChannel(
+            NotificationChannelConfig.SESSION_CHANNEL_ID,
+            getString(R.string.notification_channel_session_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = getString(R.string.notification_channel_session_desc)
+            setShowBadge(false)
+        }
+        mgr.createNotificationChannel(session)
+
+        val complete = NotificationChannel(
+            NotificationChannelConfig.COMPLETE_CHANNEL_ID,
+            getString(R.string.notification_channel_complete_name),
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = getString(R.string.notification_channel_complete_desc)
+            setShowBadge(true)
+        }
+        mgr.createNotificationChannel(complete)
+    }
+
+    /**
+     * M5 §5 — per-state builder. Derives channel, accent, icon, progress,
+     * and action specs from [state] via the pure-helper extension functions;
+     * routes every action intent through [buildActionIntent] so the activity
+     * handles stop and share without the service touching chooser APIs.
+     */
+    private fun createNotification(state: NotificationState, sessionId: String?): Notification {
+        val plan = state.toBindPlan()
+        val channelId = state.toChannelId()
+        val ongoing = !state.isDismissible()
+        val autoCancel = state.isDismissible()
+
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val collapsed = renderRemoteView(plan, expanded = false)
+        val expanded = renderRemoteView(plan, expanded = true)
+
+        // M5 Phase 3 §3.2: drop setColorized — title color + dots + green
+        // border on notif_surface_complete carry the celebratory signal.
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setContentTitle(plan.title)
+            .setContentText(plan.body)
+            .setSmallIcon(plan.iconRes)
+            .setColor(plan.accent)
+            .setContentIntent(openPendingIntent)
+            .setOngoing(ongoing)
+            .setAutoCancel(autoCancel)
+            .setOnlyAlertOnce(!plan.isComplete)
+            .setVisibility(
+                if (plan.isComplete) NotificationCompat.VISIBILITY_PRIVATE
+                else NotificationCompat.VISIBILITY_PUBLIC
             )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            .setShowWhen(plan.isComplete)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(expanded)
+
+        state.toActionSpecs().forEach { spec ->
+            val intent = buildActionIntent(spec, sessionId)
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                spec.key.ordinal + 100,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val action = NotificationCompat.Action.Builder(spec.iconRes, getString(spec.labelRes), pendingIntent)
+                .build()
+            builder.addAction(action)
+        }
+
+        return builder.build()
+    }
+
+    private fun renderRemoteView(plan: NotificationBindPlan, expanded: Boolean): RemoteViews {
+        val layoutRes = if (expanded) plan.layoutExpandedRes else plan.layoutCollapsedRes
+        val rv = RemoteViews(packageName, layoutRes)
+
+        // Surface drawable — runtime swap between default + complete variant.
+        rv.setInt(R.id.notif_root, "setBackgroundResource", plan.surfaceRes)
+
+        // Title + optional explicit color (MergeComplete only).
+        rv.setTextViewText(R.id.notif_title, plan.title)
+        plan.titleColor?.let { rv.setTextColor(R.id.notif_title, it) }
+
+        if (expanded) {
+            rv.setTextViewText(R.id.notif_body, plan.body)
+
+            // Chronometer / body toggle (Phase 3.1 §4.2).
+            // ClipRecording + GapWaiting → Chronometer visible, body hidden.
+            // Merging + MergeComplete    → body visible, Chronometer hidden.
+            val chrono = plan.chrono
+            if (chrono != null) {
+                rv.setViewVisibility(R.id.notif_body, View.GONE)
+                rv.setViewVisibility(R.id.notif_chrono, View.VISIBLE)
+                rv.setChronometer(R.id.notif_chrono, chrono.baseElapsedMs, null, true)
+                rv.setBoolean(R.id.notif_chrono, "setCountDown", true)
+            } else {
+                rv.setViewVisibility(R.id.notif_chrono, View.GONE)
+                rv.setViewVisibility(R.id.notif_body, View.VISIBLE)
+            }
+
+            // Dots row (expanded only). Phase 3.1 §2 + §4.3:
+            //   - setColorFilter tints the src drawable (Phase 3.1 fix: src not background)
+            //   - setFloat(weightSum) makes visible pills fill the row regardless of count
+            val dots = plan.dots
+            if (!dots.visible) {
+                rv.setViewVisibility(R.id.notif_dots_row, View.GONE)
+            } else {
+                rv.setViewVisibility(R.id.notif_dots_row, View.VISIBLE)
+                val pills = dots.pills
+                val visibleCount = pills.size.coerceAtMost(8)
+                rv.setFloat(R.id.notif_dots_row, "setWeightSum", visibleCount.toFloat())
+
+                val slotIds = intArrayOf(
+                    R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
+                    R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7
+                )
+                val containerIds = intArrayOf(
+                    R.id.notif_dot_0, R.id.notif_dot_1, R.id.notif_dot_2, R.id.notif_dot_3,
+                    R.id.notif_dot_4, R.id.notif_dot_5, R.id.notif_dot_6, R.id.notif_dot_7_container
+                )
+
+                for (i in 0 until 8) {
+                    if (i < visibleCount) {
+                        rv.setViewVisibility(containerIds[i], View.VISIBLE)
+                        val pill = pills[i]
+                        val color = when (pill.kind) {
+                            DotState.Kind.DONE -> dots.accent
+                            DotState.Kind.CURRENT -> (dots.accent and 0x00FFFFFF) or 0x66000000
+                            DotState.Kind.TODO -> 0x1FFFFFFF
+                            DotState.Kind.COUNT_PILL -> 0x14FFFFFF
+                        }
+                        rv.setInt(slotIds[i], "setColorFilter", color)
+                    } else {
+                        rv.setViewVisibility(containerIds[i], View.GONE)
+                    }
+                }
+
+                // Count-pill label overlay: visible only when last visible pill is COUNT_PILL
+                val lastPill = pills.lastOrNull()
+                if (lastPill?.kind == DotState.Kind.COUNT_PILL && lastPill.countLabel != null) {
+                    rv.setTextViewText(R.id.notif_dot_count_label, lastPill.countLabel)
+                    rv.setViewVisibility(R.id.notif_dot_count_label, View.VISIBLE)
+                } else {
+                    rv.setViewVisibility(R.id.notif_dot_count_label, View.GONE)
+                }
+            }
+
+            bindProgress(rv, plan.progress)
+        } else {
+            if (plan.collapsedTail != null) {
+                rv.setTextViewText(R.id.notif_tail, plan.collapsedTail)
+                rv.setViewVisibility(R.id.notif_tail, View.VISIBLE)
+            } else {
+                rv.setViewVisibility(R.id.notif_tail, View.GONE)
+            }
+        }
+
+        return rv
+    }
+
+    private fun bindProgress(rv: RemoteViews, progress: NotificationProgress?) {
+        if (progress == null) {
+            rv.setViewVisibility(R.id.notif_progress, View.GONE)
+            return
+        }
+        rv.setProgressBar(R.id.notif_progress, progress.max, progress.current, progress.indeterminate)
+        rv.setViewVisibility(R.id.notif_progress, View.VISIBLE)
+        val cd = if (progress.indeterminate) {
+            getString(R.string.notification_progress_cd_indeterminate)
+        } else {
+            val percent = if (progress.max > 0) (progress.current * 100 / progress.max) else 0
+            getString(R.string.notification_progress_cd_determinate, percent)
+        }
+        rv.setContentDescription(R.id.notif_progress, cd)
+    }
+
+    private fun buildActionIntent(spec: NotificationActionSpec, sessionIdContext: String?): Intent {
+        return when (spec.key) {
+            NotificationActionKey.STOP, NotificationActionKey.STOP_EARLY ->
+                // Reuses the existing user-stop broadcast pipeline.
+                // RovaStopReceiver.ACTION_STOP is the canonical entry point;
+                // the in-app Stop FAB already routes through it.
+                Intent(this, MainActivity::class.java)
+                    .setAction(RovaStopReceiver.ACTION_STOP)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.OPEN ->
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.VIEW_IN_LIBRARY ->
+                Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_TARGET_TAB, MainActivity.TAB_HISTORY)
+                    .also { i -> spec.sessionIdExtra?.let { i.putExtra(MainActivity.EXTRA_SESSION_ID, it) } }
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            NotificationActionKey.SHARE -> {
+                // Share routes through MainActivity so chooser construction
+                // has access to Activity context.
+                Intent(this, MainActivity::class.java)
+                    .setAction(ACTION_SHARE_RECORDING)
+                    .also { i -> spec.sessionIdExtra?.let { i.putExtra(MainActivity.EXTRA_SESSION_ID, it) } }
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
         }
     }
 
@@ -2712,12 +2954,27 @@ class RovaRecordingService : Service(), LifecycleOwner {
         )
     }
 
-    // Phase 3.1 — typed overload for the 4 mockup happy-path states.
+    // M5 §5 — typed overload delegates to the per-state builder.
+    // The legacy createNotification(title, body, sessionId) path is
+    // preserved for the String-based updateNotification(contentText)
+    // overload above; do not remove it.
     private fun updateNotification(state: NotificationState) {
-        val copy = state.toCopy()
+        val now = android.os.SystemClock.elapsedRealtime()
+        val previousState = lastNotifiedState
+        lastNotifiedState = state
+        val sameStateClass = previousState != null && previousState::class == state::class
+        if (!sameStateClass) {
+            lastSessionNotifyMillis = 0L  // force-emit on transition
+        }
+        val isSessionChannel = state.toChannelId() == NotificationChannelConfig.SESSION_CHANNEL_ID
+        val isHighRate = state is NotificationState.ClipRecording || state is NotificationState.GapWaiting
+        if (isSessionChannel && isHighRate) {
+            if (now - lastSessionNotifyMillis < MIN_SESSION_NOTIFY_INTERVAL_MS) return
+            lastSessionNotifyMillis = now
+        }
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
-            createNotification(copy.title, copy.body, currentSessionId)
+            createNotification(state, currentSessionId)
         )
     }
 
@@ -3014,7 +3271,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var mergeSucceeded = false
         try {
             _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
-            updateNotification(NotificationState.Merging(done = 0, total = segments.size))
+            updateNotification(NotificationState.Merging(done = 0, total = segments.size, mergeProgressPercent = 0))
 
             // Phase 1.7 commit-7 — single live entry into the tier
             // export pipeline. ExportPipeline.export dispatches by
@@ -3039,12 +3296,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 side = null
             ) { progress ->
                 _serviceState.update { it.copy(mergeProgress = progress) }
-                updateNotification(NotificationState.Merging((progress * segments.size).toInt(), segments.size))
+                updateNotification(NotificationState.Merging(
+                    done = (progress * segments.size).toInt().coerceIn(0, segments.size),
+                    total = segments.size,
+                    mergeProgressPercent = (progress * 100f).toInt().coerceIn(0, 100)
+                ))
             }
 
             when (result) {
                 is ExportResult.Success -> {
-                    updateNotification(NotificationState.MergeComplete(clipCount = segments.size))
+                    updateNotification(NotificationState.MergeComplete(
+                        clipCount = segments.size,
+                        totalDurationSeconds = null, // segments: List<File> — durationMs not available here
+                        sessionId = currentSessionId
+                    ))
                     withContext(Dispatchers.IO) {
                         segments.forEach {
                             if (!coroutineContext.isActive) throw CancellationException("Post-merge cleanup cancelled")
@@ -3203,7 +3468,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // X always means "clips within the saved content", not "raw
             // segments across all output streams."
             val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
-            updateNotification(NotificationState.Merging(done = 0, total = userClipCount))
+            updateNotification(NotificationState.Merging(done = 0, total = userClipCount, mergeProgressPercent = 0))
 
             val sid = currentSessionId
             val sessionDir = currentSessionDir
@@ -3230,8 +3495,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val overall = progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = (overall * userClipCount).toInt(),
-                            total = userClipCount
+                            done = (overall * userClipCount).toInt().coerceIn(0, userClipCount),
+                            total = userClipCount,
+                            mergeProgressPercent = (overall * 100f).toInt().coerceIn(0, 100)
                         )
                     )
                 }
@@ -3253,8 +3519,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val overall = 0.5f + progress * 0.5f
                     updateNotification(
                         NotificationState.Merging(
-                            done = (overall * userClipCount).toInt(),
-                            total = userClipCount
+                            done = (overall * userClipCount).toInt().coerceIn(0, userClipCount),
+                            total = userClipCount,
+                            mergeProgressPercent = (overall * 100f).toInt().coerceIn(0, 100)
                         )
                     )
                 }
@@ -3297,7 +3564,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
                     }
                 }
-                updateNotification(NotificationState.MergeComplete(clipCount = userClipCount))
+                updateNotification(NotificationState.MergeComplete(
+                    clipCount = userClipCount,
+                    totalDurationSeconds = null, // portraitSegments/landscapeSegments: List<File> — durationMs not available here
+                    sessionId = currentSessionId
+                ))
                 delay(1000)
             } else {
                 // TODO T17: when both sides failed, advance shared
@@ -3591,7 +3862,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
             while (remaining > 0 && kotlinx.coroutines.currentCoroutineContext().isActive) {
                 val step = minOf(remaining, WAKE_LOCK_IDLE_UPDATE_STEP_SECONDS)
                 _serviceState.update { it.copy(nextRecordingCountdown = remaining.toLong()) }
-                updateNotification(NotificationState.GapWaiting(segmentCount + 1, formatCountdownSeconds(remaining), limitLoops.takeIf { it != -1 }))
+                updateNotification(NotificationState.GapWaiting(
+                    nextNumber = segmentCount + 1,
+                    nextInLabel = formatCountdownSeconds(remaining),
+                    total = limitLoops.takeIf { it != -1 },
+                    nextStartsInSeconds = remaining,
+                    gapTotalSeconds = waitSeconds.coerceAtLeast(0)
+                ))
                 delay(step * 1000L)
                 remaining -= step
             }
@@ -3664,7 +3941,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         acquireWakeLock()
         for (i in waitSeconds downTo 1) {
             if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
-            updateNotification(NotificationState.GapWaiting(segmentCount + 1, "${i}s", limitLoops.takeIf { it != -1 }))
+            updateNotification(NotificationState.GapWaiting(
+                    nextNumber = segmentCount + 1,
+                    nextInLabel = "${i}s",
+                    total = limitLoops.takeIf { it != -1 },
+                    nextStartsInSeconds = i,
+                    gapTotalSeconds = waitSeconds.coerceAtLeast(0)
+                ))
             _serviceState.update { it.copy(nextRecordingCountdown = i.toLong()) }
             delay(1000)
         }
