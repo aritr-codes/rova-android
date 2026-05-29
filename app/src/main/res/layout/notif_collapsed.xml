@@ -31,7 +31,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:textSize="11sp"
-        android:textColor="#A6FFFFFF"
+        android:textColor="#DDFFFFFF"
         android:fontFamily="@font/inter"
         style="@style/TextAppearance.Compat.Notification" />
 

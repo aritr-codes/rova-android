@@ -32,7 +32,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:textSize="12sp"
-        android:textColor="#8CFFFFFF"
+        android:textColor="#E8FFFFFF"
         android:lineSpacingExtra="2dp"
         android:fontFamily="@font/inter"
         style="@style/TextAppearance.Compat.Notification" />
@@ -48,7 +48,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:textSize="12sp"
-        android:textColor="#C2FFFFFF"
+        android:textColor="#E0FFFFFF"
         android:textStyle="normal"
         android:fontFamily="@font/inter"
         android:visibility="gone"
@@ -93,8 +93,8 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:singleLine="true"
-                android:textSize="8sp"
-                android:textColor="#80FFFFFF"
+                android:textSize="10sp"
+                android:textColor="#E8FFFFFF"
                 android:fontFamily="@font/inter"
                 android:visibility="gone"
                 android:importantForAccessibility="no" />
