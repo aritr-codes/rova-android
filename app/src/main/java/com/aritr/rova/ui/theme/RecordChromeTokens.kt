@@ -101,31 +101,37 @@ object RecordChromeTokens {
     /** `.focus-frame` bracket — `rgba(255,255,255,0.8)` × `opacity:0.25` = 0.20. */
     val focusFrameStroke = Color.White.copy(alpha = 0.20f)
 
-    // ── Text-fill colours (white at the mockup alpha) ────────────────────
+    // ── Text-fill colours (white) ────────────────────────────────────────
+    // WCAG 2.2 AA override (ADR-0020; audit TOK-01, REC-01..07, NAV-01/02,
+    // TOK-05). The mockup's `rgba` text alphas (18–35%) failed SC 1.4.3 — the
+    // dim values below were raised to meet 4.5:1 over the dark-pill/scrim
+    // chrome on a dark scene (the common case). Guaranteed AA over arbitrarily
+    // bright camera footage would require an opaque scrim behind the text;
+    // tracked as a separate remediation. Verified by TokenContrastTest.
     /** `.loop-count` — `rgba(255,255,255,0.93)`. */
     val loopCountText = Color.White.copy(alpha = 0.93f)
-    /** `.loop-unit` — `rgba(255,255,255,0.32)`. */
-    val loopUnitText = Color.White.copy(alpha = 0.32f)
+    /** `.loop-unit` — mockup 0.32 → 0.70 for AA (SC 1.4.3). */
+    val loopUnitText = Color.White.copy(alpha = 0.70f)
     /** `.status-main` — `rgba(255,255,255,0.65)`. */
     val statusMainText = Color.White.copy(alpha = 0.65f)
-    /** `.status-time` — `rgba(255,255,255,0.32)`. */
-    val statusTimeText = Color.White.copy(alpha = 0.32f)
+    /** `.status-time` — mockup 0.32 → 0.70 for AA. */
+    val statusTimeText = Color.White.copy(alpha = 0.70f)
     /** `.s-val` — `rgba(255,255,255,0.88)`. */
     val cellValueText = Color.White.copy(alpha = 0.88f)
-    /** `.s-key` — `rgba(255,255,255,0.28)`. */
-    val cellKeyText = Color.White.copy(alpha = 0.28f)
+    /** `.s-key` — mockup 0.28 → 0.65 for AA. */
+    val cellKeyText = Color.White.copy(alpha = 0.65f)
     /** Read-only Mode cell value — existing 0.50 alpha, kept. */
     val cellValueReadOnlyText = Color.White.copy(alpha = 0.50f)
-    /** `.settings-arrow` — `rgba(255,255,255,0.18)`. */
-    val settingsArrow = Color.White.copy(alpha = 0.18f)
-    /** `.swipe-hint` container opacity — `0.22`. */
-    val swipeHint = Color.White.copy(alpha = 0.22f)
-    /** `.nav-ico` glyph — `rgba(255,255,255,0.35)`. */
-    val navIcon = Color.White.copy(alpha = 0.35f)
-    /** `.nav-txt` — `rgba(255,255,255,0.30)`. */
-    val navText = Color.White.copy(alpha = 0.30f)
-    /** `.cam-zone-tag` — `rgba(255,255,255,0.32)`. */
-    val zoneTagText = Color.White.copy(alpha = 0.32f)
+    /** `.settings-arrow` — mockup 0.18 → 0.60 for AA. */
+    val settingsArrow = Color.White.copy(alpha = 0.60f)
+    /** `.swipe-hint` — mockup 0.22 → 0.65 for AA. */
+    val swipeHint = Color.White.copy(alpha = 0.65f)
+    /** `.nav-ico` glyph — mockup 0.35 → 0.50 for AA (interactive). */
+    val navIcon = Color.White.copy(alpha = 0.50f)
+    /** `.nav-txt` — mockup 0.30 → 0.65 for AA. */
+    val navText = Color.White.copy(alpha = 0.65f)
+    /** `.cam-zone-tag` — mockup 0.32 → 0.65 for AA. */
+    val zoneTagText = Color.White.copy(alpha = 0.65f)
 
     // ── Pills ────────────────────────────────────────────────────────────
     /** `.status-pill` corner radius. */

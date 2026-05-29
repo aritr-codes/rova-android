@@ -53,8 +53,9 @@ object SettingsSheetTokens {
     val sheetTopPaddingBottom = 14.dp
 
     // ── Section labels ──────────────────────────────────────────────────
-    /** `.sheet-section-label` colour. */
-    val sectionLabelColor = Color.White.copy(alpha = 0.2f)
+    /** `.sheet-section-label` colour — mockup 0.20 → 0.55 for AA (SC 1.4.3,
+     *  ADR-0020; opaque sheet fill, so AA is guaranteed). See TokenContrastTest. */
+    val sectionLabelColor = Color.White.copy(alpha = 0.55f)
     /** Gap between a section label and the content below it. */
     val sectionLabelGap = 8.dp
 
@@ -69,8 +70,10 @@ object SettingsSheetTokens {
     val modeTabRadius = 10.dp
     val modeTabActiveFill = Color.White.copy(alpha = 0.11f)
     val modeTabActiveText = Color.White.copy(alpha = 0.90f)
-    val modeTabIdleText = Color.White.copy(alpha = 0.26f)
-    val modeTabDisabledText = Color.White.copy(alpha = 0.16f)
+    /** Idle (selectable) tab — mockup 0.26 → 0.55 for AA (SC 1.4.3). */
+    val modeTabIdleText = Color.White.copy(alpha = 0.55f)
+    /** Disabled tab — 1.4.3-exempt, but mockup 0.16 was illegible; bumped to 0.40. */
+    val modeTabDisabledText = Color.White.copy(alpha = 0.40f)
 
     // ── Setting rows ────────────────────────────────────────────────────
     /** `.s-row` vertical padding. */
@@ -99,7 +102,8 @@ object SettingsSheetTokens {
     val chipOnStroke = Color.White.copy(alpha = 0.18f)
     val chipOnText = Color.White.copy(alpha = 0.90f)
     val chipOffStroke = Color.White.copy(alpha = 0.09f)
-    val chipOffText = Color.White.copy(alpha = 0.28f)
+    /** Unselected chip label — mockup 0.28 → 0.55 for AA (SC 1.4.3). */
+    val chipOffText = Color.White.copy(alpha = 0.55f)
 
     // ── Save CTA ────────────────────────────────────────────────────────
     val ctaTopMargin = 18.dp
