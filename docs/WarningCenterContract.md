@@ -13,6 +13,8 @@ The precedence model below (the per-category urgency ordering in §3 and §6.1) 
 
 **The 17 rows, in precedence order (highest first) — `WarningId` value · tier · summary:**
 
+> **Count note:** §4 below is titled "The 18 warning states" because it counts 18 logical warning states across 5 categories (C1.1–C4.5). The precedence flat list here contains 17 entries because one §4 state (C4.4 Merge failed — `CANT_MERGE`) is surfaced via a transient `RecoveryCardState` field rather than its own standalone `WarningId` row in the precedence resolver. Both counts are correct; they measure different things.
+
 1. `CAMERA_PERMISSION_DENIED` · HARD_BLOCK · CAMERA not granted — recording can't run. **Gates Start.**
 2. `EXACT_ALARM_DENIED` · HARD_BLOCK · exact alarms not allowed — loop falls back to inexact and drifts. Flat banner, **does NOT gate Start.**
 3. `STORAGE_INSUFFICIENT` · HARD_BLOCK · estimated peak bytes for the current clip settings exceed free space (mirrors the service's start-time preflight). **Gates Start.**
@@ -40,7 +42,7 @@ The precedence model below (the per-category urgency ordering in §3 and §6.1) 
 - `WarningCenterViewModel`'s output is `StateFlow<WarningId?>` (not `StateFlow<WarningCenterUiState>`).
 - A resolution error logs and degrades to `null` (NO-GO #6).
 
-**Snooze / hysteresis (§5): deferred.** The per-warning in-memory 24 h snooze (ADVISORY-tier only, not persisted across process death) and the thermal/storage hysteresis described in §5 are **not built in Phase 4.1 or 4.1b** — they are Phase 4.1c.
+**Snooze / hysteresis (§5): shipped.** Snooze persistence shipped in PR #44 (Phase 4.1c, ADR-0014, 2026-05-24). The original "not built in Phase 4.1 or 4.1b" qualifier applied to the first two slices; Phase 4.1c delivered durable snooze. Thermal hysteresis shipped in Milestone 3 (ADR-0019). See §5 for the current contracts.
 
 **Signal producers (§7):** the camera-permission producer is `CameraPermissionSignal`; the storage producer is `StorageSignal` (mirrors `RovaRecordingService`'s preflight); the microphone producer is `MicrophonePermissionSignal` — all `RovaApp` lazy props added in Phase 4.1b. The battery-optimization producer is `BatteryOptimizationSignal` (Phase 4.1) — the old `BatteryOptimizationBanner.kt` was removed in PR #12.
 - **`StorageLowMidRecSignal`** (R2, 2026-05-13) — UI-side leaf signal. Polled by RecordScreen every ~30 s while HUD state ∈ {Recording, Waiting, Merging}. Fires when `freeBytes < 3 × bytesPerSecondForResolution(resolution) × durationSeconds`. Cleared on Idle transitions. No service or data-layer involvement.
@@ -444,6 +446,12 @@ Resolve before Phase 3 / Phase 4 opens. Listed here so Phase 1 stays clean of sp
 - Severity tokens: `UI_DESIGN_TOKENS.md` §2.10.
 - Routing rules: `UI_NAV_GRAPH.md` §6.3 (no `s-warn` route — overlay-only).
 - Existing producers: `RecoveryScanner.kt`, `StorageEstimator.kt`, `BatteryOptimizationHelper.kt`, `RovaRecordingService.kt`, `ExportPipeline.kt`, ADR 0001, ADR 0006.
+- **ADR-0014** — Snooze persistence (Phase 4.1c, PR #44 / #45): durable `rova_runtime_prefs.xml`-backed snooze; 24 h TTL rescinded; snoozes reset on uninstall.
+- **ADR-0016** — Thermal auto-stop (Phase 4 Slice 3): auto-stop fires at CRITICAL; `THERMAL_AUTOSTOPPED` echo on next Idle; `StopReason.THERMAL` added.
+- **ADR-0017** — Recovery merge architecture (Phase 4.3): `RecoveryMergeOutcomeSignal`; `CANT_MERGE` 3-way sheet; `MuxFailed` recovery card variant.
+- **ADR-0018** — Recovery merge retry classifier preflight: pre-flight check before merge retry.
+- **ADR-0019** — Asymmetric thermal hysteresis (Milestone 3): instant rise (safety); 3 s dwell-gated fall (UX stability). Implemented in `ThermalHysteresis.kt`.
+- **`effectiveIdleTopBannerId`** — Idle-echo promotion helper (`ui/warnings/`). When an active-state `TopBanner` outranks its echo in precedence order, the Idle state would suppress both. `effectiveIdleTopBannerId` fixes this at the routing layer (not the precedence layer) by promoting the echo. Reusable pattern for any new auto-stop echo signal. See `memory/feedback_idle_echo_promotion.md`.
 
 ---
 
