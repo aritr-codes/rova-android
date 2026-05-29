@@ -1,10 +1,10 @@
 # Rova — UI Navigation Graph (post-redesign)
 
-> **Status:** Phase 1.A authored. Planning artifact. No production code modified by this doc.
+> **Status:** Phase 2 fully shipped (master `d54e051`). All routes listed as "New in Phase 2" are implemented: `onboarding` (PR #53 `12c12a9`, 3 immersive screens), `player/{sessionId}` (PR #1 `db25405`), and the HUD Merging end-states (Phase 2.4, `32c5cb3`). This document remains authoritative for the nav contract — it now describes the shipped state.
 > **Source of truth for the prototype's nav order:** `mockups/new_uiux/10-interactive-prototype.html` (function `goScreen(id)`, screen ids `s-ob`, `s-rec`, `s-hud`, `s-lib`, `s-player`, `s-settings`, `s-editor`).
 > **Source of truth for warning surfaces:** `mockups/new_uiux/07-warnings.html` (overlay-only — never owns a route).
 > **Source of truth for export options surface:** `mockups/new_uiux/09-notification-export.html` (overlay-only — sheet on `s-lib`).
-> **Branch:** `master`. **Phase 2 is not yet started.** This document precedes any screen implementation.
+> **Branch:** `master`.
 >
 > **Nav model amended — Record-home redesign R1 (2026-05-12, branch `feat/record-home-redesign-r1`):** there is no longer an app-wide persistent `NavigationBar`. The `record` screen is the home and carries its OWN bottom nav (Library / center Start/Stop FAB / Settings). `history` and `settings` are now **drill-down** routes — pushed onto the back stack with `launchSingleTop = true`, each with a back arrow (`navController.popBackStack()`), like `player/{sessionId}` already was. The old `TOP_LEVEL_ROUTES` collapse mechanism is removed. Back-stack: `record` is the post-onboarding start destination; Library/Settings push onto it; system-back from Library/Settings → Record; system-back from Record → exits the app. See `docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md` for the full R1 spec.
 
@@ -28,10 +28,10 @@ The Compose Navigation graph stays structurally close to the shipped `MainScreen
 
 | Route id | Prototype screen | Status today | Owning ViewModel | Bottom nav visible? | New in Phase 2? |
 |---|---|---|---|---|---|
-| `onboarding` | `s-ob` | does not exist | new `OnboardingViewModel` | **No** (full-screen flow) | Yes — Phase 2.6 |
+| `onboarding` | `s-ob` | **shipped (PR #53, 3 immersive screens)** | `OnboardingViewModel` | **No** (full-screen flow) | Yes — Phase 2.6 |
 | `record` | `s-rec` (idle) + `s-hud` (active state) | shipped | `RecordViewModel` (Slice 3 hoisted to MainScreen) | **Yes — Record owns its own bottom nav** (Library / Start-Stop FAB / Settings); gated by `sessionLocked` (**R1 redesign** — see note above) | No (re-skin — Record-home redesign R1) |
 | `history` | `s-lib` | shipped | `HistoryViewModel` | **No** — drill-down from `record`; back arrow → `record` (**R1 redesign**) | No (re-skin — Phase 2.2, 2.3) |
-| `player/{sessionId}` | `s-player` | does not exist | new `PlayerViewModel` | **No** (sub-screen, drill-down) | Yes — Phase 2.5 |
+| `player/{sessionId}` | `s-player` | **shipped (PR #1 `db25405`)** | `PlayerViewModel` | **No** (sub-screen, drill-down) | Yes — Phase 2.5 |
 | `settings` | `s-settings` | shipped | `SettingsViewModel` | **No** — drill-down from `record`; back arrow → `record` (**R1 redesign**) | No (re-skin — Phase 2.1) |
 | `editor` (`s-editor`) | `s-editor` | does not exist | n/a | n/a | **NO-GO for v1.0** (see §6.2) |
 
@@ -51,17 +51,17 @@ flowchart TD
     classDef overlay fill:#1f1f3a,stroke:#5b7fff,color:#fff,stroke-dasharray:2 2
     classDef nogo fill:#5a1f1f,stroke:#ef4444,color:#fff,stroke-dasharray:4 3
 
-    OB["onboarding<br/>(3 walkthrough + 4 permissions)<br/>NEW — Phase 2.6"]:::new
+    OB["onboarding<br/>(3 immersive screens)<br/>shipped — Phase 2.6 (PR #53)"]:::shipped
 
     subgraph RecordRoute ["record (top-level route)"]
         REC_IDLE["Idle dock<br/>(plan summary + cells + presets + START)"]:::shipped
         REC_HUD_REC["HUD: Recording<br/>(REC badge, clip progress)"]:::state
         REC_HUD_WAIT["HUD: Waiting<br/>(WAIT badge, countdown)"]:::state
-        REC_HUD_MERGE["HUD: Merging<br/>(progress N/total) — Phase 2.4"]:::new
+        REC_HUD_MERGE["HUD: Merging<br/>(progress N/total)<br/>shipped — Phase 2.4 (32c5cb3)"]:::shipped
     end
 
     LIB["history<br/>(Library grid + recovery card + Empty State)"]:::shipped
-    PLAYER["player/{sessionId}<br/>(Media3 ExoPlayer, segmented timeline)<br/>NEW — Phase 2.5"]:::new
+    PLAYER["player/{sessionId}<br/>(Media3 ExoPlayer, segmented timeline)<br/>shipped — Phase 2.5 (PR #1)"]:::shipped
     SETTINGS["settings<br/>(5 sections, App settings re-skin)"]:::shipped
     EDITOR["editor<br/>(17 tools)<br/>NO-GO for v1.0"]:::nogo
 
@@ -267,8 +267,8 @@ Not in scope. v1.0 has no deep-link contract. Adding one is a separate ADR.
 | `record` | `record` | re-skin only (Phase 2.1, 2.4) |
 | `history` | `history` | re-skin (Phase 2.2, 2.3); `LibrarySessionConfigDialog` added as overlay |
 | `settings` | `settings` | re-skin (Phase 2.1) |
-| n/a | `onboarding` | NEW route (Phase 2.6); gates first launch |
-| n/a | `player/{sessionId}` | NEW route (Phase 2.5); drill-down from `history` |
+| n/a | `onboarding` | **Shipped** (Phase 2.6, PR #53); gates first launch |
+| n/a | `player/{sessionId}` | **Shipped** (Phase 2.5, PR #1 `db25405`); drill-down from `history` |
 | n/a | `editor` | **NO-GO for v1.0** — never added |
 
 Net new routes in production: **2** (`onboarding`, `player/{sessionId}`).
@@ -298,4 +298,4 @@ These are not blockers for Phase 1 but should be resolved before the correspondi
 
 ---
 
-*End of document. Phase 2 may begin only after explicit owner GO; this document is its prerequisite.*
+*End of document. Phase 2 is fully shipped (master `d54e051`). This document describes the shipped nav contract.*
