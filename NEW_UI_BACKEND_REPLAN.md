@@ -1,8 +1,8 @@
 # NEW_UI_BACKEND_REPLAN
 
-> **Type:** Planning + reconciliation report. Untracked. No production code touched. No commits.
-> **Date:** 2026-05-07
-> **Inputs reviewed:** `mockups/new_uiux/` (11 HTML files, ~10 250 lines), `mockups/new_uiux/UI_SCREENSHOTS/`, interactive prototype (`10-interactive-prototype.html`), current Android source under `app/src/main/java/com/aritr/rova/`, `UI_ROADMAP.md`, `ROADMAP_v6.md`, `docs/adr/0001`–`docs/adr/0006`, `slice13_verify*.log`, `slice14_verify.log`, `app/build.gradle.kts` static-check task list, `app/src/test/java/com/aritr/rova/service/recovery/RecoveryScannerTest.kt`.
+> **Type:** Planning + reconciliation report. Tracked (committed in cleanup-pass Task 2 / PR #57). No production code touched.
+> **Date:** 2026-05-28 (refreshed from 2026-05-07 snapshot; original inputs listed in Appendix B)
+> **Commit-of-record:** `d54e051 Milestone 5 — Notification redesign v1.0 (#54)` (master tip at refresh)
 
 ---
 
@@ -13,9 +13,9 @@
 | Field | Value |
 |---|---|
 | Branch | `master` |
-| HEAD | `4b32b0c polish(ui): simplify history library surface` |
-| vs `origin/master` | **0 ahead, 0 behind** (after `git fetch origin master`) |
-| Untracked drift (preserved — explicit policy: no `git clean`, no commits, no push) | Pre-existing 16 entries: `.claude/`, `.codegraph/`, `.github/`, `ROADMAP.md`, `ROADMAP_REVIEW.md`, `ROADMAP_v2.md`, `ROADMAP_v3.md`, `ROADMAP_v4.md`, `ROADMAP_v5.md`, `UI_ROADMAP.md`, `mockups/`, `screenshots/`, `slice12_verify.log`, `slice13_verify.log`, `slice13_verify2.log`, `slice14_verify.log`. New entries from this planning pass (also untracked, also preserved): `NEW_UI_BACKEND_REPLAN.md` (this file) and `.playwright-mcp/` (Playwright snapshot artefacts from the prototype inspection step in the appendix). **18 entries total — confirmed via `git status --porcelain | grep -c '^??'`.** |
+| HEAD | `d54e051 Milestone 5 — Notification redesign v1.0 (#54)` |
+| vs `origin/master` | **1 ahead** (`5e354d2 docs(cleanup): add project cleanup pass meta-spec + implementation plan` not yet pushed) |
+| Untracked drift (as of 2026-05-28 refresh) | `.claude/`, `.github/` (hooks only — workflows tracked separately), `.kotlin/`, `.mcp.json`, `CLAUDE.md`, `gradle_*.log` (~50 ephemeral verification logs — convention-allowed per CLAUDE.md), `docs/superpowers/plans/2026-05-27-notification-redesign-v1.md`, `docs/superpowers/specs/2026-05-27-notification-redesign-v1-design.md` (M5 plan/spec slipped from PR #54 — backfilled in cleanup-pass Task 1), `mockups/` (gitignored, unchanged policy). Stale working-tree clutter from original snapshot (ROADMAP.md, ROADMAP_v2-v4, UI_ROADMAP.md, ROADMAP_REVIEW.md, nul, slice*.log) cleaned up in cleanup-pass Task 1 / PR #55. |
 
 ### 1.2 What UI slices are already in app code
 
@@ -27,8 +27,18 @@
 | 2 — Record Idle Setup | shipped | `32c510a feat(ui): wire record idle redesign` |
 | 3 — Record Active HUD | shipped | `69c3052 feat(ui): add active recording HUD` (introduces `RecordStatusStrip.kt`, `SessionTimer.kt`, `ClipProgressBand.kt`, `WaitingCountdown.kt`, `RecordHudFormatters.kt`, `RecordHudState.kt`) |
 | 4 — History / Library Polish | shipped | `4b32b0c polish(ui): simplify history library surface`, plus the chain `e8ec58a`, `a28dc31`, `cf2e04f` |
-| 5 — Settings Polish | **NOT started** | no SettingsScreen rewrite present; `SettingsHeroCard` still in tree |
-| 6 — Final Integration / A11y / Smoke | **NOT started** | no `AccessibilitySmokeTest.kt` under `androidTest/` |
+| 5 — Settings Polish | superseded | `UI_ROADMAP.md` Slice 5 (old direction) superseded by Phase 2 re-skin work below; `SettingsScreen` re-skinned in Phase 4 v3 stack (PRs #43-#49) |
+| 6 — Final Integration / A11y / Smoke | superseded | `UI_ROADMAP.md` Slice 6 (old direction) superseded by Phase 7 in revised roadmap §5 |
+| 7 — DualShot P+L stability stack | shipped | PRs #25-#35 (`fda4bc1` → `9ac4269`) — 10 PRs hardening render threading, FBO-ring, fence-sync, EglRouter ANR, aspect-swap, encoder/audio teardown, P+L surface replay |
+| 8 — DualShot Phase 6.1 foundation | shipped | PRs #22-#24 (`5224e83`, `1945965`, `ba252c3`) — CameraEffect fan-out, dual-recording consumer, true per-side rendering |
+| 9 — Record screen pixel-faithful re-skin | shipped | PRs #36, #37, #39, #40 — Phase 1 Foundation + Phase 2 Shared Chrome + settings-sheet re-skin + camera-guides framing |
+| 10 — Edge-to-edge immersive record-home | shipped | PRs #41, #42 (`aa337d2`, `f684d5c`) — Slice A (immersive) + Slice B (gradient scrim dock + Mode tap-cycle) |
+| 11 — Phase 4 warning re-skin v3 + slices | shipped | PRs #43-#49 — Record/Library re-skin + 4.1c snooze persistence + Slice 2 storage-full echo + Slice 3 thermal auto-stop + Phase 4.3 recovery merge + Phase 4.2 warning routing |
+| 12 — M1 DualShot frame polish | shipped | PR #50 (`b3fad71`) |
+| 13 — M2 Merge reliability bundle | shipped | PR #51 (`0347880`) |
+| 14 — M3 Asymmetric thermal hysteresis | shipped | PR #52 (`e1e121d`) — ADR-0019 |
+| 15 — M4 Onboarding 7→3 immersive | shipped | PR #53 (`12c12a9`) |
+| 16 — M5 Notification redesign v1.0 | shipped | PR #54 (`d54e051`) |
 
 The "Slice 11 / 12 / 13 / 14" naming in `slice12_verify.log` … `slice14_verify.log` corresponds to a **previous** numbering (the log content refers to `Slice 13 compile` matching `3387041 fix(history): unblock Slice 13 compile`). Those logs are pre-`UI_ROADMAP.md` rebaseline artifacts. Treat them as historical.
 
@@ -55,7 +65,7 @@ The new direction lives at `mockups/new_uiux/` and contains **eleven** HTML file
 | **Video player** | not in roadmap | **NEW**: in-app player with segmented clip timeline (`Clip 3 of 10`), trim shortcut + edit shortcut, portrait + landscape variants |
 | **Video editor** | not in roadmap | **NEW**: 17-tool editor — Trim / Split / Merge / Reverse / Speed / Volume / Audio / Filters / Adjust / Colour / Captions / Stickers / Text / Crop / Rotate / Add Clips. CapCut-style. Massive scope. |
 | **Notification + Export** | not in roadmap | **NEW**: 4 notification states (clip active / gap / merging / complete) + 3 export states (options sheet / saving / inline success) |
-| **Warning surface** | implicit (BatteryOptimizationBanner, recovery card) | **NEW**: 18 states across Permissions / Storage / Battery / Recovery / Hardware-Export |
+| **Warning surface** | implicit (`BatteryOptimizationBanner` [pre-PR-#12, since removed], recovery card) | **NEW**: 18 states across Permissions / Storage / Battery / Recovery / Hardware-Export |
 
 **Conclusion.** `UI_ROADMAP.md` should be treated as superseded for any work past Slice 4. `mockups/new_uiux/` is the new source of truth for screen direction; the old roadmap's Slice 5 (Settings Polish) and Slice 6 (Final Integration / A11y) targets should be folded into a re-derived roadmap.
 
@@ -65,16 +75,16 @@ The user's brief framed Phase 1.5 as still in a review-gated cycle with the ADR 
 
 | Backend item | Source-of-truth file | Implementation evidence | Test evidence |
 |---|---|---|---|
-| **ADR 0005 row 5** — `T == null && stopRequested == true && empty session → markTerminated(USER_STOPPED, StopReason.USER)` | `app/src/main/java/com/aritr/rova/service/recovery/RecoveryScanner.kt:306-308` | `manifest.stopRequested -> sessionStore.markTerminated(sessionId, Terminated.USER_STOPPED, StopReason.USER); TerminalAction.WROTE_USER_STOPPED` — exact wording from ADR 0006 §"Migration table" | `RecoveryScannerTest.kt:151 \`T null with stopRequested and empty session writes USER_STOPPED\`` (KDoc explicitly cites ADR 0005 Row 5 + memory key `project_phase15_recovery_carryover`) and `\`RecoveryScanner USER_STOPPED stopRequested branch carries StopReason USER\`` |
-| **ADR 0005 row 7** — `T == null && stopRequested == false && empty → markTerminated(KILLED_FORCE_STOP, NONE)` | `RecoveryScanner.kt:310-313` | present | `RecoveryScannerTest.kt \`T null no stopRequested and empty session writes KILLED_FORCE_STOP\`` |
-| **ADR 0006 cross-phase invariant** — `terminated == null && exportState ∈ {MUXING, COPYING, FINALIZED} → SKIPPED_EXPORT_PENDING` (defer to Phase 1.7) | `RecoveryScanner.kt:99-106` + companion `EXPORT_IN_FLIGHT_OR_FINALIZED` set at line 377 | present | five tests: MUXING, COPYING, FINALIZED yield `SKIPPED_EXPORT_PENDING`; FAILED is **not** skipped; `Terminal session with exportState MUXING is ALREADY_TERMINAL not SKIPPED_EXPORT_PENDING` |
+| **ADR 0005 row 5** — `T == null && stopRequested == true && empty session → markTerminated(USER_STOPPED, StopReason.USER)` | `app/src/main/java/com/aritr/rova/service/recovery/RecoveryScanner.kt:352-354` | `manifest.stopRequested -> sessionStore.markTerminated(sessionId, Terminated.USER_STOPPED, StopReason.USER); TerminalAction.WROTE_USER_STOPPED` — exact wording from ADR 0006 §"Migration table" | `RecoveryScannerTest.kt \`T null with stopRequested and empty session writes USER_STOPPED\`` (KDoc explicitly cites ADR 0005 Row 5 + memory key `project_phase15_recovery_carryover`) and `\`RecoveryScanner USER_STOPPED stopRequested branch carries StopReason USER\`` |
+| **ADR 0005 row 7** — `T == null && stopRequested == false && empty → markTerminated(KILLED_FORCE_STOP, NONE)` | `RecoveryScanner.kt:357` | present | `RecoveryScannerTest.kt \`T null no stopRequested and empty session writes KILLED_FORCE_STOP\`` |
+| **ADR 0006 cross-phase invariant** — `terminated == null && exportState ∈ {MUXING, COPYING, FINALIZED} → SKIPPED_EXPORT_PENDING` (defer to Phase 1.7) | `RecoveryScanner.kt:99-106` (check) + companion `EXPORT_IN_FLIGHT_OR_FINALIZED` set at line 433 | present | five tests: MUXING, COPYING, FINALIZED yield `SKIPPED_EXPORT_PENDING`; FAILED is **not** skipped; `Terminal session with exportState MUXING is ALREADY_TERMINAL not SKIPPED_EXPORT_PENDING` |
 | **ADR 0006 atomic terminal-write API** — 3-arg `markTerminated(sessionId, terminated, stopReason)` | `SessionStore.kt` (signature; tests reference `store.markTerminated(sid, Terminated.USER_STOPPED, StopReason.PERMISSION_REVOKED)`) | present | `\`markTerminated writes stopReason atomically with terminated\``, `\`markTerminated first-writer-wins preserves winner stopReason\``, `\`markTerminated Failed is returned after retry exhaustion\``, `\`markTerminated Failed for unknown sessionId\`` |
-| **ADR 0005 single-site scan trigger** — `RovaApp.triggerRecoveryScanIfNeeded()` only invoked from `MainActivity.onCreate` | `RovaApp.kt:145` (function), `MainActivity.kt:22` (call site), static check `checkScanTriggerSingleSite` registered in `app/build.gradle.kts:300` | wired | static check enforces |
-| **ADR 0006 B16 forbidden pair** — `markTerminated(USER_STOPPED, NONE)` forbidden | static check `checkAtomicTerminalWriteForbiddenPair` at `app/build.gradle.kts:439-490` | wired | check passes in `slice13_verify2.log` build |
-| **Phase 1.4 lifecycle invariants** — eager `USER_STOPPED` write before merge, `COMPLETED` only post-merge | static check `checkUserStoppedBeforeMerge` at `app/build.gradle.kts:662-720` | wired | check passes |
-| **Phase 1.7 pending-visibility (ROADMAP_v6 only delta vs v5)** — Tier 1 sweep uses `setIncludePending` (API 29) / `QUERY_ARG_MATCH_PENDING` (API 30+) | static checks `checkExportSetIncludePendingGuarded` and `checkExportQueryArgMatchPendingGuarded` at `app/build.gradle.kts:950, 1000` | wired | checks pass |
+| **ADR 0005 single-site scan trigger** — `RovaApp.triggerRecoveryScanIfNeeded()` only invoked from `MainActivity.onCreate` | `RovaApp.kt` (function), `MainActivity.kt:17` (call site), static check `checkScanTriggerSingleSite` registered in `app/build.gradle.kts:328` | wired | static check enforces |
+| **ADR 0006 B16 forbidden pair** — `markTerminated(USER_STOPPED, NONE)` forbidden | static check `checkAtomicTerminalWriteForbiddenPair` at `app/build.gradle.kts:467` | wired | check passes on master |
+| **Phase 1.4 lifecycle invariants** — eager `USER_STOPPED` write before merge, `COMPLETED` only post-merge | static check `checkUserStoppedBeforeMerge` at `app/build.gradle.kts:690` | wired | check passes |
+| **Phase 1.7 pending-visibility (ROADMAP_v6 only delta vs v5)** — Tier 1 sweep uses `setIncludePending` (API 29) / `QUERY_ARG_MATCH_PENDING` (API 30+) | static checks `checkExportSetIncludePendingGuarded` and `checkExportQueryArgMatchPendingGuarded` at `app/build.gradle.kts:978, 1028` | wired | checks pass |
 
-In addition, `RovaApp.buildExportRecoveryRunner()` (`RovaApp.kt:240-319`) wires `ExportRecoveryRunner.run()` (Phase 1.7) ahead of Phase 1.5 classification — `RovaApp.kt:193 val exportReport = buildExportRecoveryRunner().run()` runs first, then line 201 `val scanner = RecoveryScanner(sessionStore); val classifications = scanner.classifyAll(scanStart)` runs Phase 1.5 over the residue. The B14 ordering hazard (1.5 racing 1.7 on row 13c) is therefore handled by ordering at the trigger site, not just the in-classifier guard — both layers are present.
+In addition, `RovaApp.buildExportRecoveryRunner()` (`RovaApp.kt:405`) wires `ExportRecoveryRunner.run()` (Phase 1.7) ahead of Phase 1.5 classification — `buildExportRecoveryRunner().run()` runs first (line 405 area), then `val scanner = RecoveryScanner(sessionStore); val classifications = scanner.classifyAll(scanStart)` runs Phase 1.5 over the residue (line 414 area). The B14 ordering hazard (1.5 racing 1.7 on row 13c) is therefore handled by ordering at the trigger site, not just the in-classifier guard — both layers are present.
 
 **Net.** I cannot find an unresolved Phase 1.5 carry-over in the source. The repo state matches "Phase 1.5 closed" at the committed level. What may still be open is a **memory or review-cycle ledger** that hasn't been updated to reflect the close. That distinction matters for sequencing — see §4.
 
@@ -91,7 +101,7 @@ Each row maps a `mockups/new_uiux/` screen to its current Android equivalent (if
 | 3 | `03-history-library.html` (Library) | Grid of cards (real thumbnails today), 3-dot menu → Open / Edit / View Settings, Empty State, Recovery card variant | `ui/screens/HistoryScreen.kt` (30 KB), `HistoryViewModel`, `HistoryArtifactMapper`, `HistoryDeleter`, `HistoryMetadataLoader`, `HistoryRowFormatters`, `RecoveryCard` | "View Settings" requires reading the historical `SessionConfig` from `SessionManifest` for that session — already persisted (sessions write a manifest with full `SessionConfig`); only an adapter is missing. "Edit" requires the editor (#5) which is its own scope. | Refactor + minor data adapter |
 | 4 | `04-video-player.html` (in-app player) | Segmented clip timeline (`Clip 3 of 10`), Trim shortcut, Edit shortcut, rewind/forward 10 s, portrait + landscape variants | **Does not exist.** Today, History opens via `safeShareUri`-based external player (commits `924687a fix(history): share preview playback via safe content URI`, `b3737f6`) | New player surface inside the app. Needs `androidx.media3.exoplayer` (or `androidx.media3.ui.PlayerView`) integration. Reads existing merged MP4 only, so no manifest schema change. Trim / Edit shortcuts depend on #5. | New UI-only component, **but** Trim / Edit shortcuts depend on the editor scope decision. Player itself is independently shippable. |
 | 5 | `05-video-editor.html` (CapCut-style editor) | 17 tools: Trim / Split / Merge / Reverse / Speed / Volume / Audio / Filters / Adjust / Colour / Captions / Stickers / Text / Crop / Rotate / Add Clips. Tool panels replace the bottom toolbar in place. | **Does not exist anywhere in code.** The existing `utils/VideoMerger.kt` is a `MediaMuxer` concat used post-recording; there is no per-clip cut, trim, filter, overlay, or audio-channel manipulation. | Massive backend scope inferred from the codebase + mockup: per-clip frame-accurate cuts (`MediaCodec` decode + re-encode or `MediaExtractor` keyframe-aligned cuts, or `androidx.media3.transformer`), audio mixing, OpenGL-ES filter pipeline, text/sticker rendering, plus state for "Add Clips" (multi-source merge across sessions). Module would dwarf the current `service/` + `data/` source trees combined. | **Deferred — NO-GO for v1.0** on codebase scope/risk grounds (see §7 #2). The mockup is aspirational. |
-| 6 | `06-app-settings.html` (App settings — global) | Toggle rows (existing keys), picker rows opening bottom sheets, battery dialog with status badge, folder-name dialog with live preview | `ui/screens/SettingsScreen.kt` (15 KB), `SettingsViewModel.kt`, `BatteryOptimizationBanner.kt` (removed PR #12 — now the WarningCenter row `BATTERY_OPTIMIZATION_ON`), `BatteryOptimizationHelper.kt` | Existing toggle rows (Keep screen on, Sound cues, Vibrate alerts, Auto-delete + Keep-latest chip group) all map to `RovaSettings` keys that already exist — `autoDeleteEnabled` and `autoDeleteKeepLatest` are present at `RovaSettings.kt:45-51` (shipped via commit `6b1c569`). The mockup-implied new keys are limited to:<br>• `onboardingCompleted` (drives the onboarding flow gate; see #8)<br>• `autoExportEnabled` (export options sheet; see #9)<br>• `exportFolderName` (folder-name dialog with live preview)<br>See §3.7 for the full schema reconciliation. | Refactor of existing screen + **3 new backend keys** to land first |
+| 6 | `06-app-settings.html` (App settings — global) | Toggle rows (existing keys), picker rows opening bottom sheets, battery dialog with status badge, folder-name dialog with live preview | `ui/screens/SettingsScreen.kt` (15 KB), `SettingsViewModel.kt`, WarningCenter row `BATTERY_OPTIMIZATION_ON` (replaces `BatteryOptimizationBanner.kt`, removed PR #12), `BatteryOptimizationHelper.kt` | Existing toggle rows (Keep screen on, Sound cues, Vibrate alerts, Auto-delete + Keep-latest chip group) all map to `RovaSettings` keys that already exist — `autoDeleteEnabled` and `autoDeleteKeepLatest` are present at `RovaSettings.kt:45-51` (shipped via commit `6b1c569`). The mockup-implied new keys are limited to:<br>• `onboardingCompleted` (drives the onboarding flow gate; see #8)<br>• `autoExportEnabled` (export options sheet; see #9)<br>• `exportFolderName` (folder-name dialog with live preview)<br>See §3.7 for the full schema reconciliation. | Refactor of existing screen + **3 new backend keys** to land first |
 | 7 | `07-warnings.html` (18 warning states across 5 categories) | Permissions (Camera denied, Mic denied, Notifications off, Exact alarm denied), Storage (not enough, low banner, full / aborted, can't merge — 3-way), Battery (optimization on, saver on, low <15 %, critical <5 %, overheating escalating), Recovery (Killed by system, Force stopped, Stopped before merge, Merge failed), Hardware (Camera in use by another app, SD card ejected mid-session — 3-way, Export to gallery failed) | Partially exists: `BatteryOptimizationBanner`, `RecoveryEchoBanner`, `RecoveryCard`, recovery-card vendor guidance. Storage estimator (`StorageEstimator.kt`) exists. **Missing surfaces:** thermal/overheating (no thermal sensor read today), camera-in-use detection, SD-card ejected mid-session detection, export-to-gallery failure inline card | Backend signals partially exist (battery, recovery), partially missing (thermal, camera-in-use, SD eject, mid-session storage banner). Each missing signal is a small backend slice. | Mixed: existing → re-skin; missing → backend-blocked |
 | 8 | `08-onboarding.html` (3 walkthrough + 4 permissions) | Slides (Record on repeat / Walk away / One file) → Camera (required) → Mic (optional) → Notifications (recommended) → Exact Alarm (required) | **Does not exist.** Today the app prompts for Camera/Mic on first record start (lazy). Battery optimization is prompted via existing `BatteryOptimizationHelper`. Notifications and Exact Alarm are not gated by an onboarding flow. | New `onboardingCompleted` flag in `RovaSettings`. Wires through the existing intent helpers (no new permission types). The "Exact Alarm — required" framing is consistent with `ADR 0001` (`SCHEDULE_EXACT_ALARM` opt-in, OS-revocable) — so the screen must handle revocation re-prompts, not assume one-shot grant. | New UI-only component **+ small persistence delta** |
 | 9 | `09-notification-export.html` (4 notification states + export sheet) | Notifications: clip recording active / gap / merging / complete. Export: options sheet, saving progress, inline success card. | `RovaRecordingService.kt` (122 KB) builds the FGS notification today; segment / merge transitions exist as state but the notification copy probably does not split across all four states the mockup shows. Export options sheet does not exist (export is automatic via tier dispatch in `ExportPipeline`). | Notification states are presentation-only deltas on existing service state — no new manifest fields. Export options sheet implies a user-toggle for export-on-completion (today it auto-exports per ADR 0003). That **does** add a new RovaSettings key (`autoExportEnabled`?) and a deferred-export queue. | Mixed — re-skin notifications free, opt-in export sheet adds a small backend contract |
@@ -113,7 +123,7 @@ The user's brief asked me to enumerate backend gaps explicitly. The biggest find
 
 | Item | Evidence |
 |---|---|
-| Implementation | `service/recovery/RecoveryScanner.kt:306-308` writes `markTerminated(sessionId, Terminated.USER_STOPPED, StopReason.USER)` for the `manifest.stopRequested` branch (T == null path) |
+| Implementation | `service/recovery/RecoveryScanner.kt:352-354` writes `markTerminated(sessionId, Terminated.USER_STOPPED, StopReason.USER)` for the `manifest.stopRequested` branch (T == null path) |
 | ADR-0006-mandated `stopReason` argument | passed (`StopReason.USER`) per ADR 0006 §"Migration table" |
 | Append-before-mark ordering | guaranteed by line 282 (append) preceding line 304 (terminal write) inside the same `classify()` body, both running on the serial `persistDispatcher` |
 | Test for the brief's exact shape `(stopRequested=true, terminated=null, segments=[])` | `RecoveryScannerTest.kt:151 \`T null with stopRequested and empty session writes USER_STOPPED\`` — KDoc cites ADR 0005 Row 5 *and* the memory key |
@@ -124,7 +134,7 @@ The user's brief asked me to enumerate backend gaps explicitly. The biggest find
 
 ### 3.2 Phase 1.3 carry-over state classification — **shipped**
 
-The `(stopRequested=true, terminated=null, segments=[])` and the `(stopRequested=false, terminated=null, segments=[])` shapes both have explicit handlers and tests (RecoveryScanner.kt:306 and 310; tests at line 151 and 168 in `RecoveryScannerTest.kt`). The KDoc reference at the test (`This is the Phase 1.3 prep-time stop carry-over (memory: project_phase15_recovery_carryover)`) shows the implementer was working from the same memory the user is concerned about.
+The `(stopRequested=true, terminated=null, segments=[])` and the `(stopRequested=false, terminated=null, segments=[])` shapes both have explicit handlers and tests (RecoveryScanner.kt:352 and 357; tests verifying both branches in `RecoveryScannerTest.kt`). The KDoc reference at the test (`This is the Phase 1.3 prep-time stop carry-over (memory: project_phase15_recovery_carryover)`) shows the implementer was working from the same memory the user is concerned about.
 
 ### 3.3 Recovery / warning surface dependencies — partially shipped
 
@@ -344,26 +354,16 @@ The roadmap below replaces the existing UI_ROADMAP.md trajectory beyond Slice 4.
 
 **Scope.** Slices that consume only Phase 0 + Phase 1 outputs. Order these by smallest blast radius first; each slice is independently revertible.
 
-| # | Slice | Files likely touched | Backend deps | Test gates | Smoke | NO-GO |
-|---|---|---|---|---|---|---|
-| 2.1 | **App Settings re-skin** (matches `06-app-settings.html`) | `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsViewModel.kt`, `ui/components/BatteryOptimizationBanner.kt` (removed PR #12 — now the WarningCenter row `BATTERY_OPTIMIZATION_ON`) | Phase 0 only | unit tests for new toggles; lint; release build | toggle each row, restart, confirm persisted | any change to recording behavior |
-| 2.2 | **Library View Settings popup** | `ui/screens/HistoryScreen.kt`, `ui/screens/HistoryViewModel.kt`, new `ui/screens/LibrarySessionConfigDialog.kt` | adapter only — reads `SessionManifest.config` | unit tests for the adapter | open from 3-dot menu on a real recording, confirm clip / wait / repeats / quality match what the manifest says | popup that mutates the manifest |
-| 2.3 | **Library Empty State** | `ui/screens/HistoryScreen.kt` | none | composable preview test | install on clean device, confirm empty state shows | none |
-| 2.4 | **HUD Merging end-states** | `ui/components/RecordHudState.kt`, `ui/screens/RecordViewModel.kt`, `ui/screens/RecordScreen.kt` | reads existing merger progress only | unit tests for state transitions | record, stop, watch HUD transition through Merging 1/N → N/N → Complete | adding a new manifest field |
-| 2.5 | **In-app Player (Media3)** | new `ui/screens/PlayerScreen.kt`, new dependency on `androidx.media3:media3-exoplayer` + `media3-ui` | none | UI tests for play / seek / clip-timeline | open a finished merge from Library, scrub, rotate device | scope creep into editor |
-| 2.6 | **Onboarding flow** | new `ui/screens/onboarding/*.kt`, `RovaApp.kt` (gate `MainScreen` behind onboarding flag) | `RovaSettings.onboardingCompleted` (Phase 0) | unit + UI tests for slide nav, permission request paths | first-launch on clean device, walk through, confirm production app comes up after | reordering the permission requests away from camera-first |
+| # | Slice | Status | Notes |
+|---|---|---|---|
+| 2.1 | **App Settings re-skin** (matches `06-app-settings.html`) | shipped | Folded into Phase 4 v3 stack (PRs #43-#49). `SettingsScreen.kt` re-skinned. |
+| 2.2 | **Library View Settings popup** | shipped | `LibrarySessionConfigDialog.kt` present in tree (added as part of Phase 4 / post-Phase-4 work). |
+| 2.3 | **Library Empty State** | shipped | `HistoryScreen.kt` includes empty-state card. |
+| 2.4 | **HUD Merging end-states** | shipped | `32c5cb3 feat(ui): add HUD merging end-states` — `RecordHudState.Merging` + VM piping present. |
+| 2.5 | **In-app Player (Media3)** | shipped | `db25405 feat(player): add Phase 2.5 in-app video player (#1)` + `35558a5 fix(player): post-2.5 hardening (#3)`. `ui/screens/player/` present. |
+| 2.6 | **Onboarding flow** | shipped | PR #53 `12c12a9 Milestone 4 — Onboarding redesign (7→3 screens, immersive, swipe)`. `ui/screens/onboarding/` present. |
 
-**Backend dependencies (collective).** `RovaSettings` reconciled (Phase 0). Media3 dep on Slice 2.5 only.
-
-**Test gates (collective).** `lintDebug` + `testDebugUnitTest` + `assembleRelease` + the new UI tests for each slice. Identical to UI_ROADMAP §6 — keep the gate, retire the slice numbers.
-
-**Smoke checklist.** Per-slice rows above; on a real device, font scale 100/130/150/200, both light and dark.
-
-**NO-GO conditions (per phase).**
-- Any slice in Phase 2 modifying `service/`, `data/SessionManifest.kt`, `data/SessionStore.kt`, recovery code, or the merger.
-- Phase 2.5 (Player) trying to support trim or edit. Player ships *only* the playback shortcut; trim / edit shortcuts are placeholder buttons with `TODO` snackbar.
-
-**Commit strategy.** One PR per slice. Each PR is self-contained.
+**Phase 2 status: ALL SLICES SHIPPED.** All six slices landed across PRs #1, #3, #12-#13, #43-#53, and point commits. Phase 2 is closed.
 
 ### Phase 3 — Backend signal slices (parallel-safe with Phase 2 except 3.X feeds 4.X)
 
@@ -475,43 +475,50 @@ the locked input spec for 4.1. Decisions:
    `WarningCenterViewModel` note above; behaviourally identical in
    steady state, simpler VM, no stale-queue failure mode.
 
-- 4.1 — `ui/warnings/WarningCenterViewModel.kt` (aggregator) + `ui/warnings/WarningCenter.kt` (presentational) + the 18 banners as composable templates (group by category).
-- 4.2 — Routing: where each warning shows up (Record overlay vs Library inline vs full-screen sheet vs in-line History card). Pulled from the doc in 1.D.
-- 4.3 — Recovery card "Merge what was recorded" 3rd action. Wires through a new `RovaController.recoverAndMerge(sessionId)` entry point that reuses `ExportPipeline` over the appended-orphan-prefix segments.
+**Phase 4 status: SHIPPED.** PRs #12-#13 (Phase 4.1 + 4.1b), #43-#45 (Phase 4.1c snooze persistence + v3 re-skin), #46-#47 (Slices 2-3), #48 (Phase 4.3 recovery merge), #49 (Phase 4.2 warning routing). WarningCenterViewModel, WarningCenter composables, routing, and recovery merge 3-way all landed. Phase 4 is closed.
 
-**Backend dependencies.** All Phase 3 signals.
-
-**Test gates.** Same gradle gate. Plus integration tests that simulate each signal flipping and assert the WarningCenter emits the right banner.
-
-**Smoke checklist.** All 18 mockup states, on a real device. Each one provoked at least once.
-
-**NO-GO conditions.** Any signal still in Phase 3 backlog. Adding a 19th warning state without a Phase 3 signal behind it.
-
-**Commit strategy.** Slice 4.1 and 4.2 in separate commits; 4.3 in its own PR after 4.2.
+- 4.1 — `ui/warnings/WarningCenterViewModel.kt` + `ui/warnings/WarningCenter.kt` — **SHIPPED PR #12-#13, #43-#45**
+- 4.2 — Warning routing to History + Settings — **SHIPPED PR #49**
+- 4.3 — Recovery merge + C2.4 'Can't merge yet' sheet — **SHIPPED PR #48**
 
 ### Phase 5 — Export options sheet (optional v1.0)
 
-**Scope.** `09-notification-export.html` export options sheet. Adds `RovaSettings.autoExportEnabled` and `exportFolderName` (already added in Phase 0 if owner approved). UI for opt-out of auto-gallery-export.
+**Status: PARKED — deferred from M5 scope per `memory/project_current_state.md`.**
 
-**Backend dependencies.** `RovaSettings` reconciled (Phase 0). No tier dispatch change — same `ExportPipeline` runs on the same trigger; the gate is whether to copy to gallery automatically vs queue-on-demand.
-
-**Test gates / smoke / NO-GO / commit strategy.** Standard.
+**Scope.** `09-notification-export.html` export options sheet. Adds `RovaSettings.autoExportEnabled` and `exportFolderName`. UI for opt-out of auto-gallery-export. No tier dispatch change.
 
 **Recommend.** Defer past v1.0 unless the owner asks for it. Adding "queue export for later" is a meaningful contract change.
 
 ### Phase 6 — Orientation Mode (conditional)
 
-**Scope.** Portrait / Landscape per session. **P+L deferred indefinitely** (§3.5).
-
-**Backend dependencies.** `SessionConfig.orientationMode` (schema bump — coordinate with `SessionManifest.SCHEMA_VERSION = 4`), `RovaRecordingService` `targetRotation` per segment, merger compatibility.
-
-**Test gates / smoke / NO-GO / commit strategy.** Standard, plus a recovery-test that an orientation-marked session crash-recovers correctly with the schema-3 → schema-4 read compat.
-
-**Recommend.** Plan only after Phases 0–4 land. Treat as a future minor-version feature.
+**Status: PARTIALLY SHIPPED.** Portrait / Landscape per session landed (Mode picker in PRs #20-#21, DualShot P+L foundation in PRs #22-#35). `SessionConfig.mode` + `SessionManifest.SCHEMA_VERSION = 4` shipped. **P+L deferred indefinitely** (§3.5 / §7 #1).
 
 ### Phase 7 — Final integration / accessibility / smoke
 
-Same scope as the original `UI_ROADMAP.md` Slice 6 — dynamic font scale, TalkBack, contrast, on-device end-to-end smoke. Run *after* Phases 0–4 (and 5 if it landed).
+**Status: NOT STARTED.** Same scope as the original `UI_ROADMAP.md` Slice 6 — dynamic font scale, TalkBack, contrast, on-device end-to-end smoke. Prerequisite: all prior phases closed.
+
+---
+
+## Remaining backlog (as of 2026-05-28)
+
+| # | Slice | Source |
+|---|---|---|
+| 1 | Mode preset seed (first-run mode picker default — "Drill" / "Vlog" named presets) | §2.x + §6 dep-matrix — re-derive from `mockups/new_uiux/01-home-idle.html` mode tabs; `customPresetsJson` is the backing store |
+| 4 | Export options sheet (`autoExportEnabled` + `exportFolderName` keys) | Phase 5 above — deferred from M5; needs owner confirmation to unpark |
+| 7 | Phase 7 final integration / accessibility / smoke | Phase 7 above — not started; run after remaining slices land |
+
+**Note on in-app player and HUD merging end-states:** memory previously listed these as "next priority." Git log confirms both are **already shipped** (`db25405` in-app player, `32c5cb3` HUD merging end-states). These are NOT in the remaining backlog unless the owner wants a follow-on refinement slice — in which case it should be labeled as such.
+
+## Parked (deferred indefinitely or with conditions)
+
+- **Variant D** — deferred to 2027 per ADR-0012 §Rejected variants A/B/D
+- **Variant A** — mid-segment thermal escalation (deferred — no owner ask)
+- **Variant G** — "Continue without saving" (deferred — no owner ask)
+- **Export sheet polish** — deferred from M5 scope per `memory/project_current_state.md`
+- **M4 follow-on items**: theme switcher, tour-replay, full i18n, per-perm JIT split (deferred — none have current owner ask)
+- **Launcher webp legacy fallback for API 24-25** (deferred — <0.5% installs in 2026 per memory)
+- **P+L split-screen capture** — hardware-gated (CameraX 1.x, API-31+ only on supported devices); deferred indefinitely per §7 #1
+- **In-app video editor (17 tools)** — NO-GO for v1.0 per §7 #2; editor button remains `TODO` snackbar
 
 ---
 
