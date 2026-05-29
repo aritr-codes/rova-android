@@ -10,6 +10,10 @@ ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
 
 ## [Unreleased]
 
+### Added
+- Accessibility audit (WCAG 2.2 AA) — static, source-level audit of all 12 UI surfaces in `docs/accessibility/` (full report + prioritized remediation backlog). 161 findings (3 Blocker, ~58 Serious). Docs-only; no Kotlin changed.
+- ADR-0020 (Proposed) — "WCAG 2.2 AA by default" standing requirement for all new/changed UI, with a design stub for a future `checkA11y*` static-gate suite.
+
 ### Changed
 - **Onboarding requests Camera, Microphone, and Notifications up-front** via per-permission rationale cards, reversing the M4 camera-only reduction. Each card has Allow + "Skip for now"; skipping still finishes onboarding (camera stays enforced at the WarningCenter Start-gate). Notifications card shows only on API 33+. Exact-alarm remains just-in-time (no in-app dialog exists). New pure `visibleOnboardingSteps(sdkInt)` seam drives the pager + ViewModel. Spec: `docs/superpowers/specs/2026-05-31-onboarding-upfront-permissions-design.md`.
 
