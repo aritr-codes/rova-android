@@ -8,9 +8,9 @@ contents change.
 
 | Field | Value |
 |---|---|
-| Commit | `e05f5fc chore(release): prepare beta distribution metadata` |
-| `versionCode` | `2` |
-| `versionName` | `0.3.0` |
+| Commit | `d54e051 Milestone 5 — Notification redesign v1.0 (#54)` |
+| `versionCode` | `3` |
+| `versionName` | `0.5.0` |
 | Signed APK | `app/build/outputs/apk/release/app-release.apk` |
 | Keystore | `rova-beta-release.jks` (gitignored) |
 | `keystore.properties` | local-only (gitignored) |
@@ -21,15 +21,19 @@ contents change.
 Run before every distribution:
 
 ```
+rtk ./gradlew :app:preBuild
 rtk ./gradlew :app:lintDebug
 rtk ./gradlew :app:testDebugUnitTest --rerun-tasks
 rtk ./gradlew :app:assembleDebug
 rtk ./gradlew :app:assembleRelease
 ```
 
-All four must report `BUILD SUCCESSFUL`. R8 minify on release should
-produce an APK ~2.7M. Compile warnings about `Theme.kt` deprecated
-status/navigation bar setters are pre-existing and not blocking.
+All five must report `BUILD SUCCESSFUL`. The `preBuild` task runs all **25
+custom `check*` static-check tasks** wired into the build gate — each enforces
+an ADR clause (see `app/build.gradle.kts`). `lintDebug` runs Android Lint on
+top of that. R8 minify on release should produce an APK ~2.7M. Compile
+warnings about `Theme.kt` deprecated status/navigation bar setters are
+pre-existing and not blocking (TBD-VERIFY: owner to confirm if still present).
 
 ## On-device smoke checklist (signed release APK)
 
@@ -122,7 +126,7 @@ fingerprint until the upload key is registered.
   is monotonic, never reused.
 - Bump `versionCode` in [app/build.gradle.kts](../app/build.gradle.kts)
   every time a new APK is uploaded to a tester-facing track.
-- Keep `versionName` (currently `0.3.0`) tracking the human-meaningful
+- Keep `versionName` (currently `0.5.0`) tracking the human-meaningful
   release; bump it on user-facing milestones, not on every internal
   iteration.
 
