@@ -27,28 +27,41 @@ app/src/main/java/com/aritr/rova/
 ├── data/
 │   └── RovaSettings.kt             # SharedPreferences wrapper + RovaPreset data class
 ├── service/
-│   └── RovaRecordingService.kt     # Foreground service: CameraX, recording loops, merge
+│   ├── RovaRecordingService.kt     # Foreground service: CameraX, recording loops, merge
+│   ├── RovaTickReceiver.kt         # Segment-boundary AlarmManager fire
+│   ├── RovaStopReceiver.kt         # Loop-count-exhausted STOP fire
+│   ├── audio/                      # BeepPolicy
+│   ├── dualrecord/                 # P+L dual-encode — CameraEffect + EGL14 fan-out to dual MediaMuxer
+│   │   └── internal/               # EGL14 / GLES20 implementation details
+│   ├── export/                     # Tier1/2/3 exporters, ExportRecoveryRunner,
+│   │                               # ExportCleanupPredicate, MediaScanWaiter
+│   ├── notification/               # NotificationCopy
+│   ├── recovery/                   # RecoveryScanner.classifyAll, RecoveryReport
+│   ├── scheduler/                  # AlarmScheduler — exact alarms only (ADR-0001)
+│   ├── surface/                    # Headless preview surface variants (ADR-0002)
+│   └── wakelock/                   # WakeLockPolicy — bounded acquire (ADR-0006)
 ├── ui/
 │   ├── MainScreen.kt               # Navigation shell (History + Settings drill-down; Record owns nav)
-│   ├── PreviewActivity.kt          # In-app video player
-│   ├── components/
-│   │   ├── BackgroundRecordingBanner.kt
-│   │   ├── RovaAnimations.kt       # Pulsing opacity, slide animations
-│   │   ├── RovaCardComponents.kt   # SwitchRow and other shared UI components
-│   │   ├── RovaComponents.kt       # StepperControl
-│   │   └── RovaDialogs.kt          # Shared dialog components
+│   ├── components/                 # Shared chrome (re-skin tokens)
+│   ├── permissions/                # Permission-request composables
+│   ├── share/                      # Share-sheet helpers
 │   ├── screens/
 │   │   ├── RecordScreen.kt         # Camera preview + recording controls
 │   │   ├── RecordChrome.kt         # R1/R2: chrome metrics, active HUD (RecordActiveHud,
 │   │   │                           #   LoopPill, StatusPill), SessionSettingsSheet
-│   │   ├── SessionSettingsSheet.kt # R1: combined per-session settings ModalBottomSheet
 │   │   ├── RecordViewModel.kt      # ViewModel: service binding, recording settings, presets
 │   │   ├── HistoryScreen.kt        # Video library with thumbnails and batch operations
 │   │   ├── HistoryViewModel.kt     # Off-thread metadata loading for HistoryScreen
 │   │   ├── SettingsScreen.kt       # App preferences
 │   │   ├── SettingsViewModel.kt    # Activity-scoped: single source of truth for app settings
-│   │   ├── BatteryOptimizationHelper.kt
-│   │   └── VideoMetadataUtils.kt   # Thumbnail + resolution extraction helpers
+│   │   ├── VideoMetadataUtils.kt   # Thumbnail + resolution extraction helpers
+│   │   ├── onboarding/             # 3-screen immersive onboarding (M4, PR #53)
+│   │   └── player/                 # In-app player (PR #1, db25405)
+│   │       ├── PlayerScreen.kt     # Compose surface + segmented timeline (Media3 ExoPlayer)
+│   │       ├── PlayerViewModel.kt  # ExoPlayer + 250 ms position poll
+│   │       ├── PlayerUriResolver.kt # Pure manifest → URI dispatch
+│   │       └── PlayerUiState.kt    # Loading | Ready | Unavailable
+│   ├── recovery/                   # RecoveryCard, RecoveryViewModel, VendorGuidanceIntents
 │   ├── signals/
 │   │   ├── BatteryOptimizationSignal.kt
 │   │   ├── CameraPermissionSignal.kt
@@ -57,16 +70,22 @@ app/src/main/java/com/aritr/rova/
 │   │   ├── MicrophonePermissionSignal.kt
 │   │   ├── NotificationPermissionSignal.kt
 │   │   ├── PowerSignal.kt
-│   │   ├── StorageLowMidRecSignal.kt   # R2 (2026-05-13): mid-rec storage poll; top-banner surface
+│   │   ├── StorageLowMidRecSignal.kt   # R2: mid-rec storage poll; top-banner surface
 │   │   ├── StorageSignal.kt
-│   │   └── ThermalStatusSignal.kt
+│   │   └── ThermalStatusSignal.kt      # Asymmetric hysteresis (ADR-0019)
 │   ├── warnings/
-│   │   ├── WarningCenter.kt            # R1: WarningSheet/WarningChip; R2: +WarningTopBanner
+│   │   ├── WarningCenter.kt            # WarningSheet/WarningChip + WarningTopBanner
 │   │   ├── WarningCenterViewModel.kt
-│   │   ├── WarningId.kt               # 17-row enum (R2 adds STORAGE_LOW_MID_REC at ordinal 10)
-│   │   └── WarningPrecedence.kt        # Pure resolver: 9 leaf-signal booleans/states → WarningId? (highest-priority)
+│   │   ├── WarningId.kt               # 17-entry enum (precedence order; see WarningCenterContract.md)
+│   │   └── WarningPrecedence.kt        # Pure resolver → WarningId? (highest-priority)
 │   └── theme/
 │       ├── Color.kt
+│       ├── Font.kt
+│       ├── RecordChromeTokens.kt   # Record-screen pixel-faithful constants (ADR-0013)
+│       ├── RovaTokens.kt           # Shared type/shape/spacing tokens
+│       ├── RovaTokensPreview.kt
+│       ├── RovaWarningsV3.kt       # Warning severity + notification re-skin tokens (M5)
+│       ├── SettingsSheetTokens.kt
 │       ├── Theme.kt
 │       └── Type.kt
 └── utils/
@@ -405,6 +424,8 @@ graph LR
 
 ## 8. UI Composition & Navigation
 
+**R1 redesign model (shipped PR #17, 2026-05-12):** there is no longer an app-wide `NavigationBar`. The `record` screen is the home and carries its own bottom nav (Library / center Start-Stop FAB / Settings). `history` and `settings` are drill-down routes pushed on the back stack. There is no `ModalNavigationDrawer` — settings are a drill-down `SettingsScreen` route.
+
 ```mermaid
 graph TD
     subgraph MainActivity
@@ -413,62 +434,54 @@ graph TD
 
     subgraph MainScreen
         NAV[NavHost<br/>startDestination = record]
-        NB[NavigationBar<br/>3 tabs]
     end
 
-    subgraph RecordScreen
-        MND[ModalNavigationDrawer<br/>Settings Toggles]
-        BSS[BottomSheetScaffold]
-        SHEET[Sheet Content<br/>Preset Chips + Steppers]
-        MAIN[Main Content]
-        CAM_PV[Camera Preview<br/>AndroidView + PreviewView]
-        TOP[Top Bar<br/>Menu / REC / Flash / Flip]
-        FAB[FAB<br/>Start / Stop]
-        BOT[Bottom Overlay<br/>Loop Progress]
-        MPD[Merge Progress Dialog]
-        TUT[Tutorial Overlay]
-        LCD[Lifecycle Observer<br/>ON_STOP: release camera<br/>ON_START: restart camera]
+    subgraph RecordScreen["RecordScreen (top-level route)"]
+        REC_IDLE[Idle dock<br/>plan summary + presets + START]
+        REC_HUD[Active HUD<br/>REC / WAIT / Merge states]
+        REC_NAV[Record bottom nav<br/>Library · FAB · Settings]
+        EDITSHEETS[SessionSettingsSheet<br/>ModalBottomSheet overlay]
+        WARN[WarningSheet / WarningChip<br/>overlay — ADR-0007]
     end
 
-    subgraph HistoryScreen
-        HS_SC[Scaffold + TopAppBar]
-        HS_LC[LazyColumn<br/>Grouped by Date]
-        HS_TH[VideoThumbnail<br/>Cached ImageBitmap]
-        HS_SEL[Batch Select / Delete]
+    subgraph HistoryScreen["history (drill-down)"]
+        HS_LIST[Library grid + recovery cards]
+        HS_PLAYER[→ player/{sessionId}]
+    end
+
+    subgraph PlayerScreen["player/{sessionId} (drill-down — PR #1)"]
+        PL_SURF[PlayerScreen<br/>Media3 ExoPlayer + segmented timeline]
+    end
+
+    subgraph OnboardingScreen["onboarding (first-launch — M4 PR #53)"]
+        OB[3 immersive screens<br/>permission grants]
     end
 
     subgraph SettingsScreen
-        SS_SC[Scaffold]
-        SS_SW[SwitchRow Controls<br/>Beeps / Vibrate / Screen]
+        SS_SC[5 sections<br/>Reliability · Recording · Alerts · Storage · About]
     end
 
     MA_SC --> MainScreen
     NAV --> RecordScreen
     NAV --> HistoryScreen
     NAV --> SettingsScreen
+    NAV --> PlayerScreen
+    NAV --> OnboardingScreen
 
-    MND --> BSS
-    BSS --> SHEET
-    BSS --> MAIN
-    MAIN --> CAM_PV
-    MAIN --> TOP
-    MAIN --> FAB
-    MAIN --> BOT
-    RecordScreen --> MPD
-    RecordScreen --> TUT
-    RecordScreen --> LCD
-
-    HS_SC --> HS_LC
-    HS_LC --> HS_TH
-    HS_SC --> HS_SEL
-
-    SS_SC --> SS_SW
-
-    HistoryScreen -->|launch intent| PA_EXT[PreviewActivity<br/>Video Playback]
+    REC_IDLE -->|START| REC_HUD
+    REC_IDLE -.->|cell tap| EDITSHEETS
+    REC_IDLE -.->|condition| WARN
+    REC_HUD -.->|condition| WARN
+    REC_NAV -->|Library| HistoryScreen
+    REC_NAV -->|Settings| SettingsScreen
+    HS_LIST -->|tap row| HS_PLAYER
+    HS_PLAYER --> PL_SURF
 
     style RecordScreen fill:#e3f2fd
     style HistoryScreen fill:#e8f5e9
     style SettingsScreen fill:#fce4ec
+    style PlayerScreen fill:#f3e5f5
+    style OnboardingScreen fill:#1f2f3a
 ```
 
 ---
@@ -593,11 +606,18 @@ flowchart TD
 
 ---
 
-## 12. Known Limitations
+## 12. Known Limitations & Key Design Constraints
 
 - **No database** — Video metadata (duration, resolution, thumbnails) is cached in-memory by HistoryViewModel but not persisted. Will need Room or DataStore if the library grows large.
-- **No unit tests** — `VideoMerger` and `RovaSettings` have no test coverage. Core logic changes risk silent regressions.
 - **SharedPreferences on main thread** — Reads are synchronous. Not a problem at current scale but would need DataStore migration for complex settings.
 - **No ProGuard/R8** — `isMinifyEnabled = false` in release build. Larger APK, no obfuscation.
 - **Single recorder instance** — The service assumes one active recording session. No support for multiple concurrent sessions.
-- **SimpleDateFormat not thread-safe** — File-level instances in HistoryScreen are used from the main thread only, but would need synchronization if accessed from background threads.
+- **JVM unit tests only** — No Robolectric, no instrumented tests. `testOptions.unitTests.isReturnDefaultValues = true`; framework calls no-op under JVM. Pattern: extract pure-helper objects (`SegmentGateThermal`, `ThermalHysteresis`, `AspectFitMath`, etc.) for logic that must be unit-tested; the framework-touching wrapper stays a thin seam. Baseline: 1322 tests / 0-0-0 on master.
+
+### DualShot (P+L mode)
+
+`service/dualrecord/` implements simultaneous Portrait + Landscape recording (ADRs 0008, 0009, 0010) via a single `CameraEffect(target=PREVIEW)` wired into an EGL14/GLES20 fan-out that drives two `MediaMuxer` instances and a single broadcast `AudioRecord`. DualShot uses a native 4:3 source with 27/64 side-crop matrices; pause/resume is deferred.
+
+### Static-check gate (load-bearing)
+
+`app/build.gradle.kts` registers **25 custom `check*` tasks** wired into `preBuild`. Each task is a regex/AST scan enforcing an invariant from a specific ADR clause. Check tasks cite the ADR clause they enforce; do not remove or weaken them — fix the source code to satisfy the check, or amend the ADR with explicit owner sign-off and update the check accordingly.
