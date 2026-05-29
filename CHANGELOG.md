@@ -8,6 +8,12 @@ Commit-level detail lives in `git log` and on GitHub PRs
 ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
 (reliability) and `NEW_UI_BACKEND_REPLAN.md` (UI / feature).
 
+## [Unreleased]
+
+### Added
+- Accessibility audit (WCAG 2.2 AA) — static, source-level audit of all 12 UI surfaces in `docs/accessibility/` (full report + prioritized remediation backlog). 161 findings (3 Blocker, ~58 Serious). Docs-only; no Kotlin changed.
+- ADR-0020 (Proposed) — "WCAG 2.2 AA by default" standing requirement for all new/changed UI, with a design stub for a future `checkA11y*` static-gate suite.
+
 ## [0.9.0] — 2026-05-28
 
 ### Added
