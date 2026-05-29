@@ -16,6 +16,9 @@ ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
 
 ### Changed
 - **Onboarding requests Camera, Microphone, and Notifications up-front** via per-permission rationale cards, reversing the M4 camera-only reduction. Each card has Allow + "Skip for now"; skipping still finishes onboarding (camera stays enforced at the WarningCenter Start-gate). Notifications card shows only on API 33+. Exact-alarm remains just-in-time (no in-app dialog exists). New pure `visibleOnboardingSteps(sdkInt)` seam drives the pager + ViewModel. Spec: `docs/superpowers/specs/2026-05-31-onboarding-upfront-permissions-design.md`.
+### Fixed
+- Accessibility contrast **Blockers** (WCAG 2.2 AA SC 1.4.3, ADR-0020): WarningSheetV3 body text (0.45→0.55α), RecoveryCard progress header (0.36→0.70α), and notification small-text (body/chrono/tail/count colors + count-pill size 8→10sp) raised to meet the 4.5:1 bar. Verified by `ContrastMathTest` against the audit-measured elevated backgrounds.
+- Accessibility **text-token contrast** (WCAG 2.2 AA SC 1.4.3, ADR-0020): 8 `RecordChromeTokens` text tokens (loop-unit/status-time/cell-key/settings-arrow/swipe-hint/nav-icon/nav-text/zone-tag, 18–35%→50–70α) and 3 `SettingsSheetTokens` (section-label/idle-tab/chip-off, →55α) raised to meet 4.5:1; disabled-tab text bumped 0.16→0.40α for legibility. These override the mockup's `rgba` alphas (documented in-token). Guarded by `TokenContrastTest`.
 
 ## [0.9.0] — 2026-05-28
 
