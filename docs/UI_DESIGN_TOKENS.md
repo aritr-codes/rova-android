@@ -1,7 +1,7 @@
 # Rova — UI Design Tokens (post-redesign)
 
 > **Status:** All phases shipped and merged to master (`d54e051`). `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, `Font.kt` (Inter downloadable font), `SettingsSheetTokens.kt`, `RovaWarningsV3.kt`, and `RovaTokensPreview.kt` are live on master. The feature branch `feat/record-skin-phase-1-foundation` no longer exists as a branch; its work is on master. Phases 3+ (edge-to-edge, warning re-skin, notification re-skin) are fully implemented.
-> **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks). Note: `mockups/` is gitignored and not present in a fresh checkout.
+> **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks). Note: `mockups/` is gitignored and not present in a fresh checkout. The mockup files are the **frozen design origin** — all derived values have been inlined into `RecordChromeTokens.kt` and `RovaTokens.kt`, which are the **live inline contracts** for any future token work.
 > **Existing implementation reference:** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Font,RecordChromeTokens,RovaTokens,RovaTokensPreview,RovaWarningsV3,SettingsSheetTokens,Theme,Type}.kt`.
 
 ---

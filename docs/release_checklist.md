@@ -33,7 +33,8 @@ custom `check*` static-check tasks** wired into the build gate — each enforces
 an ADR clause (see `app/build.gradle.kts`). `lintDebug` runs Android Lint on
 top of that. R8 minify on release should produce an APK ~2.7M. Compile
 warnings about `Theme.kt` deprecated status/navigation bar setters are
-pre-existing and not blocking (TBD-VERIFY: owner to confirm if still present).
+pre-existing and not blocking (verified present: `window.statusBarColor` and
+`window.navigationBarColor` at `Theme.kt:99-100`, deprecated since API 30/35).
 
 ## On-device smoke checklist (signed release APK)
 
