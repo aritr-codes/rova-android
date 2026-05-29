@@ -43,6 +43,7 @@ The app runs as a foreground service, continuing to record even when the screen 
 | Front/back camera | Switch between cameras before recording | Implemented |
 | Flash modes | Off / On / Auto (torch mode) | Implemented |
 | Audio recording | Record with device microphone, graceful fallback if permission denied | Implemented |
+| DualShot (P+L mode) | Simultaneous Portrait + Landscape recording in a single session via CameraEffect fan-out | Implemented (ADRs 0008/0009/0010, PRs #22–#35) |
 | Pre-recording countdown | 3-2-1 countdown with audio/visual cues before first segment | Not implemented |
 | Frame rate selection | 24 / 30 / 60 fps | Not implemented |
 | Single continuous mode | Standard recording without looping | Not implemented |
@@ -62,9 +63,9 @@ The app runs as a foreground service, continuing to record even when the screen 
 | Video list | Browse recorded videos with metadata | Implemented (basic) |
 | Batch delete | Select and delete multiple videos | Implemented |
 | Play/share via system | Open videos in external player or share | Implemented |
-| Video thumbnails | Frame preview for each video in the list | Not implemented |
+| Video thumbnails | Frame preview for each video in the list | Implemented |
 | Sort/filter | Sort by date, size; search by name | Not implemented (stubs exist) |
-| In-app video player | Watch recordings without leaving the app | Not implemented |
+| In-app video player | Watch recordings without leaving the app | Implemented (PR #1 `db25405`) |
 | Resolution/duration badges | Show actual video metadata on cards | Not implemented |
 
 ### 3.4 Safety & Reliability
@@ -72,7 +73,7 @@ The app runs as a foreground service, continuing to record even when the screen 
 |---------|-------------|--------|
 | Storage space check | Estimate required space before recording, abort if insufficient | Implemented |
 | Orphaned segment cleanup | Delete leftover segments from crashed sessions on next launch | Implemented |
-| Battery optimization prompt | Encourage user to exempt app from Doze mode | Exists (unwired) |
+| Battery optimization prompt | Encourage user to exempt app from Doze mode | Shipped (WarningCenter `BATTERY_OPTIMIZATION_ON`, ADR-0007) |
 | Crash recovery dialog | Offer to merge orphaned segments instead of silently deleting | Not implemented |
 | Low-battery graceful shutdown | Finish current segment, merge, save, stop | Not implemented |
 
@@ -121,15 +122,13 @@ Over time, build a visual timeline of all sessions. An athlete can scroll throug
 ### 5.1 Navigation Structure
 
 ```
-Bottom Navigation (3 tabs):
+Record screen (home) — owns its own bottom nav:
 
-  Record          Library          Settings
-  (Camera)        (Videos)         (Preferences)
+  Library         [ START/STOP ]        Settings
+  (drill-down)    (center FAB)          (drill-down)
 ```
 
-Three tabs. The current four-tab layout (Record / History / Schedule / Feedback) should be simplified:
-- **Schedule** should be a feature within Record (scheduling a future recording session), not a separate tab
-- **Feedback** is not a core product screen
+Shipped R1 model (PR #17): `record` is the home screen and owns a floating bottom nav (Library / center FAB / Settings). `history` and `settings` are drill-down routes pushed on the back stack, not tab peers. There is no Schedule or Feedback tab. On first launch, an `onboarding` flow (3 immersive screens, PR #53) precedes `record`.
 
 ### 5.2 Record Screen
 - Camera preview dominates the screen
@@ -157,9 +156,8 @@ Three tabs. The current four-tab layout (Record / History / Schedule / Feedback)
 - Notification with live info: current loop, time remaining
 
 ### 5.6 Onboarding
-- First launch: 3-screen tutorial shown automatically (interactive, not just text)
-- Persona picker: "What will you use this for?" → Athlete / Creator / Monitoring / General → auto-configures defaults
-- Prominent "Test Recording" CTA on first launch
+
+Shipped M4 (PR #53 `12c12a9`): 3 immersive screens shown automatically on first launch. The onboarding is fullscreen, swipe-navigated, and covers permission grants (Camera, Mic, Notifications, Exact Alarm). There is no persona picker in the current implementation — the original "What will you use this for?" flow was not shipped in M4 and remains a future consideration.
 
 ---
 
@@ -274,9 +272,9 @@ Three tabs. The current four-tab layout (Record / History / Schedule / Feedback)
 | Priority | Feature | Rationale |
 |----------|---------|-----------|
 | P0 | Pre-recording countdown (3-2-1) | First segment always shows user walking away without this |
-| P0 | Video thumbnails in Library | A list of filenames is unusable |
-| P0 | In-app video player | Users shouldn't leave the app to watch recordings |
-| P0 | Battery optimization banner | Recording fails silently on many OEMs without this |
+| P0 | Video thumbnails in Library (**Shipped**) | A list of filenames is unusable |
+| P0 | In-app video player (**Shipped** — PR #1 `db25405`) | Users shouldn't leave the app to watch recordings |
+| P0 | Battery optimization banner (**Shipped** — WarningCenter ADR-0007) | Recording fails silently on many OEMs without this |
 | P1 | Haptic feedback on start/stop | Athletes can't always hear the beep |
 | P1 | Session naming | Timestamps are meaningless a week later |
 | P1 | Frame rate selection (30/60fps) | Athletes reviewing form need 60fps |

@@ -1,8 +1,8 @@
 # Rova — UI Design Tokens (post-redesign)
 
-> **Status:** Phase 1 Foundation implemented. `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, and `Font.kt` (Inter downloadable font) are live on `feat/record-skin-phase-1-foundation`. **Phase 2 implemented:** the record-screen shared chrome (`RecordChrome.kt`) now consumes all `RecordChromeTokens` and the 7 `RovaTokens` type styles declared in Phase 1. Six custom chrome glyphs are defined in `ui/screens/RecordChromeIcons.kt`. Phase 3+ composables will consume the remaining tokens.
-> **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks).
-> **Existing implementation reference:** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Type,Theme,RovaTokens,RecordChromeTokens,Font}.kt`.
+> **Status:** All phases shipped and merged to master (`d54e051`). `RovaTokens.kt`, `RecordChromeTokens.kt`, `Type.kt`, `Font.kt` (Inter downloadable font), `SettingsSheetTokens.kt`, `RovaWarningsV3.kt`, and `RovaTokensPreview.kt` are live on master. The feature branch `feat/record-skin-phase-1-foundation` no longer exists as a branch; its work is on master. Phases 3+ (edge-to-edge, warning re-skin, notification re-skin) are fully implemented.
+> **Source of truth for the design system:** `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" + `mockups/new_uiux/*.html` (CSS in `<style>` blocks). Note: `mockups/` is gitignored and not present in a fresh checkout. The mockup files are the **frozen design origin** — all derived values have been inlined into `RecordChromeTokens.kt` and `RovaTokens.kt`, which are the **live inline contracts** for any future token work.
+> **Existing implementation reference:** `app/src/main/java/com/aritr/rova/ui/theme/{Color,Font,RecordChromeTokens,RovaTokens,RovaTokensPreview,RovaWarningsV3,SettingsSheetTokens,Theme,Type}.kt`.
 
 ---
 
@@ -456,16 +456,7 @@ CSS `backdrop-filter` blurs present in `02-settings-sheet.html` are deliberately
 | `RovaTokens.kt` — shape, sizing/spacing, and all type styles (including Phase 1 mockup scale) | Done |
 | `RecordChromeTokens.kt` — full record-screen pixel constants | Done |
 
-**Remaining for Phase 2.1 PR:**
-
-1. **Edit `Color.kt`** to add the new dark-scheme entries (`#06090f` background, `#5b7fff` primary, `#ef4444` error, derived surface family). Keep the existing `Sand*` / `Ink*` / `Harbor*` / `Copper*` / `Sage*` palette unchanged (light scheme stays).
-2. **Do not** touch `Theme.kt` beyond the `colorScheme` / `typography` / `shapes` it already wires up. The light scheme stays.
-3. **Test gates.** `lintDebug` + `testDebugUnitTest` + `assembleRelease`. Lint baseline must not be expanded to mask new `Lint` warnings (e.g. unused color resources). Add a Compose preview for at least one screen using the new tokens (Settings, idle dock — pick one) and verify dark and light renderings.
-
-The Phase 2.1 PR is **not** allowed to:
-- Implement any new screen layout (token-only changes ship first).
-- Modify `service/`, `data/`, or `RovaApp.kt`.
-- Create a "design tokens" Gradle module — single-file `RovaTokens.kt` is enough for v1.0.
+**All Phase 2.1 items shipped** (master `d54e051`). The `Color.kt` dark-scheme entries (`#06090f` background, `#5b7fff` primary, `#ef4444` error, derived surface family) landed in the Phase 2.1 PR. The TODOs listed here are historical artifacts; see git log for the implementing commits.
 
 ---
 
@@ -496,9 +487,10 @@ These should be resolved before the Phase 2.1 PR opens. Defer until then; do not
 
 ## 6. References
 
-- Mockup design system source: `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" (lines 86–158).
+- Mockup design system source: `mockups/new_uiux/PROJECT_CONTEXT.md` §"UI/UX Design Principles" (lines 86–158). Note: `mockups/` is gitignored.
 - Mockup CSS: every `<style>` block in `mockups/new_uiux/*.html`. The 18-state warning palette lives in `07-warnings.html` lines 32–35 (`sev-r`, `sev-y`, `sev-b`, `sev-o`).
-- Theme files: `app/src/main/java/com/aritr/rova/ui/theme/Color.kt`, `Type.kt`, `Theme.kt`, `Font.kt`, `RovaTokens.kt`, `RecordChromeTokens.kt`.
+- Theme files (all on master): `Color.kt`, `Font.kt`, `RecordChromeTokens.kt`, `RovaTokens.kt`, `RovaTokensPreview.kt`, `RovaWarningsV3.kt`, `SettingsSheetTokens.kt`, `Theme.kt`, `Type.kt` — all under `app/src/main/java/com/aritr/rova/ui/theme/`.
+- `RovaWarningsV3.kt` — Phase 4 warning re-skin v3 token object (ADR-0013). Also provides notification re-skin state tokens added in Milestone 5 (PR #54).
 - Slice 3 typography precedent: `Type.kt:22-42` (`NumericMonoLarge`, `NumericMonoMedium`).
 - Bottom-nav surface precedent: `MainScreen.kt:118-179`.
 - Replan source: `NEW_UI_BACKEND_REPLAN.md` §5 Phase 1.B + 1.C.

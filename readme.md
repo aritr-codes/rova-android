@@ -7,9 +7,9 @@ Set a duration, interval, and loop count — Rova records in the background, the
 | | |
 |---|---|
 | Package | `com.aritr.rova` |
-| Version | `0.5.0` |
+| Version | `0.9.0` |
 | `minSdk` | 24 (Android 7.0) |
-| `targetSdk` | 36 |
+| `targetSdk` | 37 |
 | UI | Jetpack Compose (Material 3) |
 | Capture | CameraX |
 | Status | Active development — see [`ROADMAP_v6.md`](ROADMAP_v6.md) |
@@ -196,7 +196,7 @@ and `BLOCKED`.
 | Public Export | `MediaStore` (Tier 1) / scoped temp + `MediaScannerConnection` (Tier 2) / direct path (Tier 3) |
 | Playback | AndroidX Media3 (ExoPlayer + PlayerView) — pinned to 1.4.1 |
 | Min SDK | 24 (Android 7.0) |
-| Target SDK | 36 |
+| Target SDK | 37 |
 
 ---
 
@@ -231,14 +231,19 @@ app/src/main/java/com/aritr/rova/
 │   ├── RovaRecordingService.kt      # FGS · CameraX bind · segment loop
 │   ├── RovaTickReceiver.kt          # Segment boundary
 │   ├── RovaStopReceiver.kt          # Loop-count exhaustion
-│   ├── recovery/
-│   │   └── RecoveryScanner.kt       # Phase 1.5 classifier
+│   ├── audio/                       # BeepPolicy
+│   ├── dualrecord/                  # P+L dual-encode (CameraEffect + EGL14 fan-out; ADRs 0008/0009/0010)
 │   ├── export/
 │   │   ├── Tier1Exporter.kt         # API 29+ MediaStore
 │   │   ├── Tier2Exporter.kt         # API 26-28
 │   │   ├── Tier3Exporter.kt         # API 24-25
 │   │   ├── ExportRecoveryRunner.kt  # Phase 1.7 cold-boot reconciliation
 │   │   └── ExportCleanupPredicate.kt
+│   ├── notification/                # NotificationCopy
+│   ├── recovery/
+│   │   └── RecoveryScanner.kt       # Phase 1.5 classifier
+│   ├── scheduler/                   # AlarmScheduler — exact alarms only (ADR 0001)
+│   ├── surface/                     # Headless preview surface variants (ADR 0002)
 │   └── wakelock/
 │       └── WakeLockPolicy.kt        # Bounded acquire (ADR 0006)
 ├── ui/
@@ -246,20 +251,23 @@ app/src/main/java/com/aritr/rova/
 │   ├── screens/
 │   │   ├── RecordScreen.kt
 │   │   ├── HistoryScreen.kt         # Hosts recovery cards
-│   │   └── SettingsScreen.kt
+│   │   ├── SettingsScreen.kt
+│   │   ├── onboarding/              # 3-screen immersive onboarding (M4 — PR #53)
+│   │   └── player/                  # In-app player (PR #1)
+│   │       ├── PlayerScreen.kt      # Compose surface + segmented timeline
+│   │       ├── PlayerViewModel.kt   # ExoPlayer + 250ms position poll
+│   │       ├── PlayerUriResolver.kt # Pure manifest → URI dispatch
+│   │       ├── PlayerUiState.kt     # Loading | Ready | Unavailable
+│   │       ├── SegmentedTimeline.kt
+│   │       └── SegmentedTimelineMath.kt # Pure boundary math
 │   ├── recovery/
 │   │   ├── RecoveryCard.kt          # Display surface
 │   │   ├── RecoveryUiState.kt       # Pure mapper
 │   │   ├── RecoveryViewSource.kt    # Adapter
 │   │   ├── RecoveryViewModel.kt
 │   │   └── VendorGuidanceIntents.kt # OEM auto-start screen resolver
-│   ├── screens/player/              # Phase 2.5 in-app player
-│   │   ├── PlayerScreen.kt          # Compose surface + segmented timeline
-│   │   ├── PlayerViewModel.kt       # ExoPlayer + 250ms position poll
-│   │   ├── PlayerUriResolver.kt     # Pure manifest → URI dispatch
-│   │   ├── PlayerUiState.kt         # Loading | Ready | Unavailable
-│   │   ├── SegmentedTimeline.kt     # Strip composable
-│   │   └── SegmentedTimelineMath.kt # Pure boundary math
+│   ├── permissions/                 # Permission-request composables
+│   ├── share/                       # Share-sheet helpers
 │   └── components/                  # Shared cards + controls (refreshed palette)
 └── utils/
     ├── VideoMerger.kt               # MediaMuxer concat
@@ -277,8 +285,12 @@ docs/adr/                            # Architecture Decision Records
 |----------|-------------|
 | [docs/product_vision.md](docs/product_vision.md) | Product overview, target users, feature roadmap, UX principles |
 | [docs/architecture.md](docs/architecture.md) | Code structure, data flow, key technical decisions |
-| [docs/development_log.md](docs/development_log.md) | Chronological record of implementation phases and fixes |
-| [docs/naming.md](docs/naming.md) | App name candidates and branding analysis |
+| [docs/WarningCenterContract.md](docs/WarningCenterContract.md) | WarningCenter warning model, precedence, routing, and signal ownership |
+| [docs/UI_DESIGN_TOKENS.md](docs/UI_DESIGN_TOKENS.md) | Design token system: color, typography, shape, spacing, chrome constants |
+| [docs/UI_NAV_GRAPH.md](docs/UI_NAV_GRAPH.md) | Navigation graph contract: routes, back-stack, shell model |
+| [docs/release_checklist.md](docs/release_checklist.md) | Release cut checklist: verification gates, smoke tests, keystore backup |
+| [docs/archive/development_log.md](docs/archive/development_log.md) | Chronological record of early implementation phases (frozen at Phase 4) |
+| [docs/archive/naming.md](docs/archive/naming.md) | App name candidates and branding analysis (decision record — Rova chosen) |
 
 ### Architecture Decision Records
 
@@ -287,7 +299,21 @@ ADRs are the source of truth for behavioral invariants and live under [`docs/adr
 - **[0001](docs/adr/0001-exact-alarm-policy.md)** — Exact alarm policy.
 - **[0002](docs/adr/0002-headless-surface.md)** — Headless surface (dummy preview when UI absent).
 - **[0003](docs/adr/0003-storage-export-tiered.md)** — Tiered storage / public export (FD Mode amendment 2026-04-30).
-- **[0005](docs/adr/0005-recovery-scan.md)** — Recovery scan (amended by ADR 0006 §"Cross-Phase Ordering Invariant").
+- **[0005](docs/adr/0005-recovery-scan.md)** — Recovery scan.
 - **[0006](docs/adr/0006-recording-lifecycle-robustness.md)** — Recording lifecycle robustness (Phase 1.4 / 1.5 / 1.7 contracts).
+- **[0007](docs/adr/0007-record-warning-sheets.md)** — Record-screen warning surfaces (WarningSheet / WarningChip model).
+- **[0008](docs/adr/0008-dual-recording-architecture.md)** — Dual-recording architecture (CameraEffect fan-out).
+- **[0009](docs/adr/0009-dualshot-4-3-source-aspect.md)** — DualShot 4:3 source aspect + 27/64 side-crop matrices.
+- **[0010a](docs/adr/0010-canonical-uv-frame-and-first-principles-render.md)** — Canonical UV frame and first-principles render.
+- **[0010b](docs/adr/0010-dualshot-preview-crop-divergence.md)** — DualShot preview crop divergence.
+- **[0011](docs/adr/0011-edge-to-edge-record-home.md)** — Edge-to-edge record-home layout.
+- **[0012](docs/adr/0012-gradient-scrim-dock.md)** — Gradient scrim dock.
+- **[0013](docs/adr/0013-phase4-warning-reskin-v3.md)** — Phase 4 warning re-skin v3 chrome.
+- **[0014](docs/adr/0014-snooze-persistence.md)** — Snooze persistence (forever, backed by `rova_runtime_prefs.xml`).
+- **[0015](docs/adr/0015-storage-full-autostopped-echo.md)** — Storage-full autostopped echo signal.
+- **[0016](docs/adr/0016-thermal-autostop.md)** — Thermal auto-stop (auto-stops at CRITICAL; echo banner on Idle).
+- **[0017](docs/adr/0017-recovery-merge-architecture.md)** — Recovery merge architecture.
+- **[0018](docs/adr/0018-recovery-merge-retry-classifier-preflight.md)** — Recovery merge retry classifier preflight.
+- **[0019](docs/adr/0019-thermal-hysteresis.md)** — Asymmetric thermal hysteresis (instant rise, 3 s dwell-gated fall).
 
-Each `check*` task in `app/build.gradle.kts` cites the ADR clause it enforces.
+Each of the 25 `check*` tasks in `app/build.gradle.kts` cites the ADR clause it enforces. They are wired into `preBuild` so the static-check gate runs on every build.
