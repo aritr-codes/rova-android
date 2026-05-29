@@ -60,7 +60,7 @@
 
 | Line / Section | Claim | Status | Evidence (current truth) | Suggested fix |
 |---|---|---|---|---|
-| §1 Revision note (top) | "17 rows, in precedence order" | STALE vs §4 | The Revision block says "17 rows" in the precedence list, but §4 heading says "The 18 warning states" and the actual `WarningId.kt` enum has 17 entries. The discrepancy is: the contract counts 18 named warning states (C1.1–C4.5) in §4, but the enum has 17 entries because `LOW_BATTERY` was removed or merged. The precedence flat list in §1 explicitly names only 17. | Reconcile the "17 rows" (precedence list) vs "18 warning states" (§4 heading) — either update §4 to say "17" or clarify that one §4 state has no standalone `WarningId` entry. |
+| §1 Revision note (top) | "17 rows, in precedence order" | STALE | The Revision block says "17 rows" in the precedence list, but §4 heading says "The 18 warning states" (vs §4) and the actual `WarningId.kt` enum has 17 entries. The discrepancy is: the contract counts 18 named warning states (C1.1–C4.5) in §4, but the enum has 17 entries because `LOW_BATTERY` was removed or merged. The precedence flat list in §1 explicitly names only 17. | Reconcile the "17 rows" (precedence list) vs "18 warning states" (§4 heading) — either update §4 to say "17" or clarify that one §4 state has no standalone `WarningId` entry. |
 | §1 Revision note | Snooze/hysteresis "deferred" to Phase 4.1c | STALE | Snooze persistence shipped in PR #44 (Phase 4.1c), PR #45. `RovaSettings` has snooze keys. `WarningPrecedence` has snooze support. The "deferred" note is no longer accurate. | Update note to say snooze shipped in PR #44 (Phase 4.1c, ADR-0014) |
 | §4 "The 18 warning states" | Table includes all states through C4.5 with Phase 4.3 (ADR-0017) `CANT_MERGE` and Phase 4 Slice 2/3 (`STORAGE_FULL_AUTOSTOPPED`, `THERMAL_AUTOSTOPPED`) | CURRENT | `WarningId.kt` contains `CANT_MERGE`, `STORAGE_FULL_AUTOSTOPPED`, `THERMAL_AUTOSTOPPED` | Leave |
 | §11 References | `WarningCenter` routing references `effectiveIdleTopBannerId` | MISSING | `effectiveIdleTopBannerId` (ADR-driven idle-echo promotion pattern, memory `feedback_idle_echo_promotion.md`) is not mentioned in §11 References or the contract body | Add reference to idle-echo promotion pattern and `effectiveIdleTopBannerId` |
@@ -147,16 +147,16 @@
 
 | Doc | CURRENT | STALE | MISSING | TBD-VERIFY |
 |---|---|---|---|---|
-| `readme.md` | 4 | 2 | 4 | 0 |
-| `docs/architecture.md` | 2 | 7 | 4 | 1 |
-| `docs/WarningCenterContract.md` | 2 | 2 | 2 | 0 |
-| `docs/UI_DESIGN_TOKENS.md` | 2 | 3 | 1 | 1 |
+| `readme.md` | 3 | 3 | 6 | 0 |
+| `docs/architecture.md` | 1 | 8 | 3 | 0 |
+| `docs/WarningCenterContract.md` | 1 | 2 | 2 | 0 |
+| `docs/UI_DESIGN_TOKENS.md` | 0 | 3 | 1 | 1 |
 | `docs/UI_NAV_GRAPH.md` | 1 | 6 | 0 | 0 |
 | `docs/release_checklist.md` | 1 | 4 | 1 | 1 |
 | `docs/development_log.md` | 0 | 1 | 0 | 1 |
 | `docs/product_vision.md` | 0 | 7 | 1 | 1 |
 | `docs/naming.md` | 1 | 1 | 1 | 0 |
-| **Total** | **13** | **33** | **14** | **5** |
+| **Total** | **8** | **35** | **15** | **4** |
 
 ---
 
