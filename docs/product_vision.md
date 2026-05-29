@@ -290,7 +290,9 @@ Shipped M4 (PR #53 `12c12a9`): 3 immersive screens shown automatically on first 
 
 ## 10. Long-Term Product Direction
 
-### Phase 1: Solid Recorder (Current)
+> **Status update (2026-05-29, post-cleanup-pass v0.9.0):** Phase 1 has materially exceeded its literal "record + merge + review" scope. WarningCenter v3, DualShot P+L, in-app player, 3-screen onboarding, tiered public export, asymmetric thermal hysteresis, and notification redesign v1 are all shipped (see `CHANGELOG.md` for the 0.9.0 entry). The next concrete backlog item is Mode preset seed (first-run mode picker default) — still Phase 1 polish. **v1.0.0 is positioned as the Play-Store launch anchor** once remaining Phase 1 polish is done. Phases 2–4 below remain as written; no Phase 2 work (Coach Mode, voice prompts, rep counting) has been started or scoped.
+
+### Phase 1: Solid Recorder (Current — approaching v1.0.0 ship)
 Ship a reliable periodic recording app that handles the basics flawlessly — record, merge, review. No crashes, no silent failures, no lost footage.
 
 ### Phase 2: Training Assistant
