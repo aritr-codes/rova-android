@@ -1,0 +1,89 @@
+# Changelog
+
+All notable changes to Rova are documented here. This project adheres to
+[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
+
+Commit-level detail lives in `git log` and on GitHub PRs
+(https://github.com/aritr-codes/rova-android/pulls).
+ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
+(reliability) and `NEW_UI_BACKEND_REPLAN.md` (UI / feature).
+
+## [0.9.0] — 2026-05-28
+
+### Added
+- DualShot P+L simultaneous-recording mode (entire `service/dualrecord/` subsystem; ADRs 0008, 0009, and the 0010 sibling pair canonical-uv-frame + crop-divergence).
+- In-app onboarding — 3 immersive screens replacing the previous lazy first-record prompt (PR #53).
+- Semantic + branded notification system — 4 notification states, clip-dots row, Chronometer live countdown, Inter font, custom branded launcher icon replacing the stock Android Studio Android-bot (PR #54).
+- Thermal auto-stop system — `PowerManager.OnThermalStatusChangedListener` with asymmetric hysteresis per ADR-0019 (PR #52).
+- Storage-full auto-stop with reason-agnostic echo banner (ADR-0015, PR #46).
+- Recovery merge architecture with retry + classifier preflight (ADRs 0017, 0018, PRs #48, #51).
+- WarningCenter v3 re-skin — snooze persistence + 18 warning states across 5 categories (ADRs 0013, 0014, 0016; PRs #43, #44, #45, #46, #47).
+- Edge-to-edge immersive record-home (ADRs 0011, 0012; PRs #41, #42).
+- Record-home Mode picker — Portrait / Landscape / P+L (PR #20).
+- Record-screen pixel-faithful re-skin with Inter typography system + `RecordChromeTokens` mockup-exact pixel constants (PRs #36, #37).
+- Camera-guides framing — grid + focus brackets, all modes, toggle (PR #39).
+- Phase 4.2 warning routing — route warnings to History + Settings (PR #49).
+
+### Changed
+- Build toolchain — AGP 9.2.1 / Gradle 9.4.1 / Kotlin 2.2.10 / `compileSdk` + `targetSdk` 37 (PRs #14, #15, #16).
+- UI redesigns — record-home (R1 + R2, PRs #17, #18, #19), settings sheet (PR #37), library / history surface (`4b32b0c` + chain).
+- Warning surface — inline strip → modal sheet + collapse-to-chip (ADR-0007; supersedes pre-PR-#12 `BatteryOptimizationBanner`).
+- Launcher icon — replaced stock Android Studio template with branded recording-dot motif (M5 follow-on).
+
+### Fixed
+- DualShot PORTRAIT-stretch architectural fix (ADR-0009 4:3 source, PR #25).
+- 10+ DualShot stability fixes — render threading (#32), FBO-ring (#33), fence-sync (#35), EglRouter ANR (#30), aspect-swap (#28), encoder/audio teardown (#28), P+L surface replay on service reconnect (#29), DualCameraSizeResolver contract (#26).
+- Warning dismiss persistence — stop re-prompting same warning (PR #31).
+- Merge reliability — retry + preflight + notification + library rows (PR #51).
+
+### Removed
+- `BatteryOptimizationBanner.kt` (replaced by WarningCenter row `BATTERY_OPTIMIZATION_ON`, PR #12 era).
+
+## [0.5.0] — (untagged, code-version only — `53d246b chore(repo): bump readme to 0.5.0 + extend gitignore (#2)`)
+
+### Added
+- Phase 2.5 in-app video player — manifest-driven Media3 surface, segmented clip timeline, ±10s seek, auto-pause on background (PR #1).
+- Phase 2.6 onboarding flow (PR #4).
+- 6 leaf signals — notifications-permission read (#5), thermal status read (#6), power read (#7), camera-state (#10), exact-alarm revocation (#9).
+- FGS notification copy split into 4 states (PR #8).
+- HUD merging end-states (`32c5cb3`).
+- Library empty-state re-skin (`3499e3d`).
+- Library recording-settings popup (`e4a5847`).
+- App-settings re-skin (`ed2d4eb`).
+- Phase 2 design tokens (`5d23d18`).
+- UI-pending settings keys (`e5bb225`).
+- WarningCenter Phase 4.1 + 4.1b — 17 warning states with single-flat precedence ordering, Start-gating, snooze (ADR-0007; PRs #12, #13).
+
+### Changed
+- Recovery — hide finalized sessions from recovery cards (`2b97f8c`); resume after inter-clip wait fix (`00facb7`).
+- Bottom nav locked during merge (`014d985`).
+- Recording-duration persistence fix (`aa06028`).
+
+### Fixed
+- Post-2.5 player hardening (PR #3, `35558a5`).
+
+## [0.4.0] — 2026-03-07
+
+From tag `v0.4.0` message: "v0.4.0 — Library thumbnails, battery optimization, project cleanup"
+
+### Added
+- Real video thumbnails in History library.
+- Battery optimization prompt + Doze-mode detection.
+
+### Changed
+- Project cleanup pass.
+
+## [0.3.0] — 2026-03-07
+
+From tag `v0.3.0` message: "v0.3.0 — Architecture refactor + reliability hardening. First clean commit. Core periodic recording loop is end-to-end functional. RecordViewModel established, LoomAppLegacy removed, 10+ reliability fixes applied across the service and merge pipeline."
+
+### Added
+- `RecordViewModel`.
+- End-to-end periodic recording loop.
+
+### Changed
+- Architecture refactor.
+- Reliability hardening across service + merge pipeline.
+
+### Removed
+- `LoomAppLegacy`.
