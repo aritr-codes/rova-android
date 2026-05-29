@@ -52,3 +52,9 @@ UI_ROADMAP.md
 
 # Brainstorm artifacts (visual-companion mockups) — local only
 .superpowers/
+
+# Per-developer tool state
+.claude/
+.kotlin/
+.mcp.json
+.github/hooks/
