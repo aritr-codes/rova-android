@@ -157,7 +157,11 @@ internal fun WarningSheetV3(
                     Text(
                         text = content.body,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.45f),
+                        // WCAG 2.2 AA (ADR-0020, audit WARN-01): 0.45α was ~4.10:1
+                        // over the elevated sheet surface — below the 4.5:1 SC 1.4.3
+                        // bar on a gating warning surface. 0.55α ≈ 5.34:1. See
+                        // ContrastMathTest.
+                        color = Color.White.copy(alpha = 0.55f),
                         textAlign = TextAlign.Center,
                     )
                 }

@@ -292,7 +292,10 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
             Text(
                 text = headerLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.36f),
+                // WCAG 2.2 AA (ADR-0020, audit RECOV-06): 0.36α was ~3:1 over the
+                // elevated card — below the 4.5:1 SC 1.4.3 bar. 0.70α ≈ 6.83:1.
+                // See ContrastMathTest.
+                color = Color.White.copy(alpha = 0.70f),
             )
             Box(
                 modifier = Modifier
