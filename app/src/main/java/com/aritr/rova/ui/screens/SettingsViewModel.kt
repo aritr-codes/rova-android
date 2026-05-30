@@ -60,11 +60,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /**
      * B1 — re-read the recording-default prefs from [RovaSettings] into the
      * flows. Called from SettingsScreen ON_RESUME so values changed by the
-     * record sheet while this screen was backgrounded are reflected. Setting
-     * a flow to the just-read value re-fires its write-back collector with an
-     * identical value (StateFlow re-emits on equal assignment) — but writing
-     * an unchanged value back to SharedPreferences is a no-op, so it is
-     * harmless. (Keep collector bodies idempotent for this reason.)
+     * record sheet while this screen was backgrounded are reflected. When the
+     * value is unchanged, MutableStateFlow suppresses the equal assignment
+     * (it compares via equals), so the write-back collector does not even
+     * re-fire; when it differs, the collector writes the new value to
+     * SharedPreferences — exactly the intended update. Either way, harmless.
      */
     fun reloadRecordingDefaults() {
         resolution.value = settings.resolution
