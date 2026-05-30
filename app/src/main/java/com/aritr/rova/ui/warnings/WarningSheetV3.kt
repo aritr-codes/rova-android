@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -205,7 +206,7 @@ internal fun WarningSheetV3(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 8.dp)
-                                    .clickable { onTertiary() },
+                                    .clickable(role = Role.Button) { onTertiary() },
                             )
                         }
                         WarningActionStyle.Secondary -> {

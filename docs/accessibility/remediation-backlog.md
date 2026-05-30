@@ -2,6 +2,16 @@
 
 Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reach weight (sum of host-surface reach weights). Shared-component and token-rooted issues are **deduped** into single rows listing all call-sites. Effort is the merged worst-case (S < M < L). Reach is the combined weight of surfaces a row touches.
 
+> **Reclassification (2026-05-30, remediation cycle).** Touch-target rows
+> measured against Material 3's 48dp guideline, but **WCAG 2.2 AA SC 2.5.8
+> Target Size (Minimum) requires only 24×24 dp**. Every flagged target
+> (camControl 30, stepper 27, navIconBox 42, recovery CTA 40, warning CTA 46,
+> expander 36, overflow 28, ring 38, checkbox 24) is **≥24dp → already passes
+> AA**. Rows 7, 20, 25, 34 (TOK-04, REC-17, REC-18, NAV-08, WARN-04, HIST-03/05/10,
+> SHAR-12/14, SET-04/15, ONB-07) are therefore **M3-polish only, not AA
+> failures** — deferred from the AA-severity remediation pass. Re-rank them as
+> Advisory for AA purposes.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |

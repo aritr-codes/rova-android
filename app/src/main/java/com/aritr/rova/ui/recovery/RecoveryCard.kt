@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -263,6 +264,22 @@ private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
 }
 
 /**
+ * Pure screen-reader label for the progress strip (WCAG 2.2 AA SC 4.1.2,
+ * RECOV-16). The cells are decorative `Box`es with no text, so the count is
+ * otherwise invisible to TalkBack. `internal` for [RecoveryProgressA11yTest].
+ */
+internal fun recoveryProgressContentDescription(
+    cellCount: Int,
+    filledCells: Int,
+    merging: Boolean,
+): String = if (merging) {
+    "Merging: $filledCells of $cellCount segments."
+} else {
+    val noun = if (cellCount == 1) "clip" else "clips"
+    "$cellCount $noun recovered."
+}
+
+/**
  * Clip-progress strip with leading header label + numeric `N / N` chip
  * + a row of cells.
  *
@@ -287,7 +304,16 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
         cellCount
     }
     val headerLabel = if (progress != null) "MERGING" else "CLIPS RECOVERED"
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // RECOV-16 (SC 4.1.2): merge the strip into one node with a spoken
+            // count — the decorative cells carry no text otherwise.
+            .semantics(mergeDescendants = true) {
+                contentDescription =
+                    recoveryProgressContentDescription(cellCount, filledCells, progress != null)
+            },
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -351,7 +377,7 @@ private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifie
             .height(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(RovaWarnings.hard)
-            .clickable { onClick() },
+            .clickable(role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -439,7 +465,7 @@ private fun PrimaryMergeCta(label: String, enabled: Boolean, onClick: () -> Unit
             .height(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(accent.copy(alpha = if (enabled) 1f else 0.40f))
-            .clickable(enabled = enabled) { onClick() },
+            .clickable(enabled = enabled, role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -469,7 +495,7 @@ private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
                 color = Color.White.copy(alpha = if (enabled) 0.20f else 0.10f),
                 shape = RoundedCornerShape(12.dp),
             )
-            .clickable(enabled = enabled) { onClick() },
+            .clickable(enabled = enabled, role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {

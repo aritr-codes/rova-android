@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -492,7 +493,11 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
-        modifier = if (enabled) Modifier.clickable { onClick() } else Modifier,
+        modifier = if (enabled) {
+            Modifier.clickable(onClickLabel = label, role = Role.Button) { onClick() }
+        } else {
+            Modifier
+        },
     ) {
         Box(
             modifier = Modifier
