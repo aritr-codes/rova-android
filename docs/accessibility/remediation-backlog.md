@@ -30,6 +30,15 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > SHAR-05 (text-field label) fixed in `CustomDurationDialog`. Shipped in
 > `a11y/shared-control-labels`.
 
+> **Row-10 note (2026-05-30, live-regions).** All five (REC-22, NAV-07,
+> RECOV-17, SHAR-07, SHAR-09) ship in `a11y/live-regions`. Key decision:
+> announcement strings exclude the per-second countdown / fractional percent
+> and re-announce only on discrete boundaries (state change, loop roll,
+> merge-segment roll), so a polite live region does not chant every frame.
+> `formatMergeAnnouncement` (segment-discrete) is reused for the HUD merge
+> state; new `hudActiveAnnouncement` + `formatSessionStatusAnnouncement` are
+> unit-tested.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |

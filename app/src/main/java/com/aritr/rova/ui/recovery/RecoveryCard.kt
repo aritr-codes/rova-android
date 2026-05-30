@@ -29,7 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -311,9 +313,12 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
             .fillMaxWidth()
             // RECOV-16 (SC 4.1.2): merge the strip into one node with a spoken
             // count — the decorative cells carry no text otherwise.
+            // RECOV-17 (SC 4.1.3): polite live region so merge progress is
+            // announced as filled cells roll forward (discrete, not per-tick).
             .semantics(mergeDescendants = true) {
                 contentDescription =
                     recoveryProgressContentDescription(cellCount, filledCells, progress != null)
+                liveRegion = LiveRegionMode.Polite
             },
     ) {
         Row(

@@ -45,8 +45,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -545,7 +547,13 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
                 .background(fill)
                 .border(1.5.dp, stroke, CircleShape)
                 .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
-                .semantics { contentDescription = semanticsLabel },
+                // SC 4.1.3 (NAV-07): the label flips Start↔Stop when recording
+                // toggles; a polite live region announces that transition even
+                // when focus is elsewhere on the HUD.
+                .semantics {
+                    contentDescription = semanticsLabel
+                    liveRegion = LiveRegionMode.Polite
+                },
             contentAlignment = Alignment.Center,
         ) {
             when (state) {
@@ -638,6 +646,34 @@ internal fun hudStatusPillContent(
     )
     RecordHudState.Idle ->
         error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
+}
+
+/**
+ * WCAG 2.2 AA SC 4.1.3 (ADR-0020, REC-22): TalkBack announcement for the
+ * active HUD, published into a polite live region on [RecordActiveHud].
+ *
+ * Deliberately omits the per-second clip/wait countdown — a live region that
+ * re-announced every tick would chant over the user. The string changes only
+ * on meaningful boundaries (state transition, loop roll, merge segment roll),
+ * which is the right granularity for a status message. Pure / JVM-testable.
+ */
+internal fun hudActiveAnnouncement(
+    state: RecordHudState,
+    loopIndex: Int,
+    loopTotal: Int,
+): String {
+    val loopPhrase = when {
+        loopTotal == 1 || loopTotal == 0 -> ""
+        loopTotal < 0 -> " Loop ${loopIndex.coerceAtLeast(0)}."
+        else -> " Loop ${loopIndex.coerceIn(0, loopTotal)} of $loopTotal."
+    }
+    return when (state) {
+        RecordHudState.Recording -> "Recording.$loopPhrase"
+        RecordHudState.Waiting -> "On break.$loopPhrase"
+        is RecordHudState.Merging ->
+            RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments)
+        RecordHudState.Idle -> ""
+    }
 }
 
 // ── R2 active-HUD composables (Task 8). Consume the Phase-A helpers above. ──
@@ -779,8 +815,16 @@ internal fun RecordActiveHud(
     waitSecondsLeft: Int,
     modifier: Modifier = Modifier,
 ) {
+    // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
+    // only announcement. mergeDescendants + an explicit contentDescription
+    // replaces the pills' volatile per-second text so TalkBack speaks the
+    // status once per transition instead of chanting the countdown.
+    val announcement = hudActiveAnnouncement(state, loopIndex, loopTotal)
     Column(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            liveRegion = LiveRegionMode.Polite
+            contentDescription = announcement
+        },
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

@@ -180,6 +180,24 @@ object RecordHudFormatters {
     }
 
     /**
+     * TalkBack announcement for [com.aritr.rova.ui.components.SessionStatusCard]
+     * (WCAG 2.2 AA SC 4.1.3, ADR-0020, SHAR-09). Published as the card's
+     * content description in a polite live region — it carries the recording
+     * state + loop position (not the fractional progress bar value), so it
+     * re-announces on a loop roll, not on every progress frame.
+     */
+    fun formatSessionStatusAnnouncement(
+        isRecording: Boolean,
+        currentLoop: Int,
+        totalLoops: Int,
+    ): String {
+        val state = if (isRecording) "Recording" else "Queued"
+        val safeCurrent = currentLoop.coerceAtLeast(0)
+        val loop = if (totalLoops > 0) "loop $safeCurrent of $totalLoops" else "loop $safeCurrent"
+        return "$state, $loop."
+    }
+
+    /**
      * Summary line for the brief Merge Complete card shown before
      * the auto-navigation to Library. Singular vs plural copy is
      * pinned in tests so future refactors do not silently degrade
