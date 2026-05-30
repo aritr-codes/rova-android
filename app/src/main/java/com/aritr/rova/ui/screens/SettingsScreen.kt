@@ -73,6 +73,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.BuildConfig
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.QualityPresets
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -121,6 +127,10 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
     val exportFolderName by settingsViewModel.exportFolderName.collectAsStateWithLifecycle()
+    val resolution by settingsViewModel.resolution.collectAsStateWithLifecycle()
+    val durationSeconds by settingsViewModel.durationSeconds.collectAsStateWithLifecycle()
+    val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
+    val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
 
     // Re-read battery-exempt state on resume so returning from the system
     // settings screen flips the badge without forcing a manual refresh.
@@ -132,6 +142,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 batteryExempt = BatteryOptimizationHelper.isIgnoring(context)
+                settingsViewModel.reloadRecordingDefaults()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -140,6 +151,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
     var showBatteryDialog by remember { mutableStateOf(false) }
     var showFolderDialog by remember { mutableStateOf(false) }
+    var openSheet by remember { mutableStateOf<RecordingDefaultSheet?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -174,6 +186,44 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 warningIds = settingsWarnings,
                 onOpenSheet = { sheetWarningId = it },
             )
+            SettingsSection(label = "Recording defaults") {
+                SettingsRow(
+                    icon = Icons.Default.HighQuality,
+                    label = "Default resolution",
+                    supporting = "Quality new recordings start at.",
+                    value = QualityPresets.canonicalizeOrDefault(resolution),
+                    onClick = { openSheet = RecordingDefaultSheet.RESOLUTION },
+                    trailing = { ChevronTrailing() },
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Timer,
+                    label = "Clip duration",
+                    supporting = "How long each clip records.",
+                    value = recordClipValue(durationSeconds),
+                    onClick = { openSheet = RecordingDefaultSheet.DURATION },
+                    trailing = { ChevronTrailing() },
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.HourglassEmpty,
+                    label = "Interval between clips",
+                    supporting = "Wait time before the next clip.",
+                    value = recordWaitValue(intervalMinutes),
+                    onClick = { openSheet = RecordingDefaultSheet.INTERVAL },
+                    trailing = { ChevronTrailing() },
+                )
+                SettingsDivider()
+                SettingsRow(
+                    icon = Icons.Default.Repeat,
+                    label = "Number of loops",
+                    supporting = "How many clips before stopping.",
+                    value = recordRepeatsValue(loopCount),
+                    onClick = { openSheet = RecordingDefaultSheet.LOOPS },
+                    trailing = { ChevronTrailing() },
+                )
+            }
+
             SettingsSection(label = "Recording behavior") {
                 SettingsRow(
                     icon = Icons.Default.Smartphone,
@@ -207,6 +257,26 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     supporting = "Use a short vibration to confirm starts and stops.",
                     checked = vibrateAlerts,
                     onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
+                )
+            }
+
+            SettingsSection(label = "Notifications") {
+                SettingsRow(
+                    icon = Icons.Default.Notifications,
+                    label = "System notification settings",
+                    supporting = "Manage Rova's notification channels in Android settings.",
+                    onClick = {
+                        try {
+                            context.startActivity(buildNotificationSettingsIntent(context))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(
+                                context,
+                                "Notification settings not available on this device",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                    trailing = { ChevronTrailing() },
                 )
             }
 
@@ -354,6 +424,51 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             },
             onDismiss = { showFolderDialog = false }
         )
+    }
+
+    when (openSheet) {
+        RecordingDefaultSheet.RESOLUTION -> SettingsOptionSheet(
+            title = "Default resolution",
+            options = QualityPresets.PICKER_ORDER,
+            selected = QualityPresets.canonicalizeOrDefault(resolution),
+            optionLabel = { it },
+            onPick = { settingsViewModel.resolution.value = it },
+            onDismiss = { openSheet = null },
+        )
+        RecordingDefaultSheet.DURATION -> SettingsStepperSheet(
+            title = "Clip duration",
+            valueLabel = recordClipValue(durationSeconds),
+            atMin = RecordSettingBounds.clipAtMin(durationSeconds),
+            atMax = RecordSettingBounds.clipAtMax(durationSeconds),
+            onStep = { dir ->
+                settingsViewModel.durationSeconds.value =
+                    RecordSettingBounds.stepClip(durationSeconds, dir)
+            },
+            onDismiss = { openSheet = null },
+        )
+        RecordingDefaultSheet.INTERVAL -> SettingsStepperSheet(
+            title = "Interval between clips",
+            valueLabel = recordWaitValue(intervalMinutes),
+            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
+            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
+            onStep = { dir ->
+                settingsViewModel.intervalMinutes.value =
+                    RecordSettingBounds.stepWait(intervalMinutes, dir)
+            },
+            onDismiss = { openSheet = null },
+        )
+        RecordingDefaultSheet.LOOPS -> SettingsStepperSheet(
+            title = "Number of loops",
+            valueLabel = recordRepeatsValue(loopCount),
+            atMin = RecordSettingBounds.repeatsAtMin(loopCount),
+            atMax = RecordSettingBounds.repeatsAtMax(loopCount),
+            onStep = { dir ->
+                settingsViewModel.loopCount.value =
+                    RecordSettingBounds.stepRepeats(loopCount, dir)
+            },
+            onDismiss = { openSheet = null },
+        )
+        null -> Unit
     }
 }
 
@@ -634,6 +749,9 @@ private fun BatteryOptimizationDialog(
         }
     )
 }
+
+/** Which recording-default picker sheet is open in [SettingsScreen]. */
+private enum class RecordingDefaultSheet { RESOLUTION, DURATION, INTERVAL, LOOPS }
 
 @Composable
 private fun ExportFolderDialog(
