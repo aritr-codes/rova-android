@@ -36,12 +36,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aritr.rova.data.QualityPresets
+import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SettingsSheetTokens
 
@@ -322,6 +324,7 @@ private fun SettingsPanel(
                 .clip(ctaShape)
                 .background(SettingsSheetTokens.ctaFill)
                 .border(1.dp, SettingsSheetTokens.ctaStroke, ctaShape)
+                .focusHighlight(ctaShape)
                 .clickable { onDismiss() }
                 .padding(vertical = SettingsSheetTokens.ctaPaddingV),
             contentAlignment = Alignment.Center,
@@ -381,7 +384,7 @@ private fun ModeTabs(currentMode: String, enabled: Boolean, onPick: (String) -> 
                         it
                     }
                 }
-                .let { if (enabled && !isActive) it.clickable { onPick(tab.value) } else it }
+                .let { if (enabled && !isActive) it.focusHighlight(tabShape).clickable { onPick(tab.value) } else it }
                 .padding(
                     horizontal = SettingsSheetTokens.modeTabPaddingH,
                     vertical = SettingsSheetTokens.modeTabPaddingV,
@@ -445,7 +448,7 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(SettingsSheetTokens.stepBtnFill)
             .border(1.dp, SettingsSheetTokens.stepBtnStroke, shape)
-            .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+            .then(if (enabled) Modifier.focusHighlight(shape).clickable { onClick() } else Modifier)
             .alpha(if (enabled) 1f else 0.4f),
         contentAlignment = Alignment.Center,
     ) {
@@ -497,7 +500,7 @@ private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onCl
             .clip(shape)
             .background(fill)
             .border(1.dp, stroke, shape)
-            .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+            .then(if (enabled) Modifier.focusHighlight(shape).clickable { onClick() } else Modifier)
             .alpha(if (enabled) 1f else 0.5f)
             .padding(
                 horizontal = SettingsSheetTokens.chipPaddingH,
@@ -525,6 +528,7 @@ private fun ResetSnoozesRow(count: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .focusHighlight(RectangleShape)
             .clickable { onClick() }
             .padding(vertical = SettingsSheetTokens.rowPaddingV),
         verticalAlignment = Alignment.CenterVertically,
