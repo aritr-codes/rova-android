@@ -177,6 +177,19 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * B1 — re-read the recording-default prefs from [RovaSettings] into the
+     * existing flows. Called from RecordScreen ON_RESUME so a change made in
+     * App Settings while the record screen was backgrounded is reflected, and
+     * a later stepper nudge does not write back a stale value (clobber fix).
+     */
+    fun reloadRecordingDefaults() {
+        duration.value = settings.durationSeconds
+        interval.value = settings.intervalMinutes
+        loopCount.value = settings.loopCount
+        resolution.value = settings.resolution
+    }
+
     override fun onCleared() {
         serviceStateJob?.cancel()
         super.onCleared()
