@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -79,7 +80,7 @@ internal fun WarningSnoozeChip(
                 color = severityColor.copy(alpha = RovaWarningsV3.snoozeChipBorderAlpha),
                 shape = RoundedCornerShape(RovaWarningsV3.snoozeChipRadius),
             )
-            .clickable { onExpand() }
+            .clickable(onClickLabel = "Show details", role = Role.Button) { onExpand() }
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),

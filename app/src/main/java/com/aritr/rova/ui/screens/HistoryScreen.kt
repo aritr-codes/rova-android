@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -627,7 +628,8 @@ fun LibraryRow(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onPlay,
-                onLongClick = onToggleSelection
+                onLongClick = onToggleSelection,
+                role = Role.Button,
             )
             .semantics { contentDescription = rowA11y }
     ) {

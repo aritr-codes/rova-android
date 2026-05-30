@@ -3,6 +3,7 @@ package com.aritr.rova.ui.warnings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,7 +78,7 @@ private fun HistoryWarningCard(
             .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.10f))
             .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = "View", role = Role.Button, onClick = onClick)
             .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
