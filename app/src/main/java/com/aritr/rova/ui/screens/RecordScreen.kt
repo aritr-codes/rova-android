@@ -112,6 +112,8 @@ fun RecordScreen(
 
         // B1 — resume-reseed recording defaults from prefs so an edit made in App
         // Settings is reflected here and a stepper nudge cannot clobber it.
+        // Registered before the storage-signal recompute effect so the reseed
+        // lands before recompute reads viewModel.duration.value on the same resume.
         val recordLifecycleOwner = LocalLifecycleOwner.current
         DisposableEffect(recordLifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
