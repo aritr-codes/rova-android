@@ -269,7 +269,9 @@ private fun PlayerReady(
                             fallbackPerClipMs = state.perClipDurationMs
                         ),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.45f)
+                        // WCAG 2.2 AA SC 1.4.3 (ADR-0020, PLR-01): 0.45α was
+                        // ~3.3:1 over the dark player scrim; 0.72α clears 4.5:1.
+                        color = Color.White.copy(alpha = 0.72f)
                     )
                 }
             }
@@ -283,7 +285,11 @@ private fun PlayerReady(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.12f),
+                    // WCAG 2.2 AA SC 1.4.11 (ADR-0020, PLR-02): the play
+                    // affordance is a functional UI component — its fill must
+                    // clear 3:1 against the dark backdrop. 0.12α was ~1.4:1;
+                    // 0.35α clears 3:1 over the dark-scene reference.
+                    color = Color.White.copy(alpha = 0.35f),
                     onClick = onTogglePlay,
                     modifier = Modifier
                         .size(64.dp)

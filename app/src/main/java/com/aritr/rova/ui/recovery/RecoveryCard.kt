@@ -145,7 +145,9 @@ fun RecoveryCard(
             Text(
                 text = state.body,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.45f),
+                // WCAG 2.2 AA SC 1.4.3 (ADR-0020, RECOV-05): 0.45α was ~3.3:1
+                // over the elevated card surface; 0.65α clears 4.5:1.
+                color = Color.White.copy(alpha = 0.65f),
             )
 
             // Clip-progress strip — only rendered when there is at

@@ -39,7 +39,11 @@ object RovaWarningsV3 {
     val sevChipPaddingH = 10.dp
     val sevChipPaddingV = 4.dp
     val sevChipDotSize = 5.dp
-    val sevChipFillAlpha = 0.13f
+    // WCAG 2.2 AA SC 1.4.11 (ADR-0020, TOK-03): 0.13α left the severity-chip
+    // fill below 3:1 against the sheet; 0.20α gives the badge a perceivable
+    // boundary. Foreground label/dot already carry severity (no 1.4.1 reliance
+    // on colour alone).
+    val sevChipFillAlpha = 0.20f
     val sevChipForegroundAlpha = 0.95f
 
     // ── Overflow ⋯ menu ──────────────────────────────────────────────

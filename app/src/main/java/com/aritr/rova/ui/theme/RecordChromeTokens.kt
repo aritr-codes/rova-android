@@ -98,8 +98,12 @@ object RecordChromeTokens {
     val splitDivider = Color.White.copy(alpha = 0.14f)
     /** `.camera-grid` line — `rgba(255,255,255,0.018)`. */
     val cameraGridLine = Color.White.copy(alpha = 0.018f)
-    /** `.focus-frame` bracket — `rgba(255,255,255,0.8)` × `opacity:0.25` = 0.20. */
-    val focusFrameStroke = Color.White.copy(alpha = 0.20f)
+    /**
+     * `.focus-frame` bracket. Mockup is `rgba(255,255,255,0.8)` × `opacity:0.25`
+     * = 0.20, but that fails SC 1.4.11 (functional focus indicator needs 3:1
+     * against the dark scene). Raised to 0.50 (ADR-0020, REC-23).
+     */
+    val focusFrameStroke = Color.White.copy(alpha = 0.50f)
 
     // ── Text-fill colours (white) ────────────────────────────────────────
     // WCAG 2.2 AA override (ADR-0020; audit TOK-01, REC-01..07, NAV-01/02,
