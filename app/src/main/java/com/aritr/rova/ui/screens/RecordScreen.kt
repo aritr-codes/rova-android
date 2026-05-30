@@ -110,6 +110,19 @@ fun RecordScreen(
             onDispose { autoStopLifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
+        // B1 — resume-reseed recording defaults from prefs so an edit made in App
+        // Settings is reflected here and a stepper nudge cannot clobber it.
+        val recordLifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(recordLifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    viewModel.reloadRecordingDefaults()
+                }
+            }
+            recordLifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { recordLifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
     // Slice 2 — read-only echo of the existing app-level recovery
     // report. No new RecoveryViewModel ownership; the History tab
     // remains the sole owner of Discard. RovaApp.instance is set in
