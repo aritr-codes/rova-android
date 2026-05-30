@@ -84,7 +84,10 @@ fun MergeCompleteCard(
             )
             Text(
                 text = summary,
-                color = Color.White.copy(alpha = 0.78f),
+                // WCAG 2.2 AA SC 1.4.3 (ADR-0020, SHAR-17): the card's
+                // Black@0.78 fill lightens over bright footage; 0.87α holds
+                // the subtitle above 4.5:1 in that worst case.
+                color = Color.White.copy(alpha = 0.87f),
                 style = MaterialTheme.typography.bodyMedium
             )
         }

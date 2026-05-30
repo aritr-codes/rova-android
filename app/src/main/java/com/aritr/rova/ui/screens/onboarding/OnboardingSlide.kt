@@ -124,7 +124,9 @@ internal fun WalkthroughSlide(
                 Text(
                     text = stringResource(R.string.onboarding_skip),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                    // WCAG 2.2 AA SC 1.4.3 (ADR-0020, ONB-01): drop the 0.45α
+                    // dimming — full onSurfaceVariant clears 4.5:1.
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -157,7 +159,9 @@ internal fun WalkthroughSlide(
         Text(
             text = stringResource(bodyRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+            // WCAG 2.2 AA SC 1.4.3 (ADR-0020, ONB-02): 0.65α body was ~4:1;
+            // onSurface @0.80α clears 4.5:1 for primary body copy.
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -295,7 +299,9 @@ internal fun PermissionSlide(
             Text(
                 text = stringResource(R.string.onboarding_perm_skip),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                // WCAG 2.2 AA SC 1.4.3 (ADR-0020, ONB-03): drop 0.45α dimming
+                // — full onSurfaceVariant clears 4.5:1.
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Spacer(modifier = Modifier.height(34.dp))

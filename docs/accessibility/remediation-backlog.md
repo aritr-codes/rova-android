@@ -12,6 +12,15 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > failures** — deferred from the AA-severity remediation pass. Re-rank them as
 > Advisory for AA purposes.
 
+> **Slice-6 exemptions (2026-05-30, contrast-remainder).** Within rows 14/16
+> the disabled-state findings — **PLR-03** (player disabled-icon), **RECOV-07**
+> (recovery disabled ghost text), **SHAR-02** (shared disabled button) — are
+> **SC 1.4.3-exempt** (inactive UI components). Within row 13, **REC-25**
+> (dual-preview divider) and **SET-12** (sheet dividers) are **pure-decoration,
+> SC 1.4.11-exempt**. None were changed; the remaining row 13/14/16 items
+> (REC-23, TOK-03, PLR-01/02, RECOV-05, SHAR-17) plus WARN-02 (row 12) and
+> ONB-01/02/03 (row 15) shipped in `a11y/contrast-remainder`.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |

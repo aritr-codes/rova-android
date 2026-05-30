@@ -377,7 +377,11 @@ private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White,
+            // WCAG 2.2 AA SC 1.4.3 (ADR-0020, WARN-02): white-on-accent was
+            // 1.67–3.76:1 across the severity fills. Near-black text clears
+            // 4.5:1 on every accent (hard/soft/advisory/escalating are all
+            // bright enough that dark text is the AA-safe foreground).
+            color = Color(0xFF1A1A1A),
         )
     }
 }
