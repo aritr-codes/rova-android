@@ -53,9 +53,10 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > (a composed 2 dp focus ring; ordering contract documented in-source) ships in
 > `a11y/focus-visible` and is applied to the **Serious** sites: NAV-03/05
 > (record nav items), RECOV-12 (recovery CTAs), SET-03 (settings rows), SET-16
-> (permission chips). **SET-10** (SettingsSheet panel controls, effort L) is a
-> separate component — sequenced to a follow-up slice (`a11y/focus-visible-sheet`).
-> REC-16 and WARN-09 are **Moderate** → out of this Serious-only pass. Focus
+> (permission chips). **SET-10** (SettingsSheet panel controls — Save CTA, mode
+> tabs, steppers, quality chips, reset-snoozes row) shipped in the follow-up
+> `a11y/focus-visible-sheet`. REC-16 and WARN-09 are **Moderate** → out of this
+> Serious-only pass. Focus
 > behaviour is not JVM-unit-testable (no instrumented harness); the modifier was
 > codex-reviewed for correct focus-modifier ordering.
 
