@@ -63,6 +63,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -395,12 +397,17 @@ private fun SettingsSection(
             text = label.uppercase(),
             style = RovaTokens.eyebrow,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-            modifier = Modifier.padding(
-                start = RovaTokens.screenEdgeMargin,
-                end = RovaTokens.screenEdgeMargin,
-                top = 20.dp,
-                bottom = 8.dp
-            )
+            // WCAG 2.2 AA SC 1.3.1 (ADR-0020, SET-01): mark the section label
+            // as a heading so TalkBack's heading navigation can jump between
+            // settings groups (layout-only grouping is invisible to it).
+            modifier = Modifier
+                .padding(
+                    start = RovaTokens.screenEdgeMargin,
+                    end = RovaTokens.screenEdgeMargin,
+                    top = 20.dp,
+                    bottom = 8.dp
+                )
+                .semantics { heading() }
         )
         content()
     }

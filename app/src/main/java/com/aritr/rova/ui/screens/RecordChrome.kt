@@ -578,8 +578,15 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
  */
 @Composable
 fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier) {
+    val word = if (count == 1) "recording" else "recordings"
+    // WCAG 2.2 AA SC 1.3.1 / 4.1.2 (ADR-0020, REC-19): one button node with a
+    // single spoken name — the decorative history glyph (CD=null) and the label
+    // otherwise read as separate fragments.
+    val chipDescription = "$count $word interrupted. Review."
     Surface(
-        modifier = modifier.clickable { onReview() },
+        modifier = modifier
+            .clickable(onClickLabel = "Review", role = Role.Button) { onReview() }
+            .semantics(mergeDescendants = true) { contentDescription = chipDescription },
         shape = RoundedCornerShape(20.dp),
         color = Color.Black.copy(alpha = 0.40f),
         contentColor = Color.White,
@@ -590,7 +597,6 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-            val word = if (count == 1) "recording" else "recordings"
             Text("$count $word interrupted · Review", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
     }
