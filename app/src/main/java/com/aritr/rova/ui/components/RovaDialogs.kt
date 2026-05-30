@@ -7,6 +7,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
@@ -32,6 +35,10 @@ fun CustomDurationDialog(
                         val intVal = it.toIntOrNull()
                         isError = intVal == null || intVal !in 5..300
                     },
+                    // WCAG 2.2 AA SC 4.1.2 / 1.3.1 (ADR-0020, SHAR-05): the
+                    // field needs a programmatic name — without it TalkBack
+                    // reads only "edit box".
+                    label = { Text("Duration in seconds") },
                     isError = isError,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true
@@ -40,7 +47,10 @@ fun CustomDurationDialog(
                     Text(
                         text = "Value must be between 5 and 300",
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        // WCAG 2.2 AA SC 4.1.3 (ADR-0020, SHAR-04): announce the
+                        // validation error when it appears without moving focus.
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
             }

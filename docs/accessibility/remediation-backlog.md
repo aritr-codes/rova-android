@@ -21,6 +21,15 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > (REC-23, TOK-03, PLR-01/02, RECOV-05, SHAR-17) plus WARN-02 (row 12) and
 > ONB-01/02/03 (row 15) shipped in `a11y/contrast-remainder`.
 
+> **Row-9 notes (2026-05-30, shared-control labels).** **SET-06**
+> (settings chevron `contentDescription`) was **already `null`** in source —
+> compliant, no change. **SHAR-10** (SwitchRow leading glyph) is a **decorative
+> reinforcement of the adjacent title → `CD = null` is correct**; naming it
+> would double-speak. SET-02 / SHAR-11 fixed by making the rows `toggleable`
+> (role=Switch) with a presentational Switch; SHAR-04 (error live region) and
+> SHAR-05 (text-field label) fixed in `CustomDurationDialog`. Shipped in
+> `a11y/shared-control-labels`.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |
