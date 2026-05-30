@@ -57,6 +57,7 @@ import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
+import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
 
 // Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
@@ -496,7 +497,10 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
         modifier = if (enabled) {
-            Modifier.clickable(onClickLabel = label, role = Role.Button) { onClick() }
+            // SC 2.4.7 (NAV-03/05): visible D-pad/keyboard focus ring.
+            Modifier
+                .focusHighlight(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius))
+                .clickable(onClickLabel = label, role = Role.Button) { onClick() }
         } else {
             Modifier
         },

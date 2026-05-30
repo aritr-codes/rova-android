@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import com.aritr.rova.ui.components.focusHighlight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -82,6 +83,8 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
             .clip(RoundedCornerShape(6.dp))
             .background(accent.copy(alpha = 0.08f))
             .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+            // SC 2.4.7 (SET-16): visible focus ring for D-pad/keyboard.
+            .focusHighlight(RoundedCornerShape(6.dp))
             .clickable(onClickLabel = "Open details", role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = chipDescription }
             .padding(horizontal = 10.dp, vertical = 8.dp),
