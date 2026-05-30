@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
+import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -384,6 +385,7 @@ private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifie
             .height(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(RovaWarnings.hard)
+            .focusHighlight(RoundedCornerShape(12.dp))
             .clickable(role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -485,6 +487,7 @@ private fun PrimaryMergeCta(label: String, enabled: Boolean, onClick: () -> Unit
             .height(40.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(accent.copy(alpha = if (enabled) 1f else 0.40f))
+            .focusHighlight(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -515,6 +518,7 @@ private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
                 color = Color.White.copy(alpha = if (enabled) 0.20f else 0.10f),
                 shape = RoundedCornerShape(12.dp),
             )
+            .focusHighlight(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, role = Role.Button) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

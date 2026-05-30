@@ -59,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -72,6 +73,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.BuildConfig
 import com.aritr.rova.RovaApp
+import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.warnings.SettingsPermissionsSection
@@ -435,13 +437,18 @@ private fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .let { base ->
+                // SC 2.4.7 (SET-03): visible focus ring on the interactive row.
                 when {
-                    toggleChecked != null && toggleChange != null -> base.toggleable(
-                        value = toggleChecked,
-                        role = Role.Switch,
-                        onValueChange = toggleChange,
-                    )
-                    onClick != null -> base.clickable(onClick = onClick)
+                    toggleChecked != null && toggleChange != null -> base
+                        .focusHighlight(RectangleShape)
+                        .toggleable(
+                            value = toggleChecked,
+                            role = Role.Switch,
+                            onValueChange = toggleChange,
+                        )
+                    onClick != null -> base
+                        .focusHighlight(RectangleShape)
+                        .clickable(onClick = onClick)
                     else -> base
                 }
             }
