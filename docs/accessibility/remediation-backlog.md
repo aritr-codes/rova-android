@@ -44,6 +44,11 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > become `heading()` nodes; the permission chip and record recovery chip are
 > single button nodes with one merged CD (badge + title). No new pure helpers.
 
+> **Row-17 note (2026-05-30, error-display).** RECOV-14 ships in
+> `a11y/recovery-error-display`: `state.mergeFailedReason` now renders (error
+> colour + assertive live region) above the recovery CTAs. RECOV-15 (map
+> reason → suggested user action) is Moderate, deferred to a later cycle.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |
