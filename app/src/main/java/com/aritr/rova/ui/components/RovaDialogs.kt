@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,7 +92,14 @@ fun MergeProgressSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
-                .padding(bottom = 32.dp),
+                .padding(bottom = 32.dp)
+                // WCAG 2.2 AA SC 4.1.3 (ADR-0020, SHAR-07): announce merge
+                // phase changes. The CD tracks the coarse statusText, not the
+                // per-tick percent, so TalkBack does not chant on every frame.
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "Merging videos. $statusText"
+                    liveRegion = LiveRegionMode.Polite
+                },
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

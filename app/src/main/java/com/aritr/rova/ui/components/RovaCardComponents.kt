@@ -36,8 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,12 +59,24 @@ fun SessionStatusCard(
     val statusColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val progress = if (totalLoops > 0) currentLoop.toFloat() / totalLoops.toFloat() else 0f
 
+    // WCAG 2.2 AA SC 4.1.3 (ADR-0020, SHAR-09): the progress bar + loop text
+    // carried no spoken status. Publish a polite live region whose CD tracks
+    // the recording state + loop position (not the fractional bar value).
+    val statusAnnouncement =
+        RecordHudFormatters.formatSessionStatusAnnouncement(isRecording, currentLoop, totalLoops)
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(18.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = statusAnnouncement
+                    liveRegion = LiveRegionMode.Polite
+                }
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

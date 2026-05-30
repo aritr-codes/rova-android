@@ -358,4 +358,36 @@ class RecordHudFormattersTest {
             RecordHudFormatters.formatMergeCompleteSummary(-3)
         )
     }
+
+    // ─── SHAR-09 — formatSessionStatusAnnouncement (SC 4.1.3) ─────
+
+    @Test
+    fun `formatSessionStatusAnnouncement recording with loop of total`() {
+        assertEquals(
+            "Recording, loop 2 of 5.",
+            RecordHudFormatters.formatSessionStatusAnnouncement(
+                isRecording = true, currentLoop = 2, totalLoops = 5,
+            )
+        )
+    }
+
+    @Test
+    fun `formatSessionStatusAnnouncement queued when not recording`() {
+        assertEquals(
+            "Queued, loop 0 of 5.",
+            RecordHudFormatters.formatSessionStatusAnnouncement(
+                isRecording = false, currentLoop = 0, totalLoops = 5,
+            )
+        )
+    }
+
+    @Test
+    fun `formatSessionStatusAnnouncement omits total for non-positive total`() {
+        assertEquals(
+            "Recording, loop 3.",
+            RecordHudFormatters.formatSessionStatusAnnouncement(
+                isRecording = true, currentLoop = 3, totalLoops = 0,
+            )
+        )
+    }
 }

@@ -96,4 +96,50 @@ class RecordActiveHudFormattersTest {
             clipSecondsLeft = 0, waitSecondsLeft = 0,
         )
     }
+
+    // ── hudActiveAnnouncement (REC-22, SC 4.1.3) ────────────────────
+    // The live-region string must NOT include the per-second countdown,
+    // so it changes only on state/loop/merge-segment boundaries.
+
+    @Test fun announce_recording_includesLoopOfTotal() {
+        assertEquals(
+            "Recording. Loop 2 of 5.",
+            hudActiveAnnouncement(RecordHudState.Recording, loopIndex = 2, loopTotal = 5),
+        )
+    }
+
+    @Test fun announce_waiting_includesLoopOfTotal() {
+        assertEquals(
+            "On break. Loop 2 of 5.",
+            hudActiveAnnouncement(RecordHudState.Waiting, loopIndex = 2, loopTotal = 5),
+        )
+    }
+
+    @Test fun announce_singleClip_omitsLoopPhrase() {
+        assertEquals(
+            "Recording.",
+            hudActiveAnnouncement(RecordHudState.Recording, loopIndex = 0, loopTotal = 1),
+        )
+    }
+
+    @Test fun announce_indefinite_omitsTotal() {
+        assertEquals(
+            "Recording. Loop 3.",
+            hudActiveAnnouncement(RecordHudState.Recording, loopIndex = 3, loopTotal = -1),
+        )
+    }
+
+    @Test fun announce_merging_usesSegmentAnnouncement_notPercent() {
+        assertEquals(
+            "Merging clip 3 of 6",
+            hudActiveAnnouncement(
+                RecordHudState.Merging(progress = 0.5f, currentSegment = 3, totalSegments = 6),
+                loopIndex = 0, loopTotal = 6,
+            ),
+        )
+    }
+
+    @Test fun announce_idle_isEmpty() {
+        assertEquals("", hudActiveAnnouncement(RecordHudState.Idle, loopIndex = 0, loopTotal = 0))
+    }
 }
