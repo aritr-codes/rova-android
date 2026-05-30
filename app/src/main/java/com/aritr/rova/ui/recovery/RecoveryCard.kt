@@ -428,6 +428,19 @@ private fun CtaRow(
     val inFlight = state.mergeInProgress != null
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // WCAG 2.2 AA SC 3.3.1 / 4.1.3 (ADR-0020, RECOV-14): the last merge
+        // failure reason was tracked in state (it flips the CTA to "Retry
+        // merge") but never shown. Render it in the error colour and announce
+        // it assertively so the user knows why the retry is being offered.
+        val failReason = state.mergeFailedReason
+        if (failReason != null && !inFlight) {
+            Text(
+                text = "Merge failed: $failReason",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
+            )
+        }
         if (showThreeCtaStack) {
             // 1. Merge segments (primary; ink fill). Label flips to
             //    "Retry merge" when last merge failed.
