@@ -134,6 +134,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
     // Re-read battery-exempt state on resume so returning from the system
     // settings screen flips the badge without forcing a manual refresh.
+    // Also re-seeds the recording-default flows on resume so changes made from
+    // the record sheet while this screen was backgrounded are reflected.
     val lifecycleOwner = LocalLifecycleOwner.current
     var batteryExempt by remember {
         mutableStateOf(BatteryOptimizationHelper.isIgnoring(context))
@@ -459,7 +461,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         )
         RecordingDefaultSheet.LOOPS -> SettingsStepperSheet(
             title = "Number of loops",
-            valueLabel = recordRepeatsValue(loopCount),
+            valueLabel = recordRepeatsStepperValue(loopCount),
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
             onStep = { dir ->
