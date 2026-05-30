@@ -18,7 +18,7 @@ import android.provider.Settings
  * [Intent] build (android.jar, a no-op under JVM tests) stays in the thin
  * [buildNotificationSettingsIntent] wrapper.
  */
-enum class NotifSettingsTarget {
+enum class NotificationSettingsTarget {
     /** API 26+: per-app channel list. */
     APP_NOTIFICATION_SETTINGS,
 
@@ -27,21 +27,21 @@ enum class NotifSettingsTarget {
 }
 
 /** Pure decision: per-app channel settings on O+, app-details fallback below. */
-fun notificationSettingsTarget(sdkInt: Int): NotifSettingsTarget =
+fun notificationSettingsTarget(sdkInt: Int): NotificationSettingsTarget =
     if (sdkInt >= Build.VERSION_CODES.O) {
-        NotifSettingsTarget.APP_NOTIFICATION_SETTINGS
+        NotificationSettingsTarget.APP_NOTIFICATION_SETTINGS
     } else {
-        NotifSettingsTarget.APP_DETAILS
+        NotificationSettingsTarget.APP_DETAILS
     }
 
 /** Builds the platform intent for the resolved [notificationSettingsTarget]. */
-fun buildNotificationSettingsIntent(context: Context): Intent =
-    when (notificationSettingsTarget(Build.VERSION.SDK_INT)) {
-        NotifSettingsTarget.APP_NOTIFICATION_SETTINGS ->
+fun buildNotificationSettingsIntent(context: Context, sdkInt: Int = Build.VERSION.SDK_INT): Intent =
+    when (notificationSettingsTarget(sdkInt)) {
+        NotificationSettingsTarget.APP_NOTIFICATION_SETTINGS ->
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
 
-        NotifSettingsTarget.APP_DETAILS ->
+        NotificationSettingsTarget.APP_DETAILS ->
             Intent(
                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.fromParts("package", context.packageName, null),
