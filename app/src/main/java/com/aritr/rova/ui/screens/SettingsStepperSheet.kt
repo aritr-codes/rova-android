@@ -21,10 +21,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -113,6 +116,9 @@ private fun StepGlyphButton(
     Box(
         modifier = Modifier
             .size(48.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), shape)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .then(
                 if (enabled) {
                     Modifier
@@ -122,10 +128,11 @@ private fun StepGlyphButton(
                     Modifier
                 },
             )
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), shape)
             .alpha(if (enabled) 1f else 0.4f)
-            .semantics { this.contentDescription = contentDescription },
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(
