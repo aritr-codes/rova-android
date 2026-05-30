@@ -20,6 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,7 +52,11 @@ internal fun SettingsPermissionsSection(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 8.dp),
+            // WCAG 2.2 AA SC 1.3.1 (ADR-0020, SET-14): section header as a
+            // heading for TalkBack navigation.
+            modifier = Modifier
+                .padding(start = 4.dp, top = 12.dp, bottom = 8.dp)
+                .semantics { heading() },
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             warningIds.forEach { id ->
@@ -63,13 +71,19 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
     val surface = warningSurfaceFor(id)
     val accent = accentFor(surface)
     val content = warningSheetContent(id)
+    // WCAG 2.2 AA SC 4.1.2 / 1.3.1 (ADR-0020, SET-14): one button node whose
+    // name folds the severity badge + title together, so TalkBack reads e.g.
+    // "Soft status: Microphone access needed, button" instead of two stray
+    // fragments.
+    val chipDescription = "${severityLabelFor(surface)} status: ${content.title}"
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(accent.copy(alpha = 0.08f))
             .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = "Open details", role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = chipDescription }
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

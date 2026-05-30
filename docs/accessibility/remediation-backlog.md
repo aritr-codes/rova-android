@@ -39,6 +39,11 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > state; new `hudActiveAnnouncement` + `formatSessionStatusAnnouncement` are
 > unit-tested.
 
+> **Row-19 note (2026-05-30, grouping/headings).** REC-19, SET-01, SET-14
+> ship in `a11y/semantics-grouping`: section labels + the permissions header
+> become `heading()` nodes; the permission chip and record recovery chip are
+> single button nodes with one merged CD (badge + title). No new pure helpers.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |
