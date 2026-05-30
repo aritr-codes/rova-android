@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -233,7 +234,10 @@ private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
         ),
         label = "recovery-tag-pulse-alpha",
     )
-    val dotAlpha: Float = if (pulsing) pulsingAlpha else 1f
+    // WCAG 2.2 AA SC 2.3.3 / 2.2.2 (ADR-0020, RECOV-18): suppress the pulse
+    // when the OS reduced-motion toggle is on — hold the dot fully visible.
+    val reduceMotion = rememberReduceMotion()
+    val dotAlpha: Float = if (pulsing && !reduceMotion) pulsingAlpha else 1f
 
     Row(
         modifier = Modifier
