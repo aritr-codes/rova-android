@@ -60,6 +60,16 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > behaviour is not JVM-unit-testable (no instrumented harness); the modifier was
 > codex-reviewed for correct focus-modifier ordering.
 
+> **Row-11 note (2026-05-30, notification semantics).** Ships in
+> `a11y/notification-semantics`. NOTI-06 was a one-line wire-up — `DotsPlan`
+> already computed a spoken summary that was never applied to the row. NOTI-05
+> adds CDs on the title + Chronometer (CD = the body line, since a raw chrono
+> reads as bare digits). NOTI-07: title + dots-row are `accessibilityLiveRegion=
+> "polite"` (discrete transitions); chrono + progress are intentionally excluded
+> (per-second/per-tick → chant). NOTI-08 (action `contentDescriptionRes`) is
+> Moderate, deferred. **This closes the last Serious row** — all Serious/Blocker
+> AA findings are now remediated or documented as exempt.
+
 | Rank | Finding IDs | Severity | Reach | Title | Effort | Suggested PR slice |
 |---|---|---|---|---|---|---|
 | 1 | WARN-01 | Blocker | 2 | WarningSheetV3 body text 0.45α (~4.09:1) — gating warning surface unreadable | S | a11y/contrast-warnings |
