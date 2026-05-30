@@ -12,6 +12,9 @@
     android:paddingVertical="10dp"
     android:background="@drawable/notif_surface">
 
+    <!-- accessibilityLiveRegion: title changes only on discrete state
+         transitions (recording → merging → complete), so a polite region
+         announces them without chanting (WCAG 2.2 AA SC 4.1.3, NOTI-07). -->
     <TextView
         android:id="@+id/notif_title"
         android:layout_width="match_parent"
@@ -22,6 +25,7 @@
         android:textColor="#EBFFFFFF"
         android:textStyle="bold"
         android:fontFamily="@font/inter"
+        android:accessibilityLiveRegion="polite"
         style="@style/TextAppearance.Compat.Notification.Title" />
 
     <TextView
@@ -57,12 +61,20 @@
     <!-- Dots row. 8 pre-allocated slots; service binds weightSum + per-pill
          visibility + tint per state. Pills use src + scaleType=fitXY so
          setColorFilter actually tints them (Phase 3.1 §2 item 1). -->
+    <!-- The pills are decorative (importantForAccessibility=no); the row
+         carries a runtime contentDescription ("Clip 3 of 6") and is a polite
+         live region so clip-progress rolls are announced once per clip — the
+         count is discrete, so no per-tick chant (SC 4.1.2 / 4.1.3, NOTI-06/07).
+         Chronometer + progress bar are intentionally NOT live regions: their
+         values change every second / every frame and would chant. -->
     <LinearLayout
         android:id="@+id/notif_dots_row"
         android:layout_width="match_parent"
         android:layout_height="4dp"
         android:layout_marginTop="10dp"
         android:orientation="horizontal"
+        android:importantForAccessibility="yes"
+        android:accessibilityLiveRegion="polite"
         android:weightSum="8">
 
         <ImageView android:id="@+id/notif_dot_0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginEnd="3dp" android:src="@drawable/notif_dot_pill" android:scaleType="fitXY" android:importantForAccessibility="no" />

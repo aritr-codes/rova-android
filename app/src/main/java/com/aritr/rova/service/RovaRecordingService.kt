@@ -2764,6 +2764,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // Title + optional explicit color (MergeComplete only).
         rv.setTextViewText(R.id.notif_title, plan.title)
         plan.titleColor?.let { rv.setTextColor(R.id.notif_title, it) }
+        // WCAG 2.2 AA SC 1.1.1 (ADR-0020, NOTI-05): explicit CD on the custom
+        // notification title so TalkBack names it in SystemUI's process.
+        rv.setContentDescription(R.id.notif_title, plan.title)
 
         if (expanded) {
             rv.setTextViewText(R.id.notif_body, plan.body)
@@ -2777,6 +2780,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 rv.setViewVisibility(R.id.notif_chrono, View.VISIBLE)
                 rv.setChronometer(R.id.notif_chrono, chrono.baseElapsedMs, null, true)
                 rv.setBoolean(R.id.notif_chrono, "setCountDown", true)
+                // NOTI-05: a raw ticking Chronometer reads as bare digits; the
+                // body line ("Clip 2 · recording") is the meaningful label, so
+                // borrow it as the timer's content description.
+                rv.setContentDescription(R.id.notif_chrono, plan.body)
             } else {
                 rv.setViewVisibility(R.id.notif_chrono, View.GONE)
                 rv.setViewVisibility(R.id.notif_body, View.VISIBLE)
@@ -2790,6 +2797,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 rv.setViewVisibility(R.id.notif_dots_row, View.GONE)
             } else {
                 rv.setViewVisibility(R.id.notif_dots_row, View.VISIBLE)
+                // WCAG 2.2 AA SC 4.1.2 (ADR-0020, NOTI-06): the dot pills are
+                // unlabeled ImageViews. DotsPlan already computes a spoken
+                // summary ("Clip 3 of 6", "All 6 clips complete") — wire it to
+                // the row so the group is announced as one unit.
+                rv.setContentDescription(R.id.notif_dots_row, dots.contentDescription)
                 val pills = dots.pills
                 val visibleCount = pills.size.coerceAtMost(8)
                 rv.setFloat(R.id.notif_dots_row, "setWeightSum", visibleCount.toFloat())
