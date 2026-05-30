@@ -107,16 +107,41 @@ of a B1-local loop-option constant.
 
 ---
 
-## 3. Data flow
+## 3. Data flow — two owners, resume-reseed (resolved)
 
-- `SettingsScreen` already collects `SettingsViewModel` StateFlows. Add collectors for
-  `resolution`, `durationSeconds`, `intervalMinutes`, `loopCount` if not already exposed by
-  `SettingsViewModel`; otherwise reuse. Writes go through the existing setter path
-  (`settingsViewModel.<field>.value = …`) → `RovaSettings` → SharedPreferences.
-- The service reads these prefs at session start (unchanged). Editing them in app-settings
-  vs the record sheet is identical persistence; the screens cannot diverge because they
-  share `RecordSettingBounds` / `QualityPresets`.
-- No schema/version bump. No new persisted key in B1.
+**The problem.** `resolution` / `durationSeconds` / `intervalMinutes` / `loopCount` are
+owned in-memory by `RecordViewModel` (RecordViewModel.kt:96-99,147-150) — seeded once at
+construction, write-back on change. `RecordViewModel` is **not** hoisted; `RecordScreen`
+creates it via `viewModel()` (record-nav-entry scope). `SettingsScreen` receives only the
+**shared** `SettingsViewModel` (MainScreen.kt:53,155) and has no handle to
+`RecordViewModel`. Under bottom-nav (record entry stays alive), editing these prefs from
+app-settings via a parallel `SettingsViewModel` copy leaves `RecordViewModel`'s in-memory
+flow stale → record screen shows the old value, and a later stepper nudge writes the stale
+value back, **clobbering** the app-settings edit.
+
+**The resolution (owner-approved): resume-reseed both screens.** SharedPreferences
+(`RovaSettings`) is the single persistent source of truth; both ViewModels re-read it when
+their screen resumes, so they converge.
+
+- `SettingsViewModel` gains four write-through `MutableStateFlow`s — `resolution`,
+  `durationSeconds`, `intervalMinutes`, `loopCount` — seeded from `RovaSettings`, each with
+  a `viewModelScope.launch { flow.collect { settings.<field> = it } }` collector (identical
+  to its existing fields). Plus `fun reloadRecordingDefaults()` that re-reads all four from
+  `RovaSettings` into the flows.
+- `SettingsScreen` calls `settingsViewModel.reloadRecordingDefaults()` on `ON_RESUME`
+  (folded into the existing `DisposableEffect` that already re-reads `batteryExempt` at
+  SettingsScreen.kt:131-139) — so app-settings always shows the value the record sheet may
+  have changed while away.
+- `RecordViewModel` gains a symmetric `fun reloadRecordingDefaults()` re-reading the four
+  from `RovaSettings` into its existing `duration`/`interval`/`loopCount`/`resolution`
+  flows; `RecordScreen` calls it on `ON_RESUME`. This kills the stale-read and the
+  clobber-on-nudge.
+- Reseed writes are idempotent: setting `flow.value` to the just-read pref re-fires the
+  write-back collector with the identical value — a harmless no-op write.
+- The service reads these prefs at session start (unchanged). No schema/version bump, **no
+  new persisted key** in B1. Both screens share `RecordSettingBounds` / `QualityPresets` so
+  the *step/option logic* cannot diverge; resume-reseed keeps the *in-memory values*
+  convergent.
 
 ---
 
@@ -161,9 +186,12 @@ policy):
   `QualityPresets`, all already covered by `RecordSettingBoundsTest` and quality tests, so
   ideally **no new formatter** is needed. If a thin adapter is added, it gets a focused test.
 - Stepper clamp behavior is already covered by `RecordSettingBoundsTest`; no duplication.
-- Deep-link intent **builder** extracted as a pure function `buildNotificationSettingsIntent(packageName, sdkInt)`
-  returning the correct `Intent` action/extras per API level — unit-tested for ≥26 and
-  24–25 branches (no Android dispatch, just intent shape).
+- Deep-link **decision logic** extracted as a pure function `notificationSettingsTarget(sdkInt): NotifSettingsTarget`
+  (an enum: `APP_NOTIFICATION_SETTINGS` for ≥26, `APP_DETAILS` for 24–25) — unit-tested for
+  both branches. The thin wrapper that turns the target + package name into an actual
+  `android.content.Intent` is **not** unit-tested (android.jar Intent/Settings are no-ops
+  under `isReturnDefaultValues = true`); the JVM-testable decision lives in the pure helper,
+  per the house pure-helper-extraction pattern.
 - Any new contrast token → `ContrastMath` assertion.
 - Baseline to preserve: green test suite + `:app:lintDebug` (the 25 `check*` gates). B1
   adds no new invariant and touches no `check*`-guarded source path.
@@ -173,21 +201,26 @@ policy):
 ## 7. Files (anticipated)
 
 **New**
-- `ui/screens/SettingsOptionSheet.kt` (or `ui/components/`) — single-select sheet.
-- `ui/screens/SettingsStepperSheet.kt` — stepper sheet.
-- `ui/screens/NotificationSettingsIntent.kt` — pure `buildNotificationSettingsIntent`.
-- Matching `test/.../NotificationSettingsIntentTest.kt` (+ contrast test if a token is added).
+- `ui/screens/SettingsOptionSheet.kt` — single-select bottom sheet (resolution).
+- `ui/screens/SettingsStepperSheet.kt` — `−`/value/`+` bottom sheet (duration/interval/loops).
+- `ui/screens/NotificationSettingsIntent.kt` — pure `notificationSettingsTarget(sdkInt)` +
+  `NotifSettingsTarget` enum + thin Intent wrapper.
+- `test/.../NotificationSettingsIntentTest.kt` — both API branches of the decision helper.
 
 **Modified**
-- `ui/screens/SettingsScreen.kt` — add Recording-defaults section (4 rows + sheet hosts)
-  and Notifications section (1 row). Reuse existing `SettingsRow` / `SettingsSection` /
-  `ChevronTrailing`.
-- `ui/screens/SettingsViewModel.kt` — expose resolution/duration/interval/loop collectors
-  if not already present.
+- `ui/screens/SettingsViewModel.kt` — add 4 write-through flows (`resolution`,
+  `durationSeconds`, `intervalMinutes`, `loopCount`) + collectors + `reloadRecordingDefaults()`.
+- `ui/screens/RecordViewModel.kt` — add `reloadRecordingDefaults()` re-reading the 4 prefs
+  into its existing flows.
+- `ui/screens/RecordScreen.kt` — call `viewModel.reloadRecordingDefaults()` on `ON_RESUME`.
+- `ui/screens/SettingsScreen.kt` — call `settingsViewModel.reloadRecordingDefaults()` on
+  `ON_RESUME` (existing `DisposableEffect`); add Recording-defaults section (4 rows + sheet
+  hosts) and Notifications section (1 deep-link row). Reuse existing `SettingsRow` /
+  `SettingsSection` / `ChevronTrailing`.
 - `CHANGELOG.md` — `[Unreleased]` entry.
 
-**Unchanged on purpose:** `RovaSettings.kt` (no new key), service, record `SettingsSheet`,
-all `check*` tasks.
+**Unchanged on purpose:** `RovaSettings.kt` (no new key), service, record `SettingsSheet`
+controls, all `check*` tasks.
 
 ---
 
