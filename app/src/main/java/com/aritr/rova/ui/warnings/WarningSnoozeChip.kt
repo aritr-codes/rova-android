@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
 /**
@@ -52,7 +53,10 @@ internal fun WarningSnoozeChip(
     }
     val isHardBlock = warningSurfaceFor(id) == WarningSurface.HardBlockSheet
 
-    val dotAlpha: Float = if (isHardBlock) {
+    // WCAG 2.2 AA SC 2.3.3 / 2.2.2 (ADR-0020, WARN-07): no pulse under the OS
+    // reduced-motion toggle — the dot holds fully visible.
+    val reduceMotion = rememberReduceMotion()
+    val dotAlpha: Float = if (isHardBlock && !reduceMotion) {
         val transition = rememberInfiniteTransition(label = "snooze-chip-pulse")
         val alpha by transition.animateFloat(
             initialValue = RovaWarningsV3.snoozeChipDotPulseAlpha,

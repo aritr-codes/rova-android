@@ -54,6 +54,7 @@ import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
+import com.aritr.rova.ui.components.rememberReduceMotion
 
 // Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
 // docs/UI_DESIGN_TOKENS.md §2.13). Only values with no token stay local:
@@ -647,8 +648,12 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
         // mockup `.dot-recording` — blink 1.8s ease-in-out + a red glow.
         // Compose has no box-shadow; the glow is a radial-gradient halo drawn
         // behind the dot, pulsing on the same transition as the dot alpha.
+        // WCAG 2.2 AA SC 2.3.3 / 2.2.2 (ADR-0020, REC-14): hold the dot static
+        // and fully visible when the OS reduced-motion toggle is on. Hook stays
+        // unconditional; only the emitted value is gated.
+        val reduceMotion = rememberReduceMotion()
         val transition = rememberInfiniteTransition(label = "recordingDot")
-        val pulse by transition.animateFloat(
+        val animatedPulse by transition.animateFloat(
             initialValue = 1f,
             targetValue = 0.35f,
             animationSpec = infiniteRepeatable(
@@ -657,6 +662,7 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
             ),
             label = "recordingDotPulse",
         )
+        val pulse = if (reduceMotion) 1f else animatedPulse
         Box(
             modifier
                 .size(20.dp)                       // 8 dp dot + room for the ~8 dp halo

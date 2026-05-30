@@ -19,6 +19,9 @@ object RovaAnimations {
         minAlpha: Float = 0.3f,
         maxAlpha: Float = 1f
     ): Float {
+        // WCAG 2.2 AA SC 2.3.3 / 2.2.2 (ADR-0020): honor the OS reduced-motion
+        // toggle — hold a static, fully-visible value instead of pulsing.
+        if (rememberReduceMotion()) return maxAlpha
         val infiniteTransition = rememberInfiniteTransition(label = "Pulse")
         val alpha by infiniteTransition.animateFloat(
             initialValue = minAlpha,
