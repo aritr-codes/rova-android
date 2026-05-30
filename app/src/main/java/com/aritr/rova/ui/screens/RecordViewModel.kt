@@ -182,8 +182,16 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
      * existing flows. Called from RecordScreen ON_RESUME so a change made in
      * App Settings while the record screen was backgrounded is reflected, and
      * a later stepper nudge does not write back a stale value (clobber fix).
+     *
+     * Excludes `mode` (it has its own setMode() persist path) and `flashMode`
+     * (session-volatile, not a RovaSettings pref).
      */
     fun reloadRecordingDefaults() {
+        // Don't reseed mid-session: the running session's config is fixed at
+        // start; overwriting these flows would desync the HUD + storage-signal
+        // recompute from the live session. Same guard precedent as cycleMode().
+        val s = _serviceState.value
+        if (s.isPeriodicActive || s.isMerging) return
         duration.value = settings.durationSeconds
         interval.value = settings.intervalMinutes
         loopCount.value = settings.loopCount
