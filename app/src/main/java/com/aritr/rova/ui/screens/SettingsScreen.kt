@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -172,30 +175,16 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     icon = Icons.Default.Smartphone,
                     label = "Keep screen on",
                     supporting = "Stops the screen from dimming while you frame a shot.",
-                    onClick = {
-                        settingsViewModel.keepScreenOn.value = !keepScreenOn
-                    },
-                    trailing = {
-                        Switch(
-                            checked = keepScreenOn,
-                            onCheckedChange = { settingsViewModel.keepScreenOn.value = it }
-                        )
-                    }
+                    checked = keepScreenOn,
+                    onCheckedChange = { settingsViewModel.keepScreenOn.value = it }
                 )
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.GridOn,
                     label = "Camera guides",
                     supporting = "Show the framing grid and focus brackets over the viewfinder.",
-                    onClick = {
-                        settingsViewModel.cameraGuidesEnabled.value = !cameraGuidesEnabled
-                    },
-                    trailing = {
-                        Switch(
-                            checked = cameraGuidesEnabled,
-                            onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
-                        )
-                    }
+                    checked = cameraGuidesEnabled,
+                    onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
                 )
             }
 
@@ -204,30 +193,16 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     icon = Icons.AutoMirrored.Filled.VolumeUp,
                     label = "Sound cues",
                     supporting = "Play short beeps so you can hear when capture starts and stops.",
-                    onClick = {
-                        settingsViewModel.enableBeeps.value = !enableBeeps
-                    },
-                    trailing = {
-                        Switch(
-                            checked = enableBeeps,
-                            onCheckedChange = { settingsViewModel.enableBeeps.value = it }
-                        )
-                    }
+                    checked = enableBeeps,
+                    onCheckedChange = { settingsViewModel.enableBeeps.value = it }
                 )
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.Vibration,
                     label = "Vibrate alerts",
                     supporting = "Use a short vibration to confirm starts and stops.",
-                    onClick = {
-                        settingsViewModel.vibrateAlerts.value = !vibrateAlerts
-                    },
-                    trailing = {
-                        Switch(
-                            checked = vibrateAlerts,
-                            onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
-                        )
-                    }
+                    checked = vibrateAlerts,
+                    onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
                 )
             }
 
@@ -240,15 +215,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     } else {
                         "Off. Recordings stay until you delete them yourself."
                     },
-                    onClick = {
-                        settingsViewModel.autoDeleteEnabled.value = !autoDeleteEnabled
-                    },
-                    trailing = {
-                        Switch(
-                            checked = autoDeleteEnabled,
-                            onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
-                        )
-                    }
+                    checked = autoDeleteEnabled,
+                    onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
                 )
                 if (autoDeleteEnabled) {
                     KeepLatestChips(
@@ -444,13 +412,32 @@ private fun SettingsRow(
     label: String,
     supporting: String? = null,
     value: String? = null,
-    onClick: (() -> Unit)?,
-    trailing: (@Composable () -> Unit)?
+    onClick: (() -> Unit)? = null,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
 ) {
+    // WCAG 2.2 AA SC 4.1.2 (ADR-0020, SET-02): a row carrying a Switch is one
+    // toggleable node (role=Switch) so its label names the control and the
+    // state is announced once. Non-toggle rows keep the plain clickable path.
+    // Locals captured so the null-checks below smart-cast (a separate
+    // `isToggle` boolean would not let the compiler narrow `checked`).
+    val toggleChecked = checked
+    val toggleChange = onCheckedChange
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base }
+            .let { base ->
+                when {
+                    toggleChecked != null && toggleChange != null -> base.toggleable(
+                        value = toggleChecked,
+                        role = Role.Switch,
+                        onValueChange = toggleChange,
+                    )
+                    onClick != null -> base.clickable(onClick = onClick)
+                    else -> base
+                }
+            }
             .heightIn(min = RovaTokens.minHitTarget)
             .padding(
                 horizontal = RovaTokens.screenEdgeMargin,
@@ -500,7 +487,16 @@ private fun SettingsRow(
                 )
             }
         }
-        trailing?.invoke()
+        if (toggleChecked != null) {
+            // Presentational — the toggleable Row owns role/state/name.
+            Switch(
+                checked = toggleChecked,
+                onCheckedChange = null,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        } else {
+            trailing?.invoke()
+        }
     }
 }
 
