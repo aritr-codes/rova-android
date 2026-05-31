@@ -83,10 +83,24 @@ app has backgrounded.
   worse privacy. Rejected.
 - **Extra unconditional `!appForeground` re-check inside `setupSingleCamera`** —
   that bind path is shared with the recording path, so an ungated re-check could
-  abort a legitimate background recording bind. Analysis (Main-thread confinement
-  + `withContext`/`Mutex.lock` prompt-cancellation) shows the cancellable acquire
-  already prevents any lasting bound-while-background state, so the extra check is
-  unnecessary. Rejected.
+  abort a legitimate background recording bind. For the `startCameraPreview`
+  path, analysis (Main-thread confinement + `withContext`/`Mutex.lock`
+  prompt-cancellation) shows the cancellable acquire (`previewStartJob` cancel +
+  the `!appForeground` re-check) already prevents that path from leaving the
+  camera bound after background, so the extra check there is unnecessary.
+  Rejected.
+
+  Scope note: the cancel + re-check guard only the `startCameraPreview`
+  acquisition. Two other idle-bind launches — `setSurfaceProvider`'s
+  `forceReconfigureCamera()` / `setupCamera()` coroutines, fired when the UI
+  surface arrives — are *not* `previewStartJob`-tracked or foreground-gated.
+  If one is in flight at the instant the app backgrounds it can bind the camera
+  after `appForeground` flips, but that is **transient, not a leak**: the same
+  `onStop → stopCameraPreview() → unbindAll()` releases it within the inherent
+  `ProcessLifecycleOwner` `ON_STOP` window (next bullet). All such launches run
+  on `Dispatchers.Main`, so `unbindAll()` (also Main) cannot interleave with an
+  in-progress `bindToLifecycle()`; the end state after `onStop` is always
+  unbound.
 
 ## Consequences
 
