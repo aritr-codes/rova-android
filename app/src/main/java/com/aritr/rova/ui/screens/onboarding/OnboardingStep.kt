@@ -22,7 +22,15 @@ enum class OnboardingStep {
     PERM_MIC,
     PERM_NOTIFS;
 
+    /**
+     * Raw ordinal successor across ALL entries — NOT the navigation contract.
+     * On API < 33 this can return the hidden PERM_NOTIFS; callers must navigate
+     * by indexing into [visibleOnboardingSteps], not via next/previous. Retained
+     * only for the enum round-trip test.
+     */
     fun next(): OnboardingStep? = entries.getOrNull(ordinal + 1)
+
+    /** Raw ordinal predecessor across ALL entries — see [next]; not for navigation. */
     fun previous(): OnboardingStep? = entries.getOrNull(ordinal - 1)
 
     val isWalkthrough: Boolean get() = ordinal <= WALKTHROUGH_2.ordinal

@@ -31,6 +31,18 @@ class OnboardingFlowTest {
         )
     }
 
+    @Test fun `visibleOnboardingSteps at API 32 (boundary) omits notifications`() {
+        assertEquals(
+            listOf(
+                OnboardingStep.WALKTHROUGH_1,
+                OnboardingStep.WALKTHROUGH_2,
+                OnboardingStep.PERM_CAMERA,
+                OnboardingStep.PERM_MIC,
+            ),
+            visibleOnboardingSteps(32),
+        )
+    }
+
     @Test fun `permissionStepsOf filters to permission steps preserving order`() {
         assertEquals(
             listOf(OnboardingStep.PERM_CAMERA, OnboardingStep.PERM_MIC, OnboardingStep.PERM_NOTIFS),
