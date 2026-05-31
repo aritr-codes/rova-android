@@ -52,9 +52,9 @@ import com.aritr.rova.RovaApp
  *    source of truth: tap-driven transitions (advance/goBack/skip)
  *    drive the pager via the first sync `LaunchedEffect`; user swipes
  *    settle and the second sync `LaunchedEffect` writes back into the
- *    VM via [OnboardingViewModel.setStep]. Pager forward-swipe past
- *    PERM_CAMERA is clamped (no completion via swipe — user must tap
- *    Allow Camera or Not now).
+ *    VM via [OnboardingViewModel.setStep]. Pager forward-swipe is
+ *    clamped at the last visible step (no completion via swipe — user
+ *    must tap Allow or Skip for now on the final permission card).
  *
  * The route is registered in [com.aritr.rova.ui.MainScreen] as the
  * conditional start destination when
