@@ -109,3 +109,21 @@ fun RovaTheme(
         content = content
     )
 }
+
+/**
+ * B2 — forces the dark [MaterialTheme] color scheme for a subtree, WITHOUT
+ * the window-bar SideEffect that [RovaTheme] runs. Used to pin surfaces that
+ * have only a dark design source (camera viewfinder, video player, onboarding)
+ * to dark even when the app theme is Light, so their descendants that read
+ * `colorScheme.*` get dark values consistent with their hardcoded dark
+ * backgrounds (avoids light-on-dark mismatch). Status-bar polarity is owned by
+ * the outer [RovaTheme] and is intentionally left untouched here.
+ */
+@Composable
+fun RovaDarkSurface(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = DarkColorScheme,
+        typography = Typography,
+        content = content,
+    )
+}
