@@ -131,7 +131,7 @@ fun OnboardingScreen(
             pageStep.isWalkthrough -> WalkthroughSlide(
                 step = pageStep,
                 onNext = viewModel::advance,
-                onSkip = viewModel::skipWalkthroughToCamera
+                onSkip = viewModel::skipWalkthroughToFirstPermission
             )
             pageStep.isPermission -> PermissionSlide(
                 step = pageStep,

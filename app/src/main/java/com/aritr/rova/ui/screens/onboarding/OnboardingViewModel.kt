@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * M4 (2026-05-27) Onboarding redesign — VM for the device-visible step list first-launch flow.
  *
  * Holds the current [OnboardingStep] in a [StateFlow] and exposes
- * [advance] / [goBack] / [complete] / [skipWalkthroughToCamera] /
+ * [advance] / [goBack] / [complete] / [skipWalkthroughToFirstPermission] /
  * [setStep] transitions. The completion side-effect
  * (`RovaSettings.onboardingCompleted = true`) is injected as a
  * [markCompleted] seam so the VM stays pure-Kotlin and the unit test
@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * [visibleOnboardingSteps] keyed on [android.os.Build.VERSION.SDK_INT].
  *
  * Idempotency contract: [advance] / [complete] /
- * [skipWalkthroughToCamera] / [goBack] / [setStep] are all no-ops
+ * [skipWalkthroughToFirstPermission] / [goBack] / [setStep] are all no-ops
  * once [OnboardingUiState.completed] flips true. Without this guard,
  * a delayed permission-launcher result OR a HorizontalPager
  * swipe-settle event firing after the user has already exited could
@@ -68,7 +68,7 @@ class OnboardingViewModel(
      * camera is still enforced at the WarningCenter Start-gate. No-op if already past
      * walkthrough or completed.
      */
-    fun skipWalkthroughToCamera() {
+    fun skipWalkthroughToFirstPermission() {
         val current = _uiState.value
         if (current.completed) return
         if (!current.step.isWalkthrough) return
@@ -96,9 +96,9 @@ class OnboardingViewModel(
     }
 
     /**
-     * "Not now" path on the Camera rationale slide AND any future
-     * "exit early" path. Idempotent: [markCompleted] fires at most
-     * once per VM lifetime.
+     * Early-exit path. NOT called by the normal per-permission skips
+     * (those call [advance]); retained as an escape hatch. Idempotent:
+     * [markCompleted] fires at most once per VM lifetime.
      */
     fun complete() {
         val current = _uiState.value

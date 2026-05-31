@@ -19,7 +19,6 @@
     <string name="onboarding_camera_title">Camera</string>
     <string name="onboarding_camera_body">Rova uses your camera to record video. Without it, the app can\'t work.</string>
     <string name="onboarding_camera_allow">Allow Camera</string>
-    <string name="onboarding_camera_not_now">Not now</string>
 
     <!-- 2026-05-31 — up-front permission cards (mic + notifications) -->
     <string name="onboarding_perm_step_label">Step %1$d of %2$d</string>
