@@ -46,6 +46,7 @@ class OnboardingViewModel(
         val current = _uiState.value
         if (current.completed) return
         val idx = steps.indexOf(current.step)
+        if (idx < 0) return // step not in this device's list — cannot navigate
         if (idx == steps.lastIndex) {
             markCompleted()
             _uiState.value = current.copy(completed = true)
@@ -58,7 +59,7 @@ class OnboardingViewModel(
         val current = _uiState.value
         if (current.completed) return
         val idx = steps.indexOf(current.step)
-        if (idx <= 0) return
+        if (idx <= 0) return // index 0, or -1 (not in list) → no predecessor
         _uiState.value = current.copy(step = steps[idx - 1])
     }
 

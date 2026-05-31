@@ -7,13 +7,15 @@ import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * M4 (2026-05-27) — pure-JVM tests for [OnboardingViewModel] after
- * the 7 → 3 step shrink. Test count: 16 (was 12 in Phase 2.6 — +2 for
- * `skipWalkthroughToCamera`, +2 for `setStep` HorizontalPager seam).
+ * M4 (2026-05-27) — pure-JVM tests for [OnboardingViewModel] covering
+ * the device-visible step list flow (4 steps below API 33, 5 steps at
+ * API 33+). Test count: 17 (was 12 in Phase 2.6 — +2 for
+ * `skipWalkthroughToCamera`, +2 for `setStep` HorizontalPager seam,
+ * +1 for `below API 33 the flow has no notifications step`).
  *
  * Coverage:
  *  - initial state
- *  - advance step-by-step through all 3 entries + completion
+ *  - advance step-by-step through all entries + completion
  *  - advance past last step fires `markCompleted` exactly once
  *  - complete from any step fires `markCompleted` exactly once
  *  - complete is idempotent on repeat calls
@@ -22,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *  - goBack walks slides backward
  *  - goBack on first step is a no-op
  *  - goBack after completed is a no-op
+ *  - below API 33 the flow has no notifications step (4-step partition)
  *  - skipWalkthroughToCamera (NEW) jumps from any walkthrough step to PERM_CAMERA
  *  - skipWalkthroughToCamera is a no-op from PERM_CAMERA (already past)
  *  - setStep (M4 owner-feedback) transitions to the specified step
