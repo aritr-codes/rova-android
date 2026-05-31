@@ -5,8 +5,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.ui.MainScreen
+import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
+import com.aritr.rova.ui.theme.resolveDarkTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -18,8 +24,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val initialTab = readInitialTab(intent)
         setContent {
-            RovaTheme {
-                MainScreen(initialTab = initialTab)
+            // B2 — theme root. The activity-scoped SettingsViewModel is the
+            // single owner of themeMode; collecting it ABOVE RovaTheme means a
+            // picker change recomposes here and re-themes the whole tree with
+            // no Activity recreate. The same instance is passed into MainScreen.
+            val settingsViewModel: SettingsViewModel = viewModel()
+            val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
+            val dark = resolveDarkTheme(themeMode, isSystemInDarkTheme())
+            RovaTheme(darkTheme = dark) {
+                MainScreen(initialTab = initialTab, settingsViewModel = settingsViewModel)
             }
         }
         handleNotificationAction(intent)
