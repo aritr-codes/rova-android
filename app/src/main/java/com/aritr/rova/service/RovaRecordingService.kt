@@ -479,6 +479,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     fun stopCameraPreview() {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
+        previewStartJob?.cancel()
+        previewStartJob = null
         RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
         currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
@@ -500,7 +502,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         }
         if (!_serviceState.value.isCameraActive) {
-            serviceScope.launch {
+            previewStartJob?.cancel()
+            previewStartJob = serviceScope.launch {
                 // Smoke-test fix: brief grace window for the UI's
                 // SurfaceProvider to attach before falling back to the
                 // headless DUMMY surface. ServiceConnection.onServiceConnected
@@ -521,6 +524,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     RovaLog.d(
                         "startCameraPreview: surface grace ${if (waited != null) "UI arrived" else "expired -> DUMMY"}"
                     )
+                }
+                // ADR-0021 — the app may have backgrounded while we waited in
+                // the grace window. Do NOT bind the camera after a background
+                // event (privacy/policy). stopCameraPreview also cancels this
+                // job on ON_STOP; this re-check covers the ProcessLifecycleOwner
+                // ON_STOP dispatch delay.
+                if (!appForeground) {
+                    RovaLog.d("startCameraPreview: app backgrounded mid-grace, aborting setupCamera")
+                    return@launch
                 }
                 setupCamera()
             }
