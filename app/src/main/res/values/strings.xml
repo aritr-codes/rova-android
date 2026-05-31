@@ -21,6 +21,24 @@
     <string name="onboarding_camera_allow">Allow Camera</string>
     <string name="onboarding_camera_not_now">Not now</string>
 
+    <!-- 2026-05-31 — up-front permission cards (mic + notifications) -->
+    <string name="onboarding_perm_step_label">Step %1$d of %2$d</string>
+    <string name="onboarding_perm_required">Required</string>
+    <string name="onboarding_perm_optional">Optional</string>
+    <string name="onboarding_perm_recommended">Recommended</string>
+    <string name="onboarding_perm_skip">Skip for now</string>
+
+    <string name="onboarding_mic_title">Microphone</string>
+    <string name="onboarding_mic_body">Records sound alongside your video. Skip and sessions will be video-only — no audio.</string>
+    <string name="onboarding_mic_allow">Allow Microphone</string>
+    <string name="onboarding_mic_callout">You can change this any time in Settings.</string>
+    <string name="onboarding_illustration_mic">Microphone</string>
+
+    <string name="onboarding_notifs_title">Stay in control</string>
+    <string name="onboarding_notifs_body">A live notification lets you stop or check a recording without opening the app — even with the screen off.</string>
+    <string name="onboarding_notifs_allow">Allow Notifications</string>
+    <string name="onboarding_illustration_notifications">Notification bell</string>
+
     <!-- contentDescription strings for illustrations -->
     <string name="onboarding_illustration_clock_orbit">Clock with timing badges</string>
     <string name="onboarding_illustration_clip_merge">Three clips combine into one video file</string>
