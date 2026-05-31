@@ -82,6 +82,7 @@ import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.theme.rovaQuietText
 import com.aritr.rova.ui.warnings.SettingsPermissionsSection
 import com.aritr.rova.ui.warnings.SettingsPermissionsSheetHost
 import com.aritr.rova.ui.warnings.WarningCenterViewModel
@@ -515,7 +516,7 @@ private fun SettingsSection(
         Text(
             text = label.uppercase(),
             style = RovaTokens.eyebrow,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            color = rovaQuietText(dimAlpha = 0.45f),
             // WCAG 2.2 AA SC 1.3.1 (ADR-0020, SET-01): mark the section label
             // as a heading so TalkBack's heading navigation can jump between
             // settings groups (layout-only grouping is invisible to it).
@@ -606,7 +607,7 @@ private fun SettingsRow(
                 Text(
                     text = supporting,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    color = rovaQuietText(dimAlpha = 0.55f)
                 )
             }
             if (!value.isNullOrEmpty()) {
@@ -650,7 +651,7 @@ private fun BatteryStatusBadge(exempt: Boolean) {
         Text(
             text = "Exempt",
             style = RovaTokens.statusPillLabel,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            color = rovaQuietText(dimAlpha = 0.6f),
             modifier = Modifier.padding(end = 4.dp)
         )
     } else {
@@ -784,7 +785,7 @@ private fun ExportFolderDialog(
                         "Videos will be saved to Movies / $sanitized"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = rovaQuietText(dimAlpha = 0.6f)
                 )
             }
         },
