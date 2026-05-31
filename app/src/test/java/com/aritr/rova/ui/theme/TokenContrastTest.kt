@@ -74,4 +74,21 @@ class TokenContrastTest {
         val ratio = ratioOver(SettingsSheetTokens.modeTabDisabledText, sheetBg)
         assertTrue("disabled tab text should be >= 3:1 for legibility", ratio >= 3.0)
     }
+
+    @Test
+    fun `light quiet text (solid onSurfaceVariant) meets AA over the light background`() {
+        // B2: on light, rovaQuietText returns SOLID onSurfaceVariant (Ink80)
+        // over the light background (Sand30). Regression guard for the AA fix.
+        val fg = ContrastMath.relativeLuminance(0x4C, 0x61, 0x75) // Ink80
+        val bg = ContrastMath.relativeLuminance(0xF6, 0xF0, 0xE7) // Sand30
+        val r = ContrastMath.contrastRatio(fg, bg)
+        assertTrue("light quiet text must meet 4.5:1 (was ${"%.2f".format(r)}:1)", r >= 4.5)
+    }
+
+    @Test
+    fun `light primary value text meets AA over the light background`() {
+        // SettingsRow value text = primary (Harbor40) at 0.85α over Sand30.
+        val r = ContrastMath.contrastRatioForAlpha(0x29, 0x51, 0x6E, 0.85, 0xF6, 0xF0, 0xE7)
+        assertTrue("light value text must meet 4.5:1 (was ${"%.2f".format(r)}:1)", r >= 4.5)
+    }
 }
