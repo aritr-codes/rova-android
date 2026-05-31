@@ -8,6 +8,11 @@ Commit-level detail lives in `git log` and on GitHub PRs
 ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
 (reliability) and `NEW_UI_BACKEND_REPLAN.md` (UI / feature).
 
+## [Unreleased]
+
+### Changed
+- **Onboarding requests Camera, Microphone, and Notifications up-front** via per-permission rationale cards, reversing the M4 camera-only reduction. Each card has Allow + "Skip for now"; skipping still finishes onboarding (camera stays enforced at the WarningCenter Start-gate). Notifications card shows only on API 33+. Exact-alarm remains just-in-time (no in-app dialog exists). New pure `visibleOnboardingSteps(sdkInt)` seam drives the pager + ViewModel. Spec: `docs/superpowers/specs/2026-05-31-onboarding-upfront-permissions-design.md`.
+
 ## [0.9.0] — 2026-05-28
 
 ### Added
