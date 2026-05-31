@@ -18,21 +18,21 @@ The light scheme is not a palette gap — it is ~60 UI sites that bake a dark as
 |---|---|
 | Record viewfinder chrome (`RecordChromeTokens`, `RecordChrome`, `RecordChromeIcons`) — ~15 sites | Camera HUD; intentionally dark; only a dark mockup exists |
 | `PlayerScreen` — 19 sites | Video over black |
-| `SegmentedTimeline`, `DualPreviewZone` — ~6 sites | Scene/preview visualization over dark media |
+| `SegmentedTimeline`, `DualPreviewZone` — ~6 sites | Scene/preview visualization over dark media (children of the record/player subtrees) |
+| `OnboardingScreen` / `OnboardingSlide` / `OnboardingIllustrations` | Bespoke canvas art ported pixel-for-pixel from the **dark** `08b-onboarding.html`; white-alpha strokes have no light design source. Same "no light mockup → stays dark" rule as the viewfinder. Wrapped dark; first-run branded experience. |
 
 | Themes to light (in scope) | State |
 |---|---|
-| `SettingsScreen`, `SettingsSheet`, `OnboardingScreen`, `OnboardingSlide` | Already GREEN — flip for free |
+| `SettingsScreen`, `SettingsSheet` | Already GREEN — flip for free |
 | `HistoryScreen` (28 `colorScheme` reads) | Mostly GREEN; 2 media-overlay sites stay dark-on-media |
 | `MainScreen` Scaffold `containerColor = Color.Black` | 1 fix → `colorScheme.background` |
-| `MergeCompleteCard`, `RovaCardComponents` thumbnail overlays | Overlays **on media** stay dark; non-media chrome flips |
-| `OnboardingIllustrations` (canvas white strokes, 7 sites) | Onboarding flips light → strokes must use `onBackground`/`onSurface` |
+| Shared dialogs / bottom sheets (`SettingsOptionSheet`, `SettingsStepperSheet`, `AlertDialog`s, `LibrarySessionConfigDialog`) | Already GREEN |
 
 `ContrastMath.kt` (WCAG luminance/contrast helpers, from the a11y stack) and `TokenContrastTest` already exist and are reused to verify light contrast.
 
 ## 3. Reach decision (approved)
 
-**App chrome themes to Light; the camera viewfinder, video player, and timeline stay dark always.** This matches camera-app convention, avoids inventing a light record-home design (no light mockup), and keeps the RED-heavy surfaces out of scope.
+**App chrome (Settings + History + shared dialogs/sheets) themes to Light; the camera viewfinder, video player, timeline, and the onboarding flow stay dark always.** This matches camera-app convention and avoids inventing light designs for surfaces that only have dark mockups, keeping the RED-heavy surfaces out of scope.
 
 ## 4. Mechanism
 
@@ -79,7 +79,7 @@ When the app is in Light but a surface stays dark, any descendant reading `color
 fun RovaDarkSurface(content: @Composable () -> Unit) =
     MaterialTheme(colorScheme = DarkColorScheme, typography = Typography, content = content)
 ```
-Wrap the dark-pinned subtrees at their roots: `RecordScreen` (3 `colorScheme` reads), `PlayerScreen`. `SegmentedTimeline`/`DualPreviewZone` are reached from those subtrees or from media contexts; wrap or convert per the plan's per-surface pass. Net effect: those islands always see the dark scheme regardless of app theme — consistent, no window side-effect, no nested status-bar flip.
+Wrap the dark-pinned subtrees **at their NavHost call sites in `MainScreen`** — `RecordScreen`, `PlayerScreen`, and `OnboardingScreen`. `SegmentedTimeline`, `DualPreviewZone`, and `MergeCompleteCard` are children of those subtrees so they are covered automatically; the screens themselves stay untouched. Net effect: those islands always see the dark scheme regardless of app theme — consistent, no window side-effect, no nested status-bar flip.
 
 ### 4.6 Picker UI
 Reuse B1's `SettingsOptionSheet<T>` (radio `selectableGroup`, WCAG-clean, no double-announce). New **"Appearance"** `SettingsSection` with one row ("Theme", value = current mode label) opening the sheet with `ThemeMode.entries`. On pick: set `themeMode.value`, close sheet, theme applies live.
@@ -91,6 +91,7 @@ Reuse B1's `SettingsOptionSheet<T>` (radio `selectableGroup`, WCAG-clean, no dou
 ## 6. Out of scope / deferred
 - Dynamic color (Material You) — `dynamicColor` stays `false`.
 - A light record-home / viewfinder design (no mockup; viewfinder stays dark by decision §3).
+- A light onboarding design (only a dark mockup exists; onboarding stays dark by decision §3).
 - Per-surface light redesign of player/timeline.
 - A `checkA11y*` static gate (ADR-0020 still Proposed/unbuilt) — not part of B2.
 
