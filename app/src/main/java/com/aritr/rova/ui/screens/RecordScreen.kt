@@ -391,12 +391,22 @@ fun RecordScreen(
     // transition keeps the "Initializing Camera..." overlay on screen
     // through that window. Idle preview (no transition) is unaffected.
     var cameraWarmingUp by remember { mutableStateOf(false) }
+    // ADR-0021: the overlay must bridge a real cold-acquire black gap only.
+    // `prevCameraActive` is seeded to the CURRENT camera state so a fresh
+    // re-composition (e.g. returning to the Record tab while the camera
+    // stayed warm — RecordScreen leaves composition on tab-away and
+    // re-enters on return) is NOT mistaken for a false→true transition.
+    // Without this seed the LaunchedEffect re-fired on every tab return and
+    // showed "Initializing Camera…" for 1.5 s despite no rebind.
+    var prevCameraActive by remember { mutableStateOf(isCameraActive) }
     LaunchedEffect(isCameraActive) {
-        if (isCameraActive) {
+        val coldAcquire = isCameraActive && !prevCameraActive
+        prevCameraActive = isCameraActive
+        if (coldAcquire) {
             cameraWarmingUp = true
             delay(1500)
             cameraWarmingUp = false
-        } else {
+        } else if (!isCameraActive) {
             cameraWarmingUp = false
         }
     }
