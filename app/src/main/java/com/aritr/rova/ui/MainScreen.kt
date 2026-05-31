@@ -1,13 +1,14 @@
 package com.aritr.rova.ui
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aritr.rova.ui.theme.RovaDarkSurface
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,7 +25,10 @@ import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
 
 @Composable
-fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
+fun MainScreen(
+    initialTab: InitialTab = InitialTab.DEFAULT,
+    settingsViewModel: SettingsViewModel = viewModel(),
+) {
     val navController = rememberNavController()
     // Phase 2.6 — onboarding gate. The first-launch flag drives the
     // NavHost start destination: a fresh install routes to the
@@ -50,10 +54,8 @@ fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
     // The Record screen renders its own bottom nav and owns its VM
     // via its `viewModel: RecordViewModel = viewModel()` default param.
     // SettingsViewModel remains shared between RecordScreen and SettingsScreen.
-    val settingsViewModel: SettingsViewModel = viewModel()
-
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { _ ->
         NavHost(
@@ -69,14 +71,16 @@ fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
             // (NOT past it via the old `complete()` path) — Camera is a
             // hard-block, must be prompted. UI_NAV_GRAPH §5 back-stack table.
             composable("onboarding") {
-                OnboardingScreen(
-                    onCompleted = {
-                        navController.navigate("record") {
-                            popUpTo("onboarding") { inclusive = true }
-                            launchSingleTop = true
+                RovaDarkSurface {
+                    OnboardingScreen(
+                        onCompleted = {
+                            navController.navigate("record") {
+                                popUpTo("onboarding") { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
             composable("record") {
                 val toHistory: () -> Unit = {
@@ -85,14 +89,16 @@ fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
                         launchSingleTop = true
                     }
                 }
-                RecordScreen(
-                    onMergeFinished = toHistory,
-                    onNavigateToHistory = toHistory,
-                    onNavigateToSettings = {
-                        navController.navigate("settings") { launchSingleTop = true }
-                    },
-                    settingsViewModel = settingsViewModel
-                )
+                RovaDarkSurface {
+                    RecordScreen(
+                        onMergeFinished = toHistory,
+                        onNavigateToHistory = toHistory,
+                        onNavigateToSettings = {
+                            navController.navigate("settings") { launchSingleTop = true }
+                        },
+                        settingsViewModel = settingsViewModel
+                    )
+                }
             }
             composable("history") {
                 HistoryScreen(
@@ -146,11 +152,13 @@ fun MainScreen(initialTab: InitialTab = InitialTab.DEFAULT) {
                 // on P+L manifests.
                 val sideStr = backStackEntry.arguments?.getString("side")
                 val side = sideStr?.let { runCatching { VideoSide.valueOf(it) }.getOrNull() }
-                PlayerScreen(
-                    sessionId = sessionId,
-                    side = side,
-                    onBack = { navController.popBackStack() }
-                )
+                RovaDarkSurface {
+                    PlayerScreen(
+                        sessionId = sessionId,
+                        side = side,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
             composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel, onBack = { navController.popBackStack() }) }
         }
