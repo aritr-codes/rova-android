@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +44,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val intervalMinutes = MutableStateFlow(settings.intervalMinutes)
     val loopCount = MutableStateFlow(settings.loopCount)
 
+    // B2 — app theme mode. Single owner (only this VM writes it); the write-back
+    // collector mirrors changes to RovaSettings. The theme root in MainActivity
+    // collects this flow above RovaTheme so a change re-themes the whole tree live.
+    val themeMode = MutableStateFlow(settings.themeMode)
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
@@ -55,6 +61,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { durationSeconds.collect { settings.durationSeconds = it } }
         viewModelScope.launch { intervalMinutes.collect { settings.intervalMinutes = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
+        viewModelScope.launch { themeMode.collect { settings.themeMode = it } }
     }
 
     /**
