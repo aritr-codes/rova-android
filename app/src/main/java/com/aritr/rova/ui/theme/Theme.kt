@@ -87,6 +87,13 @@ fun RovaTheme(
     // Was: `isSystemInDarkTheme()`. Light-mode users on fresh install were
     // landing on the unfinished light scheme. Full Light/Dark/System
     // switcher ships in a later milestone via RovaSettings.themeMode.
+    // B2 — system-bar icon polarity. Defaults to `!darkTheme` (light bg →
+    // dark icons). MainActivity overrides it per route so the pinned-dark
+    // screens (viewfinder/player/onboarding) keep light icons in Light theme,
+    // instead of invisible dark icons over their black surface. RovaTheme is
+    // the SINGLE writer of bar polarity; RovaDarkSurface deliberately does not
+    // touch the window bars.
+    lightStatusBarIcons: Boolean = !darkTheme,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -98,8 +105,8 @@ fun RovaTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStatusBarIcons
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = lightStatusBarIcons
         }
     }
 

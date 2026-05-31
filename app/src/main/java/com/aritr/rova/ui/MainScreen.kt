@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.ui.theme.RovaDarkSurface
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,12 +25,25 @@ import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
 
+/**
+ * B2 review fix — routes that paint full-bleed dark regardless of the app
+ * theme (camera viewfinder "record", video "player/…", "onboarding"; each
+ * wrapped in RovaDarkSurface). They need light/white system-bar icons even in
+ * Light theme — otherwise dark icons render invisibly over the black surface.
+ * The argumented player route ("player/{sessionId}?side={side}") is matched by
+ * its base segment. Consumed by the single bar writer (RovaTheme) in MainActivity.
+ */
+fun isPinnedDarkRoute(route: String?): Boolean {
+    val base = route?.substringBefore('?')?.substringBefore('/') ?: return false
+    return base == "record" || base == "onboarding" || base == "player"
+}
+
 @Composable
 fun MainScreen(
     initialTab: InitialTab = InitialTab.DEFAULT,
     settingsViewModel: SettingsViewModel = viewModel(),
+    navController: NavHostController = rememberNavController(),
 ) {
-    val navController = rememberNavController()
     // Phase 2.6 — onboarding gate. The first-launch flag drives the
     // NavHost start destination: a fresh install routes to the
     // walkthrough + permission flow; once `onboardingCompleted` flips
