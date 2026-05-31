@@ -35,8 +35,19 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class OnboardingViewModelTest {
 
-    private fun newVm(seam: AtomicInteger = AtomicInteger(0)): OnboardingViewModel =
-        OnboardingViewModel(markCompleted = { seam.incrementAndGet() })
+    private val fullSteps = listOf(
+        OnboardingStep.WALKTHROUGH_1,
+        OnboardingStep.WALKTHROUGH_2,
+        OnboardingStep.PERM_CAMERA,
+        OnboardingStep.PERM_MIC,
+        OnboardingStep.PERM_NOTIFS,
+    )
+
+    private fun newVm(
+        seam: AtomicInteger = AtomicInteger(0),
+        steps: List<OnboardingStep> = fullSteps,
+    ): OnboardingViewModel =
+        OnboardingViewModel(steps = steps, markCompleted = { seam.incrementAndGet() })
 
     @Test fun `initial state is WALKTHROUGH_1 not completed`() {
         val vm = newVm()
@@ -50,12 +61,16 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.WALKTHROUGH_2, vm.uiState.value.step)
         vm.advance()
         assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
+        vm.advance()
+        assertEquals(OnboardingStep.PERM_MIC, vm.uiState.value.step)
+        vm.advance()
+        assertEquals(OnboardingStep.PERM_NOTIFS, vm.uiState.value.step)
     }
 
     @Test fun `advance past last step marks completed and fires seam exactly once`() {
         val seam = AtomicInteger(0)
         val vm = newVm(seam)
-        vm.advance(); vm.advance(); vm.advance() // PERM_CAMERA → completed
+        repeat(fullSteps.size) { vm.advance() } // last advance completes
         assertTrue(vm.uiState.value.completed)
         assertEquals(1, seam.get())
     }
@@ -88,8 +103,8 @@ class OnboardingViewModelTest {
     @Test fun `advance past last step then complete does not re-fire seam`() {
         val seam = AtomicInteger(0)
         val vm = newVm(seam)
-        vm.advance(); vm.advance(); vm.advance() // → completed (seam = 1)
-        vm.complete()                            // already completed → no-op
+        repeat(fullSteps.size) { vm.advance() } // → completed (seam = 1)
+        vm.complete()                           // already completed → no-op
         assertEquals(1, seam.get())
     }
 
@@ -100,6 +115,20 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.WALKTHROUGH_2, vm.uiState.value.step)
         vm.goBack()
         assertEquals(OnboardingStep.WALKTHROUGH_1, vm.uiState.value.step)
+    }
+
+    @Test fun `below API 33 the flow has no notifications step`() {
+        val shortSteps = listOf(
+            OnboardingStep.WALKTHROUGH_1,
+            OnboardingStep.WALKTHROUGH_2,
+            OnboardingStep.PERM_CAMERA,
+            OnboardingStep.PERM_MIC,
+        )
+        val seam = AtomicInteger(0)
+        val vm = newVm(seam, shortSteps)
+        repeat(shortSteps.size) { vm.advance() }
+        assertTrue(vm.uiState.value.completed)
+        assertEquals(1, seam.get())
     }
 
     @Test fun `goBack on first step is a no-op`() {
