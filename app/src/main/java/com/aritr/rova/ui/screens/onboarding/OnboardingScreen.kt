@@ -2,6 +2,7 @@ package com.aritr.rova.ui.screens.onboarding
 
 import android.Manifest
 import android.app.Activity
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -22,10 +24,11 @@ import com.aritr.rova.RovaApp
 
 /**
  * M4 (2026-05-27) Onboarding redesign — top-level composable for the
- * first-launch onboarding route. Down from 4 ActivityResult launchers
- * (Phase 2.6) to 1: Camera only. Mic, Notifications, and Exact-Alarm
- * are deferred to JIT in [com.aritr.rova.ui.screens.RecordScreen]
- * (existing `rememberMultiplePermissionsState` path).
+ * first-launch onboarding route. Three ActivityResult launchers
+ * (Camera, Mic, Notifications) requested up-front via per-permission
+ * cards (2026-05-31). SCHEDULE_EXACT_ALARM stays JIT — no in-app
+ * dialog exists. The step set is `viewModel.visibleSteps`
+ * (Notifications only on API 33+).
  *
  * Back-gesture contract: back walks slides backward; on
  * `WALKTHROUGH_1` the system handles back (exits the app). Same as
@@ -49,9 +52,9 @@ import com.aritr.rova.RovaApp
  *    source of truth: tap-driven transitions (advance/goBack/skip)
  *    drive the pager via the first sync `LaunchedEffect`; user swipes
  *    settle and the second sync `LaunchedEffect` writes back into the
- *    VM via [OnboardingViewModel.setStep]. Pager forward-swipe past
- *    PERM_CAMERA is clamped (no completion via swipe — user must tap
- *    Allow Camera or Not now).
+ *    VM via [OnboardingViewModel.setStep]. Pager forward-swipe is
+ *    clamped at the last visible step (no completion via swipe — user
+ *    must tap Allow or Skip for now on the final permission card).
  *
  * The route is registered in [com.aritr.rova.ui.MainScreen] as the
  * conditional start destination when
@@ -89,46 +92,67 @@ fun OnboardingScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> viewModel.advance() }
+    val micLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> viewModel.advance() }
+    val notifLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> viewModel.advance() }
+
+    val steps = viewModel.visibleSteps
+    val permSteps = remember(steps) { permissionStepsOf(steps) }
 
     val pagerState = rememberPagerState(
-        initialPage = state.step.ordinal,
-        pageCount = { OnboardingStep.entries.size }
+        initialPage = steps.indexOf(state.step).coerceAtLeast(0),
+        pageCount = { steps.size }
     )
 
-    // Sync 1: VM step → pager. Tap-driven advance/goBack/skip update VM
-    // first; this effect animates the pager to match. Skip from
-    // WALKTHROUGH_1 to PERM_CAMERA animates across two pages — natural
-    // mobile feel.
+    // Sync 1: VM step → pager.
     LaunchedEffect(state.step) {
-        if (pagerState.currentPage != state.step.ordinal) {
-            pagerState.animateScrollToPage(state.step.ordinal)
+        val target = steps.indexOf(state.step)
+        if (target >= 0 && pagerState.currentPage != target) {
+            pagerState.animateScrollToPage(target)
         }
     }
 
-    // Sync 2: user swipe → VM. When a swipe settles, push the page
-    // index back into the VM via setStep (idempotent on equal values,
-    // so no-op for tap-driven scrolls where VM is already on target).
+    // Sync 2: user swipe → VM (idempotent on equal step).
     LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress) {
-            val target = OnboardingStep.entries[pagerState.currentPage]
-            viewModel.setStep(target)
+            viewModel.setStep(steps[pagerState.currentPage])
         }
     }
 
-    val canGoBack = state.step.previous() != null && !state.completed
+    val canGoBack = steps.indexOf(state.step) > 0 && !state.completed
     BackHandler(enabled = canGoBack) { viewModel.goBack() }
 
     HorizontalPager(state = pagerState) { pageIndex ->
-        val pageStep = OnboardingStep.entries[pageIndex]
+        val pageStep = steps[pageIndex]
         when {
             pageStep.isWalkthrough -> WalkthroughSlide(
                 step = pageStep,
                 onNext = viewModel::advance,
-                onSkip = viewModel::skipWalkthroughToCamera
+                onSkip = viewModel::skipWalkthroughToFirstPermission
             )
-            pageStep.isPermission -> CameraRationaleSlide(
-                onAllow = { cameraLauncher.launch(Manifest.permission.CAMERA) },
-                onNotNow = viewModel::complete
+            pageStep.isPermission -> PermissionSlide(
+                step = pageStep,
+                permIndex = permSteps.indexOf(pageStep),
+                permTotal = permSteps.size,
+                onAllow = {
+                    when (pageStep) {
+                        OnboardingStep.PERM_CAMERA ->
+                            cameraLauncher.launch(Manifest.permission.CAMERA)
+                        OnboardingStep.PERM_MIC ->
+                            micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        OnboardingStep.PERM_NOTIFS ->
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.advance()
+                            }
+                        else -> viewModel.advance()
+                    }
+                },
+                onSkip = viewModel::advance
             )
         }
     }

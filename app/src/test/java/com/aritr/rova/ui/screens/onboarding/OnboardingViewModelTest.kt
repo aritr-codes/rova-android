@@ -7,13 +7,16 @@ import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * M4 (2026-05-27) — pure-JVM tests for [OnboardingViewModel] after
- * the 7 → 3 step shrink. Test count: 16 (was 12 in Phase 2.6 — +2 for
- * `skipWalkthroughToCamera`, +2 for `setStep` HorizontalPager seam).
+ * M4 (2026-05-27) — pure-JVM tests for [OnboardingViewModel] covering
+ * the device-visible step list flow (4 steps below API 33, 5 steps at
+ * API 33+). Test count: 18 (was 12 in Phase 2.6 — +2 for
+ * `skipWalkthroughToFirstPermission`, +2 for `setStep` HorizontalPager seam,
+ * +1 for `below API 33 the flow has no notifications step`,
+ * +1 for `skipWalkthroughToFirstPermission on 4-step API<33 flow`).
  *
  * Coverage:
  *  - initial state
- *  - advance step-by-step through all 3 entries + completion
+ *  - advance step-by-step through all entries + completion
  *  - advance past last step fires `markCompleted` exactly once
  *  - complete from any step fires `markCompleted` exactly once
  *  - complete is idempotent on repeat calls
@@ -22,8 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *  - goBack walks slides backward
  *  - goBack on first step is a no-op
  *  - goBack after completed is a no-op
- *  - skipWalkthroughToCamera (NEW) jumps from any walkthrough step to PERM_CAMERA
- *  - skipWalkthroughToCamera is a no-op from PERM_CAMERA (already past)
+ *  - below API 33 the flow has no notifications step (4-step partition)
+ *  - skipWalkthroughToFirstPermission (NEW) jumps from any walkthrough step to PERM_CAMERA
+ *  - skipWalkthroughToFirstPermission is a no-op from PERM_CAMERA (already past)
  *  - setStep (M4 owner-feedback) transitions to the specified step
  *  - setStep is a no-op once completed (HorizontalPager swipe-settle
  *    after onCompleted cannot regress state)
@@ -35,8 +39,19 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class OnboardingViewModelTest {
 
-    private fun newVm(seam: AtomicInteger = AtomicInteger(0)): OnboardingViewModel =
-        OnboardingViewModel(markCompleted = { seam.incrementAndGet() })
+    private val fullSteps = listOf(
+        OnboardingStep.WALKTHROUGH_1,
+        OnboardingStep.WALKTHROUGH_2,
+        OnboardingStep.PERM_CAMERA,
+        OnboardingStep.PERM_MIC,
+        OnboardingStep.PERM_NOTIFS,
+    )
+
+    private fun newVm(
+        seam: AtomicInteger = AtomicInteger(0),
+        steps: List<OnboardingStep> = fullSteps,
+    ): OnboardingViewModel =
+        OnboardingViewModel(steps = steps, markCompleted = { seam.incrementAndGet() })
 
     @Test fun `initial state is WALKTHROUGH_1 not completed`() {
         val vm = newVm()
@@ -50,12 +65,16 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.WALKTHROUGH_2, vm.uiState.value.step)
         vm.advance()
         assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
+        vm.advance()
+        assertEquals(OnboardingStep.PERM_MIC, vm.uiState.value.step)
+        vm.advance()
+        assertEquals(OnboardingStep.PERM_NOTIFS, vm.uiState.value.step)
     }
 
     @Test fun `advance past last step marks completed and fires seam exactly once`() {
         val seam = AtomicInteger(0)
         val vm = newVm(seam)
-        vm.advance(); vm.advance(); vm.advance() // PERM_CAMERA → completed
+        repeat(fullSteps.size) { vm.advance() } // last advance completes
         assertTrue(vm.uiState.value.completed)
         assertEquals(1, seam.get())
     }
@@ -88,8 +107,8 @@ class OnboardingViewModelTest {
     @Test fun `advance past last step then complete does not re-fire seam`() {
         val seam = AtomicInteger(0)
         val vm = newVm(seam)
-        vm.advance(); vm.advance(); vm.advance() // → completed (seam = 1)
-        vm.complete()                            // already completed → no-op
+        repeat(fullSteps.size) { vm.advance() } // → completed (seam = 1)
+        vm.complete()                           // already completed → no-op
         assertEquals(1, seam.get())
     }
 
@@ -100,6 +119,20 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.WALKTHROUGH_2, vm.uiState.value.step)
         vm.goBack()
         assertEquals(OnboardingStep.WALKTHROUGH_1, vm.uiState.value.step)
+    }
+
+    @Test fun `below API 33 the flow has no notifications step`() {
+        val shortSteps = listOf(
+            OnboardingStep.WALKTHROUGH_1,
+            OnboardingStep.WALKTHROUGH_2,
+            OnboardingStep.PERM_CAMERA,
+            OnboardingStep.PERM_MIC,
+        )
+        val seam = AtomicInteger(0)
+        val vm = newVm(seam, shortSteps)
+        repeat(shortSteps.size) { vm.advance() }
+        assertTrue(vm.uiState.value.completed)
+        assertEquals(1, seam.get())
     }
 
     @Test fun `goBack on first step is a no-op`() {
@@ -122,19 +155,31 @@ class OnboardingViewModelTest {
         assertEquals(captured, vm.uiState.value)
     }
 
-    @Test fun `skipWalkthroughToCamera jumps directly to PERM_CAMERA from walkthrough`() {
+    @Test fun `skipWalkthroughToFirstPermission jumps directly to PERM_CAMERA from walkthrough`() {
         val seam = AtomicInteger(0)
         val vm = newVm(seam)
-        vm.skipWalkthroughToCamera()
+        vm.skipWalkthroughToFirstPermission()
         assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
         assertFalse(vm.uiState.value.completed)
         assertEquals("Skip must NOT complete onboarding (camera still required)", 0, seam.get())
     }
 
-    @Test fun `skipWalkthroughToCamera from PERM_CAMERA is a no-op`() {
+    @Test fun `skipWalkthroughToFirstPermission from PERM_CAMERA is a no-op`() {
         val vm = newVm()
         vm.advance(); vm.advance() // → PERM_CAMERA
-        vm.skipWalkthroughToCamera()
+        vm.skipWalkthroughToFirstPermission()
+        assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
+    }
+
+    @Test fun `skipWalkthroughToFirstPermission lands on PERM_CAMERA on the 4-step (API less than 33) flow`() {
+        val shortSteps = listOf(
+            OnboardingStep.WALKTHROUGH_1,
+            OnboardingStep.WALKTHROUGH_2,
+            OnboardingStep.PERM_CAMERA,
+            OnboardingStep.PERM_MIC,
+        )
+        val vm = newVm(steps = shortSteps)
+        vm.skipWalkthroughToFirstPermission()
         assertEquals(OnboardingStep.PERM_CAMERA, vm.uiState.value.step)
     }
 
@@ -151,7 +196,7 @@ class OnboardingViewModelTest {
     @Test fun `setStep is no-op when completed`() {
         // A delayed swipe-settle that fires after onCompleted has already
         // navigated away must not regress state — guard mirrors advance/
-        // goBack/skipWalkthroughToCamera/complete idempotency.
+        // goBack/skipWalkthroughToFirstPermission/complete idempotency.
         val vm = newVm()
         vm.complete()
         val captured = vm.uiState.value
