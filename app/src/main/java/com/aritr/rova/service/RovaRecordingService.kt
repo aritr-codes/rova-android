@@ -166,9 +166,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // the `startCameraPreview` coroutine (serviceScope is Dispatchers.Main).
     // @Volatile is belt-and-suspenders against future dispatcher changes.
     @Volatile private var appForeground = true
-    // In-flight idle-preview acquisition; cancelled on release so a coroutine
+    // In-flight idle-preview acquisition (set in startCameraPreview, cancelled
+    // + nulled in stopCameraPreview); cancelling on release ensures a coroutine
     // suspended in the surface-grace window cannot bind after the app has
-    // backgrounded (wired into start/stopCameraPreview in the next slice).
+    // backgrounded.
     private var previewStartJob: Job? = null
     // Process-global foreground/background observer. ON_START only flips the
     // flag (acquisition stays screen-driven so foregrounding onto a non-camera
