@@ -9,7 +9,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.aritr.rova.ui.MainScreen
+import com.aritr.rova.ui.isPinnedDarkRoute
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.theme.resolveDarkTheme
@@ -31,8 +34,18 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = viewModel()
             val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
             val dark = resolveDarkTheme(themeMode, isSystemInDarkTheme())
-            RovaTheme(darkTheme = dark) {
-                MainScreen(initialTab = initialTab, settingsViewModel = settingsViewModel)
+            // navController is hoisted here so the current route can drive
+            // system-bar icon polarity: pinned-dark screens (viewfinder/player/
+            // onboarding) always need light icons; chrome follows the theme.
+            val navController = rememberNavController()
+            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+            val lightBars = if (isPinnedDarkRoute(currentRoute)) false else !dark
+            RovaTheme(darkTheme = dark, lightStatusBarIcons = lightBars) {
+                MainScreen(
+                    initialTab = initialTab,
+                    settingsViewModel = settingsViewModel,
+                    navController = navController,
+                )
             }
         }
         handleNotificationAction(intent)
