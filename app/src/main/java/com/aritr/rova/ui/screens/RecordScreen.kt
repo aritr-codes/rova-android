@@ -257,7 +257,11 @@ fun RecordScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> viewModel.stopCameraPreview()
+                // ADR-0021 — camera release is owned by the process lifecycle
+                // (RovaRecordingService's ProcessLifecycleOwner observer), NOT
+                // this per-screen NavBackStackEntry lifecycle, which fires
+                // ON_STOP on in-app tab switches while the app is still
+                // foreground. This observer is acquire-only.
                 Lifecycle.Event.ON_START -> viewModel.startCameraPreview()
                 Lifecycle.Event.ON_RESUME -> rovaApp?.let {
                     it.notificationPermissionSignal.refresh()
