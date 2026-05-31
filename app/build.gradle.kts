@@ -1609,6 +1609,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // ProcessLifecycleOwner — app foreground/background for camera-warm-across-nav (ADR-0021)
+    implementation("androidx.lifecycle:lifecycle-process:2.9.4")
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
