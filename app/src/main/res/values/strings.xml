@@ -249,8 +249,6 @@
     <string name="player_position_per_clip">%1$s / %2$s per clip</string>
     <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
     <string name="player_clip_n_of_m">Clip %1$d of %2$d</string>
-    <!-- Top sub-title total-duration suffix: %1$s = total MM:SS -->
-    <string name="player_total_duration">%1$s total</string>
     <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
     <string name="player_unavailable_not_available">Recording not available</string>
     <string name="player_unavailable_not_finished">Recording not finished</string>
