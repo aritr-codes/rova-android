@@ -24,6 +24,7 @@ class UiTextTest {
 
     @Test fun equality_byValue() {
         assertEquals(UiText.Str(1), UiText.Str(1))
+        assertEquals(UiText.StrArgs(7, listOf("a")), UiText.StrArgs(7, listOf("a")))
         assertEquals(UiText.Plural(1, 2, listOf(2)), UiText.Plural(1, 2, listOf(2)))
     }
 }

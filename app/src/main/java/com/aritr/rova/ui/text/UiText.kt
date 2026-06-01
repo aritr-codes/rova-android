@@ -19,6 +19,13 @@ import androidx.compose.ui.res.stringResource
 sealed interface UiText {
     data class Str(@StringRes val id: Int) : UiText
     data class StrArgs(@StringRes val id: Int, val args: List<Any>) : UiText
+
+    /**
+     * A plural string. [quantity] drives grammatical-number selection; if the
+     * format string contains a `%d`, [args] must also include [quantity] as its
+     * first element (Android's count-is-passed-twice convention — once to pick
+     * the rule, once to fill `%d`).
+     */
     data class Plural(@PluralsRes val id: Int, val quantity: Int, val args: List<Any>) : UiText
 }
 
