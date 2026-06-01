@@ -54,9 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import com.aritr.rova.R
 import com.aritr.rova.ui.share.safeShareUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -126,10 +128,10 @@ class PreviewActivity : ComponentActivity() {
                         }
                     }
                 }
-                Toast.makeText(this@PreviewActivity, "✅ Saved to Gallery", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PreviewActivity, getString(R.string.preview_saved_to_gallery), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this@PreviewActivity, "❌ Save failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PreviewActivity, getString(R.string.preview_save_failed), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -144,7 +146,7 @@ class PreviewActivity : ComponentActivity() {
         // FileProvider root.
         val uri = safeShareUri(this, File(videoPath), shareUri)
         if (uri == null) {
-            Toast.makeText(this, "Recording not ready to share yet", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.preview_share_not_ready), Toast.LENGTH_SHORT).show()
             return
         }
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -153,9 +155,9 @@ class PreviewActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {
-            startActivity(Intent.createChooser(intent, "Share Rova Video"))
+            startActivity(Intent.createChooser(intent, getString(R.string.preview_share_title)))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "No app available to share videos", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.preview_share_no_app), Toast.LENGTH_SHORT).show()
         }
     }
 }
@@ -189,10 +191,10 @@ fun PreviewScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Rova Preview", color = Color.White) },
+                title = { Text(stringResource(R.string.preview_title), color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.preview_back_cd), tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
@@ -250,7 +252,7 @@ fun PreviewScreen(
                     contentColor = Color.White,
                     modifier = Modifier.align(Alignment.Center)
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(48.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.common_play), modifier = Modifier.size(48.dp))
                 }
             }
 
@@ -322,17 +324,17 @@ fun BottomControls(
     ) {
         // REPLAY
         IconButton(onClick = { videoView.seekTo(0); videoView.start() }) {
-            Icon(Icons.Default.Replay, contentDescription = "Replay", tint = Color.White)
+            Icon(Icons.Default.Replay, contentDescription = stringResource(R.string.preview_replay_cd), tint = Color.White)
         }
-        
+
         // SAVE
         IconButton(onClick = onSave) {
-            Icon(Icons.Default.Download, contentDescription = "Save", tint = Color.White)
+            Icon(Icons.Default.Download, contentDescription = stringResource(R.string.preview_save_cd), tint = Color.White)
         }
-        
+
         // SHARE
         IconButton(onClick = onShare) {
-            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
+            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.preview_share_cd), tint = Color.White)
         }
     }
 }

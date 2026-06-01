@@ -97,7 +97,7 @@ private fun QuickSetChipRowPreviewLight() {
 private fun QuickSetChipRowPreviewDark() {
     Surface(color = MaterialTheme.colorScheme.background) {
         val options = listOf(
-            QuickSetOption(0, "None", contentDescription = "No wait between clips"),
+            QuickSetOption(0, "None", contentDescription = "No wait between clips"), // i18n-opt-out: preview-only
             QuickSetOption(1, "1m"),
             QuickSetOption(5, "5m"),
             QuickSetOption(10, "10m"),

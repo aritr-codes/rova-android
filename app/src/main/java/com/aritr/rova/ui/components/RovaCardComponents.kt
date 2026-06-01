@@ -43,8 +43,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.text.resolve
 import java.io.File
 
@@ -56,7 +58,11 @@ fun SessionStatusCard(
     totalLoops: Int,
     modifier: Modifier = Modifier
 ) {
-    val statusText = if (isRecording) "Recording in progress" else "Next capture in ${nextRecordingIn}s"
+    val statusText = if (isRecording) {
+        stringResource(R.string.card_session_recording)
+    } else {
+        stringResource(R.string.card_session_next_capture, nextRecordingIn)
+    }
     val statusColor = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val progress = if (totalLoops > 0) currentLoop.toFloat() / totalLoops.toFloat() else 0f
 
@@ -92,7 +98,11 @@ fun SessionStatusCard(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (totalLoops > 0) "Loop $currentLoop of $totalLoops" else "Loop $currentLoop",
+                        text = if (totalLoops > 0) {
+                            stringResource(R.string.card_session_loop_of, currentLoop, totalLoops)
+                        } else {
+                            stringResource(R.string.card_session_loop, currentLoop)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -102,7 +112,11 @@ fun SessionStatusCard(
                     color = statusColor.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        text = if (isRecording) "LIVE" else "QUEUED",
+                        text = if (isRecording) {
+                            stringResource(R.string.card_session_live)
+                        } else {
+                            stringResource(R.string.card_session_queued)
+                        },
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = statusColor
@@ -159,14 +173,14 @@ fun LastRecordingCard(
                 ) {
                     Icon(
                         Icons.Default.PlayCircle,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.common_play),
                         tint = Color.White
                     )
                 }
                 Spacer(modifier = Modifier.size(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Last recording",
+                        text = stringResource(R.string.card_last_recording_label),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
@@ -177,7 +191,7 @@ fun LastRecordingCard(
                     )
                 }
                 Button(onClick = { onPlay(file) }) {
-                    Text("Play")
+                    Text(stringResource(R.string.common_play))
                 }
             }
         }
