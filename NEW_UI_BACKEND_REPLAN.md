@@ -509,6 +509,19 @@ the locked input spec for 4.1. Decisions:
 
 **Note on in-app player and HUD merging end-states:** memory previously listed these as "next priority." Git log confirms both are **already shipped** (`db25405` in-app player, `32c5cb3` HUD merging end-states). These are NOT in the remaining backlog unless the owner wants a follow-on refinement slice — in which case it should be labeled as such.
 
+## Accessibility track (cross-cutting — WCAG 2.2 AA)
+
+Added 2026-05-29. A static, source-level accessibility audit of all 12 UI surfaces
+landed in `docs/accessibility/` (`2026-05-29-wcag-2.2-aa-audit.md` +
+`remediation-backlog.md`): **161 findings, 3 Blocker, ~58 Serious**, root-caused to
+(1) low-alpha text tokens, (2) missing Compose `semantics`, (3) no reduced-motion
+gating, (4) undersized touch targets. **ADR-0020 (Proposed)** makes "WCAG 2.2 AA by
+default" a standing requirement for all new/changed UI here. Remediation is a
+separate cycle, governed by the backlog's severity×reach ranking — land the
+token-contrast + reduced-motion-helper slices first (highest reach, smallest
+effort). This audit cycle touched **zero Kotlin**. Any UI slice in the phases above
+must meet WCAG 2.2 AA on landing.
+
 ## Parked (deferred indefinitely or with conditions)
 
 - **Variant D** — deferred to 2027 per ADR-0012 §Rejected variants A/B/D
