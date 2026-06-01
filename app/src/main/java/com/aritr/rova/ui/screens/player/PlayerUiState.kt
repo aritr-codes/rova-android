@@ -1,5 +1,7 @@
 package com.aritr.rova.ui.screens.player
 
+import com.aritr.rova.ui.text.UiText
+
 /**
  * Phase 2.5 — surface state for the in-app Player route.
  *
@@ -42,7 +44,7 @@ sealed interface PlayerUiState {
         val totalDurationFromSegmentsMs: Long
     ) : PlayerUiState
 
-    data class Unavailable(val reason: String) : PlayerUiState
+    data class Unavailable(val reason: UiText) : PlayerUiState
 }
 
 /**

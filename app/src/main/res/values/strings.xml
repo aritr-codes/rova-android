@@ -251,6 +251,13 @@
     <string name="player_clip_n_of_m">Clip %1$d of %2$d</string>
     <!-- Top sub-title total-duration suffix: %1$s = total MM:SS -->
     <string name="player_total_duration">%1$s total</string>
+    <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
+    <string name="player_unavailable_not_available">Recording not available</string>
+    <string name="player_unavailable_not_finished">Recording not finished</string>
+    <string name="player_unavailable_file_not_found">Recording file not found</string>
+    <string name="player_unavailable_incomplete">Recording incomplete</string>
+    <string name="player_unavailable_playback_failed">Playback failed</string>
+    <string name="player_unavailable_init_failed">Playback initialization failed</string>
 
     <!-- Settings screen + sheets (B3 i18n task 4) -->
     <string name="settings_title">Settings</string>

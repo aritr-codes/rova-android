@@ -55,6 +55,8 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.screens.HistoryRowFormatters
+import com.aritr.rova.ui.text.UiText
+import com.aritr.rova.ui.text.resolve
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -166,7 +168,7 @@ private fun PlayerLoading() {
 }
 
 @Composable
-private fun PlayerUnavailable(reason: String, onBack: () -> Unit) {
+private fun PlayerUnavailable(reason: UiText, onBack: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -175,7 +177,7 @@ private fun PlayerUnavailable(reason: String, onBack: () -> Unit) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = reason,
+                text = reason.resolve(),
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White.copy(alpha = 0.85f)
             )

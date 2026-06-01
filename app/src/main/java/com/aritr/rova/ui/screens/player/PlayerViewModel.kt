@@ -9,9 +9,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,11 +91,8 @@ class PlayerViewModel(
                 "PlayerViewModel: playback error for sessionId=$sessionId",
                 error
             )
-            // i18n-opt-out: PlayerUiState.Unavailable.reason is a String pinned by
-            // exact-equality JVM tests; externalizing needs a data-contract change
-            // (reason -> UiText/@StringRes) + test edits, deferred to a dedicated
-            // slice (B3 task 5 is literal->resource only).
-            _uiState.value = PlayerUiState.Unavailable("Playback failed")
+            _uiState.value =
+                PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_playback_failed))
         }
     }
 

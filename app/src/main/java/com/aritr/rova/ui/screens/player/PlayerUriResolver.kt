@@ -2,8 +2,10 @@ package com.aritr.rova.ui.screens.player
 
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
+import com.aritr.rova.R
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.text.UiText
 
 /**
  * Phase 2.5 — pure resolver from a loaded [SessionManifest] to the
@@ -66,23 +68,18 @@ internal object PlayerUriResolver {
      * preserves source-compat for single-mode callers that omit it.
      */
     fun resolve(manifest: SessionManifest?, side: VideoSide? = null): PlayerUiState {
-        // i18n-opt-out (all PlayerUiState.Unavailable("…") literals below):
-        // pure-JVM resolver; reason is a String pinned by exact-equality JVM
-        // tests (PlayerUriResolverTest). Externalizing needs a data-contract
-        // change (reason -> UiText/@StringRes) + test edits — deferred to a
-        // dedicated slice (B3 task 5 is literal->resource only).
         if (manifest == null) {
-            return PlayerUiState.Unavailable("Recording not available")
+            return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_available))
         }
         if (manifest.exportState != ExportState.FINALIZED) {
-            return PlayerUiState.Unavailable("Recording not finished")
+            return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_finished))
         }
         val isPlusL = manifest.config.mode == "PortraitLandscape"
         if (isPlusL && side == null) {
             // Defensive: HistoryViewModel.flatMap always supplies a
             // non-null side for P+L rows. A null here means the caller
             // forgot to thread it — fail closed rather than coin-flip.
-            return PlayerUiState.Unavailable("Recording file not found")
+            return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found))
         }
         val uri = when (manifest.exportTier) {
             ExportTier.TIER1_API29_PLUS ->
@@ -108,7 +105,7 @@ internal object PlayerUriResolver {
                 }
         }
         if (uri.isNullOrEmpty()) {
-            return PlayerUiState.Unavailable("Recording file not found")
+            return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found))
         }
         // Phase 6.1b smoke-fix #4 — P+L per-side segment filter. For a P+L
         // session the manifest's `segments` list interleaves both sides
@@ -138,7 +135,7 @@ internal object PlayerUriResolver {
         // user sees a Ready→Unavailable flicker. Refuse to play
         // segment-less manifests up front instead.
         if (segmentDurations.isEmpty()) {
-            return PlayerUiState.Unavailable("Recording incomplete")
+            return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_incomplete))
         }
         return PlayerUiState.Ready(
             mediaUri = uri,
