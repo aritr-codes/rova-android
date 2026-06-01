@@ -34,10 +34,12 @@ import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.Observer
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
@@ -156,6 +158,33 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var currentRecording: Recording? = null
     private var segmentCount = 0
     private val setupMutex = kotlinx.coroutines.sync.Mutex()
+    // ADR-0021 — camera warm across in-app navigation.
+    // `appForeground` tracks the process foreground/background state
+    // (NOT the per-screen NavBackStackEntry lifecycle, which fires ON_STOP
+    // on in-app tab switches while the app is still foreground). Written on
+    // the main thread by `processObserver`; read on the main thread inside
+    // the `startCameraPreview` coroutine (serviceScope is Dispatchers.Main).
+    // @Volatile is belt-and-suspenders against future dispatcher changes.
+    @Volatile private var appForeground = true
+    // In-flight idle-preview acquisition (set in startCameraPreview, cancelled
+    // + nulled in stopCameraPreview); cancelling on release ensures a coroutine
+    // suspended in the surface-grace window cannot bind after the app has
+    // backgrounded.
+    private var previewStartJob: Job? = null
+    // Process-global foreground/background observer. ON_START only flips the
+    // flag (acquisition stays screen-driven so foregrounding onto a non-camera
+    // tab does not wake the camera); ON_STOP releases the idle preview
+    // (stopCameraPreview is isPeriodicActive-guarded — recording is untouched).
+    // Stored instance (not anonymous) so onDestroy removes this exact observer.
+    private val processObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            appForeground = true
+        }
+        override fun onStop(owner: LifecycleOwner) {
+            appForeground = false
+            stopCameraPreview()
+        }
+    }
     private var stopAndMergeJob: Job? = null
     private var stopRequested = false
     // Phase 1.3: discriminator for the terminal record on merge success.
@@ -451,6 +480,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     fun stopCameraPreview() {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
+        previewStartJob?.cancel()
+        previewStartJob = null
         RovaLog.d("stopCameraPreview: Unbinding camera for background")
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
         currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
@@ -472,7 +503,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         }
         if (!_serviceState.value.isCameraActive) {
-            serviceScope.launch {
+            previewStartJob?.cancel()
+            previewStartJob = serviceScope.launch {
                 // Smoke-test fix: brief grace window for the UI's
                 // SurfaceProvider to attach before falling back to the
                 // headless DUMMY surface. ServiceConnection.onServiceConnected
@@ -493,6 +525,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     RovaLog.d(
                         "startCameraPreview: surface grace ${if (waited != null) "UI arrived" else "expired -> DUMMY"}"
                     )
+                }
+                // ADR-0021 — the app may have backgrounded while we waited in
+                // the grace window. Do NOT bind the camera after a background
+                // event (privacy/policy). stopCameraPreview also cancels this
+                // job on ON_STOP; this re-check covers the ProcessLifecycleOwner
+                // ON_STOP dispatch delay.
+                if (!appForeground) {
+                    RovaLog.d("startCameraPreview: app backgrounded mid-grace, aborting setupCamera")
+                    return@launch
                 }
                 setupCamera()
             }
@@ -685,6 +726,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         lifecycleRegistry = LifecycleRegistry(this)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         createNotificationChannel()
+        // ADR-0021 — release idle camera preview when the whole app
+        // backgrounds (not on in-app tab switches).
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processObserver)
         // C12: automatic cleanup is disabled until a recovery UI lands in
         // Phase 2. cleanupOrphanedSegments() is intentionally NOT called here;
         // segments persist across launches so recovery can offer them back.
@@ -2993,6 +3037,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     override fun onDestroy() {
         super.onDestroy()
+        // ADR-0021 — symmetric removal of the process-lifecycle observer.
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(processObserver)
         releaseResources()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }

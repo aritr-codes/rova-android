@@ -257,7 +257,11 @@ fun RecordScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> viewModel.stopCameraPreview()
+                // ADR-0021 — camera release is owned by the process lifecycle
+                // (RovaRecordingService's ProcessLifecycleOwner observer), NOT
+                // this per-screen NavBackStackEntry lifecycle, which fires
+                // ON_STOP on in-app tab switches while the app is still
+                // foreground. This observer is acquire-only.
                 Lifecycle.Event.ON_START -> viewModel.startCameraPreview()
                 Lifecycle.Event.ON_RESUME -> rovaApp?.let {
                     it.notificationPermissionSignal.refresh()
@@ -387,12 +391,22 @@ fun RecordScreen(
     // transition keeps the "Initializing Camera..." overlay on screen
     // through that window. Idle preview (no transition) is unaffected.
     var cameraWarmingUp by remember { mutableStateOf(false) }
+    // ADR-0021: the overlay must bridge a real cold-acquire black gap only.
+    // `prevCameraActive` is seeded to the CURRENT camera state so a fresh
+    // re-composition (e.g. returning to the Record tab while the camera
+    // stayed warm — RecordScreen leaves composition on tab-away and
+    // re-enters on return) is NOT mistaken for a false→true transition.
+    // Without this seed the LaunchedEffect re-fired on every tab return and
+    // showed "Initializing Camera…" for 1.5 s despite no rebind.
+    var prevCameraActive by remember { mutableStateOf(isCameraActive) }
     LaunchedEffect(isCameraActive) {
-        if (isCameraActive) {
+        val coldAcquire = isCameraActive && !prevCameraActive
+        prevCameraActive = isCameraActive
+        if (coldAcquire) {
             cameraWarmingUp = true
             delay(1500)
             cameraWarmingUp = false
-        } else {
+        } else if (!isCameraActive) {
             cameraWarmingUp = false
         }
     }
