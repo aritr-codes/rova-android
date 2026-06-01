@@ -67,6 +67,40 @@
     <string name="notification_progress_cd_determinate">Progress, %1$d percent</string>
     <string name="notification_progress_cd_indeterminate">In progress</string>
 
+    <!-- B3 i18n task 9: recording-service notification copy (Context scope) -->
+    <string name="notification_title_recording_active">🎥 Rova Recording Active</string>
+    <string name="notification_channel_legacy_name">Rova Background Recording</string>
+    <string name="notification_action_stop_legacy">STOP</string>
+    <string name="notification_recovery_merge_title">Merging recovered clips</string>
+    <string name="notification_recovery_merge_percent">Merging %1$d%%</string>
+    <string name="notification_recovery_merge_session">Session %1$s…</string>
+    <string name="notification_initializing">Initializing background recording...</string>
+    <string name="notification_storage_insufficient">Not enough storage to record. Free up space and try again.</string>
+    <string name="notification_preparing_camera">Preparing camera...</string>
+    <string name="notification_camera_failed">Camera failed to start. Please restart recording.</string>
+    <string name="notification_recording_failed_stopping">Recording failed. Stopping session.</string>
+    <string name="notification_segment_saved">Segment Saved: %1$d KB</string>
+    <string name="notification_empty_segment">Recording produced an empty segment</string>
+    <string name="notification_recording_failed_unexpected">Recording failed unexpectedly</string>
+    <string name="notification_error_insufficient_storage">Not enough storage space</string>
+    <string name="notification_error_source_inactive">Camera was disconnected</string>
+    <string name="notification_error_file_size_limit">File size limit reached</string>
+    <string name="notification_error_no_valid_data">No video data was captured</string>
+    <string name="notification_error_garbage_collected">Recording was interrupted</string>
+    <string name="notification_error_generic">Recording failed (code %1$d)</string>
+    <string name="notification_stopped_permission_revoked">Stopped — required permission revoked. Re-grant in Settings.</string>
+    <string name="notification_stopped_low_storage">Stopped — device storage low. Free up space.</string>
+    <string name="notification_stopped_thermal">Stopped — device overheated. Let it cool down.</string>
+    <string name="notification_stopping">Stopping recording…</string>
+    <string name="notification_stopped_state_save_failed">Stopped — recording state could not be saved. Will recover on next launch.</string>
+    <string name="notification_stopped_recovery_offered">Recording stopped — finishing will be offered when you reopen Rova</string>
+    <string name="notification_state_corrupted">Recording state corrupted: %1$s</string>
+    <string name="notification_merge_failed">Merge failed</string>
+    <string name="notification_merge_failed_detail">Merge failed: %1$s</string>
+    <string name="notification_merge_state_save_failed">Recording finished but state save failed — will reconcile on next launch.</string>
+    <string name="notification_recording_stopped_detail">Recording stopped: %1$s</string>
+    <string name="notification_unknown_error">unknown error</string>
+
     <!-- Record screen / chrome / HUD (B3 i18n task 2) -->
     <!-- Stepper default contentDescription -->
     <string name="record_stepper_decrease">Decrease</string>

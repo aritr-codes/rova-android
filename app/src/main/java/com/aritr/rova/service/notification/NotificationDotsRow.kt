@@ -32,6 +32,10 @@ data class DotsPlan(
     }
 }
 
+// i18n-opt-out: pure JVM-tested helper; its contentDescription strings
+// ("Clip 3 of 6", "All 6 clips complete") build via the same literal pattern
+// as NotificationCopy.toCopy and share the deferred token-seam/plurals refactor
+// (B3 task 9). Strings stay literal here by design.
 fun NotificationState.toDotsPlan(): DotsPlan = when (this) {
     is NotificationState.ClipRecording -> buildPlanFromActive(
         accent = NotificationChannelConfig.ACCENT_RECORDING,

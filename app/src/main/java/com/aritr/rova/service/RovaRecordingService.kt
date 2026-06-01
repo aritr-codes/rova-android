@@ -551,7 +551,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // parity holds at every legacy call site. The typed
         // updateNotification(NotificationState) overload derives
         // its own title per the mockup.
-        private const val LEGACY_NOTIFICATION_TITLE = "🎥 Rova Recording Active"
+        // B3 i18n task 9: LEGACY_NOTIFICATION_TITLE literal externalized to
+        // R.string.notification_title_recording_active; resolved at the two
+        // Service-scope call sites (a companion const cannot call getString).
         // Phase 1.3 — legacy ACTION_STOP service-intent constant removed.
         // Stop arrives via RovaStopReceiver.ACTION_STOP (broadcast).
         // M5 §5 — share action routed through MainActivity so the chooser
@@ -887,8 +889,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         lastMergeNotifyMillis = now
         val percent = (fraction.coerceIn(0f, 1f) * 100f).toInt()
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Merging recovered clips")
-            .setContentText("Merging $percent%")
+            .setContentTitle(getString(R.string.notification_recovery_merge_title))
+            .setContentText(getString(R.string.notification_recovery_merge_percent, percent))
             .setProgress(100, percent, false)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
@@ -899,8 +901,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private fun startForegroundForRecoveryMerge(sessionId: String): Boolean {
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Merging recovered clips")
-            .setContentText("Session ${sessionId.take(8)}…")
+            .setContentTitle(getString(R.string.notification_recovery_merge_title))
+            .setContentText(getString(R.string.notification_recovery_merge_session, sessionId.take(8)))
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .build()
@@ -1015,7 +1017,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // FGS-deadline) AND SecurityException (Android 14+ FGS-type vs
         // permission mismatch). Pre-manifest init window — no manifest to
         // roll back. Row 4b cleanup.
-        val notification = createNotification(LEGACY_NOTIFICATION_TITLE, "Initializing background recording...")
+        val notification = createNotification(
+            getString(R.string.notification_title_recording_active),
+            getString(R.string.notification_initializing)
+        )
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, fgsType)
@@ -1055,7 +1060,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val peakBytes = estimatePeakBytes(preflightTier)
         if (!hasEnoughStorage(peakBytes)) {
             RovaLog.e("onStartCommand: Insufficient storage — aborting session (row 3)")
-            updateNotification("Not enough storage to record. Free up space and try again.")
+            updateNotification(getString(R.string.notification_storage_insufficient))
             @Suppress("DEPRECATION")
             stopForeground(true)
             stopSelf()
@@ -1201,7 +1206,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // and a stop signal is plumbed end-to-end. notify(SAME_ID,...)
                 // does not restart the FGS deadline; the original
                 // startForeground call from onStartCommand is sticky.
-                updateNotification("Preparing camera...")
+                updateNotification(getString(R.string.notification_preparing_camera))
 
                 // C2: Wait up to 3s for the UI to provide a SurfaceProvider.
                 // If it never arrives (background-only launch), proceed headlessly.
@@ -1251,7 +1256,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
                 if (cameraReady == null) {
                     RovaLog.e("startPeriodicRecording: Camera failed to activate within 5s — aborting")
-                    updateNotification("Camera failed to start. Please restart recording.")
+                    updateNotification(getString(R.string.notification_camera_failed))
                     markInitFailedAndStop(manifest.sessionId, "camera-ready-timeout")
                     return@launch
                 }
@@ -1332,7 +1337,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         SegmentResult.RetryableFailure -> {
                             // 3 attempts exhausted. Session must end.
                             RovaLog.e("startPeriodicRecording: Segment failed after retries, stopping session")
-                            updateNotification("Recording failed. Stopping session.")
+                            updateNotification(getString(R.string.notification_recording_failed_stopping))
                             stopPeriodicRecordingAndMerge()
                             break@outer
                         }
@@ -1391,7 +1396,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // happened before createSession returned (pre-manifest);
                 // just log + tear down.
                 e.printStackTrace()
-                updateNotification("Recording stopped: ${e.message?.take(60) ?: "unknown error"}")
+                updateNotification(
+                    getString(
+                        R.string.notification_recording_stopped_detail,
+                        e.message?.take(60) ?: getString(R.string.notification_unknown_error)
+                    )
+                )
                 RovaCrashReporter.recordException(e, "startPeriodicRecording outer catch")
                 val sid = currentSessionId
                 if (sid != null) {
@@ -2172,6 +2182,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
 
         var videoFile: File? = null
+        // i18n-opt-out: failRecording() messages are dual-purpose diagnostics —
+        // logged via RovaLog.e AND surfaced; callers pass internal-identifier
+        // text ("…startPeriodicRecording must run first", "Session directory
+        // missing for $sessionId") that is developer-facing context, not the
+        // mockup-driven notification copy contract. Not externalized (B3 task 9).
         fun failRecording(message: String): SegmentResult {
             RovaLog.e("recordSegment: $message")
             updateNotification(message)
@@ -2257,7 +2272,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             (videoFile?.length() ?: 0L) > 0L
                         if (success) {
                             RovaLog.d("Recording FINALIZED. Size: ${videoFile?.length()} bytes")
-                            updateNotification("Segment Saved: ${((videoFile?.length() ?: 0L) / 1024)} KB")
+                            updateNotification(
+                                getString(
+                                    R.string.notification_segment_saved,
+                                    (videoFile?.length() ?: 0L) / 1024
+                                )
+                            )
                             // C18: persist segment to manifest. SHA-1 is computed
                             // on Dispatchers.IO so the finalize callback (Main)
                             // returns immediately. stopPeriodicRecordingAndMerge
@@ -2299,7 +2319,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             val errorMsg = if (event.hasError()) {
                                 describeRecordingError(event.error)
                             } else {
-                                "Recording produced an empty segment"
+                                getString(R.string.notification_empty_segment)
                             }
                             RovaLog.e("Recording ERROR: $errorMsg")
                             _serviceState.update { it.copy(recordingError = errorMsg) }
@@ -2430,7 +2450,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 RovaLog.w("recordSegment: exception after finalize callback; deferring to recovery to avoid retry overwriting valid segment")
             }
             stopNeedsRecovery = true
-            val msg = e.message ?: "Recording failed unexpectedly"
+            val msg = e.message ?: getString(R.string.notification_recording_failed_unexpected)
             updateNotification(msg)
             _serviceState.update { it.copy(recordingError = msg) }
             // ADR 0006 B-fix-4: was `return false` → outer treated as
@@ -2695,12 +2715,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private fun describeRecordingError(errorCode: Int): String = when (errorCode) {
-        VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> "Not enough storage space"
-        VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> "Camera was disconnected"
-        VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> "File size limit reached"
-        VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA -> "No video data was captured"
-        VideoRecordEvent.Finalize.ERROR_RECORDING_GARBAGE_COLLECTED -> "Recording was interrupted"
-        else -> "Recording failed (code $errorCode)"
+        VideoRecordEvent.Finalize.ERROR_INSUFFICIENT_STORAGE -> getString(R.string.notification_error_insufficient_storage)
+        VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE -> getString(R.string.notification_error_source_inactive)
+        VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED -> getString(R.string.notification_error_file_size_limit)
+        VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA -> getString(R.string.notification_error_no_valid_data)
+        VideoRecordEvent.Finalize.ERROR_RECORDING_GARBAGE_COLLECTED -> getString(R.string.notification_error_garbage_collected)
+        else -> getString(R.string.notification_error_generic, errorCode)
     }
 
     private fun createNotificationChannel() {
@@ -2712,7 +2732,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // Cleanup deletion is a follow-on slice after one release.
         val legacy = NotificationChannel(
             CHANNEL_ID,
-            "Rova Background Recording",
+            getString(R.string.notification_channel_legacy_name),
             NotificationManager.IMPORTANCE_LOW
         )
         mgr.createNotificationChannel(legacy)
@@ -2994,7 +3014,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 stopIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            builder.addAction(android.R.drawable.ic_media_pause, "STOP", stopPendingIntent)
+            builder.addAction(
+                android.R.drawable.ic_media_pause,
+                getString(R.string.notification_action_stop_legacy),
+                stopPendingIntent
+            )
         }
 
         return builder.build()
@@ -3006,7 +3030,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // the FGS deadline; the initial startForeground is sticky.
         getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID,
-            createNotification(LEGACY_NOTIFICATION_TITLE, contentText, currentSessionId)
+            createNotification(
+                getString(R.string.notification_title_recording_active),
+                contentText,
+                currentSessionId
+            )
         )
     }
 
@@ -3150,12 +3178,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             updateNotification(
                                 when (reason) {
                                     com.aritr.rova.data.StopReason.PERMISSION_REVOKED ->
-                                        "Stopped — required permission revoked. Re-grant in Settings."
+                                        getString(R.string.notification_stopped_permission_revoked)
                                     com.aritr.rova.data.StopReason.LOW_STORAGE ->
-                                        "Stopped — device storage low. Free up space."
+                                        getString(R.string.notification_stopped_low_storage)
                                     com.aritr.rova.data.StopReason.THERMAL ->
-                                        "Stopped — device overheated. Let it cool down."
-                                    else -> "Stopping recording…"
+                                        getString(R.string.notification_stopped_thermal)
+                                    else -> getString(R.string.notification_stopping)
                                 }
                             )
                         }
@@ -3180,10 +3208,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                 result.cause,
                                 "stopPeriodicRecordingAndMerge eager markTerminated Failed"
                             )
-                            updateNotification(
-                                "Stopped — recording state could not be saved." +
-                                    " Will recover on next launch."
-                            )
+                            updateNotification(getString(R.string.notification_stopped_state_save_failed))
                             cancelAlarmsAndUnregister()
                             @Suppress("DEPRECATION")
                             stopForeground(true)
@@ -3202,7 +3227,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // without their consent.
             if (stopNeedsRecovery) {
                 RovaLog.w("stopPeriodicRecordingAndMerge: session $currentSessionId has an unconfirmed segment; skipping merge — recovery available on next launch")
-                updateNotification("Recording stopped — finishing will be offered when you reopen Rova")
+                updateNotification(getString(R.string.notification_stopped_recovery_offered))
                 // Phase 1.2: cancel before unregister; leave terminated=null
                 // so Phase 1.5 recovery classifies based on segment state.
                 cancelAlarmsAndUnregister()
@@ -3226,7 +3251,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } catch (e: Exception) {
                 RovaLog.e("stopPeriodicRecordingAndMerge: segment persist failed", e)
                 _serviceState.update { it.copy(mergeError = "Failed to persist segment: ${e.message}") }
-                updateNotification("Recording state corrupted: ${e.message?.take(60)}")
+                updateNotification(getString(R.string.notification_state_corrupted, e.message?.take(60)))
                 cancelAlarmsAndUnregister()
                 @Suppress("DEPRECATION")
                 stopForeground(true)
@@ -3393,7 +3418,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val msg = "Export failed: ${result.javaClass.simpleName}"
                     RovaLog.e("performMerge: $msg")
                     _serviceState.update { it.copy(mergeError = msg) }
-                    updateNotification("Merge failed")
+                    updateNotification(getString(R.string.notification_merge_failed))
                     delay(3000)
                 }
             }
@@ -3406,7 +3431,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         } catch (e: Exception) {
             e.printStackTrace()
             _serviceState.update { it.copy(mergeError = e.message) }
-            updateNotification("Merge failed: ${e.message}")
+            updateNotification(getString(R.string.notification_merge_failed_detail, e.message))
             delay(3000)
         } finally {
             _serviceState.update { it.copy(isMerging = false) }
@@ -3464,10 +3489,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                         "performMerge: markTerminated($reason) FAILED" +
                                             " for $sid (attempts=${result.attempts})", result.cause
                                     )
-                                    updateNotification(
-                                        "Recording finished but state save failed —" +
-                                            " will reconcile on next launch."
-                                    )
+                                    updateNotification(getString(R.string.notification_merge_state_save_failed))
                                 }
                             }
                         }
@@ -3636,7 +3658,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // diagnostics). Either add a new mutator that flips
                 // exportState only, or split exportState per side.
                 _serviceState.update { it.copy(mergeError = "Both sides failed") }
-                updateNotification("Merge failed")
+                updateNotification(getString(R.string.notification_merge_failed))
                 delay(3000)
             }
 
@@ -3648,7 +3670,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         } catch (e: Exception) {
             e.printStackTrace()
             _serviceState.update { it.copy(mergeError = e.message) }
-            updateNotification("Merge failed: ${e.message}")
+            updateNotification(getString(R.string.notification_merge_failed_detail, e.message))
             delay(3000)
         } finally {
             _serviceState.update { it.copy(isMerging = false) }
@@ -3695,10 +3717,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                         "performMergeDual: markTerminated($reason) FAILED" +
                                             " for $sid (attempts=${result.attempts})", result.cause
                                     )
-                                    updateNotification(
-                                        "Recording finished but state save failed —" +
-                                            " will reconcile on next launch."
-                                    )
+                                    updateNotification(getString(R.string.notification_merge_state_save_failed))
                                 }
                             }
                         }

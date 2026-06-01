@@ -69,6 +69,11 @@ private fun formatMmSs(totalSeconds: Int): String {
     return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
 }
 
+// i18n-opt-out: pure mockup-contract helper, JVM-tested under
+// isReturnDefaultValues=true (29 exact-string assertions in NotificationCopyTest).
+// Externalizing requires a UiText/@StringRes token seam + plurals.xml for the
+// singular/plural + mm:ss formatting — a separate behavioral-risk slice, not
+// this literal→getString pass. Strings stay literal here by design (B3 task 9).
 fun NotificationState.toCopy(): NotificationCopy = when (this) {
     is NotificationState.ClipRecording -> NotificationCopy(
         title = if (total != null) "Recording · Clip $current of $total" else "Recording · Clip $current",
