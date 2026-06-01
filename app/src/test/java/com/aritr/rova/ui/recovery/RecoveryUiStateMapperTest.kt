@@ -547,6 +547,38 @@ class RecoveryUiStateMapperTest {
         }
     }
 
+    // ─── Slice 13C destructive-action safety copy (B3 i18n task 8) ──
+    // The body prose now lives in strings.xml, so the JVM can't read it
+    // off RecoveryCardState. These two guard the *content* contract at
+    // the resource layer where it moved: an intentional wording change
+    // to the recovery bodies must update these (and pass review). They
+    // replace the pre-i18n `body.contains(...)` asserts so the safety
+    // wording can never silently vanish. Reviewer + codex (B3 review)
+    // called the comment-only "verified once at the resource layer"
+    // precedent insufficient for a destructive-action phrase.
+
+    @Test
+    fun `every renderable body string promises segments stay until discarded`() {
+        for (name in RECOVERY_BODY_RES_NAMES) {
+            val value = stringResourceValue(name)
+            assertTrue(
+                "$name must reassure that recovered segments stay until discard, was: $value",
+                value.contains("stay on your device"),
+            )
+        }
+    }
+
+    @Test
+    fun `every renderable body string warns the discard action is permanent`() {
+        for (name in RECOVERY_BODY_RES_NAMES) {
+            val value = stringResourceValue(name)
+            assertTrue(
+                "$name must mark Discard as permanent, was: $value",
+                value.contains("This action is permanent."),
+            )
+        }
+    }
+
     // ─── Phase 4.3 — merge / keepRaw labels ───────────────────────
 
     @Test
@@ -602,5 +634,37 @@ class RecoveryUiStateMapperTest {
             )
         )
         assertEquals("MULTI_SEGMENT_KEPT must not surface a card", RecoveryUiState.Empty, ui)
+    }
+
+    // ─── resource-content helpers (B3 i18n task 8) ────────────────
+
+    private fun stringResourceValue(name: String): String {
+        // Gradle runs unit tests with the working dir at the module root
+        // (`app/`); tolerate the repo root too so the test survives a
+        // different launcher. Read the raw XML and undo the escapes Android
+        // requires (`\'`, `&amp;`, `&lt;`, `&gt;`) so asserts see plain copy.
+        val candidates = listOf(
+            java.io.File("src/main/res/values/strings.xml"),
+            java.io.File("app/src/main/res/values/strings.xml"),
+        )
+        val xml = candidates.firstOrNull { it.exists() }
+            ?: error("strings.xml not found in ${candidates.map { it.absolutePath }}")
+        val match = Regex("<string name=\"$name\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
+            .find(xml.readText())
+            ?: error("string resource '$name' not found in ${xml.absolutePath}")
+        return match.groupValues[1]
+            .replace("\\'", "'")
+            .replace("\\\"", "\"")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+    }
+
+    private companion object {
+        val RECOVERY_BODY_RES_NAMES = listOf(
+            "recovery_body_user_stopped",
+            "recovery_body_killed_by_system",
+            "recovery_body_force_stopped",
+        )
     }
 }
