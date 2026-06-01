@@ -891,12 +891,3 @@ fun RecordScreen(
     // methods (savePreset / deletePreset) stay but are dormant (spec dormancy).
 }
 
-// Formatting Helpers — retained for any consumers outside RecordScreen.
-fun formatDuration(seconds: Int): String {
-    return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
-}
-
-fun formatInterval(minutes: Int): String {
-    return if (minutes == 0) "No wait" else "${minutes}m"
-}
-

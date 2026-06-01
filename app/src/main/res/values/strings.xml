@@ -112,6 +112,26 @@
     <string name="record_loops_done_caption">LOOPS DONE</string>
     <string name="record_status_detail_prefix">· %1$s</string>
 
+    <!-- Active-HUD loop pill (B3 i18n task 2) -->
+    <string name="record_hud_loops_done_indefinite">%1$d loops done</string>
+    <string name="record_hud_loops_done">%1$d/%2$d loops done</string>
+
+    <!-- Active-HUD status pill copy + time captions (B3 i18n task 2) -->
+    <string name="record_hud_status_recording">Recording</string>
+    <string name="record_hud_status_on_break">On break</string>
+    <string name="record_hud_status_merging">Merging…</string>
+    <string name="record_hud_time_left">· %1$s left</string>
+    <string name="record_hud_time_next_in">· next in %1$s</string>
+    <string name="record_hud_time_percent">· %1$d%%</string>
+
+    <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
+    <string name="record_hud_announce_recording">Recording.</string>
+    <string name="record_hud_announce_recording_loop">Recording. Loop %1$d.</string>
+    <string name="record_hud_announce_recording_loop_of">Recording. Loop %1$d of %2$d.</string>
+    <string name="record_hud_announce_on_break">On break.</string>
+    <string name="record_hud_announce_on_break_loop">On break. Loop %1$d.</string>
+    <string name="record_hud_announce_on_break_loop_of">On break. Loop %1$d of %2$d.</string>
+
     <!-- Status pill copy (idle/active) -->
     <string name="record_status_recording">Recording</string>
     <string name="record_status_on_break">On break</string>

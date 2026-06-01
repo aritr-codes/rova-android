@@ -62,6 +62,8 @@ import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.text.UiText
+import com.aritr.rova.ui.text.resolve
 
 // Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
 // docs/UI_DESIGN_TOKENS.md §2.13). Only values with no token stay local:
@@ -622,19 +624,26 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
  * Indefinite sessions (`loopTotal < 0`) render the index without a total. The index is
  * clamped on both ends.
  */
-internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
+internal fun loopPillContent(loopIndex: Int, loopTotal: Int): UiText? = when {
     loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
-    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
-    loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
-    else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
+    // StrArgs (not Plural): the copy never pluralizes "loops", so "1 loops done"
+    // must stay byte-identical — a <plurals> would grammar-correct it to "1 loop done".
+    loopTotal < 0  -> UiText.StrArgs(
+        R.string.record_hud_loops_done_indefinite,
+        listOf(loopIndex.coerceAtLeast(0)),
+    )
+    else           -> UiText.StrArgs(
+        R.string.record_hud_loops_done,
+        listOf(loopIndex.coerceIn(0, loopTotal), loopTotal),
+    )
 }
 
 internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
 
 internal data class StatusPillContent(
     val dot: StatusDotColor,
-    val main: String,
-    val time: String,
+    val main: UiText,
+    val time: UiText,
 )
 
 /**
@@ -648,21 +657,29 @@ internal fun hudStatusPillContent(
     clipSecondsLeft: Int,
     waitSecondsLeft: Int,
 ): StatusPillContent = when (state) {
-    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
     RecordHudState.Recording -> StatusPillContent(
         dot = StatusDotColor.RECORDING,
-        main = "Recording",
-        time = "· ${RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())} left",
+        main = UiText.Str(R.string.record_hud_status_recording),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_left,
+            listOf(RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())),
+        ),
     )
     RecordHudState.Waiting -> StatusPillContent(
         dot = StatusDotColor.WAITING,
-        main = "On break",
-        time = "· next in ${RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())}",
+        main = UiText.Str(R.string.record_hud_status_on_break),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_next_in,
+            listOf(RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())),
+        ),
     )
     is RecordHudState.Merging -> StatusPillContent(
         dot = StatusDotColor.MERGING,
-        main = "Merging…",
-        time = "· ${(state.progress * 100).toInt().coerceIn(0, 100)}%",
+        main = UiText.Str(R.string.record_hud_status_merging),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_percent,
+            listOf((state.progress * 100).toInt().coerceIn(0, 100)),
+        ),
     )
     RecordHudState.Idle ->
         error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
@@ -681,20 +698,51 @@ internal fun hudActiveAnnouncement(
     state: RecordHudState,
     loopIndex: Int,
     loopTotal: Int,
-): String {
-    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
-    val loopPhrase = when {
-        loopTotal == 1 || loopTotal == 0 -> ""
-        loopTotal < 0 -> " Loop ${loopIndex.coerceAtLeast(0)}."
-        else -> " Loop ${loopIndex.coerceIn(0, loopTotal)} of $loopTotal."
-    }
-    return when (state) {
-        RecordHudState.Recording -> "Recording.$loopPhrase"
-        RecordHudState.Waiting -> "On break.$loopPhrase"
-        is RecordHudState.Merging ->
-            RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments)
-        RecordHudState.Idle -> ""
-    }
+): UiText? = when (state) {
+    // Anti-chant is unchanged: the token still carries only the boundary-level
+    // status (no per-second countdown), so the resolved live-region string
+    // changes only on state/loop/merge-segment transitions. The sole "nothing
+    // to announce" case is Idle — formerly "" — which is now null (resolved back
+    // to "" at the call site, byte-identical).
+    RecordHudState.Recording -> announceForState(
+        bare = R.string.record_hud_announce_recording,
+        loop = R.string.record_hud_announce_recording_loop,
+        loopOf = R.string.record_hud_announce_recording_loop_of,
+        loopIndex = loopIndex,
+        loopTotal = loopTotal,
+    )
+    RecordHudState.Waiting -> announceForState(
+        bare = R.string.record_hud_announce_on_break,
+        loop = R.string.record_hud_announce_on_break_loop,
+        loopOf = R.string.record_hud_announce_on_break_loop_of,
+        loopIndex = loopIndex,
+        loopTotal = loopTotal,
+    )
+    is RecordHudState.Merging ->
+        // Forwarded from a separate, still-un-externalized + char-for-char-tested
+        // helper; Resolved avoids duplicating its clamp/branch logic. Phase B: swap
+        // for the real token once formatMergeAnnouncement is externalized.
+        UiText.Resolved(
+            RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments),
+        )
+    RecordHudState.Idle -> null
+}
+
+/**
+ * Selects the bare / "Loop N" / "Loop N of M" announcement token, mirroring the
+ * original `loopPhrase` branch exactly (single/zero-clip → bare, indefinite →
+ * loop-only with a clamped index, finite → loop-of-total with a clamped index).
+ */
+private fun announceForState(
+    @androidx.annotation.StringRes bare: Int,
+    @androidx.annotation.StringRes loop: Int,
+    @androidx.annotation.StringRes loopOf: Int,
+    loopIndex: Int,
+    loopTotal: Int,
+): UiText = when {
+    loopTotal == 1 || loopTotal == 0 -> UiText.Str(bare)
+    loopTotal < 0 -> UiText.StrArgs(loop, listOf(loopIndex.coerceAtLeast(0)))
+    else -> UiText.StrArgs(loopOf, listOf(loopIndex.coerceIn(0, loopTotal), loopTotal))
 }
 
 // ── R2 active-HUD composables (Task 8). Consume the Phase-A helpers above. ──
@@ -806,12 +854,12 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
         ) {
             StatusDot(content.dot)
             Text(
-                content.main,
+                content.main.resolve(),
                 style = RovaTokens.statusMain,
                 color = RecordChromeTokens.statusMainText,
             )
             Text(
-                content.time,
+                content.time.resolve(),
                 style = RovaTokens.statusTime,
                 color = RecordChromeTokens.statusTimeText,
             )
@@ -840,7 +888,9 @@ internal fun RecordActiveHud(
     // only announcement. mergeDescendants + an explicit contentDescription
     // replaces the pills' volatile per-second text so TalkBack speaks the
     // status once per transition instead of chanting the countdown.
-    val announcement = hudActiveAnnouncement(state, loopIndex, loopTotal)
+    // Resolve UiText? → String?; null (Idle) collapses to "" to stay byte-identical
+    // with the prior empty-announcement contract. liveRegion wiring is unchanged.
+    val announcement = hudActiveAnnouncement(state, loopIndex, loopTotal)?.resolve() ?: ""
     Column(
         modifier = modifier.semantics(mergeDescendants = true) {
             liveRegion = LiveRegionMode.Polite
