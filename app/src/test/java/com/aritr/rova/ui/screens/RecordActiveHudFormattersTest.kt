@@ -150,10 +150,10 @@ class RecordActiveHudFormattersTest {
     }
 
     @Test fun announce_merging_usesSegmentAnnouncement_notPercent() {
-        // Forwarded verbatim from the still-un-externalized formatMergeAnnouncement
-        // (its own char-for-char test lives in RecordHudFormattersTest).
+        // Forwarded verbatim from formatMergeAnnouncement (now externalized to a
+        // UiText token; its own token-level test lives in RecordHudFormattersTest).
         assertEquals(
-            UiText.Resolved("Merging clip 3 of 6"),
+            UiText.StrArgs(R.string.record_hud_merge_clip_of, listOf(3, 6)),
             hudActiveAnnouncement(
                 RecordHudState.Merging(progress = 0.5f, currentSegment = 3, totalSegments = 6),
                 loopIndex = 0, loopTotal = 6,

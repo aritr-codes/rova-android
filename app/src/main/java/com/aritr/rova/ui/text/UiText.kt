@@ -27,18 +27,6 @@ sealed interface UiText {
      * the rule, once to fill `%d`).
      */
     data class Plural(@PluralsRes val id: Int, val quantity: Int, val args: List<Any>) : UiText
-
-    /**
-     * An already-resolved English string — a narrow escape hatch for copy that
-     * is produced by a *separate* still-un-externalized helper (e.g.
-     * `RecordHudFormatters.formatMergeAnnouncement`, which owns its own
-     * char-for-char test). Lets a `UiText`-returning helper forward that helper's
-     * output without duplicating its branch/clamp logic or freezing it here.
-     *
-     * Phase B TODO: when the forwarding helper is externalized, replace the
-     * `Resolved(...)` call sites with the real token and delete this variant.
-     */
-    data class Resolved(val value: String) : UiText
 }
 
 @Composable
@@ -46,12 +34,10 @@ fun UiText.resolve(): String = when (this) {
     is UiText.Str -> stringResource(id)
     is UiText.StrArgs -> stringResource(id, *args.toTypedArray())
     is UiText.Plural -> pluralStringResource(id, quantity, *args.toTypedArray())
-    is UiText.Resolved -> value
 }
 
 fun UiText.resolve(context: Context): String = when (this) {
     is UiText.Str -> context.getString(id)
     is UiText.StrArgs -> context.getString(id, *args.toTypedArray())
     is UiText.Plural -> context.resources.getQuantityString(id, quantity, *args.toTypedArray())
-    is UiText.Resolved -> value
 }

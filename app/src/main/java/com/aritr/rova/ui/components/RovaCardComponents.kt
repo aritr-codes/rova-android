@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.text.resolve
 import java.io.File
 
 @Composable
@@ -64,6 +65,7 @@ fun SessionStatusCard(
     // the recording state + loop position (not the fractional bar value).
     val statusAnnouncement =
         RecordHudFormatters.formatSessionStatusAnnouncement(isRecording, currentLoop, totalLoops)
+            .resolve()
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),

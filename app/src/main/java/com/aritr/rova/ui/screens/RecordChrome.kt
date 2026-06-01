@@ -719,12 +719,10 @@ internal fun hudActiveAnnouncement(
         loopTotal = loopTotal,
     )
     is RecordHudState.Merging ->
-        // Forwarded from a separate, still-un-externalized + char-for-char-tested
-        // helper; Resolved avoids duplicating its clamp/branch logic. Phase B: swap
-        // for the real token once formatMergeAnnouncement is externalized.
-        UiText.Resolved(
-            RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments),
-        )
+        // Forwarded from a separate, char-for-char-tested helper that owns its own
+        // clamp/branch logic; it now returns the real UiText token (B3 task 2b),
+        // resolved at the same `.resolve()` edge as the other announcement tokens.
+        RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments)
     RecordHudState.Idle -> null
 }
 

@@ -1,5 +1,8 @@
 package com.aritr.rova.ui.components
 
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
+
 /**
  * Slice 3 — pure presentation helpers for the active Record HUD.
  *
@@ -14,7 +17,11 @@ package com.aritr.rova.ui.components
  *     `H:MM:SS` so the HUD does not silently roll over a 60-minute
  *     session into "00:00".
  *
- * All functions are pure and JVM-testable. No Android dependency.
+ * i18n (B3 task 2b): user-facing display/announcement copy is now returned as
+ * [UiText] tokens (resolved at the Compose/`Context` edge), so the helpers stay
+ * pure and JVM-testable while no longer freezing localized English. Pure-numeric
+ * formatters (`formatMmSs`, `formatClipProgressNumbers`, `computeClipProgress`)
+ * emit only digits/separators and stay `String` — they carry no translatable copy.
  */
 object RecordHudFormatters {
 
@@ -30,35 +37,35 @@ object RecordHudFormatters {
         }
     }
 
-    fun formatLoopPosition(currentLoop: Int, totalLoops: Int): String {
+    fun formatLoopPosition(currentLoop: Int, totalLoops: Int): UiText {
         val safeCurrent = currentLoop.coerceAtLeast(0)
         return if (totalLoops < 0) {
-            "Loop $safeCurrent"
+            UiText.StrArgs(R.string.record_hud_loop_position_continuous, listOf(safeCurrent))
         } else {
-            "Loop $safeCurrent / $totalLoops"
+            UiText.StrArgs(R.string.record_hud_loop_position, listOf(safeCurrent, totalLoops))
         }
     }
 
-    fun formatLoopsRemaining(currentLoop: Int, totalLoops: Int): String {
-        if (totalLoops < 0) return "Records until you stop"
+    fun formatLoopsRemaining(currentLoop: Int, totalLoops: Int): UiText {
+        if (totalLoops < 0) return UiText.Str(R.string.record_hud_loops_remaining_continuous)
         val safeTotal = totalLoops.coerceAtLeast(0)
         val remaining = (safeTotal - currentLoop).coerceAtLeast(0)
         return when {
-            safeTotal == 0 -> "Last clip in progress"
-            remaining == 0 -> "Last clip in progress"
-            remaining == 1 -> "1 of $safeTotal loops remaining"
-            else -> "$remaining of $safeTotal loops remaining"
+            safeTotal == 0 -> UiText.Str(R.string.record_hud_loops_remaining_last)
+            remaining == 0 -> UiText.Str(R.string.record_hud_loops_remaining_last)
+            remaining == 1 -> UiText.StrArgs(R.string.record_hud_loops_remaining, listOf(1, safeTotal))
+            else -> UiText.StrArgs(R.string.record_hud_loops_remaining, listOf(remaining, safeTotal))
         }
     }
 
-    fun formatNextClipDurationLabel(clipSeconds: Int): String {
+    fun formatNextClipDurationLabel(clipSeconds: Int): UiText {
         val s = clipSeconds.coerceAtLeast(0)
         return when {
-            s == 0 -> "Next clip will run momentarily"
-            s < 60 -> "Next clip will run for $s s"
-            s == 60 -> "Next clip will run for 1 m"
-            s % 60 == 0 -> "Next clip will run for ${s / 60} m"
-            else -> "Next clip will run for $s s"
+            s == 0 -> UiText.Str(R.string.record_hud_next_clip_momentary)
+            s < 60 -> UiText.StrArgs(R.string.record_hud_next_clip_seconds, listOf(s))
+            s == 60 -> UiText.Str(R.string.record_hud_next_clip_one_minute)
+            s % 60 == 0 -> UiText.StrArgs(R.string.record_hud_next_clip_minutes, listOf(s / 60))
+            else -> UiText.StrArgs(R.string.record_hud_next_clip_seconds, listOf(s))
         }
     }
 
@@ -66,14 +73,18 @@ object RecordHudFormatters {
      * Status line under the session timer for the recording variant.
      * Combines the user-facing quality token with a short flash-state
      * descriptor. Never exposes raw integer flash codes.
+     *
+     * [quality] and [flashLabel] must already be localized edge strings (the
+     * caller resolves them at the Compose/`Context` edge); this helper only joins
+     * them with the layout separator.
      */
-    fun formatRecordingMeta(quality: String, flashLabel: String): String =
-        "$quality · $flashLabel"
+    fun formatRecordingMeta(quality: String, flashLabel: String): UiText =
+        UiText.StrArgs(R.string.record_hud_recording_meta, listOf(quality, flashLabel))
 
-    fun formatFlashLabel(flashMode: Int): String = when (flashMode) {
-        FLASH_MODE_AUTO -> "Flash auto"
-        FLASH_MODE_ON -> "Flash on"
-        else -> "Flash off"
+    fun formatFlashLabel(flashMode: Int): UiText = when (flashMode) {
+        FLASH_MODE_AUTO -> UiText.Str(R.string.record_hud_flash_auto)
+        FLASH_MODE_ON -> UiText.Str(R.string.record_hud_flash_on)
+        else -> UiText.Str(R.string.record_hud_flash_off)
     }
 
     /**
@@ -81,19 +92,35 @@ object RecordHudFormatters {
      * Rendered into a polite live region only on minute boundaries
      * (per UI_ROADMAP §"Slice 3 special requirements") — the caller
      * is responsible for the throttling; this helper only formats.
+     *
+     * Singular/plural hour & minute wording is encoded as one full-sentence
+     * resource per branch (not Android `Plural`) so the externalized output stays
+     * byte-identical to the prior hand-pluralized English.
      */
-    fun formatElapsedAnnouncement(totalSeconds: Long): String {
+    fun formatElapsedAnnouncement(totalSeconds: Long): UiText {
         val s = totalSeconds.coerceAtLeast(0L)
         val hours = s / 3600
         val minutes = (s % 3600) / 60
-        val hourWord = if (hours == 1L) "hour" else "hours"
-        val minuteWord = if (minutes == 1L) "minute" else "minutes"
         return when {
-            hours > 0L && minutes > 0L ->
-                "Session elapsed $hours $hourWord $minutes $minuteWord"
-            hours > 0L -> "Session elapsed $hours $hourWord"
-            minutes == 0L -> "Session just started"
-            else -> "Session elapsed $minutes $minuteWord"
+            hours > 0L && minutes > 0L -> {
+                val id = when {
+                    hours == 1L && minutes == 1L -> R.string.record_hud_elapsed_hour_minute
+                    hours == 1L -> R.string.record_hud_elapsed_hour_minutes
+                    minutes == 1L -> R.string.record_hud_elapsed_hours_minute
+                    else -> R.string.record_hud_elapsed_hours_minutes
+                }
+                UiText.StrArgs(id, listOf(hours, minutes))
+            }
+            hours > 0L -> {
+                val id = if (hours == 1L) R.string.record_hud_elapsed_hour else R.string.record_hud_elapsed_hours
+                UiText.StrArgs(id, listOf(hours))
+            }
+            minutes == 0L -> UiText.Str(R.string.record_hud_elapsed_just_started)
+            else -> {
+                val id =
+                    if (minutes == 1L) R.string.record_hud_elapsed_minute else R.string.record_hud_elapsed_minutes
+                UiText.StrArgs(id, listOf(minutes))
+            }
         }
     }
 
@@ -138,10 +165,10 @@ object RecordHudFormatters {
      * progress tick before the segment count snapshot has been
      * trimmed.
      */
-    fun formatMergeProgressNumbers(currentSegment: Int, totalSegments: Int): String {
+    fun formatMergeProgressNumbers(currentSegment: Int, totalSegments: Int): UiText {
         val total = totalSegments.coerceAtLeast(0)
         val current = currentSegment.coerceIn(0, total)
-        return "$current of $total"
+        return UiText.StrArgs(R.string.record_hud_merge_of, listOf(current, total))
     }
 
     /**
@@ -154,11 +181,11 @@ object RecordHudFormatters {
      * estimate, so we render coarse phases instead of fabricating an
      * ETA.
      */
-    fun formatMergeRemaining(progress: Float): String? {
+    fun formatMergeRemaining(progress: Float): UiText? {
         val p = progress.coerceIn(0f, 1f)
         return when {
-            p < 0.05f -> "Starting merge…"
-            p >= 0.85f -> "Almost done…"
+            p < 0.05f -> UiText.Str(R.string.record_hud_merge_starting)
+            p >= 0.85f -> UiText.Str(R.string.record_hud_merge_almost)
             else -> null
         }
     }
@@ -171,12 +198,12 @@ object RecordHudFormatters {
      * `currentSegment` rolls forward, which is the meaningful
      * accessibility boundary.
      */
-    fun formatMergeAnnouncement(currentSegment: Int, totalSegments: Int): String {
+    fun formatMergeAnnouncement(currentSegment: Int, totalSegments: Int): UiText {
         val total = totalSegments.coerceAtLeast(0)
         val current = currentSegment.coerceIn(0, total)
-        if (total <= 0) return "Preparing to merge"
-        if (current <= 0) return "Preparing to merge $total clips"
-        return "Merging clip $current of $total"
+        if (total <= 0) return UiText.Str(R.string.record_hud_merge_preparing)
+        if (current <= 0) return UiText.StrArgs(R.string.record_hud_merge_preparing_clips, listOf(total))
+        return UiText.StrArgs(R.string.record_hud_merge_clip_of, listOf(current, total))
     }
 
     /**
@@ -185,16 +212,29 @@ object RecordHudFormatters {
      * content description in a polite live region — it carries the recording
      * state + loop position (not the fractional progress bar value), so it
      * re-announces on a loop roll, not on every progress frame.
+     *
+     * The state word ("Recording"/"Queued") is part of the localized copy, so
+     * each state × loop-form combination is its own full-sentence resource rather
+     * than an interpolated English fragment.
      */
     fun formatSessionStatusAnnouncement(
         isRecording: Boolean,
         currentLoop: Int,
         totalLoops: Int,
-    ): String {
-        val state = if (isRecording) "Recording" else "Queued"
+    ): UiText {
         val safeCurrent = currentLoop.coerceAtLeast(0)
-        val loop = if (totalLoops > 0) "loop $safeCurrent of $totalLoops" else "loop $safeCurrent"
-        return "$state, $loop."
+        val hasTotal = totalLoops > 0
+        val id = when {
+            isRecording && hasTotal -> R.string.record_hud_session_status_recording_of
+            isRecording -> R.string.record_hud_session_status_recording
+            hasTotal -> R.string.record_hud_session_status_queued_of
+            else -> R.string.record_hud_session_status_queued
+        }
+        return if (hasTotal) {
+            UiText.StrArgs(id, listOf(safeCurrent, totalLoops))
+        } else {
+            UiText.StrArgs(id, listOf(safeCurrent))
+        }
     }
 
     /**
@@ -203,9 +243,13 @@ object RecordHudFormatters {
      * pinned in tests so future refactors do not silently degrade
      * accessibility output.
      */
-    fun formatMergeCompleteSummary(clipCount: Int): String {
+    fun formatMergeCompleteSummary(clipCount: Int): UiText {
         val n = clipCount.coerceAtLeast(0)
-        val noun = if (n == 1) "clip" else "clips"
-        return "$n $noun · saved to Library"
+        val id = if (n == 1) {
+            R.string.record_hud_merge_complete_summary_one
+        } else {
+            R.string.record_hud_merge_complete_summary_other
+        }
+        return UiText.StrArgs(id, listOf(n))
     }
 }

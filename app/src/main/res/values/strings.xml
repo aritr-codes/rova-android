@@ -124,6 +124,42 @@
     <string name="record_hud_time_next_in">· next in %1$s</string>
     <string name="record_hud_time_percent">· %1$d%%</string>
 
+    <!-- RecordHudFormatters user-facing copy (B3 i18n task 2b) -->
+    <string name="record_hud_loop_position">Loop %1$d / %2$d</string>
+    <string name="record_hud_loop_position_continuous">Loop %1$d</string>
+    <string name="record_hud_loops_remaining_continuous">Records until you stop</string>
+    <string name="record_hud_loops_remaining_last">Last clip in progress</string>
+    <string name="record_hud_loops_remaining">%1$d of %2$d loops remaining</string>
+    <string name="record_hud_next_clip_momentary">Next clip will run momentarily</string>
+    <string name="record_hud_next_clip_seconds">Next clip will run for %1$d s</string>
+    <string name="record_hud_next_clip_one_minute">Next clip will run for 1 m</string>
+    <string name="record_hud_next_clip_minutes">Next clip will run for %1$d m</string>
+    <string name="record_hud_recording_meta">%1$s · %2$s</string>
+    <string name="record_hud_flash_auto">Flash auto</string>
+    <string name="record_hud_flash_on">Flash on</string>
+    <string name="record_hud_flash_off">Flash off</string>
+    <string name="record_hud_elapsed_just_started">Session just started</string>
+    <string name="record_hud_elapsed_hour_minute">Session elapsed %1$d hour %2$d minute</string>
+    <string name="record_hud_elapsed_hour_minutes">Session elapsed %1$d hour %2$d minutes</string>
+    <string name="record_hud_elapsed_hours_minute">Session elapsed %1$d hours %2$d minute</string>
+    <string name="record_hud_elapsed_hours_minutes">Session elapsed %1$d hours %2$d minutes</string>
+    <string name="record_hud_elapsed_hour">Session elapsed %1$d hour</string>
+    <string name="record_hud_elapsed_hours">Session elapsed %1$d hours</string>
+    <string name="record_hud_elapsed_minute">Session elapsed %1$d minute</string>
+    <string name="record_hud_elapsed_minutes">Session elapsed %1$d minutes</string>
+    <string name="record_hud_merge_of">%1$d of %2$d</string>
+    <string name="record_hud_merge_starting">Starting merge…</string>
+    <string name="record_hud_merge_almost">Almost done…</string>
+    <string name="record_hud_merge_preparing">Preparing to merge</string>
+    <string name="record_hud_merge_preparing_clips">Preparing to merge %1$d clips</string>
+    <string name="record_hud_merge_clip_of">Merging clip %1$d of %2$d</string>
+    <string name="record_hud_session_status_recording_of">Recording, loop %1$d of %2$d.</string>
+    <string name="record_hud_session_status_recording">Recording, loop %1$d.</string>
+    <string name="record_hud_session_status_queued_of">Queued, loop %1$d of %2$d.</string>
+    <string name="record_hud_session_status_queued">Queued, loop %1$d.</string>
+    <string name="record_hud_merge_complete_summary_one">%1$d clip · saved to Library</string>
+    <string name="record_hud_merge_complete_summary_other">%1$d clips · saved to Library</string>
+
     <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
     <string name="record_hud_announce_recording">Recording.</string>
     <string name="record_hud_announce_recording_loop">Recording. Loop %1$d.</string>

@@ -1,12 +1,19 @@
 package com.aritr.rova.ui.components
 
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
  * Slice 3 — pure JVM tests for the active-HUD formatting helpers.
- * No Compose, no Android, no service dependencies — every behavior
- * pinned here is plain string/number transformation.
+ *
+ * B3 i18n task 2b: user-facing helpers now return [UiText] tokens, so assertions
+ * check the resource id + args (or null) rather than localized English. The exact
+ * English copy is verified once, at the resource layer (`values/strings.xml`).
+ * Pure-numeric helpers (`formatMmSs`, `formatClipProgressNumbers`,
+ * `computeClipProgress`) still return `String` and keep their char-for-char asserts.
  */
 class RecordHudFormattersTest {
 
@@ -48,17 +55,26 @@ class RecordHudFormattersTest {
 
     @Test
     fun `formatLoopPosition renders fixed loop position`() {
-        assertEquals("Loop 4 / 10", RecordHudFormatters.formatLoopPosition(4, 10))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_loop_position, listOf(4, 10)),
+            RecordHudFormatters.formatLoopPosition(4, 10)
+        )
     }
 
     @Test
     fun `formatLoopPosition renders continuous as Loop X without slash`() {
-        assertEquals("Loop 4", RecordHudFormatters.formatLoopPosition(4, -1))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_loop_position_continuous, listOf(4)),
+            RecordHudFormatters.formatLoopPosition(4, -1)
+        )
     }
 
     @Test
     fun `formatLoopPosition clamps negative current to zero`() {
-        assertEquals("Loop 0 / 10", RecordHudFormatters.formatLoopPosition(-3, 10))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_loop_position, listOf(0, 10)),
+            RecordHudFormatters.formatLoopPosition(-3, 10)
+        )
     }
 
     // ─── formatLoopsRemaining ─────────────────────────────────────
@@ -66,7 +82,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatLoopsRemaining renders continuous-safe copy`() {
         assertEquals(
-            "Records until you stop",
+            UiText.Str(R.string.record_hud_loops_remaining_continuous),
             RecordHudFormatters.formatLoopsRemaining(currentLoop = 4, totalLoops = -1)
         )
     }
@@ -74,7 +90,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatLoopsRemaining renders mockup example`() {
         assertEquals(
-            "5 of 10 loops remaining",
+            UiText.StrArgs(R.string.record_hud_loops_remaining, listOf(5, 10)),
             RecordHudFormatters.formatLoopsRemaining(currentLoop = 5, totalLoops = 10)
         )
     }
@@ -82,7 +98,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatLoopsRemaining handles singular`() {
         assertEquals(
-            "1 of 10 loops remaining",
+            UiText.StrArgs(R.string.record_hud_loops_remaining, listOf(1, 10)),
             RecordHudFormatters.formatLoopsRemaining(currentLoop = 9, totalLoops = 10)
         )
     }
@@ -90,13 +106,13 @@ class RecordHudFormattersTest {
     @Test
     fun `formatLoopsRemaining handles zero remaining`() {
         assertEquals(
-            "Last clip in progress",
+            UiText.Str(R.string.record_hud_loops_remaining_last),
             RecordHudFormatters.formatLoopsRemaining(currentLoop = 10, totalLoops = 10)
         )
         // currentLoop temporarily exceeds totalLoops at clip-roll-over —
         // the helper must not negate the count.
         assertEquals(
-            "Last clip in progress",
+            UiText.Str(R.string.record_hud_loops_remaining_last),
             RecordHudFormatters.formatLoopsRemaining(currentLoop = 11, totalLoops = 10)
         )
     }
@@ -106,7 +122,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatNextClipDurationLabel renders sub-minute as seconds`() {
         assertEquals(
-            "Next clip will run for 30 s",
+            UiText.StrArgs(R.string.record_hud_next_clip_seconds, listOf(30)),
             RecordHudFormatters.formatNextClipDurationLabel(30)
         )
     }
@@ -114,7 +130,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatNextClipDurationLabel renders 60 seconds as 1 m`() {
         assertEquals(
-            "Next clip will run for 1 m",
+            UiText.Str(R.string.record_hud_next_clip_one_minute),
             RecordHudFormatters.formatNextClipDurationLabel(60)
         )
     }
@@ -122,7 +138,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatNextClipDurationLabel renders multi-minute clean`() {
         assertEquals(
-            "Next clip will run for 5 m",
+            UiText.StrArgs(R.string.record_hud_next_clip_minutes, listOf(5)),
             RecordHudFormatters.formatNextClipDurationLabel(300)
         )
     }
@@ -130,7 +146,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatNextClipDurationLabel falls back to seconds for non-round`() {
         assertEquals(
-            "Next clip will run for 90 s",
+            UiText.StrArgs(R.string.record_hud_next_clip_seconds, listOf(90)),
             RecordHudFormatters.formatNextClipDurationLabel(90)
         )
     }
@@ -140,7 +156,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatRecordingMeta combines quality and flash with separator`() {
         assertEquals(
-            "FHD · Flash off",
+            UiText.StrArgs(R.string.record_hud_recording_meta, listOf("FHD", "Flash off")),
             RecordHudFormatters.formatRecordingMeta("FHD", "Flash off")
         )
     }
@@ -149,11 +165,11 @@ class RecordHudFormattersTest {
 
     @Test
     fun `formatFlashLabel maps modes to user-facing copy`() {
-        assertEquals("Flash off", RecordHudFormatters.formatFlashLabel(0))
-        assertEquals("Flash on", RecordHudFormatters.formatFlashLabel(1))
-        assertEquals("Flash auto", RecordHudFormatters.formatFlashLabel(2))
+        assertEquals(UiText.Str(R.string.record_hud_flash_off), RecordHudFormatters.formatFlashLabel(0))
+        assertEquals(UiText.Str(R.string.record_hud_flash_on), RecordHudFormatters.formatFlashLabel(1))
+        assertEquals(UiText.Str(R.string.record_hud_flash_auto), RecordHudFormatters.formatFlashLabel(2))
         // Unknown mode collapses to Off so the HUD never blanks the line.
-        assertEquals("Flash off", RecordHudFormatters.formatFlashLabel(99))
+        assertEquals(UiText.Str(R.string.record_hud_flash_off), RecordHudFormatters.formatFlashLabel(99))
     }
 
     // ─── formatElapsedAnnouncement ────────────────────────────────
@@ -161,19 +177,19 @@ class RecordHudFormattersTest {
     @Test
     fun `formatElapsedAnnouncement uses minutes-only copy under one hour`() {
         assertEquals(
-            "Session just started",
+            UiText.Str(R.string.record_hud_elapsed_just_started),
             RecordHudFormatters.formatElapsedAnnouncement(0L)
         )
         assertEquals(
-            "Session just started",
+            UiText.Str(R.string.record_hud_elapsed_just_started),
             RecordHudFormatters.formatElapsedAnnouncement(30L)
         )
         assertEquals(
-            "Session elapsed 1 minute",
+            UiText.StrArgs(R.string.record_hud_elapsed_minute, listOf(1L)),
             RecordHudFormatters.formatElapsedAnnouncement(60L)
         )
         assertEquals(
-            "Session elapsed 6 minutes",
+            UiText.StrArgs(R.string.record_hud_elapsed_minutes, listOf(6L)),
             RecordHudFormatters.formatElapsedAnnouncement(402L)
         )
     }
@@ -181,19 +197,19 @@ class RecordHudFormattersTest {
     @Test
     fun `formatElapsedAnnouncement carries hours past one hour`() {
         assertEquals(
-            "Session elapsed 1 hour",
+            UiText.StrArgs(R.string.record_hud_elapsed_hour, listOf(1L)),
             RecordHudFormatters.formatElapsedAnnouncement(3600L)
         )
         assertEquals(
-            "Session elapsed 1 hour 30 minutes",
+            UiText.StrArgs(R.string.record_hud_elapsed_hour_minutes, listOf(1L, 30L)),
             RecordHudFormatters.formatElapsedAnnouncement(3600L + 1800L)
         )
         assertEquals(
-            "Session elapsed 2 hours",
+            UiText.StrArgs(R.string.record_hud_elapsed_hours, listOf(2L)),
             RecordHudFormatters.formatElapsedAnnouncement(2L * 3600L)
         )
         assertEquals(
-            "Session elapsed 2 hours 1 minute",
+            UiText.StrArgs(R.string.record_hud_elapsed_hours_minute, listOf(2L, 1L)),
             RecordHudFormatters.formatElapsedAnnouncement(2L * 3600L + 60L)
         )
     }
@@ -248,13 +264,22 @@ class RecordHudFormattersTest {
 
     @Test
     fun `formatMergeProgressNumbers renders mockup example`() {
-        assertEquals("3 of 6", RecordHudFormatters.formatMergeProgressNumbers(3, 6))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(3, 6)),
+            RecordHudFormatters.formatMergeProgressNumbers(3, 6)
+        )
     }
 
     @Test
     fun `formatMergeProgressNumbers handles boundary values`() {
-        assertEquals("0 of 6", RecordHudFormatters.formatMergeProgressNumbers(0, 6))
-        assertEquals("6 of 6", RecordHudFormatters.formatMergeProgressNumbers(6, 6))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(0, 6)),
+            RecordHudFormatters.formatMergeProgressNumbers(0, 6)
+        )
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(6, 6)),
+            RecordHudFormatters.formatMergeProgressNumbers(6, 6)
+        )
     }
 
     @Test
@@ -262,20 +287,32 @@ class RecordHudFormattersTest {
         // The export pipeline emits a 1.0 progress tick before the
         // segment count snapshot has been trimmed; the digits must
         // not race past the denominator.
-        assertEquals("6 of 6", RecordHudFormatters.formatMergeProgressNumbers(7, 6))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(6, 6)),
+            RecordHudFormatters.formatMergeProgressNumbers(7, 6)
+        )
     }
 
     @Test
     fun `formatMergeProgressNumbers coerces negatives to zero`() {
-        assertEquals("0 of 4", RecordHudFormatters.formatMergeProgressNumbers(-2, 4))
-        assertEquals("0 of 0", RecordHudFormatters.formatMergeProgressNumbers(2, -3))
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(0, 4)),
+            RecordHudFormatters.formatMergeProgressNumbers(-2, 4)
+        )
+        assertEquals(
+            UiText.StrArgs(R.string.record_hud_merge_of, listOf(0, 0)),
+            RecordHudFormatters.formatMergeProgressNumbers(2, -3)
+        )
     }
 
     // ─── Phase 2.4 — formatMergeRemaining ─────────────────────────
 
     @Test
     fun `formatMergeRemaining renders starting copy at zero progress`() {
-        assertEquals("Starting merge…", RecordHudFormatters.formatMergeRemaining(0f))
+        assertEquals(
+            UiText.Str(R.string.record_hud_merge_starting),
+            RecordHudFormatters.formatMergeRemaining(0f)
+        )
     }
 
     @Test
@@ -284,19 +321,31 @@ class RecordHudFormattersTest {
         // and no wall-clock estimate; rather than fabricating an
         // ETA, the helper returns null so the band hides the
         // sub-line.
-        assertEquals(null, RecordHudFormatters.formatMergeRemaining(0.5f))
+        assertNull(RecordHudFormatters.formatMergeRemaining(0.5f))
     }
 
     @Test
     fun `formatMergeRemaining renders almost-done copy near completion`() {
-        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(0.85f))
-        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(1f))
+        assertEquals(
+            UiText.Str(R.string.record_hud_merge_almost),
+            RecordHudFormatters.formatMergeRemaining(0.85f)
+        )
+        assertEquals(
+            UiText.Str(R.string.record_hud_merge_almost),
+            RecordHudFormatters.formatMergeRemaining(1f)
+        )
     }
 
     @Test
     fun `formatMergeRemaining clamps progress before mapping`() {
-        assertEquals("Starting merge…", RecordHudFormatters.formatMergeRemaining(-0.5f))
-        assertEquals("Almost done…", RecordHudFormatters.formatMergeRemaining(2f))
+        assertEquals(
+            UiText.Str(R.string.record_hud_merge_starting),
+            RecordHudFormatters.formatMergeRemaining(-0.5f)
+        )
+        assertEquals(
+            UiText.Str(R.string.record_hud_merge_almost),
+            RecordHudFormatters.formatMergeRemaining(2f)
+        )
     }
 
     // ─── Phase 2.4 — formatMergeAnnouncement ──────────────────────
@@ -304,7 +353,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeAnnouncement renders mockup example`() {
         assertEquals(
-            "Merging clip 3 of 6",
+            UiText.StrArgs(R.string.record_hud_merge_clip_of, listOf(3, 6)),
             RecordHudFormatters.formatMergeAnnouncement(3, 6)
         )
     }
@@ -312,7 +361,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeAnnouncement renders preparing copy at zero progress`() {
         assertEquals(
-            "Preparing to merge 6 clips",
+            UiText.StrArgs(R.string.record_hud_merge_preparing_clips, listOf(6)),
             RecordHudFormatters.formatMergeAnnouncement(0, 6)
         )
     }
@@ -320,7 +369,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeAnnouncement collapses to preparing for empty total`() {
         assertEquals(
-            "Preparing to merge",
+            UiText.Str(R.string.record_hud_merge_preparing),
             RecordHudFormatters.formatMergeAnnouncement(0, 0)
         )
     }
@@ -328,7 +377,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeAnnouncement clamps overshoot`() {
         assertEquals(
-            "Merging clip 6 of 6",
+            UiText.StrArgs(R.string.record_hud_merge_clip_of, listOf(6, 6)),
             RecordHudFormatters.formatMergeAnnouncement(7, 6)
         )
     }
@@ -338,7 +387,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeCompleteSummary renders plural`() {
         assertEquals(
-            "6 clips · saved to Library",
+            UiText.StrArgs(R.string.record_hud_merge_complete_summary_other, listOf(6)),
             RecordHudFormatters.formatMergeCompleteSummary(6)
         )
     }
@@ -346,7 +395,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeCompleteSummary renders singular`() {
         assertEquals(
-            "1 clip · saved to Library",
+            UiText.StrArgs(R.string.record_hud_merge_complete_summary_one, listOf(1)),
             RecordHudFormatters.formatMergeCompleteSummary(1)
         )
     }
@@ -354,7 +403,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatMergeCompleteSummary coerces negative to zero plural`() {
         assertEquals(
-            "0 clips · saved to Library",
+            UiText.StrArgs(R.string.record_hud_merge_complete_summary_other, listOf(0)),
             RecordHudFormatters.formatMergeCompleteSummary(-3)
         )
     }
@@ -364,7 +413,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatSessionStatusAnnouncement recording with loop of total`() {
         assertEquals(
-            "Recording, loop 2 of 5.",
+            UiText.StrArgs(R.string.record_hud_session_status_recording_of, listOf(2, 5)),
             RecordHudFormatters.formatSessionStatusAnnouncement(
                 isRecording = true, currentLoop = 2, totalLoops = 5,
             )
@@ -374,7 +423,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatSessionStatusAnnouncement queued when not recording`() {
         assertEquals(
-            "Queued, loop 0 of 5.",
+            UiText.StrArgs(R.string.record_hud_session_status_queued_of, listOf(0, 5)),
             RecordHudFormatters.formatSessionStatusAnnouncement(
                 isRecording = false, currentLoop = 0, totalLoops = 5,
             )
@@ -384,7 +433,7 @@ class RecordHudFormattersTest {
     @Test
     fun `formatSessionStatusAnnouncement omits total for non-positive total`() {
         assertEquals(
-            "Recording, loop 3.",
+            UiText.StrArgs(R.string.record_hud_session_status_recording, listOf(3)),
             RecordHudFormatters.formatSessionStatusAnnouncement(
                 isRecording = true, currentLoop = 3, totalLoops = 0,
             )
