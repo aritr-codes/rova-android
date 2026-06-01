@@ -38,4 +38,23 @@
         <item quantity="one">%1$d clip recovered.</item>
         <item quantity="other">%1$d clips recovered.</item>
     </plurals>
+
+    <!-- Notification MergeComplete body (B3 i18n task 9b) -->
+    <!-- %1$d = clip count (passed twice: rule selection + %d fill), %2$s = total duration MM:SS -->
+    <plurals name="notification_complete_body_dur">
+        <item quantity="one">%1$d clip · %2$s total · saved to Library</item>
+        <item quantity="other">%1$d clips · %2$s total · saved to Library</item>
+    </plurals>
+    <!-- %1$d = clip count -->
+    <plurals name="notification_complete_body_nodur">
+        <item quantity="one">%1$d clip saved to Library</item>
+        <item quantity="other">%1$d clips saved to Library</item>
+    </plurals>
+
+    <!-- Notification dots-row contentDescription for MergeComplete (B3 i18n task 9b) -->
+    <!-- %1$d = clip count -->
+    <plurals name="notification_dots_complete_cd">
+        <item quantity="one">All %1$d clip complete</item>
+        <item quantity="other">All %1$d clips complete</item>
+    </plurals>
 </resources>

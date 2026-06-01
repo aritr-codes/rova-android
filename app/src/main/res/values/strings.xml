@@ -101,6 +101,33 @@
     <string name="notification_recording_stopped_detail">Recording stopped: %1$s</string>
     <string name="notification_unknown_error">unknown error</string>
 
+    <!-- B3 i18n task 9b: live foreground-notification copy (NotificationCopy.toCopy) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_clip_title_total">Recording · Clip %1$d of %2$d</string>
+    <!-- %1$d = current clip -->
+    <string name="notification_clip_title">Recording · Clip %1$d</string>
+    <!-- %1$s = mm:ss remaining -->
+    <string name="notification_clip_body_eta">%1$s remaining in this clip</string>
+    <string name="notification_clip_body_static">Recording in progress</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_gap_title_total">Waiting · Clip %1$d of %2$d next</string>
+    <!-- %1$d = next clip number -->
+    <string name="notification_gap_title">Waiting · Clip %1$d next</string>
+    <!-- %1$s = next-in label -->
+    <string name="notification_gap_body">Next clip starts in %1$s</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_merging_title">Merging clips · %1$d of %2$d</string>
+    <string name="notification_merging_body">Processing — please wait</string>
+    <string name="notification_complete_title">Merge complete</string>
+
+    <!-- B3 i18n task 9b: dots-row contentDescription (NotificationDotsRow.toDotsPlan) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_dots_cd_recording">Clip %1$d of %2$d</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_dots_cd_waiting">Waiting, %1$d of %2$d next</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_dots_cd_merging">Merging, %1$d of %2$d done</string>
+
     <!-- Record screen / chrome / HUD (B3 i18n task 2) -->
     <!-- Stepper default contentDescription -->
     <string name="record_stepper_decrease">Decrease</string>

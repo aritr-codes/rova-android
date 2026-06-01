@@ -1,5 +1,8 @@
 package com.aritr.rova.service.notification
 
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
+
 /**
  * Phase 3.1 (NEW_UI_BACKEND_REPLAN §5 row 3.1) + M5 redesign
  * (docs/superpowers/specs/2026-05-27-notification-redesign-v1-design.md)
@@ -62,41 +65,57 @@ sealed interface NotificationState {
  * the service; the only escapes from this file are the four `to*()`
  * helpers in sibling files.
  */
-data class NotificationCopy(val title: String, val body: String)
+data class NotificationCopy(val title: UiText, val body: UiText)
 
 private fun formatMmSs(totalSeconds: Int): String {
     val s = totalSeconds.coerceAtLeast(0)
     return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
 }
 
-// i18n-opt-out: pure mockup-contract helper, JVM-tested under
-// isReturnDefaultValues=true (29 exact-string assertions in NotificationCopyTest).
-// Externalizing requires a UiText/@StringRes token seam + plurals.xml for the
-// singular/plural + mm:ss formatting — a separate behavioral-risk slice, not
-// this literal→getString pass. Strings stay literal here by design (B3 task 9).
+// B3 i18n task 9b: resource-backed UiText tokens (same precedent as
+// RecordHudFormatters / Player Unavailable / recovery mapper). The mm:ss seam
+// (formatMmSs) is pure number formatting — NOT localizable copy — so its result
+// is passed as a %1$s string arg, never externalized. English verified once at
+// the resource layer (strings.xml / plurals.xml).
 fun NotificationState.toCopy(): NotificationCopy = when (this) {
     is NotificationState.ClipRecording -> NotificationCopy(
-        title = if (total != null) "Recording · Clip $current of $total" else "Recording · Clip $current",
-        body = if (etaSecondsRemaining != null) "${formatMmSs(etaSecondsRemaining)} remaining in this clip"
-        else "Recording in progress"
+        title = if (total != null) {
+            UiText.StrArgs(R.string.notification_clip_title_total, listOf(current, total))
+        } else {
+            UiText.StrArgs(R.string.notification_clip_title, listOf(current))
+        },
+        body = if (etaSecondsRemaining != null) {
+            UiText.StrArgs(R.string.notification_clip_body_eta, listOf(formatMmSs(etaSecondsRemaining)))
+        } else {
+            UiText.Str(R.string.notification_clip_body_static)
+        }
     )
     is NotificationState.GapWaiting -> NotificationCopy(
-        title = if (total != null) "Waiting · Clip $nextNumber of $total next" else "Waiting · Clip $nextNumber next",
-        body = "Next clip starts in $nextInLabel"
+        title = if (total != null) {
+            UiText.StrArgs(R.string.notification_gap_title_total, listOf(nextNumber, total))
+        } else {
+            UiText.StrArgs(R.string.notification_gap_title, listOf(nextNumber))
+        },
+        body = UiText.StrArgs(R.string.notification_gap_body, listOf(nextInLabel))
     )
     is NotificationState.Merging -> NotificationCopy(
-        title = "Merging clips · $done of $total",
-        body = "Processing — please wait"
+        title = UiText.StrArgs(R.string.notification_merging_title, listOf(done, total)),
+        body = UiText.Str(R.string.notification_merging_body)
     )
     is NotificationState.MergeComplete -> NotificationCopy(
-        title = "Merge complete",
-        body = when {
-            totalDurationSeconds != null && clipCount == 1 ->
-                "1 clip · ${formatMmSs(totalDurationSeconds)} total · saved to Library"
-            totalDurationSeconds != null ->
-                "$clipCount clips · ${formatMmSs(totalDurationSeconds)} total · saved to Library"
-            clipCount == 1 -> "1 clip saved to Library"
-            else -> "$clipCount clips saved to Library"
+        title = UiText.Str(R.string.notification_complete_title),
+        body = if (totalDurationSeconds != null) {
+            UiText.Plural(
+                R.plurals.notification_complete_body_dur,
+                clipCount,
+                listOf(clipCount, formatMmSs(totalDurationSeconds))
+            )
+        } else {
+            UiText.Plural(
+                R.plurals.notification_complete_body_nodur,
+                clipCount,
+                listOf(clipCount)
+            )
         }
     )
 }

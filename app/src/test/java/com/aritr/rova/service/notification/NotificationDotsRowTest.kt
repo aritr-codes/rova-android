@@ -1,5 +1,7 @@
 package com.aritr.rova.service.notification
 
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,6 +11,10 @@ import org.junit.Test
 /**
  * M5 Phase 3 §7 — pure-JVM tests for [NotificationDotsRow.toDotsPlan].
  * No RemoteViews, no Context — DotsPlan is plain data.
+ *
+ * B3 i18n task 9b: contentDescription is now a [UiText]? token (null = no
+ * announcement, replacing the old "" sentinel). Asserts the token / null rather
+ * than resolved English.
  */
 class NotificationDotsRowTest {
 
@@ -22,13 +28,17 @@ class NotificationDotsRowTest {
         assertEquals(DotState.Kind.CURRENT, plan.pills[1].kind)
         assertEquals(DotState.Kind.TODO, plan.pills[2].kind)
         assertEquals(NotificationChannelConfig.ACCENT_RECORDING, plan.accent)
-        assertEquals("Clip 2 of 6", plan.contentDescription)
+        assertEquals(
+            UiText.StrArgs(R.string.notification_dots_cd_recording, listOf(2, 6)),
+            plan.contentDescription
+        )
     }
 
     @Test fun `ClipRecording with total=null is invisible (unknown total)`() {
         val plan = NotificationState.ClipRecording(current = 1, total = null).toDotsPlan()
         assertFalse(plan.visible)
         assertTrue(plan.pills.isEmpty())
+        assertNull(plan.contentDescription)
     }
 
     // ----- GapWaiting -----
@@ -43,6 +53,10 @@ class NotificationDotsRowTest {
         assertEquals(DotState.Kind.DONE, plan.pills[1].kind)
         assertEquals(DotState.Kind.TODO, plan.pills[2].kind)
         assertEquals(NotificationChannelConfig.ACCENT_RECORDING, plan.accent)
+        assertEquals(
+            UiText.StrArgs(R.string.notification_dots_cd_waiting, listOf(3, 6)),
+            plan.contentDescription
+        )
     }
 
     @Test fun `GapWaiting with total=null is invisible`() {
@@ -50,6 +64,7 @@ class NotificationDotsRowTest {
             nextNumber = 2, nextInLabel = "1:00", total = null
         ).toDotsPlan()
         assertFalse(plan.visible)
+        assertNull(plan.contentDescription)
     }
 
     // ----- Merging -----
@@ -62,7 +77,10 @@ class NotificationDotsRowTest {
         assertEquals(DotState.Kind.CURRENT, plan.pills[4].kind)
         assertEquals(DotState.Kind.TODO, plan.pills[5].kind)
         assertEquals(NotificationChannelConfig.ACCENT_RECORDING, plan.accent)
-        assertEquals("Merging, 4 of 6 done", plan.contentDescription)
+        assertEquals(
+            UiText.StrArgs(R.string.notification_dots_cd_merging, listOf(4, 6)),
+            plan.contentDescription
+        )
     }
 
     @Test fun `Merging with done=6 total=6 yields all DONE`() {
@@ -79,20 +97,27 @@ class NotificationDotsRowTest {
         assertEquals(6, plan.pills.size)
         assertTrue(plan.pills.all { it.kind == DotState.Kind.DONE })
         assertEquals(NotificationChannelConfig.ACCENT_COMPLETE, plan.accent)
-        assertEquals("All 6 clips complete", plan.contentDescription)
+        assertEquals(
+            UiText.Plural(R.plurals.notification_dots_complete_cd, 6, listOf(6)),
+            plan.contentDescription
+        )
     }
 
     @Test fun `MergeComplete with clipCount=1 yields 1 DONE pill`() {
         val plan = NotificationState.MergeComplete(clipCount = 1).toDotsPlan()
         assertEquals(1, plan.pills.size)
         assertEquals(DotState.Kind.DONE, plan.pills[0].kind)
-        assertEquals("All 1 clip complete", plan.contentDescription)
+        assertEquals(
+            UiText.Plural(R.plurals.notification_dots_complete_cd, 1, listOf(1)),
+            plan.contentDescription
+        )
     }
 
     @Test fun `MergeComplete with clipCount=0 is invisible`() {
         val plan = NotificationState.MergeComplete(clipCount = 0).toDotsPlan()
         assertFalse(plan.visible)
         assertTrue(plan.pills.isEmpty())
+        assertNull(plan.contentDescription)
     }
 
     // ----- Large N cap policy (§3.1) -----
@@ -113,7 +138,10 @@ class NotificationDotsRowTest {
         assertTrue(plan.pills.take(7).all { it.kind == DotState.Kind.DONE })
         assertEquals(DotState.Kind.COUNT_PILL, plan.pills[7].kind)
         assertEquals("+43", plan.pills[7].countLabel)
-        assertEquals("All 50 clips complete", plan.contentDescription)
+        assertEquals(
+            UiText.Plural(R.plurals.notification_dots_complete_cd, 50, listOf(50)),
+            plan.contentDescription
+        )
     }
 
     // ----- Boundary: total = 8 — exactly fits, no count pill -----

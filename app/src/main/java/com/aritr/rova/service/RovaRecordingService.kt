@@ -57,6 +57,7 @@ import com.aritr.rova.service.notification.toBindPlan
 import com.aritr.rova.service.notification.toChannelId
 import com.aritr.rova.service.notification.isDismissible
 import com.aritr.rova.service.scheduler.AlarmScheduler
+import com.aritr.rova.ui.text.resolve
 import android.os.Binder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -2785,8 +2786,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // M5 Phase 3 §3.2: drop setColorized — title color + dots + green
         // border on notif_surface_complete carry the celebratory signal.
         val builder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(plan.title)
-            .setContentText(plan.body)
+            .setContentTitle(plan.title.resolve(this))
+            .setContentText(plan.body.resolve(this))
             .setSmallIcon(plan.iconRes)
             .setColor(plan.accent)
             .setContentIntent(openPendingIntent)
@@ -2822,18 +2823,22 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val layoutRes = if (expanded) plan.layoutExpandedRes else plan.layoutCollapsedRes
         val rv = RemoteViews(packageName, layoutRes)
 
+        // B3 i18n task 9b: resolve UiText title/body once at the Context edge.
+        val title = plan.title.resolve(this)
+        val body = plan.body.resolve(this)
+
         // Surface drawable — runtime swap between default + complete variant.
         rv.setInt(R.id.notif_root, "setBackgroundResource", plan.surfaceRes)
 
         // Title + optional explicit color (MergeComplete only).
-        rv.setTextViewText(R.id.notif_title, plan.title)
+        rv.setTextViewText(R.id.notif_title, title)
         plan.titleColor?.let { rv.setTextColor(R.id.notif_title, it) }
         // WCAG 2.2 AA SC 1.1.1 (ADR-0020, NOTI-05): explicit CD on the custom
         // notification title so TalkBack names it in SystemUI's process.
-        rv.setContentDescription(R.id.notif_title, plan.title)
+        rv.setContentDescription(R.id.notif_title, title)
 
         if (expanded) {
-            rv.setTextViewText(R.id.notif_body, plan.body)
+            rv.setTextViewText(R.id.notif_body, body)
 
             // Chronometer / body toggle (Phase 3.1 §4.2).
             // ClipRecording + GapWaiting → Chronometer visible, body hidden.
@@ -2847,7 +2852,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // NOTI-05: a raw ticking Chronometer reads as bare digits; the
                 // body line ("Clip 2 · recording") is the meaningful label, so
                 // borrow it as the timer's content description.
-                rv.setContentDescription(R.id.notif_chrono, plan.body)
+                rv.setContentDescription(R.id.notif_chrono, body)
             } else {
                 rv.setViewVisibility(R.id.notif_chrono, View.GONE)
                 rv.setViewVisibility(R.id.notif_body, View.VISIBLE)
@@ -2865,7 +2870,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // unlabeled ImageViews. DotsPlan already computes a spoken
                 // summary ("Clip 3 of 6", "All 6 clips complete") — wire it to
                 // the row so the group is announced as one unit.
-                rv.setContentDescription(R.id.notif_dots_row, dots.contentDescription)
+                // B3 i18n task 9b: null CD preserves the old "" sentinel byte-for-byte.
+                rv.setContentDescription(R.id.notif_dots_row, dots.contentDescription?.resolve(this) ?: "")
                 val pills = dots.pills
                 val visibleCount = pills.size.coerceAtMost(8)
                 rv.setFloat(R.id.notif_dots_row, "setWeightSum", visibleCount.toFloat())

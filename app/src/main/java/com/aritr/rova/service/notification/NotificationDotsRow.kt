@@ -1,6 +1,8 @@
 package com.aritr.rova.service.notification
 
 import androidx.annotation.ColorInt
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
 
 /**
  * M5 Phase 3 §7 — single pill in the clip-progress row.
@@ -23,7 +25,7 @@ data class DotState(val kind: Kind, val countLabel: String? = null) {
 data class DotsPlan(
     val pills: List<DotState>,
     @ColorInt val accent: Int,
-    val contentDescription: String,
+    val contentDescription: UiText?,
     val visible: Boolean
 ) {
     companion object {
@@ -32,29 +34,37 @@ data class DotsPlan(
     }
 }
 
-// i18n-opt-out: pure JVM-tested helper; its contentDescription strings
-// ("Clip 3 of 6", "All 6 clips complete") build via the same literal pattern
-// as NotificationCopy.toCopy and share the deferred token-seam/plurals refactor
-// (B3 task 9). Strings stay literal here by design.
+// B3 i18n task 9b: resource-backed UiText tokens (same precedent as Task 8's
+// recovery mapper). contentDescription is now UiText? — null replaces the old ""
+// sentinel meaning "no announcement / row hidden". The service resolves it at the
+// Context edge and maps null → "" exactly where the old empty string flowed.
 fun NotificationState.toDotsPlan(): DotsPlan = when (this) {
     is NotificationState.ClipRecording -> buildPlanFromActive(
         accent = NotificationChannelConfig.ACCENT_RECORDING,
         total = total,
         currentIndex = current - 1,
-        contentDescription = if (total != null) "Clip $current of $total" else ""
+        contentDescription = if (total != null) {
+            UiText.StrArgs(R.string.notification_dots_cd_recording, listOf(current, total))
+        } else {
+            null
+        }
     )
     is NotificationState.GapWaiting -> buildPlanFromActive(
         accent = NotificationChannelConfig.ACCENT_RECORDING,
         total = total,
         currentIndex = nextNumber - 1,
         noCurrentState = true,
-        contentDescription = if (total != null) "Waiting, $nextNumber of $total next" else ""
+        contentDescription = if (total != null) {
+            UiText.StrArgs(R.string.notification_dots_cd_waiting, listOf(nextNumber, total))
+        } else {
+            null
+        }
     )
     is NotificationState.Merging -> buildPlanFromActive(
         accent = NotificationChannelConfig.ACCENT_RECORDING,
         total = total,
         currentIndex = done,
-        contentDescription = "Merging, $done of $total done"
+        contentDescription = UiText.StrArgs(R.string.notification_dots_cd_merging, listOf(done, total))
     )
     is NotificationState.MergeComplete -> buildPlanForComplete(
         accent = NotificationChannelConfig.ACCENT_COMPLETE,
@@ -66,11 +76,11 @@ private fun buildPlanFromActive(
     @ColorInt accent: Int,
     total: Int?,
     currentIndex: Int,
-    contentDescription: String,
+    contentDescription: UiText?,
     noCurrentState: Boolean = false
 ): DotsPlan {
     if (total == null || total <= 0) {
-        return DotsPlan(pills = emptyList(), accent = accent, contentDescription = "", visible = false)
+        return DotsPlan(pills = emptyList(), accent = accent, contentDescription = null, visible = false)
     }
     fun kindFor(i: Int): DotState.Kind = when {
         i < currentIndex -> DotState.Kind.DONE
@@ -90,9 +100,9 @@ private fun buildPlanFromActive(
 
 private fun buildPlanForComplete(@ColorInt accent: Int, clipCount: Int): DotsPlan {
     if (clipCount <= 0) {
-        return DotsPlan(pills = emptyList(), accent = accent, contentDescription = "", visible = false)
+        return DotsPlan(pills = emptyList(), accent = accent, contentDescription = null, visible = false)
     }
-    val cd = if (clipCount == 1) "All 1 clip complete" else "All $clipCount clips complete"
+    val cd = UiText.Plural(R.plurals.notification_dots_complete_cd, clipCount, listOf(clipCount))
     val pills = if (clipCount <= DotsPlan.MAX_VISIBLE_PILLS) {
         List(clipCount) { DotState(kind = DotState.Kind.DONE) }
     } else {

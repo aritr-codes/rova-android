@@ -4,6 +4,7 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
 import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
 
 /**
  * M5 Phase 3.1 §6 — countdown spec for Chronometer binding.
@@ -38,8 +39,8 @@ data class ChronoSpec(val baseElapsedMs: Long)
 data class NotificationBindPlan(
     @LayoutRes val layoutCollapsedRes: Int,
     @LayoutRes val layoutExpandedRes: Int,
-    val title: String,
-    val body: String,
+    val title: UiText,
+    val body: UiText,
     val collapsedTail: String?,
     @ColorInt val accent: Int,
     @DrawableRes val iconRes: Int,
