@@ -191,4 +191,46 @@
 
     <!-- Merge failure snackbar -->
     <string name="record_merge_failed">Merge failed. Open Library to recover.</string>
+
+    <!-- History / Library screen (B3 i18n task 3) -->
+    <string name="history_title">Library</string>
+    <string name="history_back_cd">Back</string>
+
+    <!-- Library row 3-dot menu actions -->
+    <string name="history_action_open">Open</string>
+    <string name="history_action_edit">Edit</string>
+    <string name="history_action_view_settings">View Settings</string>
+
+    <!-- Library row thumbnail (contentDescription) -->
+    <string name="history_play_cd">Play</string>
+
+    <!-- Selection-mode top bar (contentDescription) -->
+    <string name="history_close_selection_cd">Close selection</string>
+    <string name="history_share_cd">Share</string>
+    <string name="history_delete_cd">Delete</string>
+
+    <!-- Share flow -->
+    <string name="history_share_chooser_title">Share videos</string>
+    <string name="history_share_not_ready">Recording not ready to share yet</string>
+    <string name="history_share_no_app">No app available to share videos</string>
+
+    <!-- Snackbars -->
+    <string name="history_settings_unavailable">Settings not available for this recording</string>
+    <string name="history_editor_coming_soon">Editor coming in a future release</string>
+
+    <!-- Recovery card OEM auto-start help -->
+    <string name="history_recovery_open_device_settings">Open device settings</string>
+
+    <!-- Empty state -->
+    <string name="history_empty_title">No Recordings Yet</string>
+    <string name="history_empty_body">Your merged sessions will appear here once you complete a recording.</string>
+    <string name="history_empty_start_recording">Start Recording</string>
+
+    <!-- View Settings dialog (LibrarySessionConfigDialog) -->
+    <string name="history_config_title">Recording Settings</string>
+    <string name="history_config_clip_length">Clip length</string>
+    <string name="history_config_repeats">Repeats</string>
+    <string name="history_config_wait">Wait</string>
+    <string name="history_config_quality">Quality</string>
+    <string name="history_config_close">Close</string>
 </resources>

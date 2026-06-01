@@ -13,8 +13,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.data.SessionConfig
 
 /**
@@ -47,7 +49,7 @@ fun LibrarySessionConfigDialog(
         shape = RoundedCornerShape(18.dp),
         title = {
             Text(
-                text = "Recording Settings",
+                text = stringResource(R.string.history_config_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -55,28 +57,28 @@ fun LibrarySessionConfigDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ConfigRow(
-                    label = "Clip length",
+                    label = stringResource(R.string.history_config_clip_length),
                     value = LibrarySessionConfigFormatters.formatClipLength(
                         config.durationSeconds
                     )
                 )
                 ConfigRow(
-                    label = "Repeats",
+                    label = stringResource(R.string.history_config_repeats),
                     value = LibrarySessionConfigFormatters.formatRepeats(config.loopCount)
                 )
                 ConfigRow(
-                    label = "Wait",
+                    label = stringResource(R.string.history_config_wait),
                     value = LibrarySessionConfigFormatters.formatWait(config.intervalMinutes)
                 )
                 ConfigRow(
-                    label = "Quality",
+                    label = stringResource(R.string.history_config_quality),
                     value = LibrarySessionConfigFormatters.formatQuality(config.resolution)
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(stringResource(R.string.history_config_close))
             }
         }
     )

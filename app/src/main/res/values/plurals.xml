@@ -8,4 +8,14 @@
         <item quantity="one">%1$d recording interrupted. Review.</item>
         <item quantity="other">%1$d recordings interrupted. Review.</item>
     </plurals>
+
+    <!-- History / Library selection + delete counts (B3 i18n task 3) -->
+    <plurals name="history_selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <plurals name="history_delete_failed_count">
+        <item quantity="one">Could not delete %d recording</item>
+        <item quantity="other">Could not delete %d recordings</item>
+    </plurals>
 </resources>
