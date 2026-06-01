@@ -43,11 +43,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -86,9 +88,9 @@ internal fun WarningSheetV3(
         WarningSurface.TopBanner -> RovaWarnings.advisory   // unreachable here
     }
     val severityLabel: String = when (surface) {
-        WarningSurface.HardBlockSheet -> "Hard · Required"
-        WarningSurface.SoftSheet -> "Soft · Degraded mode"
-        WarningSurface.AdvisorySheet -> "Advisory · Optional"
+        WarningSurface.HardBlockSheet -> stringResource(R.string.warning_severity_hard)
+        WarningSurface.SoftSheet -> stringResource(R.string.warning_severity_soft)
+        WarningSurface.AdvisorySheet -> stringResource(R.string.warning_severity_advisory)
         WarningSurface.TopBanner -> ""
     }
 
@@ -146,17 +148,17 @@ internal fun WarningSheetV3(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text = content.title,
+                    text = stringResource(content.title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White.copy(alpha = 0.94f),
                     textAlign = TextAlign.Center,
                 )
 
-                if (content.body.isNotBlank()) {
+                if (content.body != 0) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = content.body,
+                        text = stringResource(content.body),
                         style = MaterialTheme.typography.bodySmall,
                         // WCAG 2.2 AA (ADR-0020, audit WARN-01): 0.45α was ~4.10:1
                         // over the elevated sheet surface — below the 4.5:1 SC 1.4.3
@@ -172,32 +174,33 @@ internal fun WarningSheetV3(
                 if (shouldShowWhy(id)) {
                     WhyExpander(
                         expanded = expanded,
-                        whyBody = content.whyThisMatters!!,
+                        whyBody = stringResource(content.whyThisMatters!!),
                         onToggle = onToggleWhy,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
 
                 PrimaryCta(
-                    label = content.primary.label,
+                    label = stringResource(content.primary.label),
                     accent = accent,
                     onClick = onPrimary,
                 )
 
                 content.secondary?.let { sec ->
                     Spacer(Modifier.height(8.dp))
-                    SecondaryCta(label = sec.label, onClick = onSecondary)
+                    SecondaryCta(label = stringResource(sec.label), onClick = onSecondary)
                 }
 
                 // Phase 4.3 — tertiary CTA (e.g. C2.4 CANT_MERGE "Discard session").
                 // Only Link style is used for tertiary in this slice; the when-block is
                 // exhaustive so future styles (Secondary/Primary) compile cleanly.
                 content.tertiary?.let { ter ->
+                    val terLabel = stringResource(ter.label)
                     when (ter.style) {
                         WarningActionStyle.Link -> {
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = ter.label,
+                                text = terLabel,
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
                                 color = RovaWarnings.hard,
@@ -211,11 +214,11 @@ internal fun WarningSheetV3(
                         }
                         WarningActionStyle.Secondary -> {
                             Spacer(Modifier.height(8.dp))
-                            SecondaryCta(label = ter.label, onClick = onTertiary)
+                            SecondaryCta(label = terLabel, onClick = onTertiary)
                         }
                         WarningActionStyle.Primary -> {
                             Spacer(Modifier.height(8.dp))
-                            PrimaryCta(label = ter.label, accent = accent, onClick = onTertiary)
+                            PrimaryCta(label = terLabel, accent = accent, onClick = onTertiary)
                         }
                     }
                 }
@@ -333,7 +336,7 @@ private fun WhyExpander(
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = "Why this matters",
+                text = stringResource(R.string.warning_why_this_matters),
                 style = MaterialTheme.typography.labelMedium,
                 color = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowForegroundAlpha),
                 modifier = Modifier.weight(1f),
@@ -427,7 +430,7 @@ private fun OverflowMenu(
         ) {
             Icon(
                 imageVector = Icons.Default.MoreHoriz,
-                contentDescription = "More actions",
+                contentDescription = stringResource(R.string.warning_more_actions_cd),
                 tint = Color.White.copy(alpha = 0.30f),
             )
         }
@@ -437,7 +440,7 @@ private fun OverflowMenu(
         ) {
             overflow.forEach { action ->
                 DropdownMenuItem(
-                    text = { Text(action.label) },
+                    text = { Text(stringResource(action.label)) },
                     onClick = {
                         menuOpen = false
                         onTarget(action.target)

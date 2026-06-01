@@ -27,8 +27,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaWarnings
 
 /**
@@ -78,7 +81,7 @@ private fun HistoryWarningCard(
             .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.10f))
             .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
-            .clickable(onClickLabel = "View", role = Role.Button, onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.warning_view_action_label), role = Role.Button, onClick = onClick)
             .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -89,7 +92,7 @@ private fun HistoryWarningCard(
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
             Text(
-                text = severityLabelFor(surface),
+                text = stringResource(severityLabelFor(surface)),
                 style = MaterialTheme.typography.labelSmall,
                 color = accent,
                 fontWeight = FontWeight.SemiBold,
@@ -97,7 +100,7 @@ private fun HistoryWarningCard(
         }
         Spacer(Modifier.size(10.dp))
         Text(
-            text = content.title,
+            text = stringResource(content.title),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
@@ -106,7 +109,7 @@ private fun HistoryWarningCard(
         IconButton(onClick = onDismiss) {
             Icon(
                 Icons.Default.Close,
-                contentDescription = "Dismiss",
+                contentDescription = stringResource(R.string.warning_dismiss_cd),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -125,12 +128,13 @@ internal fun accentFor(surface: WarningSurface): Color = when (surface) {
     WarningSurface.TopBanner -> RovaWarnings.escalating
 }
 
-/** Phase 4.2 — short severity label for compact strip / chip cards. */
-internal fun severityLabelFor(surface: WarningSurface): String = when (surface) {
-    WarningSurface.HardBlockSheet -> "HARD"
-    WarningSurface.SoftSheet -> "SOFT"
-    WarningSurface.AdvisorySheet -> "ADVISORY"
-    WarningSurface.TopBanner -> "ESCALATING"
+/** Phase 4.2 — short severity label (string resource) for compact strip / chip cards. */
+@StringRes
+internal fun severityLabelFor(surface: WarningSurface): Int = when (surface) {
+    WarningSurface.HardBlockSheet -> R.string.warning_severity_short_hard
+    WarningSurface.SoftSheet -> R.string.warning_severity_short_soft
+    WarningSurface.AdvisorySheet -> R.string.warning_severity_short_advisory
+    WarningSurface.TopBanner -> R.string.warning_severity_short_escalating
 }
 
 /**

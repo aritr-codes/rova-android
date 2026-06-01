@@ -1,7 +1,8 @@
 package com.aritr.rova.ui.warnings
 
+import com.aritr.rova.R
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -12,7 +13,7 @@ class WarningSheetContentTest {
     @Test fun everyWarningHasSheetContent() {
         for (id in WarningId.entries) {
             val c = warningSheetContent(id)
-            assertTrue("title non-blank for $id", c.title.isNotBlank())
+            assertNotEquals("title @StringRes set for $id", 0, c.title)
             when (warningSurfaceFor(id)) {
                 WarningSurface.HardBlockSheet, WarningSurface.SoftSheet, WarningSurface.AdvisorySheet ->
                     assertTrue("secondary action present for sheet-rendered $id", c.secondary != null)
@@ -23,7 +24,7 @@ class WarningSheetContentTest {
 
     @Test fun cameraDeniedRoutesToAppSettings() {
         val c = warningSheetContent(WarningId.CAMERA_PERMISSION_DENIED)
-        assertEquals("Camera access required", c.title)
+        assertEquals(R.string.warning_camera_perm_title, c.title)
         assertEquals(ActionTarget.APP_DETAILS_SETTINGS, c.primary.target)
     }
 
@@ -33,7 +34,7 @@ class WarningSheetContentTest {
 
     @Test fun micDeniedSecondaryIsContinueWithoutAudio() {
         val c = warningSheetContent(WarningId.MICROPHONE_DENIED)
-        assertTrue(c.secondary!!.label.contains("audio", ignoreCase = true) || c.secondary!!.label.contains("without", ignoreCase = true))
+        assertEquals(R.string.warning_mic_secondary, c.secondary!!.label)
     }
 
     @Test fun storage_low_mid_rec_arm_returns_nonblank_defensive_content() {
@@ -41,26 +42,26 @@ class WarningSheetContentTest {
         // warningSheetContent total over WarningId. The test checks that the arm
         // returns a non-blank, callable sheet content (never rendered as a sheet).
         val c = warningSheetContent(WarningId.STORAGE_LOW_MID_REC)
-        assertFalse("title", c.title.isBlank())
+        assertNotEquals("title @StringRes set", 0, c.title)
         assertNotNull("icon", c.icon)
-        assertEquals("OK", c.primary.label)
+        assertEquals(R.string.warning_action_ok, c.primary.label)
         assertNull("secondary should be null on TopBanner-only arm", c.secondary)
     }
 
     @Test
     fun `CANT_MERGE sheet renders 3 CTAs with link-styled tertiary`() {
         val content = warningSheetContent(WarningId.CANT_MERGE)
-        assertEquals("Can't merge yet", content.title)
-        assertEquals("Free space and retry, or keep the raw segments for later.", content.body)
-        assertEquals("Free space & retry", content.primary.label)
+        assertEquals(R.string.warning_cant_merge_title, content.title)
+        assertEquals(R.string.warning_cant_merge_body, content.body)
+        assertEquals(R.string.warning_cant_merge_primary, content.primary.label)
         assertEquals(ActionTarget.STORAGE_SETTINGS, content.primary.target)
         assertEquals(WarningActionStyle.Primary, content.primary.style)
         assertNotNull(content.secondary)
-        assertEquals("Save segments only", content.secondary!!.label)
+        assertEquals(R.string.warning_cant_merge_secondary, content.secondary!!.label)
         assertEquals(ActionTarget.KEEP_SEGMENTS_ONLY, content.secondary!!.target)
         assertEquals(WarningActionStyle.Secondary, content.secondary!!.style)
         assertNotNull(content.tertiary)
-        assertEquals("Discard session", content.tertiary!!.label)
+        assertEquals(R.string.warning_cant_merge_tertiary, content.tertiary!!.label)
         assertEquals(ActionTarget.DISCARD_RECOVERY_SESSION, content.tertiary!!.target)
         assertEquals(WarningActionStyle.Link, content.tertiary!!.style)
     }

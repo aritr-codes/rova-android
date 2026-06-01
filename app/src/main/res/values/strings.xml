@@ -373,4 +373,153 @@
     <string name="settings_repeats_fixed_not_selected_cd">Fixed, not selected</string>
     <string name="settings_repeats_continuous_selected_cd">Records until you stop, selected</string>
     <string name="settings_repeats_continuous_not_selected_cd">Records until you stop, not selected</string>
+
+    <!-- WarningCenter sheet / banner / chip copy (B3 i18n task 7) -->
+
+    <!-- Shared action / CTA labels -->
+    <string name="warning_action_not_now">Not now</string>
+    <string name="warning_action_ok">OK</string>
+    <string name="warning_action_dont_show_again">Don\'t show again</string>
+    <string name="warning_action_review_session">Review session</string>
+    <string name="warning_banner_cta_stop">Stop</string>
+
+    <!-- Severity badges (sheet) -->
+    <string name="warning_severity_hard">Hard · Required</string>
+    <string name="warning_severity_soft">Soft · Degraded mode</string>
+    <string name="warning_severity_advisory">Advisory · Optional</string>
+
+    <!-- Severity badges (compact strip / chip) -->
+    <string name="warning_severity_short_hard">HARD</string>
+    <string name="warning_severity_short_soft">SOFT</string>
+    <string name="warning_severity_short_advisory">ADVISORY</string>
+    <string name="warning_severity_short_escalating">ESCALATING</string>
+
+    <!-- Sheet chrome -->
+    <string name="warning_why_this_matters">Why this matters</string>
+    <string name="warning_more_actions_cd">More actions</string>
+    <string name="warning_more_options_cd">More options</string>
+
+    <!-- CAMERA_PERMISSION_DENIED -->
+    <string name="warning_camera_perm_title">Camera access required</string>
+    <string name="warning_camera_perm_body">Rova can\'t record without camera access. Grant the permission in App Settings to continue.</string>
+    <string name="warning_camera_perm_primary">Open App Settings</string>
+
+    <!-- EXACT_ALARM_DENIED -->
+    <string name="warning_exact_alarm_title">Alarm permission required</string>
+    <string name="warning_exact_alarm_body">Rova uses exact alarms to time recording segments. Without it, clips won\'t start or stop on schedule.</string>
+    <string name="warning_exact_alarm_primary">Allow exact alarms</string>
+
+    <!-- STORAGE_INSUFFICIENT -->
+    <string name="warning_storage_insufficient_title">Not enough storage to start</string>
+    <string name="warning_storage_insufficient_body">Free up space, then try again.</string>
+    <string name="warning_storage_insufficient_primary">Free up space</string>
+
+    <!-- MICROPHONE_DENIED -->
+    <string name="warning_mic_title">Recording without audio</string>
+    <string name="warning_mic_body">This session will record video only. You can grant microphone access in Settings and try again.</string>
+    <string name="warning_mic_primary">Grant microphone access</string>
+    <string name="warning_mic_secondary">Continue without audio</string>
+
+    <!-- NOTIFICATIONS_DENIED -->
+    <string name="warning_notifications_title">Stay in the loop</string>
+    <string name="warning_notifications_body">Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.</string>
+    <string name="warning_notifications_primary">Enable notifications</string>
+    <string name="warning_notifications_why">Notifications are how Rova tells you what\'s happening while you\'re not in the app — recording started, clip merged, session finished. Without them, you\'ll need to open the app to check progress.</string>
+
+    <!-- BATTERY_OPTIMIZATION_ON -->
+    <string name="warning_battery_opt_title">Battery optimization may stop recording</string>
+    <string name="warning_battery_opt_body">Android may kill Rova in the background. Disable battery optimization for reliable long sessions.</string>
+    <string name="warning_battery_opt_primary">Disable</string>
+    <string name="warning_battery_opt_why">Android\'s battery optimizer can pause background apps to save power. If Rova is paused mid-recording, the session may stop early or skip clips. Exempting Rova keeps the foreground service alive for the full session.</string>
+
+    <!-- POWER_SAVE_MODE -->
+    <string name="warning_power_save_title">Power-save mode may throttle recording</string>
+    <string name="warning_power_save_body">Turning off battery saver gives Rova full CPU/IO for the session.</string>
+    <string name="warning_power_save_primary">Settings</string>
+    <string name="warning_power_save_why">Battery saver caps CPU frequency and background I/O. Rova may drop frames or fall behind on encoding, which can corrupt clip boundaries on long sessions.</string>
+
+    <!-- Thermal sheet (defensive) titles -->
+    <string name="warning_thermal_shutdown_title">Device overheating — recording stopped</string>
+    <string name="warning_thermal_emergency_title">Device critically hot</string>
+    <string name="warning_thermal_critical_title">Device very hot — recording may stop</string>
+    <string name="warning_thermal_severe_title">Device hot — quality may drop</string>
+    <string name="warning_thermal_moderate_title">Device warming up</string>
+
+    <!-- Battery sheet (defensive) titles -->
+    <string name="warning_battery_critical_title">Battery critical — recording may stop</string>
+    <string name="warning_battery_low_title">Battery low — consider charging</string>
+
+    <!-- STORAGE_LOW_MID_REC (defensive sheet arm) -->
+    <string name="warning_storage_low_mid_rec_title">Storage running low</string>
+    <string name="warning_storage_low_mid_rec_body">Free space on this device.</string>
+
+    <!-- STORAGE_FULL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_storage_full_autostopped_title">Recording stopped</string>
+    <string name="warning_storage_full_autostopped_body">Storage filled up.</string>
+
+    <!-- THERMAL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_thermal_autostopped_title">Recording stopped</string>
+    <string name="warning_thermal_autostopped_body">Device overheated.</string>
+
+    <!-- CANT_MERGE -->
+    <string name="warning_cant_merge_title">Can\'t merge yet</string>
+    <string name="warning_cant_merge_body">Free space and retry, or keep the raw segments for later.</string>
+    <string name="warning_cant_merge_primary">Free space &amp; retry</string>
+    <string name="warning_cant_merge_secondary">Save segments only</string>
+    <string name="warning_cant_merge_tertiary">Discard session</string>
+
+    <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
+    <string name="warning_camera_in_use_title">Camera in use by another app</string>
+    <string name="warning_camera_in_use_body">Close the other camera app.</string>
+    <string name="warning_camera_disabled_title">Camera disabled by device policy</string>
+
+    <!-- Mid-rec top banner: auto-action description -->
+    <string name="warning_banner_auto_stop_protect">Will auto-stop to protect device</string>
+
+    <!-- Mid-rec top banner copy -->
+    <string name="warning_banner_thermal_shutdown_title">Device overheating — stopping</string>
+    <string name="warning_banner_thermal_shutdown_sub">Recording will stop automatically.</string>
+    <string name="warning_banner_thermal_emergency_title">Device critically hot</string>
+    <string name="warning_banner_thermal_emergency_sub">Stop now to let it cool.</string>
+    <string name="warning_banner_thermal_critical_title">Device very hot</string>
+    <string name="warning_banner_thermal_critical_sub">Recording may auto-stop soon.</string>
+    <string name="warning_banner_thermal_severe_title">Device hot</string>
+    <string name="warning_banner_thermal_severe_sub">Quality may drop.</string>
+    <string name="warning_banner_thermal_moderate_title">Device warming up</string>
+    <string name="warning_banner_thermal_moderate_sub">Watch the temperature.</string>
+    <string name="warning_banner_battery_critical_title">Battery critical</string>
+    <string name="warning_banner_battery_critical_sub">Recording may stop soon.</string>
+    <string name="warning_banner_battery_low_title">Battery low</string>
+    <string name="warning_banner_battery_low_sub">Consider charging.</string>
+    <string name="warning_banner_camera_in_use_title">Camera in use</string>
+    <string name="warning_banner_camera_in_use_sub">Another app is using the camera.</string>
+    <string name="warning_banner_camera_disabled_title">Camera disabled</string>
+    <string name="warning_banner_camera_disabled_sub">Disabled by device policy.</string>
+    <string name="warning_banner_storage_low_title">Storage running low</string>
+    <string name="warning_banner_storage_low_sub">Free space on this device.</string>
+    <string name="warning_banner_storage_full_title">Recording stopped</string>
+    <string name="warning_banner_storage_full_sub">Storage filled up.</string>
+    <string name="warning_banner_storage_full_cta">Free up space</string>
+    <string name="warning_banner_thermal_autostopped_title">Recording stopped</string>
+    <string name="warning_banner_thermal_autostopped_sub">Device overheated.</string>
+    <string name="warning_banner_thermal_autostopped_cta">Tips to cool down</string>
+
+    <!-- History strip / Settings chip chrome -->
+    <string name="warning_dismiss_cd">Dismiss</string>
+    <string name="warning_view_action_label">View</string>
+    <string name="warning_show_details_label">Show details</string>
+    <string name="warning_open_details_label">Open details</string>
+    <string name="warning_settings_section_header">PERMISSIONS &amp; STATUS</string>
+    <!-- %1$s = severity badge (e.g. SOFT), %2$s = warning title -->
+    <string name="warning_chip_status_cd">%1$s status: %2$s</string>
+
+    <!-- Thermal tips sheet -->
+    <string name="warning_thermal_tips_title">Tips to cool down</string>
+    <string name="warning_thermal_tips_bullet">•  </string>
+    <string name="warning_thermal_tip_shade">Move to shade or a cooler room.</string>
+    <string name="warning_thermal_tip_case">Remove the case while the device cools.</string>
+    <string name="warning_thermal_tip_close_apps">Close other camera-heavy apps.</string>
+    <string name="warning_thermal_tip_charging">Avoid charging while recording.</string>
+    <string name="warning_thermal_tip_rest">Let the device rest 5 minutes before recording again.</string>
+    <string name="warning_thermal_tips_dismiss">Got it</string>
 </resources>

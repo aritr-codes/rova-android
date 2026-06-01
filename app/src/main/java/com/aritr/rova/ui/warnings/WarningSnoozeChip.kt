@@ -25,7 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -80,7 +82,7 @@ internal fun WarningSnoozeChip(
                 color = severityColor.copy(alpha = RovaWarningsV3.snoozeChipBorderAlpha),
                 shape = RoundedCornerShape(RovaWarningsV3.snoozeChipRadius),
             )
-            .clickable(onClickLabel = "Show details", role = Role.Button) { onExpand() }
+            .clickable(onClickLabel = stringResource(R.string.warning_show_details_label), role = Role.Button) { onExpand() }
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -98,7 +100,7 @@ internal fun WarningSnoozeChip(
             modifier = Modifier.size(12.dp),
         )
         Text(
-            text = content.title,
+            text = stringResource(content.title),
             style = MaterialTheme.typography.labelMedium,
             color = Color.White.copy(alpha = 0.78f),
             maxLines = 1,
