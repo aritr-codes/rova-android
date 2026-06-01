@@ -64,14 +64,14 @@ private fun TokenSamplerCard() {
                     .background(color = RovaWarnings.hard, shape = CircleShape)
             )
             // statusPillLabel exercises tabular-nums on a short label.
-            Text(text = "REC", style = RovaTokens.statusPillLabel)
+            Text(text = "REC", style = RovaTokens.statusPillLabel) // i18n-opt-out: preview-only sample data, not a shipped screen
 
             Spacer(Modifier.width(8.dp))
 
             // 5-cell record summary card uses cellValue + cellKey as a pair;
             // a single value/key pair is enough to show both styles.
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(text = "10s", style = RovaTokens.cellValue)
+                Text(text = "10s", style = RovaTokens.cellValue) // i18n-opt-out: preview-only sample data, not a shipped screen
                 Text(
                     text = "DURATION",
                     style = RovaTokens.cellKey,
