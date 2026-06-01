@@ -522,4 +522,45 @@
     <string name="warning_thermal_tip_charging">Avoid charging while recording.</string>
     <string name="warning_thermal_tip_rest">Let the device rest 5 minutes before recording again.</string>
     <string name="warning_thermal_tips_dismiss">Got it</string>
+
+    <!-- Recovery card (B3 i18n task 8) — RecoveryUiStateMapper titles/bodies + RecoveryCard chrome -->
+    <!-- Titles per terminator kind -->
+    <string name="recovery_title_user_stopped">Session stopped</string>
+    <string name="recovery_title_killed_by_system">Recording stopped by your device</string>
+    <string name="recovery_title_force_stopped">Recording was force-stopped</string>
+    <!-- Bodies per terminator kind -->
+    <string name="recovery_body_user_stopped">Your last session ended before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_killed_by_system">Your device\'s battery management stopped the recording before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_force_stopped">The app was force-stopped before the last session\'s segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <!-- CTA labels -->
+    <string name="recovery_discard_label">Discard recording</string>
+    <string name="recovery_merge_label">Merge segments</string>
+    <string name="recovery_keep_raw_label">Keep as raw clips</string>
+    <string name="recovery_retry_merge_label">Retry merge</string>
+    <!-- Discard CTA content description. %1$s = discard label -->
+    <string name="recovery_discard_cd">%1$s. This action is permanent.</string>
+    <!-- Merge-failed inline error. %1$s = runtime failure reason -->
+    <string name="recovery_merge_failed_prefix">Merge failed: %1$s</string>
+    <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
+    <string name="recovery_artifact_recovered_segments">Recovered %1$d segment(s) from disk</string>
+    <string name="recovery_artifact_missing_segments">Missing segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_invalid_segments">Invalid segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_orphan_segments">Orphan segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_invalid_orphans">%1$d unreadable orphan file(s)</string>
+    <string name="recovery_artifact_duplicate_segments">Duplicate segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_unknown_files">%1$d unknown file(s) in session dir</string>
+    <string name="recovery_artifact_malformed_records">%1$d malformed manifest record(s)</string>
+    <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
+    <string name="recovery_tag_killed_by_system">System-killed</string>
+    <string name="recovery_tag_force_stopped">Force-stopped</string>
+    <string name="recovery_tag_user_stopped">User-stopped</string>
+    <!-- Progress strip -->
+    <string name="recovery_progress_header_merging">MERGING</string>
+    <string name="recovery_progress_header_recovered">CLIPS RECOVERED</string>
+    <!-- Numeric chip. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_chip">%1$d / %2$d</string>
+    <!-- Progress strip "merging" content description. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_cd_merging">Merging: %1$d of %2$d segments.</string>
+    <!-- Footer for hidden older sessions. %1$d = count -->
+    <string name="recovery_hidden_footer">+%1$d older interrupted sessions</string>
 </resources>

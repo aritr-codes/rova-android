@@ -1,11 +1,14 @@
 package com.aritr.rova.ui.recovery
 
+import androidx.annotation.StringRes
+import com.aritr.rova.R
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.recovery.Anomaly
 import com.aritr.rova.service.recovery.DiscardEligibility
 import com.aritr.rova.service.recovery.SessionClassification
+import com.aritr.rova.ui.text.UiText
 
 /**
  * Phase 2 Slice 2.0.5 — pure data view of the Phase 1.5 recovery report,
@@ -56,18 +59,27 @@ enum class RecoveryCardKind {
 data class RecoveryCardState(
     val sessionId: String,
     val kind: RecoveryCardKind,
-    val title: String,
-    val body: String,
-    val discardLabel: String,
+    /** B3 i18n task 8 — fixed copy id; resolved at the composable via stringResource. */
+    @StringRes val titleRes: Int,
+    /** B3 i18n task 8 — fixed copy id; resolved at the composable via stringResource. */
+    @StringRes val bodyRes: Int,
+    /** B3 i18n task 8 — fixed copy id; resolved at the composable via stringResource. */
+    @StringRes val discardLabelRes: Int,
     val showVendorHelpSlot: Boolean,
-    val survivingArtifacts: List<String>,
+    /** B3 i18n task 8 — args/count tokens; resolved at the composable. */
+    val survivingArtifacts: List<UiText>,
     /** Phase 4.3 — null when there's nothing to merge (no surviving artifacts). */
-    val mergeLabel: String? = null,
-    /** Phase 4.3 — null when there's nothing to keep. Always co-set with [mergeLabel]. */
-    val keepRawLabel: String? = null,
+    @StringRes val mergeLabelRes: Int? = null,
+    /** Phase 4.3 — null when there's nothing to keep. Always co-set with [mergeLabelRes]. */
+    @StringRes val keepRawLabelRes: Int? = null,
     /** Phase 4.3 — null=idle; 0..1=merge in progress (strip fills, buttons disabled). */
     val mergeInProgress: Float? = null,
-    /** Phase 4.3 — non-null=last merge failed; body+button flip to retry copy. */
+    /**
+     * Phase 4.3 — non-null=last merge failed; body+button flip to retry copy.
+     * B3 i18n task 8 — stays a raw runtime diagnostic (exception message), not
+     * localizable copy. The "Merge failed: " wrapper is externalized at the
+     * composable; the reason text itself is passed through verbatim.
+     */
     val mergeFailedReason: String? = null,
 )
 
@@ -178,72 +190,56 @@ object RecoveryUiStateMapper {
         return RecoveryCardState(
             sessionId = view.manifest.sessionId,
             kind = kind,
-            title = titleFor(kind),
-            body = bodyFor(kind),
-            discardLabel = DISCARD_LABEL,
+            titleRes = titleResFor(kind),
+            bodyRes = bodyResFor(kind),
+            discardLabelRes = R.string.recovery_discard_label,
             showVendorHelpSlot = (kind == RecoveryCardKind.KILLED_BY_SYSTEM),
             survivingArtifacts = summarize(view.classification),
-            mergeLabel = if (view.classification.appendedSegmentFilenames.isNotEmpty()) MERGE_LABEL else null,
-            keepRawLabel = if (view.classification.appendedSegmentFilenames.isNotEmpty()) KEEP_RAW_LABEL else null,
+            mergeLabelRes = if (view.classification.appendedSegmentFilenames.isNotEmpty()) R.string.recovery_merge_label else null,
+            keepRawLabelRes = if (view.classification.appendedSegmentFilenames.isNotEmpty()) R.string.recovery_keep_raw_label else null,
         )
     }
 
-    private fun titleFor(kind: RecoveryCardKind): String = when (kind) {
-        RecoveryCardKind.USER_STOPPED -> "Session stopped"
-        RecoveryCardKind.KILLED_BY_SYSTEM -> "Recording stopped by your device"
-        RecoveryCardKind.KILLED_FORCE_STOP -> "Recording was force-stopped"
+    @StringRes
+    private fun titleResFor(kind: RecoveryCardKind): Int = when (kind) {
+        RecoveryCardKind.USER_STOPPED -> R.string.recovery_title_user_stopped
+        RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_title_killed_by_system
+        RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_title_force_stopped
     }
 
-    private fun bodyFor(kind: RecoveryCardKind): String = when (kind) {
-        RecoveryCardKind.USER_STOPPED ->
-            "Your last session ended before the segments could merge. " +
-                "The recovered segments stay on your device until you choose Discard recording. " +
-                "This action is permanent."
-        RecoveryCardKind.KILLED_BY_SYSTEM ->
-            "Your device's battery management stopped the recording before the segments could merge. " +
-                "The recovered segments stay on your device until you choose Discard recording. " +
-                "This action is permanent."
-        RecoveryCardKind.KILLED_FORCE_STOP ->
-            "The app was force-stopped before the last session's segments could merge. " +
-                "The recovered segments stay on your device until you choose Discard recording. " +
-                "This action is permanent."
+    @StringRes
+    private fun bodyResFor(kind: RecoveryCardKind): Int = when (kind) {
+        RecoveryCardKind.USER_STOPPED -> R.string.recovery_body_user_stopped
+        RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_body_killed_by_system
+        RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_body_force_stopped
     }
 
-    private fun summarize(c: SessionClassification): List<String> {
-        val out = mutableListOf<String>()
+    private fun summarize(c: SessionClassification): List<UiText> {
+        val out = mutableListOf<UiText>()
         if (c.appendedSegmentFilenames.isNotEmpty()) {
-            out += "Recovered ${c.appendedSegmentFilenames.size} segment(s) from disk"
+            out += UiText.StrArgs(
+                R.string.recovery_artifact_recovered_segments,
+                listOf(c.appendedSegmentFilenames.size),
+            )
         }
         c.anomalies.forEach { a ->
             out += when (a) {
                 is Anomaly.MissingSegment ->
-                    "Missing segment(s) at indices ${a.missingIndices}"
+                    UiText.StrArgs(R.string.recovery_artifact_missing_segments, listOf(a.missingIndices.toString()))
                 is Anomaly.InvalidManifestSegment ->
-                    "Invalid segment(s) at indices ${a.indices}"
+                    UiText.StrArgs(R.string.recovery_artifact_invalid_segments, listOf(a.indices.toString()))
                 is Anomaly.OrphanSegment ->
-                    "Orphan segment(s) at indices ${a.indices}"
+                    UiText.StrArgs(R.string.recovery_artifact_orphan_segments, listOf(a.indices.toString()))
                 is Anomaly.InvalidOrphan ->
-                    "${a.filenames.size} unreadable orphan file(s)"
+                    UiText.StrArgs(R.string.recovery_artifact_invalid_orphans, listOf(a.filenames.size))
                 is Anomaly.DuplicateSegment ->
-                    "Duplicate segment(s) at indices ${a.indices}"
+                    UiText.StrArgs(R.string.recovery_artifact_duplicate_segments, listOf(a.indices.toString()))
                 is Anomaly.UnknownArtifact ->
-                    "${a.filenames.size} unknown file(s) in session dir"
+                    UiText.StrArgs(R.string.recovery_artifact_unknown_files, listOf(a.filenames.size))
                 is Anomaly.MalformedManifestRecord ->
-                    "${a.filenames.size} malformed manifest record(s)"
+                    UiText.StrArgs(R.string.recovery_artifact_malformed_records, listOf(a.filenames.size))
             }
         }
         return out
     }
-
-    // Slice 13C — explicit destructive label. The bare "Discard"
-    // verb left users uncertain about scope; "Discard recording"
-    // names what the action removes, matching the body copy that
-    // also calls out the action by full name.
-    private const val DISCARD_LABEL = "Discard recording"
-
-    // Phase 4.3 — merge affordance labels. Null-gated on
-    // appendedSegmentFilenames.isNotEmpty() so the UI only shows
-    // merge controls when there are actual segments to merge.
-    private const val MERGE_LABEL = "Merge segments"
-    private const val KEEP_RAW_LABEL = "Keep as raw clips"
 }

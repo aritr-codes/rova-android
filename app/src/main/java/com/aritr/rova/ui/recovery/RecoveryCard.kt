@@ -36,8 +36,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.Role
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.aritr.rova.R
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.text.UiText
+import com.aritr.rova.ui.text.resolve
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -128,7 +133,7 @@ fun RecoveryCard(
             // would couple the composable to a Clock seam, which is
             // explicitly out of scope for B1.
             SeverityTag(
-                label = tagLabelFor(state.kind),
+                label = stringResource(tagLabelResFor(state.kind)),
                 accent = severityColor,
                 pulsing = isHardSeverity,
             )
@@ -136,7 +141,7 @@ fun RecoveryCard(
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text = state.title,
+                text = stringResource(state.titleRes),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = 0.92f),
@@ -144,9 +149,9 @@ fun RecoveryCard(
 
             Spacer(Modifier.height(6.dp))
 
-            // Description — the existing data class names this `body`.
+            // Description — the existing data class names this `bodyRes`.
             Text(
-                text = state.body,
+                text = stringResource(state.bodyRes),
                 style = MaterialTheme.typography.bodySmall,
                 // WCAG 2.2 AA SC 1.4.3 (ADR-0020, RECOV-05): 0.45α was ~3.3:1
                 // over the elevated card surface; 0.65α clears 4.5:1.
@@ -208,14 +213,15 @@ private fun severityColorFor(kind: RecoveryCardKind): Color = when (kind) {
 }
 
 /**
- * Tag-chip label derived from `kind`. Short, uppercased in the chip
- * itself; this helper returns mixed-case so the same string could be
- * reused in other contexts without re-casing.
+ * Tag-chip label id derived from `kind`. Short, uppercased in the chip
+ * itself; this helper returns the mixed-case resource id so the same
+ * string could be reused in other contexts without re-casing.
  */
-private fun tagLabelFor(kind: RecoveryCardKind): String = when (kind) {
-    RecoveryCardKind.KILLED_BY_SYSTEM -> "System-killed"
-    RecoveryCardKind.KILLED_FORCE_STOP -> "Force-stopped"
-    RecoveryCardKind.USER_STOPPED -> "User-stopped"
+@StringRes
+private fun tagLabelResFor(kind: RecoveryCardKind): Int = when (kind) {
+    RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_tag_killed_by_system
+    RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_tag_force_stopped
+    RecoveryCardKind.USER_STOPPED -> R.string.recovery_tag_user_stopped
 }
 
 @Composable
@@ -277,11 +283,10 @@ internal fun recoveryProgressContentDescription(
     cellCount: Int,
     filledCells: Int,
     merging: Boolean,
-): String = if (merging) {
-    "Merging: $filledCells of $cellCount segments."
+): UiText = if (merging) {
+    UiText.StrArgs(R.string.recovery_progress_cd_merging, listOf(filledCells, cellCount))
 } else {
-    val noun = if (cellCount == 1) "clip" else "clips"
-    "$cellCount $noun recovered."
+    UiText.Plural(R.plurals.recovery_progress_cd_recovered, cellCount, listOf(cellCount))
 }
 
 /**
@@ -308,7 +313,11 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
     } else {
         cellCount
     }
-    val headerLabel = if (progress != null) "MERGING" else "CLIPS RECOVERED"
+    val headerLabel = stringResource(
+        if (progress != null) R.string.recovery_progress_header_merging
+        else R.string.recovery_progress_header_recovered,
+    )
+    val progressCd = recoveryProgressContentDescription(cellCount, filledCells, progress != null).resolve()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -317,8 +326,7 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
             // RECOV-17 (SC 4.1.3): polite live region so merge progress is
             // announced as filled cells roll forward (discrete, not per-tick).
             .semantics(mergeDescendants = true) {
-                contentDescription =
-                    recoveryProgressContentDescription(cellCount, filledCells, progress != null)
+                contentDescription = progressCd
                 liveRegion = LiveRegionMode.Polite
             },
     ) {
@@ -343,7 +351,7 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "$artifactCount / $artifactCount",
+                    text = stringResource(R.string.recovery_progress_chip, artifactCount, artifactCount),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White.copy(alpha = 0.78f),
@@ -405,8 +413,8 @@ private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifie
  * Expands to a 3-button stack when all four conditions are met:
  *   1. [onMerge] != null
  *   2. [onKeepRaw] != null
- *   3. [state.mergeLabel] != null
- *   4. [state.keepRawLabel] != null
+ *   3. [state.mergeLabelRes] != null
+ *   4. [state.keepRawLabelRes] != null
  *
  * Discard is always LAST in the stack — permanent destructive action
  * anchored at the bottom regardless of stack height.
@@ -426,8 +434,10 @@ private fun CtaRow(
     onDiscard: () -> Unit,
 ) {
     val showThreeCtaStack = onMerge != null && onKeepRaw != null &&
-        state.mergeLabel != null && state.keepRawLabel != null
+        state.mergeLabelRes != null && state.keepRawLabelRes != null
     val inFlight = state.mergeInProgress != null
+    val discardLabel = stringResource(state.discardLabelRes)
+    val discardCd = stringResource(R.string.recovery_discard_cd, discardLabel)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // WCAG 2.2 AA SC 3.3.1 / 4.1.3 (ADR-0020, RECOV-14): the last merge
@@ -437,7 +447,7 @@ private fun CtaRow(
         val failReason = state.mergeFailedReason
         if (failReason != null && !inFlight) {
             Text(
-                text = "Merge failed: $failReason",
+                text = stringResource(R.string.recovery_merge_failed_prefix, failReason),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
@@ -446,7 +456,11 @@ private fun CtaRow(
         if (showThreeCtaStack) {
             // 1. Merge segments (primary; ink fill). Label flips to
             //    "Retry merge" when last merge failed.
-            val mergeLabel = if (state.mergeFailedReason != null) "Retry merge" else state.mergeLabel!!
+            val mergeLabel = if (state.mergeFailedReason != null) {
+                stringResource(R.string.recovery_retry_merge_label)
+            } else {
+                stringResource(state.mergeLabelRes!!)
+            }
             PrimaryMergeCta(
                 label = mergeLabel,
                 enabled = !inFlight,
@@ -454,19 +468,19 @@ private fun CtaRow(
             )
             // 2. Keep as raw clips (ghost; hairline border).
             GhostCta(
-                label = state.keepRawLabel!!,
+                label = stringResource(state.keepRawLabelRes!!),
                 enabled = !inFlight,
                 onClick = { if (!inFlight) onKeepRaw!!.invoke() },
             )
         }
         // 3. Discard recording — always present, last in stack.
         DestructiveCta(
-            label = state.discardLabel,
+            label = discardLabel,
             onClick = onDiscard,
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics {
-                    contentDescription = "${state.discardLabel}. This action is permanent."
+                    contentDescription = discardCd
                 },
         )
     }
@@ -580,7 +594,7 @@ fun RecoveryCardList(
         if (state.hiddenCount > 0) {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "+${state.hiddenCount} older interrupted sessions",
+                text = stringResource(R.string.recovery_hidden_footer, state.hiddenCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.45f),
                 modifier = Modifier.padding(start = 4.dp)

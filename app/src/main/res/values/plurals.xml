@@ -31,4 +31,11 @@
         <item quantity="one">%d warning hidden</item>
         <item quantity="other">%d warnings hidden</item>
     </plurals>
+
+    <!-- Recovery progress-strip "clips recovered" content description (B3 i18n task 8) -->
+    <!-- %1$d = recovered cell count (passed twice: rule selection + %d fill) -->
+    <plurals name="recovery_progress_cd_recovered">
+        <item quantity="one">%1$d clip recovered.</item>
+        <item quantity="other">%1$d clips recovered.</item>
+    </plurals>
 </resources>
