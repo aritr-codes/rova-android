@@ -137,6 +137,9 @@
     <string name="record_quickset_selected_label">✓ %1$s</string>
     <string name="record_quickset_selected_cd">%1$s, selected</string>
     <string name="record_quickset_not_selected_cd">%1$s, not selected</string>
+    <!-- Quality chip base TalkBack description; QuickSetChipRow appends the
+         ", selected"/", not selected" state suffix (B3 i18n task 10). -->
+    <string name="record_quality_chip_base_cd">Quality: %1$s</string>
 
     <!-- Background-recording banner -->
     <string name="record_bg_recording">Recording in background</string>
