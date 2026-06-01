@@ -33,6 +33,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // gating consumer. Empty string = use the existing default folder.
     val exportFolderName = MutableStateFlow(settings.exportFolderName)
 
+    // B1 — recording defaults, surfaced as editable rows in App Settings.
+    // These are the SAME persisted prefs the record SettingsSheet edits via
+    // RecordViewModel. SharedPreferences is the single source of truth; both
+    // ViewModels resume-reseed (see reloadRecordingDefaults + RecordViewModel)
+    // so the in-memory copies converge and neither clobbers the other.
+    val resolution = MutableStateFlow(settings.resolution)
+    val durationSeconds = MutableStateFlow(settings.durationSeconds)
+    val intervalMinutes = MutableStateFlow(settings.intervalMinutes)
+    val loopCount = MutableStateFlow(settings.loopCount)
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
@@ -41,5 +51,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
         viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
         viewModelScope.launch { exportFolderName.collect { settings.exportFolderName = it } }
+        viewModelScope.launch { resolution.collect { settings.resolution = it } }
+        viewModelScope.launch { durationSeconds.collect { settings.durationSeconds = it } }
+        viewModelScope.launch { intervalMinutes.collect { settings.intervalMinutes = it } }
+        viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
+    }
+
+    /**
+     * B1 — re-read the recording-default prefs from [RovaSettings] into the
+     * flows. Called from SettingsScreen ON_RESUME so values changed by the
+     * record sheet while this screen was backgrounded are reflected. When the
+     * value is unchanged, MutableStateFlow suppresses the equal assignment
+     * (it compares via equals), so the write-back collector does not even
+     * re-fire; when it differs, the collector writes the new value to
+     * SharedPreferences — exactly the intended update. Either way, harmless.
+     */
+    fun reloadRecordingDefaults() {
+        resolution.value = settings.resolution
+        durationSeconds.value = settings.durationSeconds
+        intervalMinutes.value = settings.intervalMinutes
+        loopCount.value = settings.loopCount
     }
 }
