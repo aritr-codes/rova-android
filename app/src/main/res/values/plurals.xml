@@ -18,4 +18,10 @@
         <item quantity="one">Could not delete %d recording</item>
         <item quantity="other">Could not delete %d recordings</item>
     </plurals>
+
+    <!-- Settings sheet "Reset snoozed warnings" subtitle (B3 i18n task 4) -->
+    <plurals name="settings_warnings_hidden_count">
+        <item quantity="one">%d warning hidden</item>
+        <item quantity="other">%d warnings hidden</item>
+    </plurals>
 </resources>

@@ -233,4 +233,121 @@
     <string name="history_config_wait">Wait</string>
     <string name="history_config_quality">Quality</string>
     <string name="history_config_close">Close</string>
+
+    <!-- Settings screen + sheets (B3 i18n task 4) -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_back_cd">Back</string>
+
+    <!-- Section labels -->
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_recording_defaults">Recording defaults</string>
+    <string name="settings_section_recording_behavior">Recording behavior</string>
+    <string name="settings_section_alerts">Alerts</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_reliability">Reliability</string>
+    <string name="settings_section_about">About</string>
+
+    <!-- Appearance row + theme picker -->
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_supporting">Light, dark, or match your system setting.</string>
+    <string name="settings_theme_mode_system">Follow system</string>
+    <string name="settings_theme_mode_dark">Dark</string>
+    <string name="settings_theme_mode_light">Light</string>
+
+    <!-- Recording-defaults rows -->
+    <string name="settings_default_resolution_label">Default resolution</string>
+    <string name="settings_default_resolution_supporting">Quality new recordings start at.</string>
+    <string name="settings_clip_duration_label">Clip duration</string>
+    <string name="settings_clip_duration_supporting">How long each clip records.</string>
+    <string name="settings_interval_label">Interval between clips</string>
+    <string name="settings_interval_supporting">Wait time before the next clip.</string>
+    <string name="settings_loops_label">Number of loops</string>
+    <string name="settings_loops_supporting">How many clips before stopping.</string>
+
+    <!-- Recording-behavior rows -->
+    <string name="settings_keep_screen_on_label">Keep screen on</string>
+    <string name="settings_keep_screen_on_supporting">Stops the screen from dimming while you frame a shot.</string>
+    <string name="settings_camera_guides_label">Camera guides</string>
+    <string name="settings_camera_guides_supporting">Show the framing grid and focus brackets over the viewfinder.</string>
+
+    <!-- Alerts rows -->
+    <string name="settings_sound_cues_label">Sound cues</string>
+    <string name="settings_sound_cues_supporting">Play short beeps so you can hear when capture starts and stops.</string>
+    <string name="settings_vibrate_alerts_label">Vibrate alerts</string>
+    <string name="settings_vibrate_alerts_supporting">Use a short vibration to confirm starts and stops.</string>
+
+    <!-- Notifications row -->
+    <string name="settings_system_notifications_label">System notification settings</string>
+    <string name="settings_system_notifications_supporting">Manage Rova\'s notification channels in Android settings.</string>
+    <string name="settings_system_notifications_unavailable">Notification settings not available on this device</string>
+
+    <!-- Storage rows -->
+    <string name="settings_auto_delete_label">Auto-delete old recordings</string>
+    <string name="settings_auto_delete_supporting_on">Keeping the latest %1$d finished recordings.</string>
+    <string name="settings_auto_delete_supporting_off">Off. Recordings stay until you delete them yourself.</string>
+    <string name="settings_export_folder_label">Export folder name</string>
+    <string name="settings_export_folder_supporting">Where finished videos appear inside your gallery.</string>
+    <string name="settings_export_folder_default">Default folder</string>
+    <string name="settings_clear_cache_label">Clear cache</string>
+    <string name="settings_clear_cache_supporting">Removes preview thumbnails and temporary files.</string>
+    <string name="settings_clear_cache_cleared">Cleared %1$.1f MB</string>
+    <string name="settings_clear_cache_empty">Cache is empty</string>
+
+    <!-- Reliability row + battery dialog -->
+    <string name="settings_battery_optimization_label">Battery optimization</string>
+    <string name="settings_battery_optimization_supporting">Required so recordings keep going in the background.</string>
+    <string name="settings_battery_exempt">Exempt</string>
+    <string name="settings_battery_not_exempt">Not exempt</string>
+    <string name="settings_battery_dialog_title">Battery optimization</string>
+    <string name="settings_battery_dialog_body_exempt">Rova is already exempt from battery optimization. Recordings will keep going in the background. Open battery settings to review or change this.</string>
+    <string name="settings_battery_dialog_body_not_exempt">Rova needs to be exempt from battery optimization so recordings keep going in the background. Without this, your device may stop the recording mid-session.</string>
+    <string name="settings_battery_dialog_confirm">Open battery settings</string>
+    <string name="settings_battery_dialog_dismiss">Not now</string>
+    <string name="settings_battery_settings_unavailable">Battery settings not available on this device</string>
+
+    <!-- About rows -->
+    <string name="settings_version_label">Version</string>
+    <string name="settings_privacy_label">Privacy policy</string>
+    <string name="settings_privacy_supporting">Open the policy in your browser.</string>
+    <string name="settings_privacy_no_browser">No browser available</string>
+
+    <!-- Export folder dialog -->
+    <string name="settings_export_folder_dialog_title">Export folder name</string>
+    <string name="settings_export_folder_field_label">Folder name</string>
+    <string name="settings_export_folder_preview_default">Videos will be saved to your default folder.</string>
+    <string name="settings_export_folder_preview_named">Videos will be saved to Movies / %1$s</string>
+    <string name="settings_export_folder_save">Save</string>
+    <string name="settings_export_folder_cancel">Cancel</string>
+
+    <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
+    <string name="settings_stepper_decrease_cd">Decrease %1$s</string>
+    <string name="settings_stepper_increase_cd">Increase %1$s</string>
+
+    <!-- Record settings sheet (SettingsSheet) -->
+    <string name="settings_sheet_section_recording_mode">Recording mode</string>
+    <string name="settings_sheet_section_settings">Settings</string>
+    <string name="settings_sheet_mode_portrait">Portrait</string>
+    <string name="settings_sheet_mode_landscape">Landscape</string>
+    <string name="settings_sheet_mode_pl">P + L</string>
+    <string name="settings_sheet_clip_duration">Clip Duration</string>
+    <string name="settings_sheet_repeats">Repeats</string>
+    <string name="settings_sheet_wait_between">Wait Between</string>
+    <string name="settings_sheet_quality">Quality</string>
+    <string name="settings_sheet_save">Save</string>
+    <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
+
+    <!-- Edit sheet shell button labels (EditSheetShell) -->
+    <string name="settings_edit_sheet_done">Done</string>
+    <string name="settings_edit_sheet_cancel">Cancel</string>
+
+    <!-- Fixed/Continuous selector (FixedContinuousSelector) -->
+    <string name="settings_repeats_fixed">Fixed</string>
+    <string name="settings_repeats_fixed_selected">✓ Fixed</string>
+    <string name="settings_repeats_continuous">Continuous</string>
+    <string name="settings_repeats_continuous_selected">✓ Continuous</string>
+    <string name="settings_repeats_fixed_selected_cd">Fixed, selected</string>
+    <string name="settings_repeats_fixed_not_selected_cd">Fixed, not selected</string>
+    <string name="settings_repeats_continuous_selected_cd">Records until you stop, selected</string>
+    <string name="settings_repeats_continuous_not_selected_cd">Records until you stop, not selected</string>
 </resources>
