@@ -19,6 +19,13 @@
         <item quantity="other">Could not delete %d recordings</item>
     </plurals>
 
+    <!-- Player top sub-title: clip count + total duration (B3 i18n task 5) -->
+    <!-- %1$d = clip count, %2$s = total duration MM:SS -->
+    <plurals name="player_top_sub">
+        <item quantity="one">%1$d clip · %2$s total</item>
+        <item quantity="other">%1$d clips · %2$s total</item>
+    </plurals>
+
     <!-- Settings sheet "Reset snoozed warnings" subtitle (B3 i18n task 4) -->
     <plurals name="settings_warnings_hidden_count">
         <item quantity="one">%d warning hidden</item>

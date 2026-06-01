@@ -66,6 +66,11 @@ internal object PlayerUriResolver {
      * preserves source-compat for single-mode callers that omit it.
      */
     fun resolve(manifest: SessionManifest?, side: VideoSide? = null): PlayerUiState {
+        // i18n-opt-out (all PlayerUiState.Unavailable("…") literals below):
+        // pure-JVM resolver; reason is a String pinned by exact-equality JVM
+        // tests (PlayerUriResolverTest). Externalizing needs a data-contract
+        // change (reason -> UiText/@StringRes) + test edits — deferred to a
+        // dedicated slice (B3 task 5 is literal->resource only).
         if (manifest == null) {
             return PlayerUiState.Unavailable("Recording not available")
         }

@@ -36,6 +36,10 @@ internal object PlayerStateEmitter {
             attach(resolved.mediaUri)
             resolved
         } catch (t: Throwable) {
+            // i18n-opt-out: pure-JVM producer; PlayerUiState.Unavailable.reason
+            // is a String pinned by exact-equality JVM tests. Externalizing needs
+            // a data-contract change (reason -> UiText/@StringRes) + test edits —
+            // deferred to a dedicated slice (B3 task 5 is literal->resource only).
             PlayerUiState.Unavailable("Playback initialization failed")
         }
     }

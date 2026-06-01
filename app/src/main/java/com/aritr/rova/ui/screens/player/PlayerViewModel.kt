@@ -89,6 +89,10 @@ class PlayerViewModel(
                 "PlayerViewModel: playback error for sessionId=$sessionId",
                 error
             )
+            // i18n-opt-out: PlayerUiState.Unavailable.reason is a String pinned by
+            // exact-equality JVM tests; externalizing needs a data-contract change
+            // (reason -> UiText/@StringRes) + test edits, deferred to a dedicated
+            // slice (B3 task 5 is literal->resource only).
             _uiState.value = PlayerUiState.Unavailable("Playback failed")
         }
     }
