@@ -11,8 +11,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.components.RovaAnimations.pulsingOpacity
 
 @Composable
@@ -44,21 +46,24 @@ fun BackgroundRecordingBanner(
                 
                 Column {
                     Text(
-                        text = "Recording in background",
+                        text = stringResource(R.string.record_bg_recording),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     Text(
-                        text = "Next recording in ${formatSeconds(nextRecordingInSeconds)}",
+                        text = stringResource(
+                            R.string.record_bg_next_recording,
+                            formatSeconds(nextRecordingInSeconds)
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
             }
-            
+
             TextButton(onClick = onStopClick) {
-                Text("STOP", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.record_bg_stop), color = MaterialTheme.colorScheme.error)
             }
         }
     }

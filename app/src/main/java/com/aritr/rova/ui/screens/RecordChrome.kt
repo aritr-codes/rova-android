@@ -45,6 +45,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -52,6 +54,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
@@ -103,7 +106,11 @@ fun RecordTopOverlay(
             StatusDot(hudState)
             Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
             if (statusDetail != null) {
-                Text("· $statusDetail", style = RovaTokens.statusTime, color = RecordChromeTokens.statusTimeText)
+                Text(
+                    stringResource(R.string.record_status_detail_prefix, statusDetail),
+                    style = RovaTokens.statusTime,
+                    color = RecordChromeTokens.statusTimeText,
+                )
             }
         }
     }
@@ -177,7 +184,7 @@ fun RecordCameraControls(
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     RecordChromeIcons.flashBolt,
-                    contentDescription = "Flash",
+                    contentDescription = stringResource(R.string.record_flash_cd),
                     tint = contentTint,
                     modifier = Modifier.size(15.dp),
                 )
@@ -203,7 +210,7 @@ fun RecordCameraControls(
         GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
             Icon(
                 RecordChromeIcons.flipCamera,
-                contentDescription = "Flip camera",
+                contentDescription = stringResource(R.string.record_flip_camera_cd),
                 tint = flipTint,
                 modifier = Modifier.size(16.dp),
             )
@@ -265,7 +272,7 @@ fun RecordSettingsCard(
                     .clip(RoundedCornerShape(1.dp))
                     .background(RecordChromeTokens.swipeHint),
             )
-            Text("SWIPE TO EDIT", style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
+            Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
         }
         Row(
             modifier = Modifier
@@ -293,13 +300,13 @@ fun RecordSettingsCard(
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SettingsCell("Clip", recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Repeats", recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Wait", recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
             ModeCycleChip(
                 mode = mode,
                 onCycleMode = onCycleMode,
@@ -309,7 +316,7 @@ fun RecordSettingsCard(
             )
             Icon(
                 RecordChromeIcons.chevronUp,
-                contentDescription = "Edit session settings",
+                contentDescription = stringResource(R.string.record_edit_session_settings_cd),
                 tint = RecordChromeTokens.settingsArrow,
                 modifier = Modifier.padding(start = 8.dp).size(13.dp),
             )
@@ -375,7 +382,7 @@ private fun ModeCycleChip(
                 maxLines = 1,
             )
             Text(
-                "MODE",
+                stringResource(R.string.record_cell_mode),
                 style = RovaTokens.cellKey,
                 color = RecordChromeTokens.cellKeyText,
                 textAlign = TextAlign.Center,
@@ -383,7 +390,7 @@ private fun ModeCycleChip(
             )
         }
         Text(
-            "↻",
+            "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
             modifier = Modifier.align(Alignment.TopEnd),
             color = Color.White.copy(alpha = glyphAlpha),
             fontSize = RecordChromeTokens.modeChipGlyphSize,
@@ -484,9 +491,9 @@ fun RecordBottomNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceAround,
         ) {
-            NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+            NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
             RecordFab(state = fabState, onClick = onFabClick)
-            NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+            NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
         }
     }
 }
@@ -529,9 +536,9 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
 @Composable
 private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
     val (fill, stroke, semanticsLabel) = when (state) {
-        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, "Start recording")
-        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, "Stop recording")
-        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), "Start recording (unavailable)")
+        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
+        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
+        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), stringResource(R.string.record_fab_start_unavailable_cd))
     }
     val enabled = state != RecordFabState.Disabled
     Box(contentAlignment = Alignment.Center) {
@@ -582,14 +589,15 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
  */
 @Composable
 fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier) {
-    val word = if (count == 1) "recording" else "recordings"
     // WCAG 2.2 AA SC 1.3.1 / 4.1.2 (ADR-0020, REC-19): one button node with a
     // single spoken name — the decorative history glyph (CD=null) and the label
     // otherwise read as separate fragments.
-    val chipDescription = "$count $word interrupted. Review."
+    val chipDescription = pluralStringResource(R.plurals.record_recovery_chip_cd, count, count)
+    val chipLabel = pluralStringResource(R.plurals.record_recovery_chip, count, count)
+    val reviewLabel = stringResource(R.string.record_recovery_review)
     Surface(
         modifier = modifier
-            .clickable(onClickLabel = "Review", role = Role.Button) { onReview() }
+            .clickable(onClickLabel = reviewLabel, role = Role.Button) { onReview() }
             .semantics(mergeDescendants = true) { contentDescription = chipDescription },
         shape = RoundedCornerShape(20.dp),
         color = Color.Black.copy(alpha = 0.40f),
@@ -601,7 +609,7 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-            Text("$count $word interrupted · Review", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+            Text(chipLabel, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
     }
 }
@@ -616,6 +624,7 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
  */
 internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
     loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
+    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
     loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
     else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
 }
@@ -639,6 +648,7 @@ internal fun hudStatusPillContent(
     clipSecondsLeft: Int,
     waitSecondsLeft: Int,
 ): StatusPillContent = when (state) {
+    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
     RecordHudState.Recording -> StatusPillContent(
         dot = StatusDotColor.RECORDING,
         main = "Recording",
@@ -672,6 +682,7 @@ internal fun hudActiveAnnouncement(
     loopIndex: Int,
     loopTotal: Int,
 ): String {
+    // i18n-opt-out: pure JVM-tested formatter helper; externalizing requires signature refactor + test rewrite, out of scope for this task
     val loopPhrase = when {
         loopTotal == 1 || loopTotal == 0 -> ""
         loopTotal < 0 -> " Loop ${loopIndex.coerceAtLeast(0)}."
@@ -774,7 +785,7 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
             horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.loopPillContentGap),
         ) {
             Text(numeral, style = RovaTokens.loopCount, color = RecordChromeTokens.loopCountText)
-            Text("LOOPS DONE", style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
+            Text(stringResource(R.string.record_loops_done_caption), style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
         }
     }
 }

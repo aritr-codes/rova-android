@@ -1,0 +1,11 @@
+<resources>
+    <!-- Record screen recovery chip (B3 i18n task 2) -->
+    <plurals name="record_recovery_chip">
+        <item quantity="one">%1$d recording interrupted · Review</item>
+        <item quantity="other">%1$d recordings interrupted · Review</item>
+    </plurals>
+    <plurals name="record_recovery_chip_cd">
+        <item quantity="one">%1$d recording interrupted. Review.</item>
+        <item quantity="other">%1$d recordings interrupted. Review.</item>
+    </plurals>
+</resources>

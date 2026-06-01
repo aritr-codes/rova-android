@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -25,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
@@ -430,14 +432,14 @@ fun RecordScreen(
     if (serviceState.isRecording && !isCameraActive) {
         AlertDialog(
             onDismissRequest = { /* Force user to stop */ },
-            title = { Text("Camera Disconnected") },
-            text = { Text("The camera connection was lost during recording.") },
+            title = { Text(stringResource(R.string.record_camera_disconnected_title)) },
+            text = { Text(stringResource(R.string.record_camera_disconnected_body)) },
             confirmButton = {
                 Button(
                     onClick = { viewModel.stopRecording() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("STOP RECORDING")
+                    Text(stringResource(R.string.record_camera_disconnected_stop))
                 }
             },
             icon = { Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error) }
@@ -464,11 +466,11 @@ fun RecordScreen(
         if (result is com.aritr.rova.service.StartResult.Blocked) {
             val msg = when (result.reason) {
                 com.aritr.rova.service.StartBlocked.APP_NOT_VISIBLE ->
-                    "Open Rova on screen before starting. Android blocks camera launches from the background."
+                    context.getString(R.string.record_blocked_app_not_visible)
                 com.aritr.rova.service.StartBlocked.FGS_RESTRICTED ->
-                    "Cannot start recording — Android requires the app to be in the foreground."
+                    context.getString(R.string.record_blocked_fgs_restricted)
                 com.aritr.rova.service.StartBlocked.UNKNOWN_ISE ->
-                    "Recording could not start. Please try again."
+                    context.getString(R.string.record_blocked_unknown)
             }
             scope.launch { snackbarHostState.showSnackbar(msg) }
         }
@@ -494,10 +496,10 @@ fun RecordScreen(
     val statusText: String
     val statusDetail: String?
     when (hudState) {
-        RecordHudState.Recording -> { statusText = "Recording"; statusDetail = "${clipElapsedSeconds}s of ${duration}s" }
-        RecordHudState.Waiting   -> { statusText = "On break"; statusDetail = "next in ${displayedCountdownSeconds}s" }
-        is RecordHudState.Merging -> { statusText = "Merging"; statusDetail = null }
-        RecordHudState.Idle -> { statusText = "Ready to record"; statusDetail = null }
+        RecordHudState.Recording -> { statusText = stringResource(R.string.record_status_recording); statusDetail = stringResource(R.string.record_status_detail_clip_of, clipElapsedSeconds, duration) }
+        RecordHudState.Waiting   -> { statusText = stringResource(R.string.record_status_on_break); statusDetail = stringResource(R.string.record_status_detail_next_in, displayedCountdownSeconds) }
+        is RecordHudState.Merging -> { statusText = stringResource(R.string.record_status_merging); statusDetail = null }
+        RecordHudState.Idle -> { statusText = stringResource(R.string.record_status_ready); statusDetail = null }
     }
 
     // Task 14 — the ModalNavigationDrawer wrapper (with its "Quick settings"
@@ -580,7 +582,7 @@ fun RecordScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.height(16.dp))
-                            Text("Initializing Camera...", color = Color.White)
+                            Text(stringResource(R.string.record_initializing_camera), color = Color.White)
                         }
                     }
                 }
@@ -718,7 +720,7 @@ fun RecordScreen(
                         loopCount = loopCount,
                         intervalMinutes = interval,
                         quality = resolution,
-                        mode = if (mode == "PortraitLandscape") "P + L" else mode,
+                        mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
                         onOpenSheet = { viewModel.openSettingsSheet() },
                         onCycleMode = { viewModel.cycleMode() },
                         dimmed = hudState != RecordHudState.Idle,
@@ -878,7 +880,7 @@ fun RecordScreen(
             } else {
                 scope.launch {
                     snackbarHostState.showSnackbar(
-                        "Merge failed. Open Library to recover."
+                        context.getString(R.string.record_merge_failed)
                     )
                 }
             }
