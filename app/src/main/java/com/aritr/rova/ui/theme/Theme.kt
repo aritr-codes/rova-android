@@ -87,6 +87,13 @@ fun RovaTheme(
     // Was: `isSystemInDarkTheme()`. Light-mode users on fresh install were
     // landing on the unfinished light scheme. Full Light/Dark/System
     // switcher ships in a later milestone via RovaSettings.themeMode.
+    // B2 — system-bar icon polarity. Defaults to `!darkTheme` (light bg →
+    // dark icons). MainActivity overrides it per route so the pinned-dark
+    // screens (viewfinder/player/onboarding) keep light icons in Light theme,
+    // instead of invisible dark icons over their black surface. RovaTheme is
+    // the SINGLE writer of bar polarity; RovaDarkSurface deliberately does not
+    // touch the window bars.
+    lightStatusBarIcons: Boolean = !darkTheme,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -98,8 +105,8 @@ fun RovaTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = lightStatusBarIcons
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = lightStatusBarIcons
         }
     }
 
@@ -107,5 +114,23 @@ fun RovaTheme(
         colorScheme = colorScheme,
         typography = Typography,
         content = content
+    )
+}
+
+/**
+ * B2 — forces the dark [MaterialTheme] color scheme for a subtree, WITHOUT
+ * the window-bar SideEffect that [RovaTheme] runs. Used to pin surfaces that
+ * have only a dark design source (camera viewfinder, video player, onboarding)
+ * to dark even when the app theme is Light, so their descendants that read
+ * `colorScheme.*` get dark values consistent with their hardcoded dark
+ * backgrounds (avoids light-on-dark mismatch). Status-bar polarity is owned by
+ * the outer [RovaTheme] and is intentionally left untouched here.
+ */
+@Composable
+fun RovaDarkSurface(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = DarkColorScheme,
+        typography = Typography,
+        content = content,
     )
 }

@@ -2,6 +2,8 @@ package com.aritr.rova.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.aritr.rova.ui.theme.ThemeMode
+import com.aritr.rova.ui.theme.themeModeFromStorage
 
 class RovaSettings(context: Context) {
     private val prefs = context.getSharedPreferences("rova_settings", Context.MODE_PRIVATE)
@@ -90,6 +92,13 @@ class RovaSettings(context: Context) {
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }
+
+    // B2 — app theme. Backed up (a genuine user preference, unlike `mode`).
+    // Stored as the ThemeMode name; reads coerce unknown/missing to SYSTEM
+    // via the pure themeModeFromStorage helper (see ThemeMode.kt).
+    var themeMode: ThemeMode
+        get() = themeModeFromStorage(prefs.getString("theme_mode", null))
+        set(value) = prefs.edit { putString("theme_mode", value.name) }
 
     var enableBeeps: Boolean
         get() = prefs.getBoolean("enable_beeps", true)

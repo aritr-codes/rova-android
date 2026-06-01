@@ -78,10 +78,13 @@ import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
+import com.aritr.rova.ui.theme.ThemeMode
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.theme.rovaQuietText
 import com.aritr.rova.ui.warnings.SettingsPermissionsSection
 import com.aritr.rova.ui.warnings.SettingsPermissionsSheetHost
 import com.aritr.rova.ui.warnings.WarningCenterViewModel
@@ -131,6 +134,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val durationSeconds by settingsViewModel.durationSeconds.collectAsStateWithLifecycle()
     val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
     val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
+    val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
 
     // Re-read battery-exempt state on resume so returning from the system
     // settings screen flips the badge without forcing a manual refresh.
@@ -154,6 +158,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     var showBatteryDialog by remember { mutableStateOf(false) }
     var showFolderDialog by remember { mutableStateOf(false) }
     var openSheet by remember { mutableStateOf<RecordingDefaultSheet?>(null) }
+    var openThemeSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -188,6 +193,16 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 warningIds = settingsWarnings,
                 onOpenSheet = { sheetWarningId = it },
             )
+            SettingsSection(label = "Appearance") {
+                SettingsRow(
+                    icon = Icons.Default.DarkMode,
+                    label = "Theme",
+                    supporting = "Light, dark, or match your system setting.",
+                    value = themeModeLabel(themeMode),
+                    onClick = { openThemeSheet = true },
+                    trailing = { ChevronTrailing() },
+                )
+            }
             SettingsSection(label = "Recording defaults") {
                 SettingsRow(
                     icon = Icons.Default.HighQuality,
@@ -472,6 +487,17 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         )
         null -> Unit
     }
+
+    if (openThemeSheet) {
+        SettingsOptionSheet(
+            title = "Theme",
+            options = ThemeMode.entries,
+            selected = themeMode,
+            optionLabel = { themeModeLabel(it) },
+            onPick = { settingsViewModel.themeMode.value = it },
+            onDismiss = { openThemeSheet = false },
+        )
+    }
 }
 
 private val KEEP_LATEST_OPTIONS = listOf(5, 10, 25, 50)
@@ -515,7 +541,7 @@ private fun SettingsSection(
         Text(
             text = label.uppercase(),
             style = RovaTokens.eyebrow,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            color = rovaQuietText(dimAlpha = 0.45f),
             // WCAG 2.2 AA SC 1.3.1 (ADR-0020, SET-01): mark the section label
             // as a heading so TalkBack's heading navigation can jump between
             // settings groups (layout-only grouping is invisible to it).
@@ -606,7 +632,7 @@ private fun SettingsRow(
                 Text(
                     text = supporting,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    color = rovaQuietText(dimAlpha = 0.55f)
                 )
             }
             if (!value.isNullOrEmpty()) {
@@ -650,7 +676,7 @@ private fun BatteryStatusBadge(exempt: Boolean) {
         Text(
             text = "Exempt",
             style = RovaTokens.statusPillLabel,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            color = rovaQuietText(dimAlpha = 0.6f),
             modifier = Modifier.padding(end = 4.dp)
         )
     } else {
@@ -752,6 +778,12 @@ private fun BatteryOptimizationDialog(
     )
 }
 
+private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
+    ThemeMode.SYSTEM -> "Follow system"
+    ThemeMode.DARK -> "Dark"
+    ThemeMode.LIGHT -> "Light"
+}
+
 /** Which recording-default picker sheet is open in [SettingsScreen]. */
 private enum class RecordingDefaultSheet { RESOLUTION, DURATION, INTERVAL, LOOPS }
 
@@ -784,7 +816,7 @@ private fun ExportFolderDialog(
                         "Videos will be saved to Movies / $sanitized"
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = rovaQuietText(dimAlpha = 0.6f)
                 )
             }
         },
