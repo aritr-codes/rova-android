@@ -68,7 +68,7 @@ internal class SafExporter(
      */
     suspend fun recover(manifest: SessionManifest, segments: List<File>): RecoveryResult {
         val docUri = manifest.safTargetDocUri
-        if (docUri != null && validateDocument(docUri)) {
+        if (docUri != null && validateSafely(docUri)) {
             return toRecovery(setFinalizedClear())
         }
         if (!isPermissionHeld() || currentRetryCount() >= RETRY_BUDGET) {
@@ -79,8 +79,8 @@ internal class SafExporter(
             mux(segments, privateTempFile)
         } catch (t: Throwable) {
             RovaLog.w("$TAG.recover: re-mux failed for ${manifest.sessionId}", t)
-            incrementRetry()
-            return RecoveryResult.RetryableFailure("saf-recover-remux", t)
+            // classify() handles permission-revoked-mid-remux (permanent) + the retry bump
+            return toRecoveryOf(classify(ExportResult.MuxFailed(t), t), "saf-recover-remux", t)
         }
         return RecoveryResult.Resumed(publish(privateTempFile))
     }
@@ -94,24 +94,28 @@ internal class SafExporter(
         }
         displayNameOf(docUri)?.let { RovaLog.d("$TAG: created doc as '$it'") }
         commit(setSafTarget(docUri))?.let { return it }   // commit BEFORE the first byte
-        try {
-            copyFileToDocument(temp, docUri)
+        // A provider may throw on close/flush even after the bytes are durable, so the
+        // KEEP/DELETE decision hinges on validation, not on whether copy threw
+        // (validate-before-delete — never destroy a valid artifact).
+        val copyError: Throwable? = try {
+            copyFileToDocument(temp, docUri); null
         } catch (t: Throwable) {
-            RovaLog.w("$TAG: copy-to-SAF failed", t)
-            safeDelete(docUri)
-            return classify(ExportResult.CopyFailed(t), t)
+            RovaLog.w("$TAG: copy-to-SAF threw (validating before any delete)", t); t
         }
-        if (!validateDocument(docUri)) {
-            RovaLog.w("$TAG: SAF doc failed validation")
-            safeDelete(docUri)
-            return classify(ExportResult.CopyFailed(failure()), null)
-        }
-        return toExport(setFinalizedClear())
+        if (validateSafely(docUri)) return toExport(setFinalizedClear())
+        RovaLog.w("$TAG: SAF doc failed validation; deleting partial")
+        safeDelete(docUri)
+        return classify(ExportResult.CopyFailed(copyError ?: failure()), copyError)
     }
 
     private suspend fun classify(transient: ExportResult, cause: Throwable?): ExportResult =
-        if (!isPermissionHeld() || currentRetryCount() >= RETRY_BUDGET) permanent(cause)
-        else { incrementRetry(); transient }
+        if (!isPermissionHeld() || currentRetryCount() >= RETRY_BUDGET) {
+            permanent(cause)
+        } else when (val r = incrementRetry()) {
+            is ExportMutationResult.Wrote -> transient
+            is ExportMutationResult.UnknownSession -> ExportResult.UnknownSession(r.sessionId)
+            is ExportMutationResult.Failed -> ExportResult.ManifestWriteFailed("incrementRetry", r.cause)
+        }
 
     private suspend fun permanent(cause: Throwable?): ExportResult {
         when (val r = setFailed()) {
@@ -127,6 +131,14 @@ internal class SafExporter(
         is ExportMutationResult.UnknownSession -> ExportResult.UnknownSession(r.sessionId)
         is ExportMutationResult.Failed -> ExportResult.ManifestWriteFailed("setExportFinalized", r.cause)
     }
+
+    private fun toRecoveryOf(export: ExportResult, phase: String, cause: Throwable?): RecoveryResult =
+        when (export) {
+            // RetryableFailure.cause is non-null; transient export results carry their own cause.
+            is ExportResult.MuxFailed -> RecoveryResult.RetryableFailure(phase, export.cause)
+            is ExportResult.CopyFailed -> RecoveryResult.RetryableFailure(phase, export.cause)
+            else -> RecoveryResult.Resumed(export)
+        }
 
     private fun toRecovery(r: ExportMutationResult): RecoveryResult = when (r) {
         is ExportMutationResult.Wrote -> RecoveryResult.Resumed(
@@ -144,6 +156,10 @@ internal class SafExporter(
     private fun safeDelete(docUri: String) {
         try { deleteDocument(docUri) } catch (t: Throwable) { RovaLog.w("$TAG: deleteDocument threw", t) }
     }
+
+    /** validateDocument can throw (e.g. SecurityException on revoked SAF permission); treat a throw as "not valid". */
+    private fun validateSafely(docUri: String): Boolean =
+        try { validateDocument(docUri) } catch (t: Throwable) { RovaLog.w("$TAG: validateDocument threw", t); false }
 
     private fun failure() = java.io.IOException("SAF publish failed")
 }

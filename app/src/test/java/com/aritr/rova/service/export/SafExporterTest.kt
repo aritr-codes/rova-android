@@ -31,7 +31,8 @@ class SafExporterTest {
         validateDoc: (String) -> Boolean = { true },
         deleteDoc: (String) -> Boolean = { true },
         permissionHeld: () -> Boolean = { true },
-        retryCount: Int = 0
+        retryCount: Int = 0,
+        incrementRetry: suspend () -> ExportMutationResult = { wrote() }
     ) = SafExporter(
         displayName = "Rova.mp4",
         privateTempFile = File(tempDir, "saf_${System.nanoTime()}.private"),
@@ -39,7 +40,7 @@ class SafExporterTest {
         setSafTarget = { _ -> calls.log += "setSafTarget"; wrote() },
         setFinalizedClear = { calls.log += "finalizedClear"; wrote() },
         setFailed = { calls.log += "setFailed"; wrote() },
-        incrementRetry = { calls.log += "incrementRetry"; wrote() },
+        incrementRetry = { calls.log += "incrementRetry"; incrementRetry() },
         currentRetryCount = { retryCount },
         mux = mux,
         createDocument = createDoc,
@@ -70,8 +71,9 @@ class SafExporterTest {
     }
 
     @Test fun copyFails_permissionHeld_is_transient_CopyFailed() = runBlocking {
+        // validate-before-delete (Fix A): a copy throw only fails if the doc ALSO fails to validate.
         val r = exporter(copyToDoc = { _, _ -> throw java.io.IOException("busy") },
-            permissionHeld = { true }).export("s", emptyList())
+            validateDoc = { false }, permissionHeld = { true }).export("s", emptyList())
         assertTrue(r is ExportResult.CopyFailed)
     }
 
@@ -84,8 +86,9 @@ class SafExporterTest {
     }
 
     @Test fun retryBudgetExhausted_escalates_to_permanent() = runBlocking {
+        // copy throw + invalid doc reaches classify(); budget exhausted → permanent.
         val r = exporter(copyToDoc = { _, _ -> throw java.io.IOException("busy") },
-            permissionHeld = { true }, retryCount = 3).export("s", emptyList())
+            validateDoc = { false }, permissionHeld = { true }, retryCount = 3).export("s", emptyList())
         assertTrue(r is ExportResult.SafFolderUnavailable)
     }
 
@@ -123,5 +126,56 @@ class SafExporterTest {
             .recover(m, listOf(File(tempDir, "seg.mp4")))
         assertTrue(r is RecoveryResult.Resumed)
         assertTrue(muxed)
+    }
+
+    // Fix A — validate-before-delete: a provider throw on close/flush after bytes are durable
+    // must NOT delete a valid artifact.
+    @Test fun copyThrowsButDocValidates_keepsDoc_returnsSuccess() = runBlocking {
+        var deleted = false
+        val r = exporter(
+            copyToDoc = { _, _ -> throw java.io.IOException("close blip") },
+            validateDoc = { true },
+            deleteDoc = { deleted = true; true }
+        ).export("s", emptyList())
+        assertTrue(r is ExportResult.Success)
+        assertEquals(false, deleted)
+    }
+
+    // Fix B — validateDocument throwing (revoked SAF perm) is treated as not-valid, then
+    // classified transient — never escapes unclassified.
+    @Test fun validateThrows_treatedAsInvalid_transientCopyFailed() = runBlocking {
+        val r = exporter(
+            validateDoc = { throw SecurityException("revoked") },
+            permissionHeld = { true },
+            retryCount = 0
+        ).export("s", emptyList())
+        assertTrue(r is ExportResult.CopyFailed)
+    }
+
+    // Fix D — a failed incrementRetry manifest write must surface ManifestWriteFailed,
+    // not silently swallow (budget never persists → unbounded retries).
+    @Test fun incrementRetryFails_returns_ManifestWriteFailed() = runBlocking {
+        val r = exporter(
+            copyToDoc = { _, _ -> throw java.io.IOException("busy") },
+            validateDoc = { false }, // copy throw + invalid doc → reaches classify()
+            permissionHeld = { true },
+            retryCount = 0,
+            incrementRetry = { ExportMutationResult.Failed(RuntimeException("disk"), attempts = 1) }
+        ).export("s", emptyList())
+        assertTrue(r is ExportResult.ManifestWriteFailed)
+    }
+
+    // Fix C — recovery re-mux that fails with permission revoked must escalate to PERMANENT
+    // (SafFolderUnavailable) via classify, not blindly RetryableFailure.
+    @Test fun recover_remuxFails_permissionRevoked_escalates_permanent() = runBlocking {
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+            emptyList(), ExportTier.SAF_DESTINATION,
+            safTargetDocUri = null, exportState = ExportState.MUXING)
+        val r = exporter(
+            mux = { _, _ -> throw java.io.IOException("io") },
+            permissionHeld = { false }
+        ).recover(m, listOf(File(tempDir, "seg.mp4")))
+        assertTrue(r is RecoveryResult.Resumed)
+        assertTrue((r as RecoveryResult.Resumed).export is ExportResult.SafFolderUnavailable)
     }
 }
