@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  i18n Phase B (ADR-0023). HAND-AUTHORED — AGP generateLocaleConfig is left OFF
+  so debug pseudolocale folders (values-en-rXA / values-ar-rXB) are never
+  published into the Android 13+ system per-app-language list. Lists only real
+  shippable locales; each future language adds one <locale> line here alongside
+  its values-xx/ catalog and AppLocale.SUPPORTED_USER_LOCALES entry.
+  The checkLocaleConfigNoPseudolocale gate forbids pseudolocale tags here.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+</locale-config>
