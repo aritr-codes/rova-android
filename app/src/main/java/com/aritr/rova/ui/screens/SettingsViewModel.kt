@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.ui.locale.LocaleApplier
 import com.aritr.rova.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // collects this flow above RovaTheme so a change re-themes the whole tree live.
     val themeMode = MutableStateFlow(settings.themeMode)
 
+    // i18n Phase B (ADR-0023) — chosen language tag, null = system. UNLIKE
+    // themeMode (which write-backs via a collector), localeTag is persisted
+    // SYNCHRONOUSLY in setLocale(): the API 24–32 recreate path reads the value
+    // in attachBaseContext, so it must be on disk before apply() recreates.
+    val localeTag = MutableStateFlow(settings.localeTag)
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
@@ -78,5 +85,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         durationSeconds.value = settings.durationSeconds
         intervalMinutes.value = settings.intervalMinutes
         loopCount.value = settings.loopCount
+    }
+
+    /**
+     * Set the app language. Persists the tag first (the API 24–32 backport reads
+     * it in attachBaseContext on recreate), updates the flow, then applies:
+     * LocaleManager on API 33+ (framework recreates) or Activity.recreate()
+     * on 24–32. [context] must be the Activity.
+     */
+    fun setLocale(context: Context, tag: String?) {
+        settings.localeTag = tag
+        localeTag.value = tag
+        LocaleApplier.apply(context, tag)
     }
 }
