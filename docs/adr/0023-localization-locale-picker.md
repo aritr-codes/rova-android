@@ -25,7 +25,7 @@ The app is deliberately `ComponentActivity` + Compose, edge-to-edge (ADR-0011) w
 - **API 33+:** `LocaleManager.setApplicationLocales(LocaleList)`. The framework persists the per-app locale, recreates the Activity, and syncs with the Android 13+ system per-app-language screen.
 - **API 24–32:** `MainActivity.attachBaseContext` wraps the base `Context` with a `Configuration.setLocale(...)` built from the persisted tag, so Compose `stringResource` resolves the override; a picker change persists the tag then calls `Activity.recreate()`.
 
-`RovaSettings.localeTag` (BCP-47 tag, null = system) is the single source of truth; it is persisted **synchronously before** apply so the 24–32 recreate path reads it. Pure logic (tag coercion, picker options, tag→Locale) lives in `AppLocale`; the framework calls live in the thin `LocaleApplier` seam.
+`RovaSettings.localeTag` (BCP-47 tag, null = system) is the single source of truth; the setter is called **before** apply (via `SharedPreferences.apply()`, whose in-memory update to the per-process singleton is immediately visible to the `attachBaseContext` read on the 24–32 recreate path — disk-flush timing is irrelevant for the same-process read). Pure logic (tag coercion, picker options, tag→Locale) lives in `AppLocale`; the framework calls live in the thin `LocaleApplier` seam.
 
 ### Picker gating — no empty promise
 
