@@ -1,13 +1,13 @@
 package com.aritr.rova.ui.warnings
 
 /**
- * The 18 Record-screen warning banners, in PRECEDENCE ORDER (highest
+ * The 21 Record-screen warning banners, in PRECEDENCE ORDER (highest
  * first). Declaration order IS the contract — [WarningPrecedence.resolve]
  * returns the first active one, and `WarningIdOrderTest` pins the
  * ordinals so a reorder cannot slip through review.
  *
  * Order mirrors NEW_UI_BACKEND_REPLAN.md the "Phase 4" "Banner precedence"
- * table (owner-signed 2026-05-11), rows 1..20. As of Phase 4 Slice 3 all 18
+ * table (owner-signed 2026-05-11), rows 1..21. As of Phase 4 Slice 3 all 20
  * rows are reachable from [WarningPrecedence.resolve]. R2 (2026-05-13)
  * inserts row #11 STORAGE_LOW_MID_REC per ADR 0007 amendment.
  *
@@ -45,7 +45,9 @@ enum class WarningId(val tier: WarningTier, val gatesStart: Boolean = false) {
     BATTERY_OPTIMIZATION_ON(WarningTier.ADVISORY),      // #17
     POWER_SAVE_MODE(WarningTier.ADVISORY),              // #18
     THERMAL_MODERATE(WarningTier.ADVISORY),             // #19
-    NOTIFICATIONS_DENIED(WarningTier.ADVISORY)          // #20
+    NOTIFICATIONS_DENIED(WarningTier.ADVISORY),          // #20
+    // B4b (ADR-0024) — custom save folder unusable
+    SAVE_FOLDER_UNAVAILABLE(WarningTier.ADVISORY),       // #21
 }
 
 /** Visual tier for the banner chrome. NOT the priority axis — that is [WarningId.ordinal]. */

@@ -34,7 +34,8 @@ class WarningIdOrderTest {
                 "BATTERY_OPTIMIZATION_ON",   // #17
                 "POWER_SAVE_MODE",           // #18
                 "THERMAL_MODERATE",          // #19
-                "NOTIFICATIONS_DENIED"       // #20
+                "NOTIFICATIONS_DENIED",      // #20
+                "SAVE_FOLDER_UNAVAILABLE"    // #21 — (B4b ADR-0024)
             ),
             WarningId.values().map { it.name }
         )
@@ -61,6 +62,17 @@ class WarningIdOrderTest {
         assertEquals(WarningTier.ADVISORY, WarningId.POWER_SAVE_MODE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.THERMAL_MODERATE.tier)
         assertEquals(WarningTier.ADVISORY, WarningId.NOTIFICATIONS_DENIED.tier)
+        assertEquals(WarningTier.ADVISORY, WarningId.SAVE_FOLDER_UNAVAILABLE.tier)
+    }
+
+    @Test fun `SAVE_FOLDER_UNAVAILABLE is the last entry with highest ordinal`() {
+        val values = WarningId.values()
+        assertEquals(
+            "SAVE_FOLDER_UNAVAILABLE must be the last entry (highest ordinal)",
+            WarningId.SAVE_FOLDER_UNAVAILABLE,
+            values.last()
+        )
+        assertEquals(21, values.size)
     }
 
     @Test fun `only camera-permission and storage gate Start`() {

@@ -540,6 +540,11 @@
     <string name="warning_cant_merge_secondary">Save segments only</string>
     <string name="warning_cant_merge_tertiary">Discard session</string>
 
+    <!-- SAVE_FOLDER_UNAVAILABLE (B4b ADR-0024) -->
+    <string name="warning_save_folder_unavailable_title">Save folder unavailable</string>
+    <string name="warning_save_folder_unavailable_body">The custom save folder is no longer accessible. Open Settings and choose a new save location.</string>
+    <string name="warning_save_folder_unavailable_primary">Open Settings</string>
+
     <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
     <string name="warning_camera_in_use_title">Camera in use by another app</string>
     <string name="warning_camera_in_use_body">Close the other camera app.</string>

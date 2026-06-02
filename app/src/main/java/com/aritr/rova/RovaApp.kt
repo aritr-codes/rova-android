@@ -37,6 +37,7 @@ import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.SessionAutoStopEchoSignal
+import com.aritr.rova.ui.signals.SaveFolderSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
@@ -271,6 +272,17 @@ class RovaApp : Application() {
      */
     val recoveryMergeOutcomeSignal: RecoveryMergeOutcomeSignal by lazy {
         RecoveryMergeOutcomeSignal()
+    }
+
+    /**
+     * B4b (ADR-0024) — SAF save-folder unavailability signal. `true` once
+     * the exporter has permanently flagged the custom save folder as gone
+     * or permission-revoked. Drives the SAVE_FOLDER_UNAVAILABLE advisory
+     * warning in the WarningCenter. Lazy so cold-start receiver paths pay
+     * no cost. Refresh contract: host Activity ON_RESUME.
+     */
+    val saveFolderSignal: SaveFolderSignal by lazy {
+        SaveFolderSignal.forContext(this)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

@@ -123,6 +123,30 @@ class WarningCenterAggregateTest {
         assertEquals(listOf<WarningId?>(null, WarningId.STORAGE_LOW_MID_REC, null), emissions)
     }
 
+    @Test fun `save-folder-unavailable flow flip emits id and clears`() = runBlocking {
+        // B4b (ADR-0024) — aggregate wiring: saveFolderUnavailable=true emits #21.
+        val saveFolderFlow = MutableStateFlow(false)
+        val emissions = mutableListOf<WarningId?>()
+        val s = sources()
+        val job = launch(Dispatchers.Unconfined) {
+            WarningCenterViewModel.aggregate(
+                s.cameraPerm, s.ea, s.storage, s.th, s.pw, s.camState, s.mic, s.nt, s.bo,
+                s.storageLowMidRec, s.autoStopEcho, s.cantMergeActive,
+                saveFolderUnavailable = saveFolderFlow,
+            ).collect { emissions += it }
+        }
+        yield()
+        saveFolderFlow.value = true
+        yield()
+        saveFolderFlow.value = false
+        yield()
+        job.cancelAndJoin()
+        assertEquals(
+            listOf<WarningId?>(null, WarningId.SAVE_FOLDER_UNAVAILABLE, null),
+            emissions,
+        )
+    }
+
     @Test fun `battery-low outranks storage-low-mid-rec`() = runBlocking {
         val s = sources()
         s.pw.value = PowerState(percent = 14, charging = false, powerSaveMode = false)   // would fire BATTERY_LOW

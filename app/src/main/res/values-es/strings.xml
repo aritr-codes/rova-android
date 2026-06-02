@@ -541,6 +541,11 @@
     <string name="warning_cant_merge_secondary">Guardar solo los segmentos</string>
     <string name="warning_cant_merge_tertiary">Descartar sesión</string>
 
+    <!-- SAVE_FOLDER_UNAVAILABLE (B4b ADR-0024) -->
+    <string name="warning_save_folder_unavailable_title">Carpeta de guardado no disponible</string>
+    <string name="warning_save_folder_unavailable_body">La carpeta de guardado personalizada ya no es accesible. Abre Ajustes y elige una nueva ubicación.</string>
+    <string name="warning_save_folder_unavailable_primary">Abrir ajustes</string>
+
     <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
     <string name="warning_camera_in_use_title">La cámara la está usando otra app</string>
     <string name="warning_camera_in_use_body">Cierra la otra app de cámara.</string>

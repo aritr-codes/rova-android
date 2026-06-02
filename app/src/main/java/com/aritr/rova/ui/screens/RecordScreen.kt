@@ -287,6 +287,7 @@ fun RecordScreen(
                     it.batteryOptimizationSignal.refresh()
                     it.cameraPermissionSignal.refresh()
                     it.microphonePermissionSignal.refresh()
+                    it.saveFolderSignal.refresh()                  // ← NEW (B4b ADR-0024)
                     it.storageSignal.recompute(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
