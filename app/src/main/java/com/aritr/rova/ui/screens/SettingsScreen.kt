@@ -4,6 +4,9 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.documentfile.provider.DocumentFile
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,6 +79,7 @@ import com.aritr.rova.BuildConfig
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.QualityPresets
+import com.aritr.rova.service.export.SafAndroidOps
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.HourglassEmpty
@@ -167,6 +171,58 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val languageOptions = AppLocale.languagePickerOptions()
     val showLanguageRow = AppLocale.shouldShowLanguagePicker(languageOptions)
     val localeTag by settingsViewModel.localeTag.collectAsStateWithLifecycle()
+    val saveLabel by settingsViewModel.saveLocationLabel.collectAsStateWithLifecycle()
+
+    // B4 SAF track — folder picker. Probe first (uses temporary callback grant),
+    // then take persistable permission, then persist. This order avoids:
+    //   (a) dangling persisted grants when the probe fails, and
+    //   (b) storing a URI whose persistent grant was silently not taken.
+    val unusableMsg = stringResource(R.string.settings_save_location_unusable)
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val ok = SafAndroidOps.writeProbe(context, uri.toString())
+                if (ok) {
+                    // Probe passed with temporary callback grant; now make it
+                    // permanent. A SecurityException here means the OS refused
+                    // to persist — treat as failure rather than silently storing
+                    // a URI that will break after the callback expires.
+                    val granted = try {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                        true
+                    } catch (_: SecurityException) {
+                        false
+                    }
+                    if (granted) {
+                        // Prefer DocumentFile.name (asks the provider for the
+                        // display name); fall back to URI path segment parsing.
+                        val label = DocumentFile.fromTreeUri(context, uri)?.name
+                            ?: uri.lastPathSegment
+                                ?.substringAfterLast(':')
+                                ?.substringAfterLast('/')
+                            ?: uri.toString()
+                        launch(Dispatchers.Main) {
+                            settingsViewModel.setSaveLocationFolder(uri.toString(), label)
+                        }
+                    } else {
+                        launch(Dispatchers.Main) {
+                            Toast.makeText(context, unusableMsg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    launch(Dispatchers.Main) {
+                        Toast.makeText(context, unusableMsg, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -353,6 +409,24 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     onClick = { showFolderDialog = true },
                     trailing = { ChevronTrailing() }
                 )
+                SettingsDivider()
+                // B4 SAF track — custom save-location row (tree URI picker).
+                SettingsRow(
+                    icon = Icons.Default.Folder,
+                    label = stringResource(R.string.settings_save_location_label),
+                    value = saveLabel ?: stringResource(R.string.settings_save_location_internal),
+                    onClick = { pickFolder.launch(null) },
+                    trailing = { ChevronTrailing() },
+                )
+                if (saveLabel != null) {
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.Folder,
+                        label = stringResource(R.string.settings_save_location_use_internal),
+                        onClick = { settingsViewModel.clearSaveLocationFolder() },
+                        trailing = { ChevronTrailing() },
+                    )
+                }
                 SettingsDivider()
                 val cacheClearedFmt = stringResource(R.string.settings_clear_cache_cleared)
                 val cacheEmptyMsg = stringResource(R.string.settings_clear_cache_empty)

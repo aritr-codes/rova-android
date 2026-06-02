@@ -373,6 +373,11 @@
     <string name="settings_system_notifications_unavailable">Notification settings not available on this device</string>
 
     <!-- Storage rows -->
+    <string name="settings_save_location_label">Save location</string>
+    <string name="settings_save_location_internal">Internal storage (default)</string>
+    <string name="settings_save_location_choose">Choose folder…</string>
+    <string name="settings_save_location_use_internal">Use internal storage</string>
+    <string name="settings_save_location_unusable">That folder can\'t be used for saving. Pick another.</string>
     <string name="settings_auto_delete_label">Auto-delete old recordings</string>
     <string name="settings_auto_delete_supporting_on">Keeping the latest %1$d finished recordings.</string>
     <string name="settings_auto_delete_supporting_off">Off. Recordings stay until you delete them yourself.</string>

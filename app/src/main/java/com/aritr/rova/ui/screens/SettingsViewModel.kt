@@ -56,6 +56,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // in attachBaseContext, so it must be on disk before apply() recreates.
     val localeTag = MutableStateFlow(settings.localeTag)
 
+    // B4 SAF track (ADR-0024) — human-readable label for the custom save
+    // location, or null = no custom folder (uses default internal/MediaStore
+    // export tier). Uses explicit setters rather than a collector pair because
+    // treeUri + label must be written/cleared atomically; independent collectors
+    // would race across the nullable boundary.
+    val saveLocationLabel = MutableStateFlow(settings.saveLocationLabel)
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
@@ -85,6 +92,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         durationSeconds.value = settings.durationSeconds
         intervalMinutes.value = settings.intervalMinutes
         loopCount.value = settings.loopCount
+        saveLocationLabel.value = settings.saveLocationLabel
     }
 
     /**
@@ -97,5 +105,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         settings.localeTag = tag
         localeTag.value = tag
         LocaleApplier.apply(context, tag)
+    }
+
+    /**
+     * B4 SAF track — persist a validated SAF tree URI + display label as the
+     * custom save location. Call AFTER the persistable URI permission has been
+     * taken and writeProbe passed. Clears any prior unavailability flag so the
+     * fresh pick is treated as healthy.
+     */
+    fun setSaveLocationFolder(treeUri: String, label: String) {
+        settings.saveLocationTreeUri = treeUri
+        settings.saveLocationLabel = label
+        settings.saveFolderUnavailable = false
+        saveLocationLabel.value = label
+    }
+
+    /**
+     * B4 SAF track — clear the custom save location; subsequent exports use
+     * the default internal/MediaStore tier.
+     */
+    fun clearSaveLocationFolder() {
+        settings.saveLocationTreeUri = null
+        settings.saveLocationLabel = null
+        settings.saveFolderUnavailable = false
+        saveLocationLabel.value = null
     }
 }

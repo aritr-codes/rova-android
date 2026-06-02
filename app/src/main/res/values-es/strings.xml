@@ -374,6 +374,11 @@
     <string name="settings_system_notifications_unavailable">Ajustes de notificaciones no disponibles en este dispositivo</string>
 
     <!-- Storage rows -->
+    <string name="settings_save_location_label">Ubicación de guardado</string>
+    <string name="settings_save_location_internal">Almacenamiento interno (predeterminado)</string>
+    <string name="settings_save_location_choose">Elegir carpeta…</string>
+    <string name="settings_save_location_use_internal">Usar almacenamiento interno</string>
+    <string name="settings_save_location_unusable">Esa carpeta no se puede usar para guardar. Elige otra.</string>
     <string name="settings_auto_delete_label">Eliminar grabaciones antiguas automáticamente</string>
     <string name="settings_auto_delete_supporting_on">Conservando las últimas %1$d grabaciones terminadas.</string>
     <string name="settings_auto_delete_supporting_off">Desactivado. Las grabaciones permanecen hasta que las elimines tú.</string>
