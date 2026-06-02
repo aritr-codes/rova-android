@@ -397,6 +397,92 @@ open class SessionStore internal constructor(rootDirArg: File) {
         }
 
     /**
+     * ADR-0024 §SAF route. Commit the private temp path before the SAF mux;
+     * mirrors Tier 2/3 commit-point A ([setExportPrivateTarget]) for the SAF
+     * copy path. Caller MUST invoke BEFORE `MediaMuxer.start()` so cold-launch
+     * recovery can find the manifest pointer on the next boot.
+     *
+     * Effects: `privateTempPath = privateTempPath`, `exportState = MUXING`.
+     * No other field touched.
+     */
+    suspend fun setExportSafPrivateTemp(
+        sessionId: String,
+        privateTempPath: String
+    ): ExportMutationResult = mutateExport("setExportSafPrivateTemp", sessionId) { current ->
+        current.copy(privateTempPath = privateTempPath, exportState = ExportState.MUXING)
+    }
+
+    /**
+     * ADR-0024 §commit-before-stream. Commit the SAF document Uri BEFORE the
+     * first byte is written to it. Transitions exportState to COPYING so the
+     * recovery classifier can identify an in-progress SAF stream write after a
+     * crash.
+     *
+     * Effects: `safTargetDocUri = docUri`, `exportState = COPYING`.
+     * No other field touched.
+     */
+    suspend fun setExportSafTarget(
+        sessionId: String,
+        docUri: String
+    ): ExportMutationResult = mutateExport("setExportSafTarget", sessionId) { current ->
+        current.copy(safTargetDocUri = docUri, exportState = ExportState.COPYING)
+    }
+
+    /**
+     * ADR-0024 §failure classification. Increment the transient-retry counter.
+     * The counter escalates to a permanent failure classification at 3.
+     *
+     * Effects: `safTransientRetryCount += 1`. No other field touched.
+     */
+    suspend fun incrementSafTransientRetry(sessionId: String): ExportMutationResult =
+        mutateExport("incrementSafTransientRetry", sessionId) { current ->
+            current.copy(safTransientRetryCount = current.safTransientRetryCount + 1)
+        }
+
+    /**
+     * ADR-0024 §SAF route per-side. Per-side analog of [setExportSafPrivateTemp]
+     * for P+L sessions. Routes to `portraitPrivateTempPath` or
+     * `landscapePrivateTempPath` based on [side]. Side-orthogonal.
+     *
+     * Effects: the matching side's `privateTempPath` field is set.
+     * No other field touched.
+     */
+    suspend fun setExportSafPrivateTempForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        privateTempPath: String
+    ): ExportMutationResult = mutateExport("setExportSafPrivateTempForSide($side)", sessionId) { current ->
+        val nextState = floorAdvanceToMuxing(current.exportState)
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitPrivateTempPath = privateTempPath, exportState = nextState)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapePrivateTempPath = privateTempPath, exportState = nextState)
+        }
+    }
+
+    /**
+     * ADR-0024 §SAF route per-side. Per-side analog of [setExportSafTarget]
+     * for P+L sessions. Routes to `portraitSafTargetDocUri` or
+     * `landscapeSafTargetDocUri` based on [side]. Side-orthogonal.
+     *
+     * Effects: the matching side's `safTargetDocUri` field is set.
+     * No other field touched.
+     */
+    suspend fun setExportSafTargetForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        docUri: String
+    ): ExportMutationResult = mutateExport("setExportSafTargetForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT ->
+                current.copy(portraitSafTargetDocUri = docUri)
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
+                current.copy(landscapeSafTargetDocUri = docUri)
+        }
+    }
+
+    /**
      * Phase 1.7 (ADR 0003 §Recovery routing). Tier 2/3 only.
      * `MediaScannerConnection.scanFile` callback fired; the gallery has
      * indexed the public artifact. Idempotent — a second call writes
