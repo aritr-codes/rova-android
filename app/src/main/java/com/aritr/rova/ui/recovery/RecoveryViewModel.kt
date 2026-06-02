@@ -83,6 +83,11 @@ class RecoveryViewModel(
                 if (c.sessionId != merge.sessionId) c
                 else when (val o = merge.outcome) {
                     is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed ->
+                        // i18n-opt-out: nonlocalized diagnostic sentinel. mergeFailedReason is a
+                        // raw runtime exception message passed through verbatim (the "Merge failed: "
+                        // wrapper is the externalized copy, at RecoveryCard). This VM is deliberately
+                        // Context-free (plain ViewModel, JVM-testable) so it cannot resolve a string
+                        // resource here; the fallback only shows when cause.message is itself null.
                         c.copy(mergeInProgress = null, mergeFailedReason = o.cause.message ?: "merge failed")
                     is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage ->
                         c.copy(mergeInProgress = null)   // CANT_MERGE sheet handles the user surface

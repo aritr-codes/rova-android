@@ -17,8 +17,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 
 /**
  * One chip in the quick-set row. Selected state carries a ✓ prefix in
@@ -47,16 +49,22 @@ fun <T> QuickSetChipRow(
         options.forEach { option ->
             val isSelected = option.value == selected
             val description = option.contentDescription ?: option.label
+            val selectedLabel = stringResource(R.string.record_quickset_selected_label, option.label)
+            val chipDescription = if (isSelected) {
+                stringResource(R.string.record_quickset_selected_cd, description)
+            } else {
+                stringResource(R.string.record_quickset_not_selected_cd, description)
+            }
             FilterChip(
                 selected = isSelected,
                 onClick = { onSelect(option.value) },
-                label = { Text(if (isSelected) "✓ ${option.label}" else option.label) },
+                label = { Text(if (isSelected) selectedLabel else option.label) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 modifier = Modifier.clearAndSetSemantics {
-                    this.contentDescription = if (isSelected) "$description, selected" else "$description, not selected"
+                    this.contentDescription = chipDescription
                     this.role = Role.RadioButton
                     this.selected = isSelected
                 }
@@ -89,7 +97,7 @@ private fun QuickSetChipRowPreviewLight() {
 private fun QuickSetChipRowPreviewDark() {
     Surface(color = MaterialTheme.colorScheme.background) {
         val options = listOf(
-            QuickSetOption(0, "None", contentDescription = "No wait between clips"),
+            QuickSetOption(0, "None", contentDescription = "No wait between clips"), // i18n-opt-out: preview-only
             QuickSetOption(1, "1m"),
             QuickSetOption(5, "5m"),
             QuickSetOption(10, "10m"),

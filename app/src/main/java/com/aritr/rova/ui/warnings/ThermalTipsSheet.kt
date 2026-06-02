@@ -15,7 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 
 /**
  * Phase 4 Slice 3 — bottom sheet opened from the THERMAL_AUTOSTOPPED echo
@@ -40,21 +42,21 @@ fun ThermalTipsSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Tips to cool down",
+                text = stringResource(R.string.warning_thermal_tips_title),
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(Modifier.height(8.dp))
-            ThermalTip("Move to shade or a cooler room.")
-            ThermalTip("Remove the case while the device cools.")
-            ThermalTip("Close other camera-heavy apps.")
-            ThermalTip("Avoid charging while recording.")
-            ThermalTip("Let the device rest 5 minutes before recording again.")
+            ThermalTip(stringResource(R.string.warning_thermal_tip_shade))
+            ThermalTip(stringResource(R.string.warning_thermal_tip_case))
+            ThermalTip(stringResource(R.string.warning_thermal_tip_close_apps))
+            ThermalTip(stringResource(R.string.warning_thermal_tip_charging))
+            ThermalTip(stringResource(R.string.warning_thermal_tip_rest))
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.End),
             ) {
-                Text("Got it")
+                Text(stringResource(R.string.warning_thermal_tips_dismiss))
             }
         }
     }
@@ -63,7 +65,7 @@ fun ThermalTipsSheet(onDismiss: () -> Unit) {
 @Composable
 private fun ThermalTip(text: String) {
     Row(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text("•  ", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.warning_thermal_tips_bullet), style = MaterialTheme.typography.bodyLarge)
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
 }

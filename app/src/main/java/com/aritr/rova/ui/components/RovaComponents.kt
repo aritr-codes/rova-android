@@ -18,8 +18,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 
 @Composable
 fun StepperControl(
@@ -49,7 +51,7 @@ fun StepperControl(
                 enabled = enabled && value > range.first,
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.stepper_decrease_cd))
             }
 
             Column(
@@ -74,7 +76,7 @@ fun StepperControl(
                 enabled = enabled && value < range.last,
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Increase")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.stepper_increase_cd))
             }
         }
     }

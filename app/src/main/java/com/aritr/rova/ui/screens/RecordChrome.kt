@@ -45,6 +45,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -52,6 +54,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
@@ -59,6 +62,8 @@ import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.text.UiText
+import com.aritr.rova.ui.text.resolve
 
 // Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
 // docs/UI_DESIGN_TOKENS.md §2.13). Only values with no token stay local:
@@ -103,7 +108,11 @@ fun RecordTopOverlay(
             StatusDot(hudState)
             Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
             if (statusDetail != null) {
-                Text("· $statusDetail", style = RovaTokens.statusTime, color = RecordChromeTokens.statusTimeText)
+                Text(
+                    stringResource(R.string.record_status_detail_prefix, statusDetail),
+                    style = RovaTokens.statusTime,
+                    color = RecordChromeTokens.statusTimeText,
+                )
             }
         }
     }
@@ -177,7 +186,7 @@ fun RecordCameraControls(
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     RecordChromeIcons.flashBolt,
-                    contentDescription = "Flash",
+                    contentDescription = stringResource(R.string.record_flash_cd),
                     tint = contentTint,
                     modifier = Modifier.size(15.dp),
                 )
@@ -203,7 +212,7 @@ fun RecordCameraControls(
         GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
             Icon(
                 RecordChromeIcons.flipCamera,
-                contentDescription = "Flip camera",
+                contentDescription = stringResource(R.string.record_flip_camera_cd),
                 tint = flipTint,
                 modifier = Modifier.size(16.dp),
             )
@@ -265,7 +274,7 @@ fun RecordSettingsCard(
                     .clip(RoundedCornerShape(1.dp))
                     .background(RecordChromeTokens.swipeHint),
             )
-            Text("SWIPE TO EDIT", style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
+            Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
         }
         Row(
             modifier = Modifier
@@ -293,13 +302,13 @@ fun RecordSettingsCard(
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SettingsCell("Clip", recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Repeats", recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Wait", recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
             CellSep()
-            SettingsCell("Quality", quality, Modifier.weight(1f), readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
             ModeCycleChip(
                 mode = mode,
                 onCycleMode = onCycleMode,
@@ -309,7 +318,7 @@ fun RecordSettingsCard(
             )
             Icon(
                 RecordChromeIcons.chevronUp,
-                contentDescription = "Edit session settings",
+                contentDescription = stringResource(R.string.record_edit_session_settings_cd),
                 tint = RecordChromeTokens.settingsArrow,
                 modifier = Modifier.padding(start = 8.dp).size(13.dp),
             )
@@ -375,7 +384,7 @@ private fun ModeCycleChip(
                 maxLines = 1,
             )
             Text(
-                "MODE",
+                stringResource(R.string.record_cell_mode),
                 style = RovaTokens.cellKey,
                 color = RecordChromeTokens.cellKeyText,
                 textAlign = TextAlign.Center,
@@ -383,7 +392,7 @@ private fun ModeCycleChip(
             )
         }
         Text(
-            "↻",
+            "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
             modifier = Modifier.align(Alignment.TopEnd),
             color = Color.White.copy(alpha = glyphAlpha),
             fontSize = RecordChromeTokens.modeChipGlyphSize,
@@ -484,9 +493,9 @@ fun RecordBottomNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceAround,
         ) {
-            NavItem(icon = RecordChromeIcons.library, label = "Library", enabled = !navItemsLocked, onClick = onLibrary)
+            NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
             RecordFab(state = fabState, onClick = onFabClick)
-            NavItem(icon = RecordChromeIcons.settings, label = "Settings", enabled = !navItemsLocked, onClick = onSettings)
+            NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
         }
     }
 }
@@ -529,9 +538,9 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
 @Composable
 private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
     val (fill, stroke, semanticsLabel) = when (state) {
-        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, "Start recording")
-        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, "Stop recording")
-        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), "Start recording (unavailable)")
+        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
+        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
+        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), stringResource(R.string.record_fab_start_unavailable_cd))
     }
     val enabled = state != RecordFabState.Disabled
     Box(contentAlignment = Alignment.Center) {
@@ -582,14 +591,15 @@ private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
  */
 @Composable
 fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier) {
-    val word = if (count == 1) "recording" else "recordings"
     // WCAG 2.2 AA SC 1.3.1 / 4.1.2 (ADR-0020, REC-19): one button node with a
     // single spoken name — the decorative history glyph (CD=null) and the label
     // otherwise read as separate fragments.
-    val chipDescription = "$count $word interrupted. Review."
+    val chipDescription = pluralStringResource(R.plurals.record_recovery_chip_cd, count, count)
+    val chipLabel = pluralStringResource(R.plurals.record_recovery_chip, count, count)
+    val reviewLabel = stringResource(R.string.record_recovery_review)
     Surface(
         modifier = modifier
-            .clickable(onClickLabel = "Review", role = Role.Button) { onReview() }
+            .clickable(onClickLabel = reviewLabel, role = Role.Button) { onReview() }
             .semantics(mergeDescendants = true) { contentDescription = chipDescription },
         shape = RoundedCornerShape(20.dp),
         color = Color.Black.copy(alpha = 0.40f),
@@ -601,7 +611,7 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-            Text("$count $word interrupted · Review", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+            Text(chipLabel, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
         }
     }
 }
@@ -614,18 +624,26 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
  * Indefinite sessions (`loopTotal < 0`) render the index without a total. The index is
  * clamped on both ends.
  */
-internal fun loopPillContent(loopIndex: Int, loopTotal: Int): String? = when {
+internal fun loopPillContent(loopIndex: Int, loopTotal: Int): UiText? = when {
     loopTotal == 1 || loopTotal == 0 -> null   // single-clip or zero-clip — hide the pill
-    loopTotal < 0  -> "${loopIndex.coerceAtLeast(0)} loops done"
-    else           -> "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal loops done"
+    // StrArgs (not Plural): the copy never pluralizes "loops", so "1 loops done"
+    // must stay byte-identical — a <plurals> would grammar-correct it to "1 loop done".
+    loopTotal < 0  -> UiText.StrArgs(
+        R.string.record_hud_loops_done_indefinite,
+        listOf(loopIndex.coerceAtLeast(0)),
+    )
+    else           -> UiText.StrArgs(
+        R.string.record_hud_loops_done,
+        listOf(loopIndex.coerceIn(0, loopTotal), loopTotal),
+    )
 }
 
 internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
 
 internal data class StatusPillContent(
     val dot: StatusDotColor,
-    val main: String,
-    val time: String,
+    val main: UiText,
+    val time: UiText,
 )
 
 /**
@@ -641,18 +659,27 @@ internal fun hudStatusPillContent(
 ): StatusPillContent = when (state) {
     RecordHudState.Recording -> StatusPillContent(
         dot = StatusDotColor.RECORDING,
-        main = "Recording",
-        time = "· ${RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())} left",
+        main = UiText.Str(R.string.record_hud_status_recording),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_left,
+            listOf(RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())),
+        ),
     )
     RecordHudState.Waiting -> StatusPillContent(
         dot = StatusDotColor.WAITING,
-        main = "On break",
-        time = "· next in ${RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())}",
+        main = UiText.Str(R.string.record_hud_status_on_break),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_next_in,
+            listOf(RecordHudFormatters.formatMmSs(waitSecondsLeft.toLong())),
+        ),
     )
     is RecordHudState.Merging -> StatusPillContent(
         dot = StatusDotColor.MERGING,
-        main = "Merging…",
-        time = "· ${(state.progress * 100).toInt().coerceIn(0, 100)}%",
+        main = UiText.Str(R.string.record_hud_status_merging),
+        time = UiText.StrArgs(
+            R.string.record_hud_time_percent,
+            listOf((state.progress * 100).toInt().coerceIn(0, 100)),
+        ),
     )
     RecordHudState.Idle ->
         error("hudStatusPillContent called with Idle — caller bug; gate on hudState != Idle")
@@ -671,19 +698,49 @@ internal fun hudActiveAnnouncement(
     state: RecordHudState,
     loopIndex: Int,
     loopTotal: Int,
-): String {
-    val loopPhrase = when {
-        loopTotal == 1 || loopTotal == 0 -> ""
-        loopTotal < 0 -> " Loop ${loopIndex.coerceAtLeast(0)}."
-        else -> " Loop ${loopIndex.coerceIn(0, loopTotal)} of $loopTotal."
-    }
-    return when (state) {
-        RecordHudState.Recording -> "Recording.$loopPhrase"
-        RecordHudState.Waiting -> "On break.$loopPhrase"
-        is RecordHudState.Merging ->
-            RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments)
-        RecordHudState.Idle -> ""
-    }
+): UiText? = when (state) {
+    // Anti-chant is unchanged: the token still carries only the boundary-level
+    // status (no per-second countdown), so the resolved live-region string
+    // changes only on state/loop/merge-segment transitions. The sole "nothing
+    // to announce" case is Idle — formerly "" — which is now null (resolved back
+    // to "" at the call site, byte-identical).
+    RecordHudState.Recording -> announceForState(
+        bare = R.string.record_hud_announce_recording,
+        loop = R.string.record_hud_announce_recording_loop,
+        loopOf = R.string.record_hud_announce_recording_loop_of,
+        loopIndex = loopIndex,
+        loopTotal = loopTotal,
+    )
+    RecordHudState.Waiting -> announceForState(
+        bare = R.string.record_hud_announce_on_break,
+        loop = R.string.record_hud_announce_on_break_loop,
+        loopOf = R.string.record_hud_announce_on_break_loop_of,
+        loopIndex = loopIndex,
+        loopTotal = loopTotal,
+    )
+    is RecordHudState.Merging ->
+        // Forwarded from a separate, char-for-char-tested helper that owns its own
+        // clamp/branch logic; it now returns the real UiText token (B3 task 2b),
+        // resolved at the same `.resolve()` edge as the other announcement tokens.
+        RecordHudFormatters.formatMergeAnnouncement(state.currentSegment, state.totalSegments)
+    RecordHudState.Idle -> null
+}
+
+/**
+ * Selects the bare / "Loop N" / "Loop N of M" announcement token, mirroring the
+ * original `loopPhrase` branch exactly (single/zero-clip → bare, indefinite →
+ * loop-only with a clamped index, finite → loop-of-total with a clamped index).
+ */
+private fun announceForState(
+    @androidx.annotation.StringRes bare: Int,
+    @androidx.annotation.StringRes loop: Int,
+    @androidx.annotation.StringRes loopOf: Int,
+    loopIndex: Int,
+    loopTotal: Int,
+): UiText = when {
+    loopTotal == 1 || loopTotal == 0 -> UiText.Str(bare)
+    loopTotal < 0 -> UiText.StrArgs(loop, listOf(loopIndex.coerceAtLeast(0)))
+    else -> UiText.StrArgs(loopOf, listOf(loopIndex.coerceIn(0, loopTotal), loopTotal))
 }
 
 // ── R2 active-HUD composables (Task 8). Consume the Phase-A helpers above. ──
@@ -774,7 +831,7 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
             horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.loopPillContentGap),
         ) {
             Text(numeral, style = RovaTokens.loopCount, color = RecordChromeTokens.loopCountText)
-            Text("LOOPS DONE", style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
+            Text(stringResource(R.string.record_loops_done_caption), style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
         }
     }
 }
@@ -795,12 +852,12 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
         ) {
             StatusDot(content.dot)
             Text(
-                content.main,
+                content.main.resolve(),
                 style = RovaTokens.statusMain,
                 color = RecordChromeTokens.statusMainText,
             )
             Text(
-                content.time,
+                content.time.resolve(),
                 style = RovaTokens.statusTime,
                 color = RecordChromeTokens.statusTimeText,
             )
@@ -829,7 +886,9 @@ internal fun RecordActiveHud(
     // only announcement. mergeDescendants + an explicit contentDescription
     // replaces the pills' volatile per-second text so TalkBack speaks the
     // status once per transition instead of chanting the countdown.
-    val announcement = hudActiveAnnouncement(state, loopIndex, loopTotal)
+    // Resolve UiText? → String?; null (Idle) collapses to "" to stay byte-identical
+    // with the prior empty-announcement contract. liveRegion wiring is unchanged.
+    val announcement = hudActiveAnnouncement(state, loopIndex, loopTotal)?.resolve() ?: ""
     Column(
         modifier = modifier.semantics(mergeDescendants = true) {
             liveRegion = LiveRegionMode.Polite

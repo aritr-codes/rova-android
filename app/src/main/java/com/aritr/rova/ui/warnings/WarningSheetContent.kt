@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.annotation.StringRes
+import com.aritr.rova.R
 
 /**
  * Where a given [WarningId] is surfaced on the Record screen (ADR 0007). The
@@ -54,7 +56,7 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
 }
 
 internal data class WarningAction(
-    val label: String,
+    @StringRes val label: Int,
     val target: ActionTarget,
     val style: WarningActionStyle = WarningActionStyle.Primary,
 )
@@ -82,9 +84,9 @@ internal enum class ActionTarget {
 
 internal data class WarningSheetContent(
     val icon: ImageVector,
-    val title: String,
-    /** Short supporting line; never blank for sheet-rendered warnings. Final copy is the dev's call. */
-    val body: String,
+    @StringRes val title: Int,
+    /** Short supporting line; @StringRes 0 = blank for TopBanner-only defensive arms. Final copy is the dev's call. */
+    @StringRes val body: Int,
     /** Primary CTA — always present (e.g. "Open App Settings"). */
     val primary: WarningAction,
     /** Secondary CTA — present for HardBlock/Soft/Advisory sheets ("Not now" / "Continue without audio"); may be null for TopBanner. */
@@ -105,7 +107,7 @@ internal data class WarningSheetContent(
      * Body text revealed when the "Why this matters" expander is open.
      * Null = expander row is not rendered for this id.
      */
-    val whyThisMatters: String? = null,
+    @StringRes val whyThisMatters: Int? = null,
 )
 
 /**
@@ -115,114 +117,108 @@ internal data class WarningSheetContent(
  */
 internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED -> WarningSheetContent(
-        Icons.Default.NoPhotography, "Camera access required",
-        "Rova can't record without camera access. Grant the permission in App Settings to continue.",
-        WarningAction("Open App Settings", ActionTarget.APP_DETAILS_SETTINGS),
-        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.NoPhotography, R.string.warning_camera_perm_title,
+        R.string.warning_camera_perm_body,
+        WarningAction(R.string.warning_camera_perm_primary, ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.EXACT_ALARM_DENIED -> WarningSheetContent(
-        Icons.Default.AlarmOff, "Alarm permission required",
-        "Rova uses exact alarms to time recording segments. Without it, clips won't start or stop on schedule.",
-        WarningAction("Allow exact alarms", ActionTarget.EXACT_ALARM_SETTINGS),
-        WarningAction("Not now", ActionTarget.EXACT_ALARM_SETTINGS),
+        Icons.Default.AlarmOff, R.string.warning_exact_alarm_title,
+        R.string.warning_exact_alarm_body,
+        WarningAction(R.string.warning_exact_alarm_primary, ActionTarget.EXACT_ALARM_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.EXACT_ALARM_SETTINGS),
     )
     WarningId.STORAGE_INSUFFICIENT -> WarningSheetContent(
-        Icons.Default.Storage, "Not enough storage to start",
-        "Free up space, then try again.",
-        WarningAction("Free up space", ActionTarget.APP_DETAILS_SETTINGS),
-        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.Storage, R.string.warning_storage_insufficient_title,
+        R.string.warning_storage_insufficient_body,
+        WarningAction(R.string.warning_storage_insufficient_primary, ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.MICROPHONE_DENIED -> WarningSheetContent(
-        Icons.Default.MicOff, "Recording without audio",
-        "This session will record video only. You can grant microphone access in Settings and try again.",
-        WarningAction("Grant microphone access", ActionTarget.APP_DETAILS_SETTINGS),
-        WarningAction("Continue without audio", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.MicOff, R.string.warning_mic_title,
+        R.string.warning_mic_body,
+        WarningAction(R.string.warning_mic_primary, ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction(R.string.warning_mic_secondary, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.NOTIFICATIONS_DENIED -> WarningSheetContent(
-        Icons.Default.NotificationsOff, "Stay in the loop",
-        "Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.",
-        WarningAction("Enable notifications", ActionTarget.NOTIFICATION_SETTINGS),
-        WarningAction("Not now", ActionTarget.NOTIFICATION_SETTINGS),
+        Icons.Default.NotificationsOff, R.string.warning_notifications_title,
+        R.string.warning_notifications_body,
+        WarningAction(R.string.warning_notifications_primary, ActionTarget.NOTIFICATION_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.NOTIFICATION_SETTINGS),
         overflow = listOf(
-            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.SNOOZE_FOREVER),
         ),
-        whyThisMatters = "Notifications are how Rova tells you what's happening while you're not " +
-            "in the app — recording started, clip merged, session finished. Without them, you'll " +
-            "need to open the app to check progress.",
+        whyThisMatters = R.string.warning_notifications_why,
     )
     WarningId.BATTERY_OPTIMIZATION_ON -> WarningSheetContent(
-        Icons.Default.BatterySaver, "Battery optimization may stop recording",
-        "Android may kill Rova in the background. Disable battery optimization for reliable long sessions.",
-        WarningAction("Disable", ActionTarget.BATTERY_OPTIMIZATION),
-        WarningAction("Not now", ActionTarget.BATTERY_OPTIMIZATION),
+        Icons.Default.BatterySaver, R.string.warning_battery_opt_title,
+        R.string.warning_battery_opt_body,
+        WarningAction(R.string.warning_battery_opt_primary, ActionTarget.BATTERY_OPTIMIZATION),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.BATTERY_OPTIMIZATION),
         overflow = listOf(
-            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.SNOOZE_FOREVER),
         ),
-        whyThisMatters = "Android's battery optimizer can pause background apps to save power. " +
-            "If Rova is paused mid-recording, the session may stop early or skip clips. " +
-            "Exempting Rova keeps the foreground service alive for the full session.",
+        whyThisMatters = R.string.warning_battery_opt_why,
     )
     WarningId.POWER_SAVE_MODE -> WarningSheetContent(
-        Icons.Default.PowerSettingsNew, "Power-save mode may throttle recording",
-        "Turning off battery saver gives Rova full CPU/IO for the session.",
-        WarningAction("Settings", ActionTarget.APP_DETAILS_SETTINGS),
-        WarningAction("Not now", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.PowerSettingsNew, R.string.warning_power_save_title,
+        R.string.warning_power_save_body,
+        WarningAction(R.string.warning_power_save_primary, ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
         overflow = listOf(
-            WarningAction("Don't show again", ActionTarget.SNOOZE_FOREVER),
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.SNOOZE_FOREVER),
         ),
-        whyThisMatters = "Battery saver caps CPU frequency and background I/O. " +
-            "Rova may drop frames or fall behind on encoding, which can corrupt clip boundaries " +
-            "on long sessions.",
+        whyThisMatters = R.string.warning_power_save_why,
     )
-    WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(Icons.Default.Thermostat, "Device overheating — recording stopped", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_EMERGENCY -> WarningSheetContent(Icons.Default.Thermostat, "Device critically hot", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_CRITICAL -> WarningSheetContent(Icons.Default.Thermostat, "Device very hot — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_SEVERE -> WarningSheetContent(Icons.Default.Thermostat, "Device hot — quality may drop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, "Device warming up", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery critical — recording may stop", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, "Battery low — consider charging", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_shutdown_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_EMERGENCY -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_emergency_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_CRITICAL -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_SEVERE -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_severe_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_moderate_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, R.string.warning_battery_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, R.string.warning_battery_low_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.STORAGE_LOW_MID_REC -> WarningSheetContent(
         // Defensive — STORAGE_LOW_MID_REC is TopBanner-only (see midRecBannerContent in T6).
         // This arm keeps warningSheetContent exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Storage, "Storage running low",
-        "Free space on this device.",
-        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.Storage, R.string.warning_storage_low_mid_rec_title,
+        R.string.warning_storage_low_mid_rec_body,
+        WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
     WarningId.STORAGE_FULL_AUTOSTOPPED -> WarningSheetContent(
         // Defensive — STORAGE_FULL_AUTOSTOPPED is TopBanner-only (rendered
         // on Idle, not as a sheet). This arm keeps warningSheetContent
         // exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Storage, "Recording stopped",
-        "Storage filled up.",
-        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.Storage, R.string.warning_storage_full_autostopped_title,
+        R.string.warning_storage_full_autostopped_body,
+        WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
     WarningId.THERMAL_AUTOSTOPPED -> WarningSheetContent(
         // Defensive — THERMAL_AUTOSTOPPED is TopBanner-only (rendered on
         // Idle, not as a sheet). This arm keeps warningSheetContent
         // exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Thermostat, "Recording stopped",
-        "Device overheated.",
-        WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS),
+        Icons.Default.Thermostat, R.string.warning_thermal_autostopped_title,
+        R.string.warning_thermal_autostopped_body,
+        WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
     WarningId.CANT_MERGE -> WarningSheetContent(
-        Icons.Default.Storage, "Can't merge yet",
-        "Free space and retry, or keep the raw segments for later.",
-        primary = WarningAction("Free space & retry", ActionTarget.STORAGE_SETTINGS),
-        secondary = WarningAction("Save segments only", ActionTarget.KEEP_SEGMENTS_ONLY, WarningActionStyle.Secondary),
-        tertiary = WarningAction("Discard session", ActionTarget.DISCARD_RECOVERY_SESSION, WarningActionStyle.Link),
+        Icons.Default.Storage, R.string.warning_cant_merge_title,
+        R.string.warning_cant_merge_body,
+        primary = WarningAction(R.string.warning_cant_merge_primary, ActionTarget.STORAGE_SETTINGS),
+        secondary = WarningAction(R.string.warning_cant_merge_secondary, ActionTarget.KEEP_SEGMENTS_ONLY, WarningActionStyle.Secondary),
+        tertiary = WarningAction(R.string.warning_cant_merge_tertiary, ActionTarget.DISCARD_RECOVERY_SESSION, WarningActionStyle.Link),
     )
-    WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, "Camera in use by another app", "Close the other camera app.", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, "Camera disabled by device policy", "", WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_in_use_title, R.string.warning_camera_in_use_body, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_disabled_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
 }
 
 internal data class TopBannerContent(
     val icon: ImageVector,
-    val title: String,
-    val sub: String,
-    val cta: String,
+    @StringRes val title: Int,
+    @StringRes val sub: Int,
+    @StringRes val cta: Int,
     /**
      * Optional auto-action countdown — when non-null, the banner renders a
      * countdown ring instead of the trailing CTA pill. Phase 4.4 will wire a
@@ -243,7 +239,7 @@ internal data class TopBannerContent(
  * is static in Phase 4 — a real ticking source lands in Phase 4.4 alongside
  * thermal hysteresis.
  */
-internal data class AutoAction(val secondsRemaining: Int, val description: String)
+internal data class AutoAction(val secondsRemaining: Int, @StringRes val description: Int)
 
 /**
  * R2 — copy for the mid-recording top banner (ADR 0007 amendment 2026-05-13). One arm
@@ -252,67 +248,67 @@ internal data class AutoAction(val secondsRemaining: Int, val description: Strin
  */
 internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
-        Icons.Default.Thermostat, "Device overheating — stopping",
-        "Recording will stop automatically.", "Stop",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_shutdown_title,
+        R.string.warning_banner_thermal_shutdown_sub, R.string.warning_banner_cta_stop,
         autoAction = AutoAction(
             secondsRemaining = 30,
-            description = "Will auto-stop to protect device",
+            description = R.string.warning_banner_auto_stop_protect,
         ),
     )
     WarningId.THERMAL_EMERGENCY -> TopBannerContent(
-        Icons.Default.Thermostat, "Device critically hot",
-        "Stop now to let it cool.", "Stop",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_emergency_title,
+        R.string.warning_banner_thermal_emergency_sub, R.string.warning_banner_cta_stop,
         autoAction = AutoAction(
             secondsRemaining = 30,
-            description = "Will auto-stop to protect device",
+            description = R.string.warning_banner_auto_stop_protect,
         ),
     )
     WarningId.THERMAL_CRITICAL -> TopBannerContent(
-        Icons.Default.Thermostat, "Device very hot",
-        "Recording may auto-stop soon.", "Stop",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_critical_title,
+        R.string.warning_banner_thermal_critical_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.THERMAL_SEVERE -> TopBannerContent(
-        Icons.Default.Thermostat, "Device hot",
-        "Quality may drop.", "Stop",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_severe_title,
+        R.string.warning_banner_thermal_severe_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.THERMAL_MODERATE -> TopBannerContent(
-        Icons.Default.Thermostat, "Device warming up",
-        "Watch the temperature.", "Stop",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_moderate_title,
+        R.string.warning_banner_thermal_moderate_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.BATTERY_CRITICAL -> TopBannerContent(
-        Icons.Default.BatteryAlert, "Battery critical",
-        "Recording may stop soon.", "Stop",
+        Icons.Default.BatteryAlert, R.string.warning_banner_battery_critical_title,
+        R.string.warning_banner_battery_critical_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.BATTERY_LOW -> TopBannerContent(
-        Icons.Default.BatteryAlert, "Battery low",
-        "Consider charging.", "Stop",
+        Icons.Default.BatteryAlert, R.string.warning_banner_battery_low_title,
+        R.string.warning_banner_battery_low_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.CAMERA_IN_USE -> TopBannerContent(
-        Icons.Default.VideocamOff, "Camera in use",
-        "Another app is using the camera.", "Stop",
+        Icons.Default.VideocamOff, R.string.warning_banner_camera_in_use_title,
+        R.string.warning_banner_camera_in_use_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.CAMERA_DISABLED -> TopBannerContent(
-        Icons.Default.VideocamOff, "Camera disabled",
-        "Disabled by device policy.", "Stop",
+        Icons.Default.VideocamOff, R.string.warning_banner_camera_disabled_title,
+        R.string.warning_banner_camera_disabled_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
-        Icons.Default.Storage, "Storage running low",
-        "Free space on this device.", "Stop",
+        Icons.Default.Storage, R.string.warning_banner_storage_low_title,
+        R.string.warning_banner_storage_low_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.STORAGE_FULL_AUTOSTOPPED -> TopBannerContent(
-        Icons.Default.Storage, "Recording stopped",
-        "Storage filled up.", "Free up space",
+        Icons.Default.Storage, R.string.warning_banner_storage_full_title,
+        R.string.warning_banner_storage_full_sub, R.string.warning_banner_storage_full_cta,
         overflow = listOf(
-            WarningAction("Don't show again", ActionTarget.DISMISS_AUTOSTOP_ECHO),
-            WarningAction("Review session", ActionTarget.REVIEW_SESSION),
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.DISMISS_AUTOSTOP_ECHO),
+            WarningAction(R.string.warning_action_review_session, ActionTarget.REVIEW_SESSION),
         ),
     )
     WarningId.THERMAL_AUTOSTOPPED -> TopBannerContent(
-        Icons.Default.Thermostat, "Recording stopped",
-        "Device overheated.", "Tips to cool down",
+        Icons.Default.Thermostat, R.string.warning_banner_thermal_autostopped_title,
+        R.string.warning_banner_thermal_autostopped_sub, R.string.warning_banner_thermal_autostopped_cta,
         overflow = listOf(
-            WarningAction("Don't show again", ActionTarget.DISMISS_AUTOSTOP_ECHO),
-            WarningAction("Review session", ActionTarget.REVIEW_SESSION),
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.DISMISS_AUTOSTOP_ECHO),
+            WarningAction(R.string.warning_action_review_session, ActionTarget.REVIEW_SESSION),
         ),
     )
     // All other WarningIds are NOT TopBanner-mapped — calling midRecBannerContent on them is a caller bug.

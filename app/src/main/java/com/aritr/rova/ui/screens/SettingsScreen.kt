@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -72,6 +73,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aritr.rova.BuildConfig
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.QualityPresets
 import androidx.compose.material.icons.filled.HighQuality
@@ -166,14 +168,17 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings",
+                        text = stringResource(R.string.settings_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.88f)
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.settings_back_cd)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -193,21 +198,21 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 warningIds = settingsWarnings,
                 onOpenSheet = { sheetWarningId = it },
             )
-            SettingsSection(label = "Appearance") {
+            SettingsSection(label = stringResource(R.string.settings_section_appearance)) {
                 SettingsRow(
                     icon = Icons.Default.DarkMode,
-                    label = "Theme",
-                    supporting = "Light, dark, or match your system setting.",
+                    label = stringResource(R.string.settings_theme_label),
+                    supporting = stringResource(R.string.settings_theme_supporting),
                     value = themeModeLabel(themeMode),
                     onClick = { openThemeSheet = true },
                     trailing = { ChevronTrailing() },
                 )
             }
-            SettingsSection(label = "Recording defaults") {
+            SettingsSection(label = stringResource(R.string.settings_section_recording_defaults)) {
                 SettingsRow(
                     icon = Icons.Default.HighQuality,
-                    label = "Default resolution",
-                    supporting = "Quality new recordings start at.",
+                    label = stringResource(R.string.settings_default_resolution_label),
+                    supporting = stringResource(R.string.settings_default_resolution_supporting),
                     value = QualityPresets.canonicalizeOrDefault(resolution),
                     onClick = { openSheet = RecordingDefaultSheet.RESOLUTION },
                     trailing = { ChevronTrailing() },
@@ -215,8 +220,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.Timer,
-                    label = "Clip duration",
-                    supporting = "How long each clip records.",
+                    label = stringResource(R.string.settings_clip_duration_label),
+                    supporting = stringResource(R.string.settings_clip_duration_supporting),
                     value = recordClipValue(durationSeconds),
                     onClick = { openSheet = RecordingDefaultSheet.DURATION },
                     trailing = { ChevronTrailing() },
@@ -224,8 +229,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.HourglassEmpty,
-                    label = "Interval between clips",
-                    supporting = "Wait time before the next clip.",
+                    label = stringResource(R.string.settings_interval_label),
+                    supporting = stringResource(R.string.settings_interval_supporting),
                     value = recordWaitValue(intervalMinutes),
                     onClick = { openSheet = RecordingDefaultSheet.INTERVAL },
                     trailing = { ChevronTrailing() },
@@ -233,62 +238,63 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.Repeat,
-                    label = "Number of loops",
-                    supporting = "How many clips before stopping.",
+                    label = stringResource(R.string.settings_loops_label),
+                    supporting = stringResource(R.string.settings_loops_supporting),
                     value = recordRepeatsValue(loopCount),
                     onClick = { openSheet = RecordingDefaultSheet.LOOPS },
                     trailing = { ChevronTrailing() },
                 )
             }
 
-            SettingsSection(label = "Recording behavior") {
+            SettingsSection(label = stringResource(R.string.settings_section_recording_behavior)) {
                 SettingsRow(
                     icon = Icons.Default.Smartphone,
-                    label = "Keep screen on",
-                    supporting = "Stops the screen from dimming while you frame a shot.",
+                    label = stringResource(R.string.settings_keep_screen_on_label),
+                    supporting = stringResource(R.string.settings_keep_screen_on_supporting),
                     checked = keepScreenOn,
                     onCheckedChange = { settingsViewModel.keepScreenOn.value = it }
                 )
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.GridOn,
-                    label = "Camera guides",
-                    supporting = "Show the framing grid and focus brackets over the viewfinder.",
+                    label = stringResource(R.string.settings_camera_guides_label),
+                    supporting = stringResource(R.string.settings_camera_guides_supporting),
                     checked = cameraGuidesEnabled,
                     onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
                 )
             }
 
-            SettingsSection(label = "Alerts") {
+            SettingsSection(label = stringResource(R.string.settings_section_alerts)) {
                 SettingsRow(
                     icon = Icons.AutoMirrored.Filled.VolumeUp,
-                    label = "Sound cues",
-                    supporting = "Play short beeps so you can hear when capture starts and stops.",
+                    label = stringResource(R.string.settings_sound_cues_label),
+                    supporting = stringResource(R.string.settings_sound_cues_supporting),
                     checked = enableBeeps,
                     onCheckedChange = { settingsViewModel.enableBeeps.value = it }
                 )
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.Vibration,
-                    label = "Vibrate alerts",
-                    supporting = "Use a short vibration to confirm starts and stops.",
+                    label = stringResource(R.string.settings_vibrate_alerts_label),
+                    supporting = stringResource(R.string.settings_vibrate_alerts_supporting),
                     checked = vibrateAlerts,
                     onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
                 )
             }
 
-            SettingsSection(label = "Notifications") {
+            SettingsSection(label = stringResource(R.string.settings_section_notifications)) {
+                val notifUnavailable = stringResource(R.string.settings_system_notifications_unavailable)
                 SettingsRow(
                     icon = Icons.Default.Notifications,
-                    label = "System notification settings",
-                    supporting = "Manage Rova's notification channels in Android settings.",
+                    label = stringResource(R.string.settings_system_notifications_label),
+                    supporting = stringResource(R.string.settings_system_notifications_supporting),
                     onClick = {
                         try {
                             context.startActivity(buildNotificationSettingsIntent(context))
                         } catch (_: ActivityNotFoundException) {
                             Toast.makeText(
                                 context,
-                                "Notification settings not available on this device",
+                                notifUnavailable,
                                 Toast.LENGTH_SHORT,
                             ).show()
                         }
@@ -297,14 +303,17 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
             }
 
-            SettingsSection(label = "Storage") {
+            SettingsSection(label = stringResource(R.string.settings_section_storage)) {
                 SettingsRow(
                     icon = Icons.Default.DeleteSweep,
-                    label = "Auto-delete old recordings",
+                    label = stringResource(R.string.settings_auto_delete_label),
                     supporting = if (autoDeleteEnabled) {
-                        "Keeping the latest $autoDeleteKeepLatest finished recordings."
+                        stringResource(
+                            R.string.settings_auto_delete_supporting_on,
+                            autoDeleteKeepLatest
+                        )
                     } else {
-                        "Off. Recordings stay until you delete them yourself."
+                        stringResource(R.string.settings_auto_delete_supporting_off)
                     },
                     checked = autoDeleteEnabled,
                     onCheckedChange = { settingsViewModel.autoDeleteEnabled.value = it }
@@ -319,17 +328,21 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 SettingsRow(
                     icon = Icons.Default.Folder,
-                    label = "Export folder name",
-                    supporting = "Where finished videos appear inside your gallery.",
-                    value = exportFolderName.ifBlank { "Default folder" },
+                    label = stringResource(R.string.settings_export_folder_label),
+                    supporting = stringResource(R.string.settings_export_folder_supporting),
+                    value = exportFolderName.ifBlank {
+                        stringResource(R.string.settings_export_folder_default)
+                    },
                     onClick = { showFolderDialog = true },
                     trailing = { ChevronTrailing() }
                 )
                 SettingsDivider()
+                val cacheClearedFmt = stringResource(R.string.settings_clear_cache_cleared)
+                val cacheEmptyMsg = stringResource(R.string.settings_clear_cache_empty)
                 SettingsRow(
                     icon = Icons.Default.CleaningServices,
-                    label = "Clear cache",
-                    supporting = "Removes preview thumbnails and temporary files.",
+                    label = stringResource(R.string.settings_clear_cache_label),
+                    supporting = stringResource(R.string.settings_clear_cache_supporting),
                     onClick = {
                         scope.launch(Dispatchers.IO) {
                             val cacheDir = context.cacheDir
@@ -349,7 +362,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                             launch(Dispatchers.Main) {
                                 Toast.makeText(
                                     context,
-                                    if (mb > 0.1) "Cleared %.1f MB".format(mb) else "Cache is empty",
+                                    if (mb > 0.1) cacheClearedFmt.format(mb) else cacheEmptyMsg,
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -359,29 +372,30 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
             }
 
-            SettingsSection(label = "Reliability") {
+            SettingsSection(label = stringResource(R.string.settings_section_reliability)) {
                 SettingsRow(
                     icon = Icons.Default.BatteryAlert,
-                    label = "Battery optimization",
-                    supporting = "Required so recordings keep going in the background.",
+                    label = stringResource(R.string.settings_battery_optimization_label),
+                    supporting = stringResource(R.string.settings_battery_optimization_supporting),
                     onClick = { showBatteryDialog = true },
                     trailing = { BatteryStatusBadge(exempt = batteryExempt) }
                 )
             }
 
-            SettingsSection(label = "About") {
+            SettingsSection(label = stringResource(R.string.settings_section_about)) {
                 SettingsRow(
                     icon = Icons.Default.Info,
-                    label = "Version",
+                    label = stringResource(R.string.settings_version_label),
                     value = BuildConfig.VERSION_NAME,
                     onClick = null,
                     trailing = null
                 )
                 SettingsDivider()
+                val noBrowserMsg = stringResource(R.string.settings_privacy_no_browser)
                 SettingsRow(
                     icon = Icons.Default.PrivacyTip,
-                    label = "Privacy policy",
-                    supporting = "Open the policy in your browser.",
+                    label = stringResource(R.string.settings_privacy_label),
+                    supporting = stringResource(R.string.settings_privacy_supporting),
                     onClick = {
                         try {
                             context.startActivity(
@@ -393,7 +407,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                         } catch (_: ActivityNotFoundException) {
                             Toast.makeText(
                                 context,
-                                "No browser available",
+                                noBrowserMsg,
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -423,7 +437,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 } catch (_: ActivityNotFoundException) {
                     Toast.makeText(
                         context,
-                        "Battery settings not available on this device",
+                        context.getString(R.string.settings_battery_settings_unavailable),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -445,7 +459,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
     when (openSheet) {
         RecordingDefaultSheet.RESOLUTION -> SettingsOptionSheet(
-            title = "Default resolution",
+            title = stringResource(R.string.settings_default_resolution_label),
             options = QualityPresets.PICKER_ORDER,
             selected = QualityPresets.canonicalizeOrDefault(resolution),
             optionLabel = { it },
@@ -453,7 +467,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             onDismiss = { openSheet = null },
         )
         RecordingDefaultSheet.DURATION -> SettingsStepperSheet(
-            title = "Clip duration",
+            title = stringResource(R.string.settings_clip_duration_label),
             valueLabel = recordClipValue(durationSeconds),
             atMin = RecordSettingBounds.clipAtMin(durationSeconds),
             atMax = RecordSettingBounds.clipAtMax(durationSeconds),
@@ -464,7 +478,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             onDismiss = { openSheet = null },
         )
         RecordingDefaultSheet.INTERVAL -> SettingsStepperSheet(
-            title = "Interval between clips",
+            title = stringResource(R.string.settings_interval_label),
             valueLabel = recordWaitValue(intervalMinutes),
             atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
             atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
@@ -475,7 +489,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             onDismiss = { openSheet = null },
         )
         RecordingDefaultSheet.LOOPS -> SettingsStepperSheet(
-            title = "Number of loops",
+            title = stringResource(R.string.settings_loops_label),
             valueLabel = recordRepeatsStepperValue(loopCount),
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
@@ -489,11 +503,20 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     }
 
     if (openThemeSheet) {
+        val systemLabel = stringResource(R.string.settings_theme_mode_system)
+        val darkLabel = stringResource(R.string.settings_theme_mode_dark)
+        val lightLabel = stringResource(R.string.settings_theme_mode_light)
         SettingsOptionSheet(
-            title = "Theme",
+            title = stringResource(R.string.settings_theme_label),
             options = ThemeMode.entries,
             selected = themeMode,
-            optionLabel = { themeModeLabel(it) },
+            optionLabel = { mode ->
+                when (mode) {
+                    ThemeMode.SYSTEM -> systemLabel
+                    ThemeMode.DARK -> darkLabel
+                    ThemeMode.LIGHT -> lightLabel
+                }
+            },
             onPick = { settingsViewModel.themeMode.value = it },
             onDismiss = { openThemeSheet = false },
         )
@@ -674,7 +697,7 @@ private fun BatteryStatusBadge(exempt: Boolean) {
         // soft warning when the user is NOT exempt. No green token exists
         // in RovaWarnings (4 severities locked per UI_DESIGN_TOKENS §2.10).
         Text(
-            text = "Exempt",
+            text = stringResource(R.string.settings_battery_exempt),
             style = RovaTokens.statusPillLabel,
             color = rovaQuietText(dimAlpha = 0.6f),
             modifier = Modifier.padding(end = 4.dp)
@@ -685,7 +708,7 @@ private fun BatteryStatusBadge(exempt: Boolean) {
             color = RovaWarnings.soft.copy(alpha = 0.12f)
         ) {
             Text(
-                text = "Not exempt",
+                text = stringResource(R.string.settings_battery_not_exempt),
                 style = RovaTokens.statusPillLabel,
                 color = RovaWarnings.soft.copy(alpha = 0.9f),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -754,34 +777,35 @@ private fun BatteryOptimizationDialog(
                 tint = MaterialTheme.colorScheme.primary
             )
         },
-        title = { Text(text = "Battery optimization") },
+        title = { Text(text = stringResource(R.string.settings_battery_dialog_title)) },
         text = {
             Text(
                 text = if (exempt) {
-                    "Rova is already exempt from battery optimization. Recordings will keep going in the background. Open battery settings to review or change this."
+                    stringResource(R.string.settings_battery_dialog_body_exempt)
                 } else {
-                    "Rova needs to be exempt from battery optimization so recordings keep going in the background. Without this, your device may stop the recording mid-session."
+                    stringResource(R.string.settings_battery_dialog_body_not_exempt)
                 },
                 style = MaterialTheme.typography.bodyMedium
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(text = "Open battery settings")
+                Text(text = stringResource(R.string.settings_battery_dialog_confirm))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = "Not now")
+                Text(text = stringResource(R.string.settings_battery_dialog_dismiss))
             }
         }
     )
 }
 
+@Composable
 private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.SYSTEM -> "Follow system"
-    ThemeMode.DARK -> "Dark"
-    ThemeMode.LIGHT -> "Light"
+    ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_mode_system)
+    ThemeMode.DARK -> stringResource(R.string.settings_theme_mode_dark)
+    ThemeMode.LIGHT -> stringResource(R.string.settings_theme_mode_light)
 }
 
 /** Which recording-default picker sheet is open in [SettingsScreen]. */
@@ -799,21 +823,21 @@ private fun ExportFolderDialog(
     val sanitized = sanitizeExportFolderName(value)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Export folder name") },
+        title = { Text(text = stringResource(R.string.settings_export_folder_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = value,
                     onValueChange = { input -> value = input.take(32) },
                     singleLine = true,
-                    label = { Text(text = "Folder name") },
+                    label = { Text(text = stringResource(R.string.settings_export_folder_field_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = if (sanitized.isEmpty()) {
-                        "Videos will be saved to your default folder."
+                        stringResource(R.string.settings_export_folder_preview_default)
                     } else {
-                        "Videos will be saved to Movies / $sanitized"
+                        stringResource(R.string.settings_export_folder_preview_named, sanitized)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = rovaQuietText(dimAlpha = 0.6f)
@@ -822,12 +846,12 @@ private fun ExportFolderDialog(
         },
         confirmButton = {
             TextButton(onClick = { onSave(sanitized) }) {
-                Text(text = "Save")
+                Text(text = stringResource(R.string.settings_export_folder_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = "Cancel")
+                Text(text = stringResource(R.string.settings_export_folder_cancel))
             }
         }
     )

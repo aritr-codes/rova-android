@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaTheme
 
 /**
@@ -53,8 +55,8 @@ fun LargeValueStepper(
     minValue: Int = 0,
     maxValue: Int = Int.MAX_VALUE,
     step: Int = 1,
-    decreaseDescription: String = "Decrease",
-    increaseDescription: String = "Increase",
+    decreaseDescription: String = stringResource(R.string.record_stepper_decrease),
+    increaseDescription: String = stringResource(R.string.record_stepper_increase),
     valueDisplay: String = value.toString()
 ) {
     val canDecrease = value - step >= minValue

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.annotation.StringRes
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -38,10 +39,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aritr.rova.R
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
@@ -272,16 +276,16 @@ private fun SettingsPanel(
             )
         }
 
-        SheetSectionLabel("Recording mode")
+        SheetSectionLabel(stringResource(R.string.settings_sheet_section_recording_mode))
         Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
         ModeTabs(currentMode = currentMode, enabled = editable, onPick = onModePick)
         Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
 
-        SheetSectionLabel("Settings")
+        SheetSectionLabel(stringResource(R.string.settings_sheet_section_settings))
         Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
 
         StepperRow(
-            label = "Clip Duration",
+            label = stringResource(R.string.settings_sheet_clip_duration),
             value = recordClipValue(durationSeconds),
             enabled = editable,
             atMin = RecordSettingBounds.clipAtMin(durationSeconds),
@@ -290,7 +294,7 @@ private fun SettingsPanel(
         )
         SheetRowDivider()
         StepperRow(
-            label = "Repeats",
+            label = stringResource(R.string.settings_sheet_repeats),
             value = recordRepeatsStepperValue(loopCount),
             enabled = editable,
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
@@ -299,7 +303,7 @@ private fun SettingsPanel(
         )
         SheetRowDivider()
         StepperRow(
-            label = "Wait Between",
+            label = stringResource(R.string.settings_sheet_wait_between),
             value = recordWaitValue(intervalMinutes),
             enabled = editable,
             atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
@@ -329,7 +333,11 @@ private fun SettingsPanel(
                 .padding(vertical = SettingsSheetTokens.ctaPaddingV),
             contentAlignment = Alignment.Center,
         ) {
-            Text("Save", style = RovaTokens.sheetCta, color = SettingsSheetTokens.ctaText)
+            Text(
+                stringResource(R.string.settings_sheet_save),
+                style = RovaTokens.sheetCta,
+                color = SettingsSheetTokens.ctaText,
+            )
         }
     }
 }
@@ -355,10 +363,10 @@ private fun SheetRowDivider() {
     )
 }
 
-private enum class SheetModeTab(val label: String, val value: String) {
-    Portrait("Portrait", "Portrait"),
-    Landscape("Landscape", "Landscape"),
-    PortraitLandscape("P + L", "PortraitLandscape"),
+private enum class SheetModeTab(@StringRes val labelRes: Int, val value: String) {
+    Portrait(R.string.settings_sheet_mode_portrait, "Portrait"),
+    Landscape(R.string.settings_sheet_mode_landscape, "Landscape"),
+    PortraitLandscape(R.string.settings_sheet_mode_pl, "PortraitLandscape"),
 }
 
 @Composable
@@ -395,7 +403,7 @@ private fun ModeTabs(currentMode: String, enabled: Boolean, onPick: (String) -> 
                 else -> SettingsSheetTokens.modeTabIdleText
             }
             Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
-                Text(tab.label, style = RovaTokens.sheetModeTab, color = textColor)
+                Text(stringResource(tab.labelRes), style = RovaTokens.sheetModeTab, color = textColor)
             }
         }
     }
@@ -470,7 +478,7 @@ private fun QualityRow(quality: String, enabled: Boolean, onPick: (String) -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Quality",
+            stringResource(R.string.settings_sheet_quality),
             style = RovaTokens.sheetRowLabel,
             color = SettingsSheetTokens.rowLabelText,
             modifier = Modifier.weight(1f),
@@ -535,12 +543,12 @@ private fun ResetSnoozesRow(count: Int, onClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "Reset snoozed warnings",
+                stringResource(R.string.settings_sheet_reset_snoozes),
                 style = RovaTokens.sheetRowLabel,
                 color = SettingsSheetTokens.rowLabelText,
             )
             Text(
-                if (count == 1) "1 warning hidden" else "$count warnings hidden",
+                pluralStringResource(R.plurals.settings_warnings_hidden_count, count, count),
                 style = RovaTokens.sheetRowLabel,
                 color = SettingsSheetTokens.rowLabelText.copy(alpha = 0.55f),
                 fontSize = 11.sp,

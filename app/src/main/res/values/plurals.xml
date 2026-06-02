@@ -1,0 +1,60 @@
+<resources>
+    <!-- Record screen recovery chip (B3 i18n task 2) -->
+    <plurals name="record_recovery_chip">
+        <item quantity="one">%1$d recording interrupted · Review</item>
+        <item quantity="other">%1$d recordings interrupted · Review</item>
+    </plurals>
+    <plurals name="record_recovery_chip_cd">
+        <item quantity="one">%1$d recording interrupted. Review.</item>
+        <item quantity="other">%1$d recordings interrupted. Review.</item>
+    </plurals>
+
+    <!-- History / Library selection + delete counts (B3 i18n task 3) -->
+    <plurals name="history_selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <plurals name="history_delete_failed_count">
+        <item quantity="one">Could not delete %d recording</item>
+        <item quantity="other">Could not delete %d recordings</item>
+    </plurals>
+
+    <!-- Player top sub-title: clip count + total duration (B3 i18n task 5) -->
+    <!-- %1$d = clip count, %2$s = total duration MM:SS -->
+    <plurals name="player_top_sub">
+        <item quantity="one">%1$d clip · %2$s total</item>
+        <item quantity="other">%1$d clips · %2$s total</item>
+    </plurals>
+
+    <!-- Settings sheet "Reset snoozed warnings" subtitle (B3 i18n task 4) -->
+    <plurals name="settings_warnings_hidden_count">
+        <item quantity="one">%d warning hidden</item>
+        <item quantity="other">%d warnings hidden</item>
+    </plurals>
+
+    <!-- Recovery progress-strip "clips recovered" content description (B3 i18n task 8) -->
+    <!-- %1$d = recovered cell count (passed twice: rule selection + %d fill) -->
+    <plurals name="recovery_progress_cd_recovered">
+        <item quantity="one">%1$d clip recovered.</item>
+        <item quantity="other">%1$d clips recovered.</item>
+    </plurals>
+
+    <!-- Notification MergeComplete body (B3 i18n task 9b) -->
+    <!-- %1$d = clip count (passed twice: rule selection + %d fill), %2$s = total duration MM:SS -->
+    <plurals name="notification_complete_body_dur">
+        <item quantity="one">%1$d clip · %2$s total · saved to Library</item>
+        <item quantity="other">%1$d clips · %2$s total · saved to Library</item>
+    </plurals>
+    <!-- %1$d = clip count -->
+    <plurals name="notification_complete_body_nodur">
+        <item quantity="one">%1$d clip saved to Library</item>
+        <item quantity="other">%1$d clips saved to Library</item>
+    </plurals>
+
+    <!-- Notification dots-row contentDescription for MergeComplete (B3 i18n task 9b) -->
+    <!-- %1$d = clip count -->
+    <plurals name="notification_dots_complete_cd">
+        <item quantity="one">All %1$d clip complete</item>
+        <item quantity="other">All %1$d clips complete</item>
+    </plurals>
+</resources>

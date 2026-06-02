@@ -21,8 +21,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaTheme
 
 /**
@@ -41,8 +43,8 @@ fun EditSheetShell(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    doneLabel: String = "Done",
-    cancelLabel: String = "Cancel",
+    doneLabel: String = stringResource(R.string.settings_edit_sheet_done),
+    cancelLabel: String = stringResource(R.string.settings_edit_sheet_cancel),
     doneEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -98,10 +100,10 @@ private fun EditSheetShellPreviewLight() {
     RovaTheme(darkTheme = false) {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(Modifier.padding(20.dp)) {
-                Text("Clip length", style = MaterialTheme.typography.titleMedium)
+                Text("Clip length", style = MaterialTheme.typography.titleMedium) // i18n-opt-out: @Preview sample data
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "How long each loop records.",
+                    "How long each loop records.", // i18n-opt-out: @Preview sample data
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -113,8 +115,8 @@ private fun EditSheetShellPreviewLight() {
                 ) {}
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = {}) { Text("Cancel") }
-                    Button(onClick = {}) { Text("Done") }
+                    TextButton(onClick = {}) { Text("Cancel") } // i18n-opt-out: @Preview sample data
+                    Button(onClick = {}) { Text("Done") } // i18n-opt-out: @Preview sample data
                 }
             }
         }
@@ -127,10 +129,10 @@ private fun EditSheetShellPreviewDark() {
     RovaTheme(darkTheme = true) {
         Surface(color = MaterialTheme.colorScheme.background) {
             Column(Modifier.padding(20.dp)) {
-                Text("Repeats", style = MaterialTheme.typography.titleMedium)
+                Text("Repeats", style = MaterialTheme.typography.titleMedium) // i18n-opt-out: @Preview sample data
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "How many clips this session captures.",
+                    "How many clips this session captures.", // i18n-opt-out: @Preview sample data
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -142,8 +144,8 @@ private fun EditSheetShellPreviewDark() {
                 ) {}
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = {}) { Text("Cancel") }
-                    Button(onClick = {}) { Text("Done") }
+                    TextButton(onClick = {}) { Text("Cancel") } // i18n-opt-out: @Preview sample data
+                    Button(onClick = {}) { Text("Done") } // i18n-opt-out: @Preview sample data
                 }
             }
         }

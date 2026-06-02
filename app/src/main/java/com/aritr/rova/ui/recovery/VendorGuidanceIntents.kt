@@ -95,6 +95,11 @@ object VendorGuidanceIntents {
      * app-settings.
      */
     internal fun candidatesFor(key: String): List<Pair<String, List<VendorComponentRef>>> = when {
+        // i18n-opt-out: vendorLabel bucket keys ("MIUI"/"Samsung"/…) are internal
+        // candidate-selector identifiers consumed only by VendorGuidanceIntentsTest;
+        // they are never shown to the user. The on-screen vendor-help button text is
+        // R.string.history_recovery_open_device_settings (wired in HistoryScreen). Not
+        // user-facing copy — kept as literals.
         key.contains("xiaomi") || key.contains("redmi") || key.contains("poco") ->
             listOf("MIUI" to MIUI)
         key.contains("samsung") ->

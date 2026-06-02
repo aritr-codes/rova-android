@@ -9,9 +9,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -89,7 +91,8 @@ class PlayerViewModel(
                 "PlayerViewModel: playback error for sessionId=$sessionId",
                 error
             )
-            _uiState.value = PlayerUiState.Unavailable("Playback failed")
+            _uiState.value =
+                PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_playback_failed))
         }
     }
 

@@ -1,5 +1,7 @@
 package com.aritr.rova.ui.screens.player
 
+import com.aritr.rova.R
+import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,7 +43,7 @@ class PlayerStateEmitterTest {
     @Test
     fun `Unavailable passes through unchanged and attach is never invoked`() {
         var attachCalls = 0
-        val input = PlayerUiState.Unavailable("nope")
+        val input = PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_incomplete))
         val out = PlayerStateEmitter.emit(input) { attachCalls++ }
         assertEquals(input, out)
         assertEquals(0, attachCalls)
@@ -64,7 +66,7 @@ class PlayerStateEmitterTest {
         }
         assertTrue("expected Unavailable, got $out", out is PlayerUiState.Unavailable)
         assertEquals(
-            "Playback initialization failed",
+            UiText.Str(R.string.player_unavailable_init_failed),
             (out as PlayerUiState.Unavailable).reason
         )
     }

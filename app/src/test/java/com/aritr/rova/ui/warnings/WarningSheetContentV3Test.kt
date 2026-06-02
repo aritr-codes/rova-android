@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.warnings
 
+import com.aritr.rova.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -95,7 +97,7 @@ class WarningSheetContentV3Test {
         ).forEach { id ->
             val why = warningSheetContent(id).whyThisMatters
             assertNotNull("expected whyThisMatters for $id to be non-null", why)
-            assertTrue("expected whyThisMatters for $id to be non-blank", why!!.isNotBlank())
+            assertNotEquals("expected whyThisMatters @StringRes for $id to be set", 0, why)
         }
     }
 
@@ -122,7 +124,7 @@ class WarningSheetContentV3Test {
         val auto = midRecBannerContent(WarningId.THERMAL_EMERGENCY).autoAction
         assertNotNull(auto)
         assertTrue("expected secondsRemaining > 0", auto!!.secondsRemaining > 0)
-        assertTrue("expected non-blank description", auto.description.isNotBlank())
+        assertNotEquals("expected description @StringRes set", 0, auto.description)
     }
 
     @Test fun midRecBanner_autoAction_for_THERMAL_SHUTDOWN_is_set() {
@@ -150,7 +152,7 @@ class WarningSheetContentV3Test {
 
     @Test
     fun `WarningAction defaults to Primary style`() {
-        val a = WarningAction("OK", ActionTarget.APP_DETAILS_SETTINGS)
+        val a = WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS)
         assertEquals(WarningActionStyle.Primary, a.style)
     }
 }

@@ -7,12 +7,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 
 @Composable
 fun CustomDurationDialog(
@@ -24,10 +26,10 @@ fun CustomDurationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Custom Duration") },
+        title = { Text(stringResource(R.string.dialog_custom_duration_title)) },
         text = {
             Column {
-                Text("Enter duration in seconds (5 - 300):")
+                Text(stringResource(R.string.dialog_custom_duration_message))
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = textValue,
@@ -39,14 +41,14 @@ fun CustomDurationDialog(
                     // WCAG 2.2 AA SC 4.1.2 / 1.3.1 (ADR-0020, SHAR-05): the
                     // field needs a programmatic name — without it TalkBack
                     // reads only "edit box".
-                    label = { Text("Duration in seconds") },
+                    label = { Text(stringResource(R.string.dialog_custom_duration_field_label)) },
                     isError = isError,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true
                 )
                 if (isError) {
                     Text(
-                        text = "Value must be between 5 and 300",
+                        text = stringResource(R.string.dialog_custom_duration_error),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                         // WCAG 2.2 AA SC 4.1.3 (ADR-0020, SHAR-04): announce the
@@ -66,12 +68,12 @@ fun CustomDurationDialog(
                 },
                 enabled = !isError
             ) {
-                Text("OK")
+                Text(stringResource(R.string.dialog_ok))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.dialog_cancel))
             }
         }
     )
@@ -84,6 +86,7 @@ fun MergeProgressSheet(
     statusText: String,
     onDismissRequest: () -> Unit // Note: Should probably be non-dismissible usually
 ) {
+    val mergeProgressCd = stringResource(R.string.dialog_merge_progress_cd, statusText)
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -97,14 +100,14 @@ fun MergeProgressSheet(
                 // phase changes. The CD tracks the coarse statusText, not the
                 // per-tick percent, so TalkBack does not chant on every frame.
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "Merging videos. $statusText"
+                    contentDescription = mergeProgressCd
                     liveRegion = LiveRegionMode.Polite
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Merging Videos",
+                text = stringResource(R.string.dialog_merge_progress_title),
                 style = MaterialTheme.typography.headlineSmall
             )
             
@@ -127,7 +130,7 @@ fun MergeProgressSheet(
             )
             
             Text(
-                text = "Please don't close the app",
+                text = stringResource(R.string.dialog_merge_progress_keep_open),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -142,16 +145,16 @@ fun PermissionRationaleDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Permissions Required") },
-        text = { Text("Rova needs Camera and Microphone permissions to record videos, and Storage access to save them.") },
+        title = { Text(stringResource(R.string.dialog_permissions_title)) },
+        text = { Text(stringResource(R.string.dialog_permissions_message)) },
         confirmButton = {
             TextButton(onClick = onGrant) {
-                Text("Grant")
+                Text(stringResource(R.string.dialog_permissions_grant))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.dialog_cancel))
             }
         }
     )

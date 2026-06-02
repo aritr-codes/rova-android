@@ -66,4 +66,611 @@
     <!-- M5 Phase 2: progress contentDescription -->
     <string name="notification_progress_cd_determinate">Progress, %1$d percent</string>
     <string name="notification_progress_cd_indeterminate">In progress</string>
+
+    <!-- B3 i18n task 9: recording-service notification copy (Context scope) -->
+    <string name="notification_title_recording_active">🎥 Rova Recording Active</string>
+    <string name="notification_channel_legacy_name">Rova Background Recording</string>
+    <string name="notification_action_stop_legacy">STOP</string>
+    <string name="notification_recovery_merge_title">Merging recovered clips</string>
+    <string name="notification_recovery_merge_percent">Merging %1$d%%</string>
+    <string name="notification_recovery_merge_session">Session %1$s…</string>
+    <string name="notification_initializing">Initializing background recording...</string>
+    <string name="notification_storage_insufficient">Not enough storage to record. Free up space and try again.</string>
+    <string name="notification_preparing_camera">Preparing camera...</string>
+    <string name="notification_camera_failed">Camera failed to start. Please restart recording.</string>
+    <string name="notification_recording_failed_stopping">Recording failed. Stopping session.</string>
+    <string name="notification_segment_saved">Segment Saved: %1$d KB</string>
+    <string name="notification_empty_segment">Recording produced an empty segment</string>
+    <string name="notification_recording_failed_unexpected">Recording failed unexpectedly</string>
+    <string name="notification_error_insufficient_storage">Not enough storage space</string>
+    <string name="notification_error_source_inactive">Camera was disconnected</string>
+    <string name="notification_error_file_size_limit">File size limit reached</string>
+    <string name="notification_error_no_valid_data">No video data was captured</string>
+    <string name="notification_error_garbage_collected">Recording was interrupted</string>
+    <string name="notification_error_generic">Recording failed (code %1$d)</string>
+    <string name="notification_stopped_permission_revoked">Stopped — required permission revoked. Re-grant in Settings.</string>
+    <string name="notification_stopped_low_storage">Stopped — device storage low. Free up space.</string>
+    <string name="notification_stopped_thermal">Stopped — device overheated. Let it cool down.</string>
+    <string name="notification_stopping">Stopping recording…</string>
+    <string name="notification_stopped_state_save_failed">Stopped — recording state could not be saved. Will recover on next launch.</string>
+    <string name="notification_stopped_recovery_offered">Recording stopped — finishing will be offered when you reopen Rova</string>
+    <string name="notification_state_corrupted">Recording state corrupted: %1$s</string>
+    <string name="notification_merge_failed">Merge failed</string>
+    <string name="notification_merge_failed_detail">Merge failed: %1$s</string>
+    <string name="notification_merge_state_save_failed">Recording finished but state save failed — will reconcile on next launch.</string>
+    <string name="notification_recording_stopped_detail">Recording stopped: %1$s</string>
+    <string name="notification_unknown_error">unknown error</string>
+
+    <!-- B3 i18n task 9b: live foreground-notification copy (NotificationCopy.toCopy) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_clip_title_total">Recording · Clip %1$d of %2$d</string>
+    <!-- %1$d = current clip -->
+    <string name="notification_clip_title">Recording · Clip %1$d</string>
+    <!-- %1$s = mm:ss remaining -->
+    <string name="notification_clip_body_eta">%1$s remaining in this clip</string>
+    <string name="notification_clip_body_static">Recording in progress</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_gap_title_total">Waiting · Clip %1$d of %2$d next</string>
+    <!-- %1$d = next clip number -->
+    <string name="notification_gap_title">Waiting · Clip %1$d next</string>
+    <!-- %1$s = next-in label -->
+    <string name="notification_gap_body">Next clip starts in %1$s</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_merging_title">Merging clips · %1$d of %2$d</string>
+    <string name="notification_merging_body">Processing — please wait</string>
+    <string name="notification_complete_title">Merge complete</string>
+
+    <!-- B3 i18n task 9b: dots-row contentDescription (NotificationDotsRow.toDotsPlan) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_dots_cd_recording">Clip %1$d of %2$d</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_dots_cd_waiting">Waiting, %1$d of %2$d next</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_dots_cd_merging">Merging, %1$d of %2$d done</string>
+
+    <!-- Record screen / chrome / HUD (B3 i18n task 2) -->
+    <!-- Stepper default contentDescription -->
+    <string name="record_stepper_decrease">Decrease</string>
+    <string name="record_stepper_increase">Increase</string>
+
+    <!-- Quick-set chip row -->
+    <string name="record_quickset_selected_label">✓ %1$s</string>
+    <string name="record_quickset_selected_cd">%1$s, selected</string>
+    <string name="record_quickset_not_selected_cd">%1$s, not selected</string>
+    <!-- Quality chip base TalkBack description; QuickSetChipRow appends the
+         ", selected"/", not selected" state suffix (B3 i18n task 10). -->
+    <string name="record_quality_chip_base_cd">Quality: %1$s</string>
+
+    <!-- Background-recording banner -->
+    <string name="record_bg_recording">Recording in background</string>
+    <string name="record_bg_next_recording">Next recording in %1$s</string>
+    <string name="record_bg_stop">STOP</string>
+
+    <!-- Camera controls (contentDescription) -->
+    <string name="record_flash_cd">Flash</string>
+    <string name="record_flip_camera_cd">Flip camera</string>
+
+    <!-- Idle settings card -->
+    <string name="record_swipe_to_edit">SWIPE TO EDIT</string>
+    <string name="record_cell_clip">Clip</string>
+    <string name="record_cell_repeats">Repeats</string>
+    <string name="record_cell_wait">Wait</string>
+    <string name="record_cell_quality">Quality</string>
+    <string name="record_cell_mode">MODE</string>
+    <string name="record_edit_session_settings_cd">Edit session settings</string>
+    <string name="record_mode_pl_label">P + L</string>
+
+    <!-- Bottom nav -->
+    <string name="record_nav_library">Library</string>
+    <string name="record_nav_settings">Settings</string>
+
+    <!-- FAB semantics -->
+    <string name="record_fab_start_cd">Start recording</string>
+    <string name="record_fab_stop_cd">Stop recording</string>
+    <string name="record_fab_start_unavailable_cd">Start recording (unavailable)</string>
+
+    <!-- Recovery chip -->
+    <string name="record_recovery_review">Review</string>
+
+    <!-- Active HUD -->
+    <string name="record_loops_done_caption">LOOPS DONE</string>
+    <string name="record_status_detail_prefix">· %1$s</string>
+
+    <!-- Active-HUD loop pill (B3 i18n task 2) -->
+    <string name="record_hud_loops_done_indefinite">%1$d loops done</string>
+    <string name="record_hud_loops_done">%1$d/%2$d loops done</string>
+
+    <!-- Active-HUD status pill copy + time captions (B3 i18n task 2) -->
+    <string name="record_hud_status_recording">Recording</string>
+    <string name="record_hud_status_on_break">On break</string>
+    <string name="record_hud_status_merging">Merging…</string>
+    <string name="record_hud_time_left">· %1$s left</string>
+    <string name="record_hud_time_next_in">· next in %1$s</string>
+    <string name="record_hud_time_percent">· %1$d%%</string>
+
+    <!-- RecordHudFormatters user-facing copy (B3 i18n task 2b) -->
+    <string name="record_hud_loop_position">Loop %1$d / %2$d</string>
+    <string name="record_hud_loop_position_continuous">Loop %1$d</string>
+    <string name="record_hud_loops_remaining_continuous">Records until you stop</string>
+    <string name="record_hud_loops_remaining_last">Last clip in progress</string>
+    <string name="record_hud_loops_remaining">%1$d of %2$d loops remaining</string>
+    <string name="record_hud_next_clip_momentary">Next clip will run momentarily</string>
+    <string name="record_hud_next_clip_seconds">Next clip will run for %1$d s</string>
+    <string name="record_hud_next_clip_one_minute">Next clip will run for 1 m</string>
+    <string name="record_hud_next_clip_minutes">Next clip will run for %1$d m</string>
+    <string name="record_hud_recording_meta">%1$s · %2$s</string>
+    <string name="record_hud_flash_auto">Flash auto</string>
+    <string name="record_hud_flash_on">Flash on</string>
+    <string name="record_hud_flash_off">Flash off</string>
+    <string name="record_hud_elapsed_just_started">Session just started</string>
+    <string name="record_hud_elapsed_hour_minute">Session elapsed %1$d hour %2$d minute</string>
+    <string name="record_hud_elapsed_hour_minutes">Session elapsed %1$d hour %2$d minutes</string>
+    <string name="record_hud_elapsed_hours_minute">Session elapsed %1$d hours %2$d minute</string>
+    <string name="record_hud_elapsed_hours_minutes">Session elapsed %1$d hours %2$d minutes</string>
+    <string name="record_hud_elapsed_hour">Session elapsed %1$d hour</string>
+    <string name="record_hud_elapsed_hours">Session elapsed %1$d hours</string>
+    <string name="record_hud_elapsed_minute">Session elapsed %1$d minute</string>
+    <string name="record_hud_elapsed_minutes">Session elapsed %1$d minutes</string>
+    <string name="record_hud_merge_of">%1$d of %2$d</string>
+    <string name="record_hud_merge_starting">Starting merge…</string>
+    <string name="record_hud_merge_almost">Almost done…</string>
+    <string name="record_hud_merge_preparing">Preparing to merge</string>
+    <string name="record_hud_merge_preparing_clips">Preparing to merge %1$d clips</string>
+    <string name="record_hud_merge_clip_of">Merging clip %1$d of %2$d</string>
+    <string name="record_hud_session_status_recording_of">Recording, loop %1$d of %2$d.</string>
+    <string name="record_hud_session_status_recording">Recording, loop %1$d.</string>
+    <string name="record_hud_session_status_queued_of">Queued, loop %1$d of %2$d.</string>
+    <string name="record_hud_session_status_queued">Queued, loop %1$d.</string>
+    <string name="record_hud_merge_complete_summary_one">%1$d clip · saved to Library</string>
+    <string name="record_hud_merge_complete_summary_other">%1$d clips · saved to Library</string>
+
+    <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
+    <string name="record_hud_announce_recording">Recording.</string>
+    <string name="record_hud_announce_recording_loop">Recording. Loop %1$d.</string>
+    <string name="record_hud_announce_recording_loop_of">Recording. Loop %1$d of %2$d.</string>
+    <string name="record_hud_announce_on_break">On break.</string>
+    <string name="record_hud_announce_on_break_loop">On break. Loop %1$d.</string>
+    <string name="record_hud_announce_on_break_loop_of">On break. Loop %1$d of %2$d.</string>
+
+    <!-- Status pill copy (idle/active) -->
+    <string name="record_status_recording">Recording</string>
+    <string name="record_status_on_break">On break</string>
+    <string name="record_status_merging">Merging</string>
+    <string name="record_status_ready">Ready to record</string>
+    <string name="record_status_detail_clip_of">%1$ds of %2$ds</string>
+    <string name="record_status_detail_next_in">next in %1$ds</string>
+
+    <!-- Camera-disconnected dialog -->
+    <string name="record_camera_disconnected_title">Camera Disconnected</string>
+    <string name="record_camera_disconnected_body">The camera connection was lost during recording.</string>
+    <string name="record_camera_disconnected_stop">STOP RECORDING</string>
+
+    <!-- Loading overlay -->
+    <string name="record_initializing_camera">Initializing Camera...</string>
+
+    <!-- Start-blocked snackbars -->
+    <string name="record_blocked_app_not_visible">Open Rova on screen before starting. Android blocks camera launches from the background.</string>
+    <string name="record_blocked_fgs_restricted">Cannot start recording — Android requires the app to be in the foreground.</string>
+    <string name="record_blocked_unknown">Recording could not start. Please try again.</string>
+
+    <!-- Merge failure snackbar -->
+    <string name="record_merge_failed">Merge failed. Open Library to recover.</string>
+
+    <!-- History / Library screen (B3 i18n task 3) -->
+    <string name="history_title">Library</string>
+    <string name="history_back_cd">Back</string>
+
+    <!-- Library row 3-dot menu actions -->
+    <string name="history_action_open">Open</string>
+    <string name="history_action_edit">Edit</string>
+    <string name="history_action_view_settings">View Settings</string>
+
+    <!-- Library row thumbnail (contentDescription) -->
+    <string name="history_play_cd">Play</string>
+
+    <!-- Selection-mode top bar (contentDescription) -->
+    <string name="history_close_selection_cd">Close selection</string>
+    <string name="history_share_cd">Share</string>
+    <string name="history_delete_cd">Delete</string>
+
+    <!-- Share flow -->
+    <string name="history_share_chooser_title">Share videos</string>
+    <string name="history_share_not_ready">Recording not ready to share yet</string>
+    <string name="history_share_no_app">No app available to share videos</string>
+
+    <!-- Snackbars -->
+    <string name="history_settings_unavailable">Settings not available for this recording</string>
+    <string name="history_editor_coming_soon">Editor coming in a future release</string>
+
+    <!-- Recovery card OEM auto-start help -->
+    <string name="history_recovery_open_device_settings">Open device settings</string>
+
+    <!-- Empty state -->
+    <string name="history_empty_title">No Recordings Yet</string>
+    <string name="history_empty_body">Your merged sessions will appear here once you complete a recording.</string>
+    <string name="history_empty_start_recording">Start Recording</string>
+
+    <!-- View Settings dialog (LibrarySessionConfigDialog) -->
+    <string name="history_config_title">Recording Settings</string>
+    <string name="history_config_clip_length">Clip length</string>
+    <string name="history_config_repeats">Repeats</string>
+    <string name="history_config_wait">Wait</string>
+    <string name="history_config_quality">Quality</string>
+    <string name="history_config_close">Close</string>
+
+    <!-- Player screen (B3 i18n task 5) -->
+    <string name="player_loading">Loading…</string>
+    <string name="player_back">Back</string>
+    <string name="player_back_cd">Back</string>
+    <string name="player_play_cd">Play</string>
+    <string name="player_pause_cd">Pause</string>
+    <string name="player_trim_cd">Trim (coming soon)</string>
+    <string name="player_rewind_cd">Rewind 10 seconds</string>
+    <string name="player_forward_cd">Forward 10 seconds</string>
+    <string name="player_edit_cd">Edit (coming soon)</string>
+    <string name="player_editor_coming_soon">Editor coming in a future release</string>
+    <!-- Info row: %1$s = current position MM:SS, %2$s = per-clip length MM:SS -->
+    <string name="player_position_per_clip">%1$s / %2$s per clip</string>
+    <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
+    <string name="player_clip_n_of_m">Clip %1$d of %2$d</string>
+    <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
+    <string name="player_unavailable_not_available">Recording not available</string>
+    <string name="player_unavailable_not_finished">Recording not finished</string>
+    <string name="player_unavailable_file_not_found">Recording file not found</string>
+    <string name="player_unavailable_incomplete">Recording incomplete</string>
+    <string name="player_unavailable_playback_failed">Playback failed</string>
+    <string name="player_unavailable_init_failed">Playback initialization failed</string>
+
+    <!-- Settings screen + sheets (B3 i18n task 4) -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_back_cd">Back</string>
+
+    <!-- Section labels -->
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_recording_defaults">Recording defaults</string>
+    <string name="settings_section_recording_behavior">Recording behavior</string>
+    <string name="settings_section_alerts">Alerts</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_reliability">Reliability</string>
+    <string name="settings_section_about">About</string>
+
+    <!-- Appearance row + theme picker -->
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_supporting">Light, dark, or match your system setting.</string>
+    <string name="settings_theme_mode_system">Follow system</string>
+    <string name="settings_theme_mode_dark">Dark</string>
+    <string name="settings_theme_mode_light">Light</string>
+
+    <!-- Recording-defaults rows -->
+    <string name="settings_default_resolution_label">Default resolution</string>
+    <string name="settings_default_resolution_supporting">Quality new recordings start at.</string>
+    <string name="settings_clip_duration_label">Clip duration</string>
+    <string name="settings_clip_duration_supporting">How long each clip records.</string>
+    <string name="settings_interval_label">Interval between clips</string>
+    <string name="settings_interval_supporting">Wait time before the next clip.</string>
+    <string name="settings_loops_label">Number of loops</string>
+    <string name="settings_loops_supporting">How many clips before stopping.</string>
+
+    <!-- Recording-behavior rows -->
+    <string name="settings_keep_screen_on_label">Keep screen on</string>
+    <string name="settings_keep_screen_on_supporting">Stops the screen from dimming while you frame a shot.</string>
+    <string name="settings_camera_guides_label">Camera guides</string>
+    <string name="settings_camera_guides_supporting">Show the framing grid and focus brackets over the viewfinder.</string>
+
+    <!-- Alerts rows -->
+    <string name="settings_sound_cues_label">Sound cues</string>
+    <string name="settings_sound_cues_supporting">Play short beeps so you can hear when capture starts and stops.</string>
+    <string name="settings_vibrate_alerts_label">Vibrate alerts</string>
+    <string name="settings_vibrate_alerts_supporting">Use a short vibration to confirm starts and stops.</string>
+
+    <!-- Notifications row -->
+    <string name="settings_system_notifications_label">System notification settings</string>
+    <string name="settings_system_notifications_supporting">Manage Rova\'s notification channels in Android settings.</string>
+    <string name="settings_system_notifications_unavailable">Notification settings not available on this device</string>
+
+    <!-- Storage rows -->
+    <string name="settings_auto_delete_label">Auto-delete old recordings</string>
+    <string name="settings_auto_delete_supporting_on">Keeping the latest %1$d finished recordings.</string>
+    <string name="settings_auto_delete_supporting_off">Off. Recordings stay until you delete them yourself.</string>
+    <string name="settings_export_folder_label">Export folder name</string>
+    <string name="settings_export_folder_supporting">Where finished videos appear inside your gallery.</string>
+    <string name="settings_export_folder_default">Default folder</string>
+    <string name="settings_clear_cache_label">Clear cache</string>
+    <string name="settings_clear_cache_supporting">Removes preview thumbnails and temporary files.</string>
+    <string name="settings_clear_cache_cleared">Cleared %1$.1f MB</string>
+    <string name="settings_clear_cache_empty">Cache is empty</string>
+
+    <!-- Reliability row + battery dialog -->
+    <string name="settings_battery_optimization_label">Battery optimization</string>
+    <string name="settings_battery_optimization_supporting">Required so recordings keep going in the background.</string>
+    <string name="settings_battery_exempt">Exempt</string>
+    <string name="settings_battery_not_exempt">Not exempt</string>
+    <string name="settings_battery_dialog_title">Battery optimization</string>
+    <string name="settings_battery_dialog_body_exempt">Rova is already exempt from battery optimization. Recordings will keep going in the background. Open battery settings to review or change this.</string>
+    <string name="settings_battery_dialog_body_not_exempt">Rova needs to be exempt from battery optimization so recordings keep going in the background. Without this, your device may stop the recording mid-session.</string>
+    <string name="settings_battery_dialog_confirm">Open battery settings</string>
+    <string name="settings_battery_dialog_dismiss">Not now</string>
+    <string name="settings_battery_settings_unavailable">Battery settings not available on this device</string>
+
+    <!-- About rows -->
+    <string name="settings_version_label">Version</string>
+    <string name="settings_privacy_label">Privacy policy</string>
+    <string name="settings_privacy_supporting">Open the policy in your browser.</string>
+    <string name="settings_privacy_no_browser">No browser available</string>
+
+    <!-- Export folder dialog -->
+    <string name="settings_export_folder_dialog_title">Export folder name</string>
+    <string name="settings_export_folder_field_label">Folder name</string>
+    <string name="settings_export_folder_preview_default">Videos will be saved to your default folder.</string>
+    <string name="settings_export_folder_preview_named">Videos will be saved to Movies / %1$s</string>
+    <string name="settings_export_folder_save">Save</string>
+    <string name="settings_export_folder_cancel">Cancel</string>
+
+    <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
+    <string name="settings_stepper_decrease_cd">Decrease %1$s</string>
+    <string name="settings_stepper_increase_cd">Increase %1$s</string>
+
+    <!-- Record settings sheet (SettingsSheet) -->
+    <string name="settings_sheet_section_recording_mode">Recording mode</string>
+    <string name="settings_sheet_section_settings">Settings</string>
+    <string name="settings_sheet_mode_portrait">Portrait</string>
+    <string name="settings_sheet_mode_landscape">Landscape</string>
+    <string name="settings_sheet_mode_pl">P + L</string>
+    <string name="settings_sheet_clip_duration">Clip Duration</string>
+    <string name="settings_sheet_repeats">Repeats</string>
+    <string name="settings_sheet_wait_between">Wait Between</string>
+    <string name="settings_sheet_quality">Quality</string>
+    <string name="settings_sheet_save">Save</string>
+    <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
+
+    <!-- Edit sheet shell button labels (EditSheetShell) -->
+    <string name="settings_edit_sheet_done">Done</string>
+    <string name="settings_edit_sheet_cancel">Cancel</string>
+
+    <!-- Fixed/Continuous selector (FixedContinuousSelector) -->
+    <string name="settings_repeats_fixed">Fixed</string>
+    <string name="settings_repeats_fixed_selected">✓ Fixed</string>
+    <string name="settings_repeats_continuous">Continuous</string>
+    <string name="settings_repeats_continuous_selected">✓ Continuous</string>
+    <string name="settings_repeats_fixed_selected_cd">Fixed, selected</string>
+    <string name="settings_repeats_fixed_not_selected_cd">Fixed, not selected</string>
+    <string name="settings_repeats_continuous_selected_cd">Records until you stop, selected</string>
+    <string name="settings_repeats_continuous_not_selected_cd">Records until you stop, not selected</string>
+
+    <!-- WarningCenter sheet / banner / chip copy (B3 i18n task 7) -->
+
+    <!-- Shared action / CTA labels -->
+    <string name="warning_action_not_now">Not now</string>
+    <string name="warning_action_ok">OK</string>
+    <string name="warning_action_dont_show_again">Don\'t show again</string>
+    <string name="warning_action_review_session">Review session</string>
+    <string name="warning_banner_cta_stop">Stop</string>
+
+    <!-- Severity badges (sheet) -->
+    <string name="warning_severity_hard">Hard · Required</string>
+    <string name="warning_severity_soft">Soft · Degraded mode</string>
+    <string name="warning_severity_advisory">Advisory · Optional</string>
+
+    <!-- Severity badges (compact strip / chip) -->
+    <string name="warning_severity_short_hard">HARD</string>
+    <string name="warning_severity_short_soft">SOFT</string>
+    <string name="warning_severity_short_advisory">ADVISORY</string>
+    <string name="warning_severity_short_escalating">ESCALATING</string>
+
+    <!-- Sheet chrome -->
+    <string name="warning_why_this_matters">Why this matters</string>
+    <string name="warning_more_actions_cd">More actions</string>
+    <string name="warning_more_options_cd">More options</string>
+
+    <!-- CAMERA_PERMISSION_DENIED -->
+    <string name="warning_camera_perm_title">Camera access required</string>
+    <string name="warning_camera_perm_body">Rova can\'t record without camera access. Grant the permission in App Settings to continue.</string>
+    <string name="warning_camera_perm_primary">Open App Settings</string>
+
+    <!-- EXACT_ALARM_DENIED -->
+    <string name="warning_exact_alarm_title">Alarm permission required</string>
+    <string name="warning_exact_alarm_body">Rova uses exact alarms to time recording segments. Without it, clips won\'t start or stop on schedule.</string>
+    <string name="warning_exact_alarm_primary">Allow exact alarms</string>
+
+    <!-- STORAGE_INSUFFICIENT -->
+    <string name="warning_storage_insufficient_title">Not enough storage to start</string>
+    <string name="warning_storage_insufficient_body">Free up space, then try again.</string>
+    <string name="warning_storage_insufficient_primary">Free up space</string>
+
+    <!-- MICROPHONE_DENIED -->
+    <string name="warning_mic_title">Recording without audio</string>
+    <string name="warning_mic_body">This session will record video only. You can grant microphone access in Settings and try again.</string>
+    <string name="warning_mic_primary">Grant microphone access</string>
+    <string name="warning_mic_secondary">Continue without audio</string>
+
+    <!-- NOTIFICATIONS_DENIED -->
+    <string name="warning_notifications_title">Stay in the loop</string>
+    <string name="warning_notifications_body">Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.</string>
+    <string name="warning_notifications_primary">Enable notifications</string>
+    <string name="warning_notifications_why">Notifications are how Rova tells you what\'s happening while you\'re not in the app — recording started, clip merged, session finished. Without them, you\'ll need to open the app to check progress.</string>
+
+    <!-- BATTERY_OPTIMIZATION_ON -->
+    <string name="warning_battery_opt_title">Battery optimization may stop recording</string>
+    <string name="warning_battery_opt_body">Android may kill Rova in the background. Disable battery optimization for reliable long sessions.</string>
+    <string name="warning_battery_opt_primary">Disable</string>
+    <string name="warning_battery_opt_why">Android\'s battery optimizer can pause background apps to save power. If Rova is paused mid-recording, the session may stop early or skip clips. Exempting Rova keeps the foreground service alive for the full session.</string>
+
+    <!-- POWER_SAVE_MODE -->
+    <string name="warning_power_save_title">Power-save mode may throttle recording</string>
+    <string name="warning_power_save_body">Turning off battery saver gives Rova full CPU/IO for the session.</string>
+    <string name="warning_power_save_primary">Settings</string>
+    <string name="warning_power_save_why">Battery saver caps CPU frequency and background I/O. Rova may drop frames or fall behind on encoding, which can corrupt clip boundaries on long sessions.</string>
+
+    <!-- Thermal sheet (defensive) titles -->
+    <string name="warning_thermal_shutdown_title">Device overheating — recording stopped</string>
+    <string name="warning_thermal_emergency_title">Device critically hot</string>
+    <string name="warning_thermal_critical_title">Device very hot — recording may stop</string>
+    <string name="warning_thermal_severe_title">Device hot — quality may drop</string>
+    <string name="warning_thermal_moderate_title">Device warming up</string>
+
+    <!-- Battery sheet (defensive) titles -->
+    <string name="warning_battery_critical_title">Battery critical — recording may stop</string>
+    <string name="warning_battery_low_title">Battery low — consider charging</string>
+
+    <!-- STORAGE_LOW_MID_REC (defensive sheet arm) -->
+    <string name="warning_storage_low_mid_rec_title">Storage running low</string>
+    <string name="warning_storage_low_mid_rec_body">Free space on this device.</string>
+
+    <!-- STORAGE_FULL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_storage_full_autostopped_title">Recording stopped</string>
+    <string name="warning_storage_full_autostopped_body">Storage filled up.</string>
+
+    <!-- THERMAL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_thermal_autostopped_title">Recording stopped</string>
+    <string name="warning_thermal_autostopped_body">Device overheated.</string>
+
+    <!-- CANT_MERGE -->
+    <string name="warning_cant_merge_title">Can\'t merge yet</string>
+    <string name="warning_cant_merge_body">Free space and retry, or keep the raw segments for later.</string>
+    <string name="warning_cant_merge_primary">Free space &amp; retry</string>
+    <string name="warning_cant_merge_secondary">Save segments only</string>
+    <string name="warning_cant_merge_tertiary">Discard session</string>
+
+    <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
+    <string name="warning_camera_in_use_title">Camera in use by another app</string>
+    <string name="warning_camera_in_use_body">Close the other camera app.</string>
+    <string name="warning_camera_disabled_title">Camera disabled by device policy</string>
+
+    <!-- Mid-rec top banner: auto-action description -->
+    <string name="warning_banner_auto_stop_protect">Will auto-stop to protect device</string>
+
+    <!-- Mid-rec top banner copy -->
+    <string name="warning_banner_thermal_shutdown_title">Device overheating — stopping</string>
+    <string name="warning_banner_thermal_shutdown_sub">Recording will stop automatically.</string>
+    <string name="warning_banner_thermal_emergency_title">Device critically hot</string>
+    <string name="warning_banner_thermal_emergency_sub">Stop now to let it cool.</string>
+    <string name="warning_banner_thermal_critical_title">Device very hot</string>
+    <string name="warning_banner_thermal_critical_sub">Recording may auto-stop soon.</string>
+    <string name="warning_banner_thermal_severe_title">Device hot</string>
+    <string name="warning_banner_thermal_severe_sub">Quality may drop.</string>
+    <string name="warning_banner_thermal_moderate_title">Device warming up</string>
+    <string name="warning_banner_thermal_moderate_sub">Watch the temperature.</string>
+    <string name="warning_banner_battery_critical_title">Battery critical</string>
+    <string name="warning_banner_battery_critical_sub">Recording may stop soon.</string>
+    <string name="warning_banner_battery_low_title">Battery low</string>
+    <string name="warning_banner_battery_low_sub">Consider charging.</string>
+    <string name="warning_banner_camera_in_use_title">Camera in use</string>
+    <string name="warning_banner_camera_in_use_sub">Another app is using the camera.</string>
+    <string name="warning_banner_camera_disabled_title">Camera disabled</string>
+    <string name="warning_banner_camera_disabled_sub">Disabled by device policy.</string>
+    <string name="warning_banner_storage_low_title">Storage running low</string>
+    <string name="warning_banner_storage_low_sub">Free space on this device.</string>
+    <string name="warning_banner_storage_full_title">Recording stopped</string>
+    <string name="warning_banner_storage_full_sub">Storage filled up.</string>
+    <string name="warning_banner_storage_full_cta">Free up space</string>
+    <string name="warning_banner_thermal_autostopped_title">Recording stopped</string>
+    <string name="warning_banner_thermal_autostopped_sub">Device overheated.</string>
+    <string name="warning_banner_thermal_autostopped_cta">Tips to cool down</string>
+
+    <!-- History strip / Settings chip chrome -->
+    <string name="warning_dismiss_cd">Dismiss</string>
+    <string name="warning_view_action_label">View</string>
+    <string name="warning_show_details_label">Show details</string>
+    <string name="warning_open_details_label">Open details</string>
+    <string name="warning_settings_section_header">PERMISSIONS &amp; STATUS</string>
+    <!-- %1$s = severity badge (e.g. SOFT), %2$s = warning title -->
+    <string name="warning_chip_status_cd">%1$s status: %2$s</string>
+
+    <!-- Thermal tips sheet -->
+    <string name="warning_thermal_tips_title">Tips to cool down</string>
+    <string name="warning_thermal_tips_bullet">•  </string>
+    <string name="warning_thermal_tip_shade">Move to shade or a cooler room.</string>
+    <string name="warning_thermal_tip_case">Remove the case while the device cools.</string>
+    <string name="warning_thermal_tip_close_apps">Close other camera-heavy apps.</string>
+    <string name="warning_thermal_tip_charging">Avoid charging while recording.</string>
+    <string name="warning_thermal_tip_rest">Let the device rest 5 minutes before recording again.</string>
+    <string name="warning_thermal_tips_dismiss">Got it</string>
+
+    <!-- Recovery card (B3 i18n task 8) — RecoveryUiStateMapper titles/bodies + RecoveryCard chrome -->
+    <!-- Titles per terminator kind -->
+    <string name="recovery_title_user_stopped">Session stopped</string>
+    <string name="recovery_title_killed_by_system">Recording stopped by your device</string>
+    <string name="recovery_title_force_stopped">Recording was force-stopped</string>
+    <!-- Bodies per terminator kind -->
+    <string name="recovery_body_user_stopped">Your last session ended before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_killed_by_system">Your device\'s battery management stopped the recording before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_force_stopped">The app was force-stopped before the last session\'s segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <!-- CTA labels -->
+    <string name="recovery_discard_label">Discard recording</string>
+    <string name="recovery_merge_label">Merge segments</string>
+    <string name="recovery_keep_raw_label">Keep as raw clips</string>
+    <string name="recovery_retry_merge_label">Retry merge</string>
+    <!-- Discard CTA content description. %1$s = discard label -->
+    <string name="recovery_discard_cd">%1$s. This action is permanent.</string>
+    <!-- Merge-failed inline error. %1$s = runtime failure reason -->
+    <string name="recovery_merge_failed_prefix">Merge failed: %1$s</string>
+    <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
+    <string name="recovery_artifact_recovered_segments">Recovered %1$d segment(s) from disk</string>
+    <string name="recovery_artifact_missing_segments">Missing segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_invalid_segments">Invalid segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_orphan_segments">Orphan segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_invalid_orphans">%1$d unreadable orphan file(s)</string>
+    <string name="recovery_artifact_duplicate_segments">Duplicate segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_unknown_files">%1$d unknown file(s) in session dir</string>
+    <string name="recovery_artifact_malformed_records">%1$d malformed manifest record(s)</string>
+    <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
+    <string name="recovery_tag_killed_by_system">System-killed</string>
+    <string name="recovery_tag_force_stopped">Force-stopped</string>
+    <string name="recovery_tag_user_stopped">User-stopped</string>
+    <!-- Progress strip -->
+    <string name="recovery_progress_header_merging">MERGING</string>
+    <string name="recovery_progress_header_recovered">CLIPS RECOVERED</string>
+    <!-- Numeric chip. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_chip">%1$d / %2$d</string>
+    <!-- Progress strip "merging" content description. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_cd_merging">Merging: %1$d of %2$d segments.</string>
+    <!-- Footer for hidden older sessions. %1$d = count -->
+    <string name="recovery_hidden_footer">+%1$d older interrupted sessions</string>
+
+    <!-- Cross-domain shared labels (B3 i18n task 10) — common_* only for labels reused verbatim across >=2 domains -->
+    <string name="common_play">Play</string>
+
+    <!-- Shared dialogs / RovaDialogs.kt (B3 i18n task 10) -->
+    <string name="dialog_custom_duration_title">Custom Duration</string>
+    <string name="dialog_custom_duration_message">Enter duration in seconds (5 - 300):</string>
+    <string name="dialog_custom_duration_field_label">Duration in seconds</string>
+    <string name="dialog_custom_duration_error">Value must be between 5 and 300</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Cancel</string>
+    <!-- Merge progress sheet. %1$s = coarse status text -->
+    <string name="dialog_merge_progress_cd">Merging videos. %1$s</string>
+    <string name="dialog_merge_progress_title">Merging Videos</string>
+    <string name="dialog_merge_progress_keep_open">Please don\'t close the app</string>
+    <string name="dialog_permissions_title">Permissions Required</string>
+    <string name="dialog_permissions_message">Rova needs Camera and Microphone permissions to record videos, and Storage access to save them.</string>
+    <string name="dialog_permissions_grant">Grant</string>
+
+    <!-- Session / last-recording cards · RovaCardComponents.kt (B3 i18n task 10) -->
+    <string name="card_session_recording">Recording in progress</string>
+    <!-- %1$d = seconds until next capture -->
+    <string name="card_session_next_capture">Next capture in %1$ds</string>
+    <!-- %1$d = current loop, %2$d = total loops -->
+    <string name="card_session_loop_of">Loop %1$d of %2$d</string>
+    <!-- %1$d = current loop -->
+    <string name="card_session_loop">Loop %1$d</string>
+    <string name="card_session_live">LIVE</string>
+    <string name="card_session_queued">QUEUED</string>
+    <string name="card_last_recording_label">Last recording</string>
+
+    <!-- Stepper control · RovaComponents.kt (B3 i18n task 10) -->
+    <string name="stepper_decrease_cd">Decrease</string>
+    <string name="stepper_increase_cd">Increase</string>
+
+    <!-- Legacy preview screen · PreviewActivity.kt (B3 i18n task 10) -->
+    <string name="preview_title">Rova Preview</string>
+    <string name="preview_back_cd">Back</string>
+    <string name="preview_replay_cd">Replay</string>
+    <string name="preview_save_cd">Save</string>
+    <string name="preview_share_cd">Share</string>
+    <string name="preview_saved_to_gallery">✅ Saved to Gallery</string>
+    <string name="preview_save_failed">❌ Save failed</string>
+    <string name="preview_share_title">Share Rova Video</string>
+    <string name="preview_share_not_ready">Recording not ready to share yet</string>
+    <string name="preview_share_no_app">No app available to share videos</string>
 </resources>

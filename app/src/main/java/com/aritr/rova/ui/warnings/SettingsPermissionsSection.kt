@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.aritr.rova.R
 import com.aritr.rova.ui.components.focusHighlight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -49,7 +51,7 @@ internal fun SettingsPermissionsSection(
 
     Column(modifier = modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Text(
-            text = "PERMISSIONS & STATUS",
+            text = stringResource(R.string.warning_settings_section_header),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
@@ -76,7 +78,11 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
     // name folds the severity badge + title together, so TalkBack reads e.g.
     // "Soft status: Microphone access needed, button" instead of two stray
     // fragments.
-    val chipDescription = "${severityLabelFor(surface)} status: ${content.title}"
+    val chipDescription = stringResource(
+        R.string.warning_chip_status_cd,
+        stringResource(severityLabelFor(surface)),
+        stringResource(content.title),
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -85,7 +91,7 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
             .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
             // SC 2.4.7 (SET-16): visible focus ring for D-pad/keyboard.
             .focusHighlight(RoundedCornerShape(6.dp))
-            .clickable(onClickLabel = "Open details", role = Role.Button, onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.warning_open_details_label), role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = chipDescription }
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -97,7 +103,7 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
                 .padding(horizontal = 5.dp, vertical = 1.dp),
         ) {
             Text(
-                text = severityLabelFor(surface),
+                text = stringResource(severityLabelFor(surface)),
                 style = MaterialTheme.typography.labelSmall,
                 color = accent,
                 fontWeight = FontWeight.SemiBold,
@@ -105,7 +111,7 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
         }
         Spacer(Modifier.size(8.dp))
         Text(
-            text = content.title,
+            text = stringResource(content.title),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),

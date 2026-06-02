@@ -34,8 +34,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
 /**
@@ -94,7 +96,7 @@ internal fun WarningTopBannerV3(
             modifier = Modifier.weight(1f),
         ) {
             Text(
-                text = content.title,
+                text = stringResource(content.title),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = 0.88f),
@@ -102,7 +104,7 @@ internal fun WarningTopBannerV3(
             )
             Spacer(Modifier.size(2.dp))
             Text(
-                text = content.autoAction?.description ?: content.sub,
+                text = stringResource(content.autoAction?.description ?: content.sub),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.48f),
                 maxLines = 2,
@@ -126,7 +128,7 @@ internal fun WarningTopBannerV3(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = content.cta.uppercase(),
+                    text = stringResource(content.cta).uppercase(),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = severityColor.copy(alpha = 0.95f),
@@ -147,7 +149,7 @@ internal fun WarningTopBannerV3(
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options",
+                        contentDescription = stringResource(R.string.warning_more_options_cd),
                         tint = Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.size(20.dp),
                     )
@@ -158,7 +160,7 @@ internal fun WarningTopBannerV3(
                 ) {
                     content.overflow.forEach { action ->
                         DropdownMenuItem(
-                            text = { Text(action.label) },
+                            text = { Text(stringResource(action.label)) },
                             onClick = {
                                 expanded = false
                                 onOverflow(action.target)

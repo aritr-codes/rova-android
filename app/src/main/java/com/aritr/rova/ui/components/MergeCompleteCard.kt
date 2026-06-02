@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.text.resolve
 
 /**
  * Phase 2.4 — brief "Merge Complete" card shown for a short grace
@@ -49,7 +50,7 @@ fun MergeCompleteCard(
     clipCount: Int,
     modifier: Modifier = Modifier
 ) {
-    val summary = RecordHudFormatters.formatMergeCompleteSummary(clipCount)
+    val summary = RecordHudFormatters.formatMergeCompleteSummary(clipCount).resolve()
     val a11y = "Merge complete. $summary"
 
     Surface(

@@ -4,8 +4,10 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SegmentRecord
 import com.aritr.rova.data.SessionConfig
+import com.aritr.rova.R
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -240,7 +242,10 @@ class PlayerUriResolverTest {
             )
         )
         assertTrue("expected Unavailable, got $state", state is PlayerUiState.Unavailable)
-        assertEquals("Recording incomplete", (state as PlayerUiState.Unavailable).reason)
+        assertEquals(
+            UiText.Str(R.string.player_unavailable_incomplete),
+            (state as PlayerUiState.Unavailable).reason
+        )
     }
 
     @Test
@@ -447,7 +452,10 @@ class PlayerUriResolverTest {
             side = VideoSide.PORTRAIT
         )
         assertTrue("expected Unavailable, got $state", state is PlayerUiState.Unavailable)
-        assertEquals("Recording incomplete", (state as PlayerUiState.Unavailable).reason)
+        assertEquals(
+            UiText.Str(R.string.player_unavailable_incomplete),
+            (state as PlayerUiState.Unavailable).reason
+        )
     }
 
     @Test

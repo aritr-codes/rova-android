@@ -66,6 +66,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -79,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
@@ -202,7 +205,7 @@ fun HistoryScreen(
                             }
                         }
                     }
-                ) { Text("Open device settings") }
+                ) { Text(stringResource(R.string.history_recovery_open_device_settings)) }
             }
         } else {
             null
@@ -225,14 +228,14 @@ fun HistoryScreen(
                 viewSettingsConfig = cfg
             } else {
                 snackbarHostState.showSnackbar(
-                    "Settings not available for this recording"
+                    context.getString(R.string.history_settings_unavailable)
                 )
             }
         }
     }
     val onEditPlaceholder: () -> Unit = {
         coroutineScope.launch {
-            snackbarHostState.showSnackbar("Editor coming in a future release")
+            snackbarHostState.showSnackbar(context.getString(R.string.history_editor_coming_soon))
         }
     }
 
@@ -298,10 +301,18 @@ fun HistoryScreen(
             topBar = {
                 if (isSelectionMode) {
                     TopAppBar(
-                        title = { Text("${selectedFiles.size} selected") },
+                        title = {
+                            Text(
+                                pluralStringResource(
+                                    R.plurals.history_selected_count,
+                                    selectedFiles.size,
+                                    selectedFiles.size
+                                )
+                            )
+                        },
                         navigationIcon = {
                             IconButton(onClick = { isSelectionMode = false; selectedFiles = emptySet() }) {
-                                Icon(Icons.Default.Close, "Close selection")
+                                Icon(Icons.Default.Close, stringResource(R.string.history_close_selection_cd))
                             }
                         },
                         actions = {
@@ -316,13 +327,13 @@ fun HistoryScreen(
                                 }
                                 if (uris.isEmpty()) {
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Recording not ready to share yet")
+                                        snackbarHostState.showSnackbar(context.getString(R.string.history_share_not_ready))
                                     }
                                     return@IconButton
                                 }
                                 if (anyMissing) {
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Recording not ready to share yet")
+                                        snackbarHostState.showSnackbar(context.getString(R.string.history_share_not_ready))
                                     }
                                 }
                                 val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
@@ -331,14 +342,19 @@ fun HistoryScreen(
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
                                 try {
-                                    context.startActivity(Intent.createChooser(intent, "Share videos"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            intent,
+                                            context.getString(R.string.history_share_chooser_title)
+                                        )
+                                    )
                                 } catch (_: ActivityNotFoundException) {
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("No app available to share videos")
+                                        snackbarHostState.showSnackbar(context.getString(R.string.history_share_no_app))
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.Share, "Share")
+                                Icon(Icons.Default.Share, stringResource(R.string.history_share_cd))
                             }
                             IconButton(onClick = {
                                 // Resolve selected files to VideoItem so deleteItems
@@ -352,14 +368,17 @@ fun HistoryScreen(
                                 coroutineScope.launch {
                                     val result = viewModel.deleteItems(toDelete)
                                     if (result.failed > 0) {
-                                        val plural = if (result.failed == 1) "recording" else "recordings"
                                         snackbarHostState.showSnackbar(
-                                            "Could not delete ${result.failed} $plural"
+                                            context.resources.getQuantityString(
+                                                R.plurals.history_delete_failed_count,
+                                                result.failed,
+                                                result.failed
+                                            )
                                         )
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.Delete, "Delete")
+                                Icon(Icons.Default.Delete, stringResource(R.string.history_delete_cd))
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -371,7 +390,7 @@ fun HistoryScreen(
                     TopAppBar(
                         title = {
                             Column {
-                                Text("Library", style = MaterialTheme.typography.titleLarge)
+                                Text(stringResource(R.string.history_title), style = MaterialTheme.typography.titleLarge)
                                 Text(
                                     text = HistoryRowFormatters.formatLibrarySummary(
                                         recordingCount = items.size,
@@ -401,7 +420,7 @@ fun HistoryScreen(
                         },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.history_back_cd))
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -737,21 +756,21 @@ fun LibraryRow(
                     onDismissRequest = { menuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Open") },
+                        text = { Text(stringResource(R.string.history_action_open)) },
                         onClick = {
                             menuExpanded = false
                             onMenuOpen()
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Edit") },
+                        text = { Text(stringResource(R.string.history_action_edit)) },
                         onClick = {
                             menuExpanded = false
                             onMenuEdit()
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("View Settings") },
+                        text = { Text(stringResource(R.string.history_action_view_settings)) },
                         onClick = {
                             menuExpanded = false
                             onMenuViewSettings()
@@ -787,7 +806,7 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
         } else {
             Icon(
                 Icons.Default.PlayCircle,
-                contentDescription = "Play",
+                contentDescription = stringResource(R.string.history_play_cd),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -849,12 +868,12 @@ private fun LibraryEmptyState(
             }
             Spacer(modifier = Modifier.height(18.dp))
             Text(
-                "No Recordings Yet",
+                stringResource(R.string.history_empty_title),
                 style = MaterialTheme.typography.headlineSmall
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Your merged sessions will appear here once you complete a recording.",
+                stringResource(R.string.history_empty_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -862,7 +881,7 @@ private fun LibraryEmptyState(
             Button(onClick = onStartRecording) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
-                Text("Start Recording")
+                Text(stringResource(R.string.history_empty_start_recording))
             }
         }
     }

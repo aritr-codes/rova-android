@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.recovery
 
+import com.aritr.rova.R
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
@@ -9,6 +10,7 @@ import com.aritr.rova.service.recovery.Anomaly
 import com.aritr.rova.service.recovery.DiscardEligibility
 import com.aritr.rova.service.recovery.SessionClassification
 import com.aritr.rova.service.recovery.TerminalAction
+import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -288,9 +290,9 @@ class RecoveryUiStateMapperTest {
         assertEquals("s-user", card.sessionId)
         assertEquals(RecoveryCardKind.USER_STOPPED, card.kind)
         assertFalse(card.showVendorHelpSlot)
-        assertEquals("Session stopped", card.title)
+        assertEquals(R.string.recovery_title_user_stopped, card.titleRes)
         // Slice 13C — explicit destructive label.
-        assertEquals("Discard recording", card.discardLabel)
+        assertEquals(R.string.recovery_discard_label, card.discardLabelRes)
     }
 
     @Test
@@ -307,7 +309,7 @@ class RecoveryUiStateMapperTest {
         val card = ui.cards.single()
         assertEquals(RecoveryCardKind.KILLED_BY_SYSTEM, card.kind)
         assertTrue(card.showVendorHelpSlot)
-        assertEquals("Recording stopped by your device", card.title)
+        assertEquals(R.string.recovery_title_killed_by_system, card.titleRes)
     }
 
     @Test
@@ -324,7 +326,7 @@ class RecoveryUiStateMapperTest {
         val card = ui.cards.single()
         assertEquals(RecoveryCardKind.KILLED_FORCE_STOP, card.kind)
         assertFalse(card.showVendorHelpSlot)
-        assertEquals("Recording was force-stopped", card.title)
+        assertEquals(R.string.recovery_title_force_stopped, card.titleRes)
     }
 
     // ─── input shape ──────────────────────────────────────────────
@@ -484,7 +486,10 @@ class RecoveryUiStateMapperTest {
         )
         val card = ui.cards.single()
         assertEquals(1, card.survivingArtifacts.size)
-        assertEquals("Recovered 3 segment(s) from disk", card.survivingArtifacts.single())
+        assertEquals(
+            UiText.StrArgs(R.string.recovery_artifact_recovered_segments, listOf(3)),
+            card.survivingArtifacts.single(),
+        )
     }
 
     @Test
@@ -508,75 +513,68 @@ class RecoveryUiStateMapperTest {
         )
         val summaries = ui.cards.single().survivingArtifacts
         assertEquals(7, summaries.size)
-        assertTrue(summaries.any { it.contains("Missing segment(s) at indices [2, 3]") })
-        assertTrue(summaries.any { it.contains("Invalid segment(s) at indices [4]") })
-        assertTrue(summaries.any { it.contains("Orphan segment(s) at indices [7]") })
-        assertTrue(summaries.any { it.contains("1 unreadable orphan file(s)") })
-        assertTrue(summaries.any { it.contains("Duplicate segment(s) at indices [1]") })
-        assertTrue(summaries.any { it.contains("2 unknown file(s) in session dir") })
-        assertTrue(summaries.any { it.contains("1 malformed manifest record(s)") })
+        // B3 i18n task 8 — assertions pin the resource id + args (index lists
+        // pass through as the List.toString() %s arg, counts as the %d arg),
+        // same cases as the pre-i18n string-substring checks.
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_missing_segments, listOf("[2, 3]"))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_invalid_segments, listOf("[4]"))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_orphan_segments, listOf("[7]"))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_invalid_orphans, listOf(1))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_duplicate_segments, listOf("[1]"))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_unknown_files, listOf(2))))
+        assertTrue(summaries.contains(UiText.StrArgs(R.string.recovery_artifact_malformed_records, listOf(1))))
     }
 
     @Test
     fun `card body matches kind for every renderable terminator`() {
-        // Slice 13C — body copy now states three things in order:
-        // cause (per kind), status ("recovered segments stay on your
-        // device"), and consequence ("This action is permanent").
-        // The fragments below pin the cause sentence per kind; the
-        // status and consequence are pinned in dedicated tests below.
-        for ((t, expectedFragment) in listOf(
-            Terminated.USER_STOPPED to "Your last session ended before the segments could merge",
-            Terminated.KILLED_BY_SYSTEM to "Your device's battery management",
-            Terminated.KILLED_FORCE_STOP to "The app was force-stopped"
+        // Slice 13C — body copy states cause (per kind), status, and
+        // consequence. B3 i18n task 8: the body is now an @StringRes id
+        // resolved at the composable; the actual prose ("stay on your
+        // device", "permanent", the per-kind cause sentence) lives in
+        // strings.xml verbatim. This test pins the id→kind mapping; the
+        // copy contents are covered by the resource file itself.
+        for ((t, expectedBodyRes) in listOf(
+            Terminated.USER_STOPPED to R.string.recovery_body_user_stopped,
+            Terminated.KILLED_BY_SYSTEM to R.string.recovery_body_killed_by_system,
+            Terminated.KILLED_FORCE_STOP to R.string.recovery_body_force_stopped
         )) {
             val ui = RecoveryUiStateMapper.map(
                 listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
             )
             val card = ui.cards.single()
             assertNotNull("card for $t", card)
-            assertTrue("body for $t contains '$expectedFragment'", card.body.contains(expectedFragment))
-            assertTrue("body for $t mentions Discard", card.body.contains("Discard"))
+            assertEquals("bodyRes for $t", expectedBodyRes, card.bodyRes)
+        }
+    }
+
+    // ─── Slice 13C destructive-action safety copy (B3 i18n task 8) ──
+    // The body prose now lives in strings.xml, so the JVM can't read it
+    // off RecoveryCardState. These two guard the *content* contract at
+    // the resource layer where it moved: an intentional wording change
+    // to the recovery bodies must update these (and pass review). They
+    // replace the pre-i18n `body.contains(...)` asserts so the safety
+    // wording can never silently vanish. Reviewer + codex (B3 review)
+    // called the comment-only "verified once at the resource layer"
+    // precedent insufficient for a destructive-action phrase.
+
+    @Test
+    fun `every renderable body string promises segments stay until discarded`() {
+        for (name in RECOVERY_BODY_RES_NAMES) {
+            val value = stringResourceValue(name)
+            assertTrue(
+                "$name must reassure that recovered segments stay until discard, was: $value",
+                value.contains("stay on your device"),
+            )
         }
     }
 
     @Test
-    fun `every renderable body explains that recovered segments stay until discarded`() {
-        // Slice 13C — beta testers asked what happens to recovered
-        // files when they don't tap Discard. The body now says it
-        // explicitly so the question doesn't have to surface.
-        for (t in listOf(
-            Terminated.USER_STOPPED,
-            Terminated.KILLED_BY_SYSTEM,
-            Terminated.KILLED_FORCE_STOP
-        )) {
-            val ui = RecoveryUiStateMapper.map(
-                listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
-            )
-            val body = ui.cards.single().body
+    fun `every renderable body string warns the discard action is permanent`() {
+        for (name in RECOVERY_BODY_RES_NAMES) {
+            val value = stringResourceValue(name)
             assertTrue(
-                "body for $t should describe segments staying until discard, was: $body",
-                body.contains("stay on your device")
-            )
-        }
-    }
-
-    @Test
-    fun `every renderable body warns the discard action is permanent`() {
-        // Slice 13C — destructive cue. Users should not tap Discard
-        // recording without knowing the segments cannot be recovered
-        // afterward; the body must call that out in plain words.
-        for (t in listOf(
-            Terminated.USER_STOPPED,
-            Terminated.KILLED_BY_SYSTEM,
-            Terminated.KILLED_FORCE_STOP
-        )) {
-            val ui = RecoveryUiStateMapper.map(
-                listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
-            )
-            val body = ui.cards.single().body
-            assertTrue(
-                "body for $t should mark Discard as permanent, was: $body",
-                body.contains("permanent")
+                "$name must mark Discard as permanent, was: $value",
+                value.contains("This action is permanent."),
             )
         }
     }
@@ -596,8 +594,8 @@ class RecoveryUiStateMapperTest {
             )
         )
         val card = state.cards.single()
-        assertEquals("Merge segments", card.mergeLabel)
-        assertEquals("Keep as raw clips", card.keepRawLabel)
+        assertEquals(R.string.recovery_merge_label, card.mergeLabelRes)
+        assertEquals(R.string.recovery_keep_raw_label, card.keepRawLabelRes)
         assertNull(card.mergeInProgress)
         assertNull(card.mergeFailedReason)
     }
@@ -615,8 +613,8 @@ class RecoveryUiStateMapperTest {
             )
         )
         val card = state.cards.single()
-        assertNull(card.mergeLabel)
-        assertNull(card.keepRawLabel)
+        assertNull(card.mergeLabelRes)
+        assertNull(card.keepRawLabelRes)
     }
 
     // ─── Phase 4.3 — MULTI_SEGMENT_KEPT hide rule ─────────────────
@@ -636,5 +634,37 @@ class RecoveryUiStateMapperTest {
             )
         )
         assertEquals("MULTI_SEGMENT_KEPT must not surface a card", RecoveryUiState.Empty, ui)
+    }
+
+    // ─── resource-content helpers (B3 i18n task 8) ────────────────
+
+    private fun stringResourceValue(name: String): String {
+        // Gradle runs unit tests with the working dir at the module root
+        // (`app/`); tolerate the repo root too so the test survives a
+        // different launcher. Read the raw XML and undo the escapes Android
+        // requires (`\'`, `&amp;`, `&lt;`, `&gt;`) so asserts see plain copy.
+        val candidates = listOf(
+            java.io.File("src/main/res/values/strings.xml"),
+            java.io.File("app/src/main/res/values/strings.xml"),
+        )
+        val xml = candidates.firstOrNull { it.exists() }
+            ?: error("strings.xml not found in ${candidates.map { it.absolutePath }}")
+        val match = Regex("<string name=\"$name\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
+            .find(xml.readText())
+            ?: error("string resource '$name' not found in ${xml.absolutePath}")
+        return match.groupValues[1]
+            .replace("\\'", "'")
+            .replace("\\\"", "\"")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+    }
+
+    private companion object {
+        val RECOVERY_BODY_RES_NAMES = listOf(
+            "recovery_body_user_stopped",
+            "recovery_body_killed_by_system",
+            "recovery_body_force_stopped",
+        )
     }
 }

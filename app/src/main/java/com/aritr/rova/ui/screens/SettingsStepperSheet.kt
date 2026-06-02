@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.ui.components.focusHighlight
 
 /**
@@ -80,7 +82,7 @@ fun SettingsStepperSheet(
                 StepGlyphButton(
                     glyph = "−",
                     enabled = !atMin,
-                    contentDescription = "Decrease $title",
+                    contentDescription = stringResource(R.string.settings_stepper_decrease_cd, title),
                     onClick = { onStep(-1) },
                 )
                 Text(
@@ -97,7 +99,7 @@ fun SettingsStepperSheet(
                 StepGlyphButton(
                     glyph = "+",
                     enabled = !atMax,
-                    contentDescription = "Increase $title",
+                    contentDescription = stringResource(R.string.settings_stepper_increase_cd, title),
                     onClick = { onStep(+1) },
                 )
             }

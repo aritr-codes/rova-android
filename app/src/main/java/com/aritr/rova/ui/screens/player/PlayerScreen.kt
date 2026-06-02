@@ -39,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -49,9 +51,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.PlayerView
+import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.screens.HistoryRowFormatters
+import com.aritr.rova.ui.text.UiText
+import com.aritr.rova.ui.text.resolve
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -94,6 +99,7 @@ fun PlayerScreen(
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val editorPlaceholderMessage = stringResource(R.string.player_editor_coming_soon)
 
     // Audit F#1 — pause ExoPlayer when the host activity goes to the
     // background. Without this, audio keeps decoding from a detached
@@ -138,7 +144,7 @@ fun PlayerScreen(
                     onSeekRelative = viewModel::seekRelative,
                     onTrimOrEditPlaceholder = {
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar(EDITOR_PLACEHOLDER_MESSAGE)
+                            snackbarHostState.showSnackbar(editorPlaceholderMessage)
                         }
                     },
                     bindPlayerView = { playerView ->
@@ -154,7 +160,7 @@ fun PlayerScreen(
 private fun PlayerLoading() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "Loading…",
+            text = stringResource(R.string.player_loading),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.7f)
         )
@@ -162,7 +168,7 @@ private fun PlayerLoading() {
 }
 
 @Composable
-private fun PlayerUnavailable(reason: String, onBack: () -> Unit) {
+private fun PlayerUnavailable(reason: UiText, onBack: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -171,13 +177,13 @@ private fun PlayerUnavailable(reason: String, onBack: () -> Unit) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = reason,
+                text = reason.resolve(),
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White.copy(alpha = 0.85f)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = onBack) {
-                Text("Back")
+                Text(stringResource(R.string.player_back))
             }
         }
     }
@@ -193,6 +199,7 @@ private fun PlayerReady(
     onTrimOrEditPlaceholder: () -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
+    val playCd = stringResource(R.string.player_play_cd)
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
         // detach; the DisposableEffect releases the surface reference
@@ -244,7 +251,7 @@ private fun PlayerReady(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.player_back_cd),
                         tint = Color.White.copy(alpha = 0.85f)
                     )
                 }
@@ -255,18 +262,24 @@ private fun PlayerReady(
                         style = MaterialTheme.typography.titleSmall,
                         color = Color.White.copy(alpha = 0.88f)
                     )
+                    val topSubTotalMs = effectiveTotalMs(
+                        totalClips = state.totalClips,
+                        // Audit F#4 — manifest-derived sum is the
+                        // authoritative total. ExoPlayer-reported
+                        // duration is only consulted when the
+                        // manifest sum is 0 (defensive — segment
+                        // durations populate at finalize time, so
+                        // this fallback should never fire).
+                        authoritativeTotalMs = state.totalDurationFromSegmentsMs,
+                        playerReportedTotalMs = progress.durationMs,
+                        fallbackPerClipMs = state.perClipDurationMs
+                    )
                     Text(
-                        text = formatTopSub(
-                            totalClips = state.totalClips,
-                            // Audit F#4 — manifest-derived sum is the
-                            // authoritative total. ExoPlayer-reported
-                            // duration is only consulted when the
-                            // manifest sum is 0 (defensive — segment
-                            // durations populate at finalize time, so
-                            // this fallback should never fire).
-                            authoritativeTotalMs = state.totalDurationFromSegmentsMs,
-                            playerReportedTotalMs = progress.durationMs,
-                            fallbackPerClipMs = state.perClipDurationMs
+                        text = pluralStringResource(
+                            R.plurals.player_top_sub,
+                            state.totalClips,
+                            state.totalClips,
+                            formatMmSs(topSubTotalMs)
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         // WCAG 2.2 AA SC 1.4.3 (ADR-0020, PLR-01): 0.45α was
@@ -293,7 +306,7 @@ private fun PlayerReady(
                     onClick = onTogglePlay,
                     modifier = Modifier
                         .size(64.dp)
-                        .semantics { contentDescription = "Play" }
+                        .semantics { contentDescription = playCd }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -359,12 +372,20 @@ private fun InfoRow(state: PlayerUiState.Ready, progress: PlaybackProgress) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "${formatMmSs(progress.positionMs)} / $perClipText per clip",
+            text = stringResource(
+                R.string.player_position_per_clip,
+                formatMmSs(progress.positionMs),
+                perClipText
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.45f)
         )
         Text(
-            text = "Clip ${math.currentClipIndex} of ${math.totalClips}",
+            text = stringResource(
+                R.string.player_clip_n_of_m,
+                math.currentClipIndex,
+                math.totalClips
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.72f)
         )
@@ -380,6 +401,11 @@ private fun ControlsRow(
     onTrim: () -> Unit,
     onEdit: () -> Unit
 ) {
+    val playPauseCd = if (isPlaying) {
+        stringResource(R.string.player_pause_cd)
+    } else {
+        stringResource(R.string.player_play_cd)
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -388,14 +414,14 @@ private fun ControlsRow(
         IconButton(onClick = onTrim) {
             Icon(
                 imageVector = Icons.Default.ContentCut,
-                contentDescription = "Trim (coming soon)",
+                contentDescription = stringResource(R.string.player_trim_cd),
                 tint = Color.White.copy(alpha = 0.6f)
             )
         }
         IconButton(onClick = onSeekBack) {
             Icon(
                 imageVector = Icons.Default.Replay10,
-                contentDescription = "Rewind 10 seconds",
+                contentDescription = stringResource(R.string.player_rewind_cd),
                 tint = Color.White.copy(alpha = 0.85f)
             )
         }
@@ -405,7 +431,7 @@ private fun ControlsRow(
             onClick = onTogglePlay,
             modifier = Modifier
                 .size(48.dp)
-                .semantics { contentDescription = if (isPlaying) "Pause" else "Play" }
+                .semantics { contentDescription = playPauseCd }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -418,14 +444,14 @@ private fun ControlsRow(
         IconButton(onClick = onSeekForward) {
             Icon(
                 imageVector = Icons.Default.Forward10,
-                contentDescription = "Forward 10 seconds",
+                contentDescription = stringResource(R.string.player_forward_cd),
                 tint = Color.White.copy(alpha = 0.85f)
             )
         }
         IconButton(onClick = onEdit) {
             Icon(
                 imageVector = Icons.Default.Edit,
-                contentDescription = "Edit (coming soon)",
+                contentDescription = stringResource(R.string.player_edit_cd),
                 tint = Color.White.copy(alpha = 0.6f)
             )
         }
@@ -447,20 +473,15 @@ private fun formatPerClip(perClipDurationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun formatTopSub(
+private fun effectiveTotalMs(
     totalClips: Int,
     authoritativeTotalMs: Long,
     playerReportedTotalMs: Long,
     fallbackPerClipMs: Long
-): String {
-    val effectiveTotal = when {
-        authoritativeTotalMs > 0L -> authoritativeTotalMs
-        playerReportedTotalMs > 0L -> playerReportedTotalMs
-        else -> fallbackPerClipMs * totalClips.coerceAtLeast(1)
-    }
-    val countWord = if (totalClips == 1) "clip" else "clips"
-    return "$totalClips $countWord · ${formatMmSs(effectiveTotal)} total"
+): Long = when {
+    authoritativeTotalMs > 0L -> authoritativeTotalMs
+    playerReportedTotalMs > 0L -> playerReportedTotalMs
+    else -> fallbackPerClipMs * totalClips.coerceAtLeast(1)
 }
 
 private const val SEEK_DELTA_MS: Long = 10_000L
-private const val EDITOR_PLACEHOLDER_MESSAGE = "Editor coming in a future release"

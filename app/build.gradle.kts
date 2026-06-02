@@ -1574,6 +1574,78 @@ val checkWakeLockZeroGapRefresh = tasks.register("checkWakeLockZeroGapRefresh") 
     }
 }
 
+// B3 i18n externalization (ADR-0022 §No Hardcoded UI Strings):
+// User-facing copy must live in `res/values/strings.xml` and be read via
+// `stringResource(...)` / `getString(...)`, never inlined as a Kotlin string
+// literal at a Compose/notification call site. This static gate prevents NEW
+// hardcoded literals from regressing the externalization done in Tasks 1-10b.
+//
+// Flagged patterns (a bare string literal as visible copy on a single line):
+//   * `Text("...")` / `Text(text = "...")`  — Compose visible text first arg
+//   * `contentDescription = "..."`           — accessibility copy
+// Resource calls (`Text(stringResource(...))`, `contentDescription =
+// stringResource(...)`, `getString(...)`) are naturally excluded because the
+// next non-space token after `Text(` / `text =` / `contentDescription =` is
+// `(` / an identifier, not a `"`.
+//
+// Opt-out: any line containing the literal `i18n-opt-out` is skipped. This is
+// the sanctioned hatch for genuinely non-user-facing literals and
+// @Preview/preview-only sample data; the convention is to spell a reason,
+// e.g. `// i18n-opt-out: preview-only sample data`.
+//
+// Pragmatic-regex scope (mirrors the other check* tasks): single-line call
+// sites only. A literal that lives on a continuation line below `Text(` /
+// `text =` is a known blind spot, accepted because the goal is catching the
+// common copy-paste regression, not proving total absence.
+val checkNoHardcodedUiStrings = tasks.register("checkNoHardcodedUiStrings") {
+    group = "verification"
+    description = "Forbid hardcoded user-facing string literals at Text(/contentDescription call sites — externalize to res/values/strings.xml (ADR-0022 §No Hardcoded UI Strings)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkNoHardcodedUiStrings: Rova source dir missing: $srcDir")
+        }
+        // `Text("` or `Text(text = "` — require `"` as the next non-space token
+        // so `Text(stringResource(...))` / `Text(text = getString(...))` don't match.
+        val textLiteral = Regex("""(^|[^A-Za-z0-9_])Text\(\s*(text\s*=\s*)?"""")
+        // `contentDescription = "` (with or without spaces around `=`).
+        val contentDescLiteral = Regex("""contentDescription\s*=\s*"""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        if (line.contains("i18n-opt-out")) return@filter false
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else textLiteral.containsMatchIn(line) ||
+                            contentDescLiteral.containsMatchIn(line)
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "Hardcoded user-facing string literal(s) found at Compose " +
+                    "`Text(`/`contentDescription =` call sites. User-facing copy " +
+                    "must live in `res/values/strings.xml` and be read via " +
+                    "`stringResource(...)` / `getString(...)` (ADR-0022 §No " +
+                    "Hardcoded UI Strings). For a genuinely non-user-facing " +
+                    "literal or @Preview-only sample data, add a " +
+                    "`// i18n-opt-out: <reason>` marker on the line to skip it. " +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1602,6 +1674,7 @@ afterEvaluate {
         dependsOn(checkWakeLockBoundedAcquire)
         dependsOn(checkWakeLockHeldRefresh)
         dependsOn(checkWakeLockZeroGapRefresh)
+        dependsOn(checkNoHardcodedUiStrings)
     }
 }
 

@@ -5,8 +5,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.data.QualityPresets
 
 /**
@@ -25,13 +27,13 @@ fun QualityOptionSelector(
 ) {
     // Pass the base description ("Quality: FHD") only — QuickSetChipRow
     // appends the ", selected" / ", not selected" suffix itself. Pre-
-    // formatting with UiCopy.qualityChipDescription would double the
-    // suffix and emit "Quality: FHD, selected, selected" via TalkBack.
+    // formatting with the full state suffix here would double it and
+    // emit "Quality: FHD, selected, selected" via TalkBack.
     val options = QualityPresets.PICKER_ORDER.map { quality ->
         QuickSetOption(
             value = quality,
             label = quality,
-            contentDescription = UiCopy.qualityChipBaseDescription(quality)
+            contentDescription = stringResource(R.string.record_quality_chip_base_cd, quality)
         )
     }
     QuickSetChipRow(
