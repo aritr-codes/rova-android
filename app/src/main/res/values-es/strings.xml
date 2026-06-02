@@ -1,0 +1,680 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rova</string>
+
+    <!-- M4 (2026-05-27) Onboarding redesign — see mockups/new_uiux/08b-onboarding.html.
+         Copy verified at Flesch-Kincaid grade 5-6 (NN/g target for mainstream
+         non-technical users). Ban list: "grant", "permission" (the system word),
+         "background", "foreground", "schedule" (the system word), "drift",
+         "session", "loop" (audio collision), all-caps Android constants. -->
+    <string name="onboarding_skip">Omitir</string>
+    <string name="onboarding_next">Siguiente</string>
+    <string name="onboarding_continue">Continuar</string>
+
+    <string name="onboarding_walkthrough_1_title">Graba según una programación</string>
+    <string name="onboarding_walkthrough_1_body">Elige cuánto dura cada clip, la pausa entre ellos y cuántos grabar.</string>
+
+    <string name="onboarding_walkthrough_2_title">Un solo vídeo al final</string>
+    <string name="onboarding_walkthrough_2_body">Cuando termina la grabación, tus clips se combinan en un solo vídeo, listo para compartir.</string>
+
+    <string name="onboarding_camera_title">Cámara</string>
+    <string name="onboarding_camera_body">Rova usa tu cámara para grabar vídeo. Sin ella, la app no puede funcionar.</string>
+    <string name="onboarding_camera_allow">Permitir cámara</string>
+
+    <!-- 2026-05-31 — up-front permission cards (mic + notifications) -->
+    <string name="onboarding_perm_step_label">Paso %1$d de %2$d</string>
+    <string name="onboarding_perm_required">Obligatorio</string>
+    <string name="onboarding_perm_optional">Opcional</string>
+    <string name="onboarding_perm_recommended">Recomendado</string>
+    <string name="onboarding_perm_skip">Omitir por ahora</string>
+
+    <string name="onboarding_mic_title">Micrófono</string>
+    <string name="onboarding_mic_body">Graba el sonido junto con tu vídeo. Si lo omites, las grabaciones serán solo de vídeo, sin audio.</string>
+    <string name="onboarding_mic_allow">Permitir micrófono</string>
+    <string name="onboarding_mic_callout">Puedes cambiar esto cuando quieras en Ajustes.</string>
+    <string name="onboarding_illustration_mic">Micrófono</string>
+
+    <string name="onboarding_notifs_title">Mantén el control</string>
+    <string name="onboarding_notifs_body">Una notificación en directo te permite detener o revisar una grabación sin abrir la app, incluso con la pantalla apagada.</string>
+    <string name="onboarding_notifs_allow">Permitir notificaciones</string>
+    <string name="onboarding_illustration_notifications">Campana de notificación</string>
+
+    <!-- contentDescription strings for illustrations -->
+    <string name="onboarding_illustration_clock_orbit">Reloj con indicadores de tiempo</string>
+    <string name="onboarding_illustration_clip_merge">Tres clips se combinan en un solo archivo de vídeo</string>
+    <string name="onboarding_illustration_camera">Cámara</string>
+
+    <!-- M5: Notification channel names + descriptions -->
+    <string name="notification_channel_session_name">Grabación en curso</string>
+    <string name="notification_channel_session_desc">Notificación permanente mientras una grabación está activa o combinándose.</string>
+    <string name="notification_channel_complete_name">Grabación completada</string>
+    <string name="notification_channel_complete_desc">Notificación única cuando una grabación está lista en la Biblioteca.</string>
+
+    <!-- M5: Notification action labels -->
+    <string name="notification_action_stop">Detener</string>
+    <string name="notification_action_stop_early">Detener antes</string>
+    <string name="notification_action_open">Abrir</string>
+    <string name="notification_action_view_in_library">Ver en la Biblioteca</string>
+    <string name="notification_action_share">Compartir</string>
+
+    <!-- M5: Notification action contentDescription (TalkBack) -->
+    <string name="notification_action_stop_cd">Detener la grabación</string>
+    <string name="notification_action_stop_early_cd">Detener antes del siguiente clip</string>
+    <string name="notification_action_open_cd">Abrir Rova</string>
+    <string name="notification_action_view_in_library_cd">Ver esta grabación en la Biblioteca</string>
+    <string name="notification_action_share_cd">Compartir esta grabación</string>
+
+    <!-- M5 Phase 2: progress contentDescription -->
+    <string name="notification_progress_cd_determinate">Progreso, %1$d por ciento</string>
+    <string name="notification_progress_cd_indeterminate">En curso</string>
+
+    <!-- B3 i18n task 9: recording-service notification copy (Context scope) -->
+    <string name="notification_title_recording_active">🎥 Grabación de Rova activa</string>
+    <string name="notification_channel_legacy_name">Grabación de Rova en segundo plano</string>
+    <string name="notification_action_stop_legacy">DETENER</string>
+    <string name="notification_recovery_merge_title">Combinando clips recuperados</string>
+    <string name="notification_recovery_merge_percent">Combinando %1$d%%</string>
+    <string name="notification_recovery_merge_session">Grabación %1$s…</string>
+    <string name="notification_initializing">Iniciando grabación en segundo plano...</string>
+    <string name="notification_storage_insufficient">No hay suficiente almacenamiento para grabar. Libera espacio e inténtalo de nuevo.</string>
+    <string name="notification_preparing_camera">Preparando la cámara...</string>
+    <string name="notification_camera_failed">La cámara no pudo iniciarse. Reinicia la grabación.</string>
+    <string name="notification_recording_failed_stopping">La grabación falló. Deteniendo.</string>
+    <string name="notification_segment_saved">Segmento guardado: %1$d KB</string>
+    <string name="notification_empty_segment">La grabación produjo un segmento vacío</string>
+    <string name="notification_recording_failed_unexpected">La grabación falló de forma inesperada</string>
+    <string name="notification_error_insufficient_storage">No hay suficiente espacio de almacenamiento</string>
+    <string name="notification_error_source_inactive">La cámara se desconectó</string>
+    <string name="notification_error_file_size_limit">Se alcanzó el límite de tamaño de archivo</string>
+    <string name="notification_error_no_valid_data">No se capturaron datos de vídeo</string>
+    <string name="notification_error_garbage_collected">La grabación se interrumpió</string>
+    <string name="notification_error_generic">La grabación falló (código %1$d)</string>
+    <string name="notification_stopped_permission_revoked">Detenida — se revocó un permiso necesario. Vuelve a concederlo en Ajustes.</string>
+    <string name="notification_stopped_low_storage">Detenida — poco almacenamiento en el dispositivo. Libera espacio.</string>
+    <string name="notification_stopped_thermal">Detenida — el dispositivo se sobrecalentó. Deja que se enfríe.</string>
+    <string name="notification_stopping">Deteniendo la grabación…</string>
+    <string name="notification_stopped_state_save_failed">Detenida — no se pudo guardar el estado de la grabación. Se recuperará al próximo inicio.</string>
+    <string name="notification_stopped_recovery_offered">Grabación detenida — al reabrir Rova se ofrecerá finalizarla</string>
+    <string name="notification_state_corrupted">Estado de la grabación dañado: %1$s</string>
+    <string name="notification_merge_failed">Falló la combinación</string>
+    <string name="notification_merge_failed_detail">Falló la combinación: %1$s</string>
+    <string name="notification_merge_state_save_failed">La grabación terminó, pero no se pudo guardar el estado — se reconciliará al próximo inicio.</string>
+    <string name="notification_recording_stopped_detail">Grabación detenida: %1$s</string>
+    <string name="notification_unknown_error">error desconocido</string>
+
+    <!-- B3 i18n task 9b: live foreground-notification copy (NotificationCopy.toCopy) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_clip_title_total">Grabando · Clip %1$d de %2$d</string>
+    <!-- %1$d = current clip -->
+    <string name="notification_clip_title">Grabando · Clip %1$d</string>
+    <!-- %1$s = mm:ss remaining -->
+    <string name="notification_clip_body_eta">Quedan %1$s en este clip</string>
+    <string name="notification_clip_body_static">Grabación en curso</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_gap_title_total">Esperando · Clip %1$d de %2$d a continuación</string>
+    <!-- %1$d = next clip number -->
+    <string name="notification_gap_title">Esperando · Clip %1$d a continuación</string>
+    <!-- %1$s = next-in label -->
+    <string name="notification_gap_body">El siguiente clip empieza en %1$s</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_merging_title">Combinando clips · %1$d de %2$d</string>
+    <string name="notification_merging_body">Procesando — espera un momento</string>
+    <string name="notification_complete_title">Combinación completada</string>
+
+    <!-- B3 i18n task 9b: dots-row contentDescription (NotificationDotsRow.toDotsPlan) -->
+    <!-- %1$d = current clip, %2$d = total -->
+    <string name="notification_dots_cd_recording">Clip %1$d de %2$d</string>
+    <!-- %1$d = next clip number, %2$d = total -->
+    <string name="notification_dots_cd_waiting">Esperando, clip %1$d de %2$d a continuación</string>
+    <!-- %1$d = done, %2$d = total -->
+    <string name="notification_dots_cd_merging">Combinando, %1$d de %2$d hechos</string>
+
+    <!-- Record screen / chrome / HUD (B3 i18n task 2) -->
+    <!-- Stepper default contentDescription -->
+    <string name="record_stepper_decrease">Disminuir</string>
+    <string name="record_stepper_increase">Aumentar</string>
+
+    <!-- Quick-set chip row -->
+    <string name="record_quickset_selected_label">✓ %1$s</string>
+    <string name="record_quickset_selected_cd">%1$s, seleccionado</string>
+    <string name="record_quickset_not_selected_cd">%1$s, no seleccionado</string>
+    <!-- Quality chip base TalkBack description; QuickSetChipRow appends the
+         ", selected"/", not selected" state suffix (B3 i18n task 10). -->
+    <string name="record_quality_chip_base_cd">Calidad: %1$s</string>
+
+    <!-- Background-recording banner -->
+    <string name="record_bg_recording">Grabando en segundo plano</string>
+    <string name="record_bg_next_recording">Próxima grabación en %1$s</string>
+    <string name="record_bg_stop">DETENER</string>
+
+    <!-- Camera controls (contentDescription) -->
+    <string name="record_flash_cd">Flash</string>
+    <string name="record_flip_camera_cd">Cambiar de cámara</string>
+
+    <!-- Idle settings card -->
+    <string name="record_swipe_to_edit">DESLIZA PARA EDITAR</string>
+    <string name="record_cell_clip">Clip</string>
+    <string name="record_cell_repeats">Repeticiones</string>
+    <string name="record_cell_wait">Espera</string>
+    <string name="record_cell_quality">Calidad</string>
+    <string name="record_cell_mode">MODO</string>
+    <string name="record_edit_session_settings_cd">Editar ajustes de la grabación</string>
+    <string name="record_mode_pl_label">V + H</string>
+
+    <!-- Bottom nav -->
+    <string name="record_nav_library">Biblioteca</string>
+    <string name="record_nav_settings">Ajustes</string>
+
+    <!-- FAB semantics -->
+    <string name="record_fab_start_cd">Iniciar grabación</string>
+    <string name="record_fab_stop_cd">Detener grabación</string>
+    <string name="record_fab_start_unavailable_cd">Iniciar grabación (no disponible)</string>
+
+    <!-- Recovery chip -->
+    <string name="record_recovery_review">Revisar</string>
+
+    <!-- Active HUD -->
+    <string name="record_loops_done_caption">CICLOS HECHOS</string>
+    <string name="record_status_detail_prefix">· %1$s</string>
+
+    <!-- Active-HUD loop pill (B3 i18n task 2) -->
+    <string name="record_hud_loops_done_indefinite">%1$d ciclos hechos</string>
+    <string name="record_hud_loops_done">%1$d/%2$d ciclos hechos</string>
+
+    <!-- Active-HUD status pill copy + time captions (B3 i18n task 2) -->
+    <string name="record_hud_status_recording">Grabando</string>
+    <string name="record_hud_status_on_break">En pausa</string>
+    <string name="record_hud_status_merging">Combinando…</string>
+    <string name="record_hud_time_left">· quedan %1$s</string>
+    <string name="record_hud_time_next_in">· siguiente en %1$s</string>
+    <string name="record_hud_time_percent">· %1$d%%</string>
+
+    <!-- RecordHudFormatters user-facing copy (B3 i18n task 2b) -->
+    <string name="record_hud_loop_position">Ciclo %1$d / %2$d</string>
+    <string name="record_hud_loop_position_continuous">Ciclo %1$d</string>
+    <string name="record_hud_loops_remaining_continuous">Graba hasta que lo detengas</string>
+    <string name="record_hud_loops_remaining_last">Último clip en curso</string>
+    <string name="record_hud_loops_remaining">Quedan %1$d de %2$d ciclos</string>
+    <string name="record_hud_next_clip_momentary">El siguiente clip empezará enseguida</string>
+    <string name="record_hud_next_clip_seconds">El siguiente clip durará %1$d s</string>
+    <string name="record_hud_next_clip_one_minute">El siguiente clip durará 1 min</string>
+    <string name="record_hud_next_clip_minutes">El siguiente clip durará %1$d min</string>
+    <string name="record_hud_recording_meta">%1$s · %2$s</string>
+    <string name="record_hud_flash_auto">Flash automático</string>
+    <string name="record_hud_flash_on">Flash activado</string>
+    <string name="record_hud_flash_off">Flash desactivado</string>
+    <string name="record_hud_elapsed_just_started">La grabación acaba de empezar</string>
+    <string name="record_hud_elapsed_hour_minute">Tiempo transcurrido %1$d hora %2$d minuto</string>
+    <string name="record_hud_elapsed_hour_minutes">Tiempo transcurrido %1$d hora %2$d minutos</string>
+    <string name="record_hud_elapsed_hours_minute">Tiempo transcurrido %1$d horas %2$d minuto</string>
+    <string name="record_hud_elapsed_hours_minutes">Tiempo transcurrido %1$d horas %2$d minutos</string>
+    <string name="record_hud_elapsed_hour">Tiempo transcurrido %1$d hora</string>
+    <string name="record_hud_elapsed_hours">Tiempo transcurrido %1$d horas</string>
+    <string name="record_hud_elapsed_minute">Tiempo transcurrido %1$d minuto</string>
+    <string name="record_hud_elapsed_minutes">Tiempo transcurrido %1$d minutos</string>
+    <string name="record_hud_merge_of">%1$d de %2$d</string>
+    <string name="record_hud_merge_starting">Iniciando combinación…</string>
+    <string name="record_hud_merge_almost">Casi listo…</string>
+    <string name="record_hud_merge_preparing">Preparando la combinación</string>
+    <string name="record_hud_merge_preparing_clips">Preparando para combinar %1$d clips</string>
+    <string name="record_hud_merge_clip_of">Combinando clip %1$d de %2$d</string>
+    <string name="record_hud_session_status_recording_of">Grabando, ciclo %1$d de %2$d.</string>
+    <string name="record_hud_session_status_recording">Grabando, ciclo %1$d.</string>
+    <string name="record_hud_session_status_queued_of">En cola, ciclo %1$d de %2$d.</string>
+    <string name="record_hud_session_status_queued">En cola, ciclo %1$d.</string>
+    <string name="record_hud_merge_complete_summary_one">%1$d clip · guardado en la Biblioteca</string>
+    <string name="record_hud_merge_complete_summary_other">%1$d clips · guardados en la Biblioteca</string>
+
+    <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
+    <string name="record_hud_announce_recording">Grabando.</string>
+    <string name="record_hud_announce_recording_loop">Grabando. Ciclo %1$d.</string>
+    <string name="record_hud_announce_recording_loop_of">Grabando. Ciclo %1$d de %2$d.</string>
+    <string name="record_hud_announce_on_break">En pausa.</string>
+    <string name="record_hud_announce_on_break_loop">En pausa. Ciclo %1$d.</string>
+    <string name="record_hud_announce_on_break_loop_of">En pausa. Ciclo %1$d de %2$d.</string>
+
+    <!-- Status pill copy (idle/active) -->
+    <string name="record_status_recording">Grabando</string>
+    <string name="record_status_on_break">En pausa</string>
+    <string name="record_status_merging">Combinando</string>
+    <string name="record_status_ready">Listo para grabar</string>
+    <string name="record_status_detail_clip_of">%1$d s de %2$d s</string>
+    <string name="record_status_detail_next_in">siguiente en %1$d s</string>
+
+    <!-- Camera-disconnected dialog -->
+    <string name="record_camera_disconnected_title">Cámara desconectada</string>
+    <string name="record_camera_disconnected_body">Se perdió la conexión con la cámara durante la grabación.</string>
+    <string name="record_camera_disconnected_stop">DETENER GRABACIÓN</string>
+
+    <!-- Loading overlay -->
+    <string name="record_initializing_camera">Iniciando la cámara...</string>
+
+    <!-- Start-blocked snackbars -->
+    <string name="record_blocked_app_not_visible">Abre Rova en pantalla antes de empezar. Android bloquea el uso de la cámara desde el segundo plano.</string>
+    <string name="record_blocked_fgs_restricted">No se puede iniciar la grabación — Android requiere que la app esté en primer plano.</string>
+    <string name="record_blocked_unknown">No se pudo iniciar la grabación. Inténtalo de nuevo.</string>
+
+    <!-- Merge failure snackbar -->
+    <string name="record_merge_failed">Falló la combinación. Abre la Biblioteca para recuperar.</string>
+
+    <!-- History / Library screen (B3 i18n task 3) -->
+    <string name="history_title">Biblioteca</string>
+    <string name="history_back_cd">Atrás</string>
+
+    <!-- Library row 3-dot menu actions -->
+    <string name="history_action_open">Abrir</string>
+    <string name="history_action_edit">Editar</string>
+    <string name="history_action_view_settings">Ver ajustes</string>
+
+    <!-- Library row thumbnail (contentDescription) -->
+    <string name="history_play_cd">Reproducir</string>
+
+    <!-- Selection-mode top bar (contentDescription) -->
+    <string name="history_close_selection_cd">Cerrar selección</string>
+    <string name="history_share_cd">Compartir</string>
+    <string name="history_delete_cd">Eliminar</string>
+
+    <!-- Share flow -->
+    <string name="history_share_chooser_title">Compartir vídeos</string>
+    <string name="history_share_not_ready">La grabación aún no está lista para compartir</string>
+    <string name="history_share_no_app">No hay ninguna app disponible para compartir vídeos</string>
+
+    <!-- Snackbars -->
+    <string name="history_settings_unavailable">Ajustes no disponibles para esta grabación</string>
+    <string name="history_editor_coming_soon">El editor llegará en una próxima versión</string>
+
+    <!-- Recovery card OEM auto-start help -->
+    <string name="history_recovery_open_device_settings">Abrir ajustes del dispositivo</string>
+
+    <!-- Empty state -->
+    <string name="history_empty_title">Aún no hay grabaciones</string>
+    <string name="history_empty_body">Tus grabaciones combinadas aparecerán aquí cuando completes una grabación.</string>
+    <string name="history_empty_start_recording">Iniciar grabación</string>
+
+    <!-- View Settings dialog (LibrarySessionConfigDialog) -->
+    <string name="history_config_title">Ajustes de grabación</string>
+    <string name="history_config_clip_length">Duración del clip</string>
+    <string name="history_config_repeats">Repeticiones</string>
+    <string name="history_config_wait">Espera</string>
+    <string name="history_config_quality">Calidad</string>
+    <string name="history_config_close">Cerrar</string>
+
+    <!-- Player screen (B3 i18n task 5) -->
+    <string name="player_loading">Cargando…</string>
+    <string name="player_back">Atrás</string>
+    <string name="player_back_cd">Atrás</string>
+    <string name="player_play_cd">Reproducir</string>
+    <string name="player_pause_cd">Pausar</string>
+    <string name="player_trim_cd">Recortar (próximamente)</string>
+    <string name="player_rewind_cd">Retroceder 10 segundos</string>
+    <string name="player_forward_cd">Avanzar 10 segundos</string>
+    <string name="player_edit_cd">Editar (próximamente)</string>
+    <string name="player_editor_coming_soon">El editor llegará en una próxima versión</string>
+    <!-- Info row: %1$s = current position MM:SS, %2$s = per-clip length MM:SS -->
+    <string name="player_position_per_clip">%1$s / %2$s por clip</string>
+    <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
+    <string name="player_clip_n_of_m">Clip %1$d de %2$d</string>
+    <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
+    <string name="player_unavailable_not_available">Grabación no disponible</string>
+    <string name="player_unavailable_not_finished">Grabación sin terminar</string>
+    <string name="player_unavailable_file_not_found">No se encontró el archivo de la grabación</string>
+    <string name="player_unavailable_incomplete">Grabación incompleta</string>
+    <string name="player_unavailable_playback_failed">Falló la reproducción</string>
+    <string name="player_unavailable_init_failed">Falló la inicialización de la reproducción</string>
+
+    <!-- Settings screen + sheets (B3 i18n task 4) -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_back_cd">Atrás</string>
+
+    <!-- Section labels -->
+    <string name="settings_section_appearance">Apariencia</string>
+    <string name="settings_section_recording_defaults">Valores predeterminados de grabación</string>
+    <string name="settings_section_recording_behavior">Comportamiento de grabación</string>
+    <string name="settings_section_alerts">Alertas</string>
+    <string name="settings_section_notifications">Notificaciones</string>
+    <string name="settings_section_storage">Almacenamiento</string>
+    <string name="settings_section_reliability">Fiabilidad</string>
+    <string name="settings_section_about">Acerca de</string>
+
+    <!-- Appearance row + theme picker -->
+    <string name="settings_theme_label">Tema</string>
+    <string name="settings_theme_supporting">Claro, oscuro o según el ajuste de tu sistema.</string>
+    <string name="settings_theme_mode_system">Seguir el sistema</string>
+    <string name="settings_theme_mode_dark">Oscuro</string>
+    <string name="settings_theme_mode_light">Claro</string>
+    <string name="settings_language_label">Idioma</string>
+    <string name="settings_language_supporting">Elige el idioma de la app</string>
+    <string name="settings_language_system">Predeterminado del sistema</string>
+
+    <!-- Recording-defaults rows -->
+    <string name="settings_default_resolution_label">Resolución predeterminada</string>
+    <string name="settings_default_resolution_supporting">Calidad con la que empiezan las grabaciones nuevas.</string>
+    <string name="settings_clip_duration_label">Duración del clip</string>
+    <string name="settings_clip_duration_supporting">Cuánto graba cada clip.</string>
+    <string name="settings_interval_label">Intervalo entre clips</string>
+    <string name="settings_interval_supporting">Tiempo de espera antes del siguiente clip.</string>
+    <string name="settings_loops_label">Número de ciclos</string>
+    <string name="settings_loops_supporting">Cuántos clips antes de detenerse.</string>
+
+    <!-- Recording-behavior rows -->
+    <string name="settings_keep_screen_on_label">Mantener la pantalla encendida</string>
+    <string name="settings_keep_screen_on_supporting">Evita que la pantalla se atenúe mientras encuadras una toma.</string>
+    <string name="settings_camera_guides_label">Guías de cámara</string>
+    <string name="settings_camera_guides_supporting">Muestra la cuadrícula de encuadre y las marcas de enfoque sobre el visor.</string>
+
+    <!-- Alerts rows -->
+    <string name="settings_sound_cues_label">Señales de sonido</string>
+    <string name="settings_sound_cues_supporting">Reproduce breves pitidos para que oigas cuándo empieza y se detiene la captura.</string>
+    <string name="settings_vibrate_alerts_label">Alertas con vibración</string>
+    <string name="settings_vibrate_alerts_supporting">Usa una breve vibración para confirmar los inicios y las paradas.</string>
+
+    <!-- Notifications row -->
+    <string name="settings_system_notifications_label">Ajustes de notificaciones del sistema</string>
+    <string name="settings_system_notifications_supporting">Gestiona los canales de notificación de Rova en los ajustes de Android.</string>
+    <string name="settings_system_notifications_unavailable">Ajustes de notificaciones no disponibles en este dispositivo</string>
+
+    <!-- Storage rows -->
+    <string name="settings_auto_delete_label">Eliminar grabaciones antiguas automáticamente</string>
+    <string name="settings_auto_delete_supporting_on">Conservando las últimas %1$d grabaciones terminadas.</string>
+    <string name="settings_auto_delete_supporting_off">Desactivado. Las grabaciones permanecen hasta que las elimines tú.</string>
+    <string name="settings_export_folder_label">Nombre de la carpeta de exportación</string>
+    <string name="settings_export_folder_supporting">Dónde aparecen los vídeos terminados dentro de tu galería.</string>
+    <string name="settings_export_folder_default">Carpeta predeterminada</string>
+    <string name="settings_clear_cache_label">Borrar caché</string>
+    <string name="settings_clear_cache_supporting">Elimina las miniaturas de vista previa y los archivos temporales.</string>
+    <string name="settings_clear_cache_cleared">Se borraron %1$.1f MB</string>
+    <string name="settings_clear_cache_empty">La caché está vacía</string>
+
+    <!-- Reliability row + battery dialog -->
+    <string name="settings_battery_optimization_label">Optimización de batería</string>
+    <string name="settings_battery_optimization_supporting">Necesaria para que las grabaciones sigan en segundo plano.</string>
+    <string name="settings_battery_exempt">Exenta</string>
+    <string name="settings_battery_not_exempt">No exenta</string>
+    <string name="settings_battery_dialog_title">Optimización de batería</string>
+    <string name="settings_battery_dialog_body_exempt">Rova ya está exenta de la optimización de batería. Las grabaciones seguirán en segundo plano. Abre los ajustes de batería para revisarlo o cambiarlo.</string>
+    <string name="settings_battery_dialog_body_not_exempt">Rova necesita estar exenta de la optimización de batería para que las grabaciones sigan en segundo plano. Sin esto, tu dispositivo podría detener la grabación a mitad de la sesión.</string>
+    <string name="settings_battery_dialog_confirm">Abrir ajustes de batería</string>
+    <string name="settings_battery_dialog_dismiss">Ahora no</string>
+    <string name="settings_battery_settings_unavailable">Ajustes de batería no disponibles en este dispositivo</string>
+
+    <!-- About rows -->
+    <string name="settings_version_label">Versión</string>
+    <string name="settings_privacy_label">Política de privacidad</string>
+    <string name="settings_privacy_supporting">Abre la política en tu navegador.</string>
+    <string name="settings_privacy_no_browser">No hay ningún navegador disponible</string>
+
+    <!-- Export folder dialog -->
+    <string name="settings_export_folder_dialog_title">Nombre de la carpeta de exportación</string>
+    <string name="settings_export_folder_field_label">Nombre de la carpeta</string>
+    <string name="settings_export_folder_preview_default">Los vídeos se guardarán en tu carpeta predeterminada.</string>
+    <string name="settings_export_folder_preview_named">Los vídeos se guardarán en Movies / %1$s</string>
+    <string name="settings_export_folder_save">Guardar</string>
+    <string name="settings_export_folder_cancel">Cancelar</string>
+
+    <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
+    <string name="settings_stepper_decrease_cd">Disminuir %1$s</string>
+    <string name="settings_stepper_increase_cd">Aumentar %1$s</string>
+
+    <!-- Record settings sheet (SettingsSheet) -->
+    <string name="settings_sheet_section_recording_mode">Modo de grabación</string>
+    <string name="settings_sheet_section_settings">Ajustes</string>
+    <string name="settings_sheet_mode_portrait">Vertical</string>
+    <string name="settings_sheet_mode_landscape">Horizontal</string>
+    <string name="settings_sheet_mode_pl">V + H</string>
+    <string name="settings_sheet_clip_duration">Duración del clip</string>
+    <string name="settings_sheet_repeats">Repeticiones</string>
+    <string name="settings_sheet_wait_between">Espera entre clips</string>
+    <string name="settings_sheet_quality">Calidad</string>
+    <string name="settings_sheet_save">Guardar</string>
+    <string name="settings_sheet_reset_snoozes">Restablecer advertencias pospuestas</string>
+
+    <!-- Edit sheet shell button labels (EditSheetShell) -->
+    <string name="settings_edit_sheet_done">Listo</string>
+    <string name="settings_edit_sheet_cancel">Cancelar</string>
+
+    <!-- Fixed/Continuous selector (FixedContinuousSelector) -->
+    <string name="settings_repeats_fixed">Fijo</string>
+    <string name="settings_repeats_fixed_selected">✓ Fijo</string>
+    <string name="settings_repeats_continuous">Continuo</string>
+    <string name="settings_repeats_continuous_selected">✓ Continuo</string>
+    <string name="settings_repeats_fixed_selected_cd">Fijo, seleccionado</string>
+    <string name="settings_repeats_fixed_not_selected_cd">Fijo, no seleccionado</string>
+    <string name="settings_repeats_continuous_selected_cd">Graba hasta que lo detengas, seleccionado</string>
+    <string name="settings_repeats_continuous_not_selected_cd">Graba hasta que lo detengas, no seleccionado</string>
+
+    <!-- WarningCenter sheet / banner / chip copy (B3 i18n task 7) -->
+
+    <!-- Shared action / CTA labels -->
+    <string name="warning_action_not_now">Ahora no</string>
+    <string name="warning_action_ok">Aceptar</string>
+    <string name="warning_action_dont_show_again">No volver a mostrar</string>
+    <string name="warning_action_review_session">Revisar sesión</string>
+    <string name="warning_banner_cta_stop">Detener</string>
+
+    <!-- Severity badges (sheet) -->
+    <string name="warning_severity_hard">Grave · Obligatorio</string>
+    <string name="warning_severity_soft">Leve · Modo degradado</string>
+    <string name="warning_severity_advisory">Informativo · Opcional</string>
+
+    <!-- Severity badges (compact strip / chip) -->
+    <string name="warning_severity_short_hard">GRAVE</string>
+    <string name="warning_severity_short_soft">LEVE</string>
+    <string name="warning_severity_short_advisory">INFORMATIVO</string>
+    <string name="warning_severity_short_escalating">EN AUMENTO</string>
+
+    <!-- Sheet chrome -->
+    <string name="warning_why_this_matters">Por qué es importante</string>
+    <string name="warning_more_actions_cd">Más acciones</string>
+    <string name="warning_more_options_cd">Más opciones</string>
+
+    <!-- CAMERA_PERMISSION_DENIED -->
+    <string name="warning_camera_perm_title">Se requiere acceso a la cámara</string>
+    <string name="warning_camera_perm_body">Rova no puede grabar sin acceso a la cámara. Concede el permiso en los ajustes de la app para continuar.</string>
+    <string name="warning_camera_perm_primary">Abrir ajustes de la app</string>
+
+    <!-- EXACT_ALARM_DENIED -->
+    <string name="warning_exact_alarm_title">Se requiere permiso de alarmas</string>
+    <string name="warning_exact_alarm_body">Rova usa alarmas exactas para cronometrar los segmentos de grabación. Sin ellas, los clips no empezarán ni se detendrán según lo programado.</string>
+    <string name="warning_exact_alarm_primary">Permitir alarmas exactas</string>
+
+    <!-- STORAGE_INSUFFICIENT -->
+    <string name="warning_storage_insufficient_title">No hay suficiente almacenamiento para empezar</string>
+    <string name="warning_storage_insufficient_body">Libera espacio e inténtalo de nuevo.</string>
+    <string name="warning_storage_insufficient_primary">Liberar espacio</string>
+
+    <!-- MICROPHONE_DENIED -->
+    <string name="warning_mic_title">Grabando sin audio</string>
+    <string name="warning_mic_body">Esta sesión grabará solo vídeo. Puedes conceder acceso al micrófono en Ajustes e intentarlo de nuevo.</string>
+    <string name="warning_mic_primary">Conceder acceso al micrófono</string>
+    <string name="warning_mic_secondary">Continuar sin audio</string>
+
+    <!-- NOTIFICATIONS_DENIED -->
+    <string name="warning_notifications_title">Mantente al tanto</string>
+    <string name="warning_notifications_body">Activa las notificaciones para ver cuándo la grabación empieza, se detiene o termina de combinarse, incluso con la pantalla apagada.</string>
+    <string name="warning_notifications_primary">Activar notificaciones</string>
+    <string name="warning_notifications_why">Las notificaciones son la forma en que Rova te avisa de lo que ocurre cuando no estás en la app: grabación iniciada, clip combinado, sesión terminada. Sin ellas, tendrás que abrir la app para revisar el progreso.</string>
+
+    <!-- BATTERY_OPTIMIZATION_ON -->
+    <string name="warning_battery_opt_title">La optimización de batería puede detener la grabación</string>
+    <string name="warning_battery_opt_body">Android puede cerrar Rova en segundo plano. Desactiva la optimización de batería para sesiones largas fiables.</string>
+    <string name="warning_battery_opt_primary">Desactivar</string>
+    <string name="warning_battery_opt_why">El optimizador de batería de Android puede pausar las apps en segundo plano para ahorrar energía. Si Rova se pausa a mitad de una grabación, la sesión podría detenerse antes o saltarse clips. Eximir a Rova mantiene activo el servicio en primer plano durante toda la sesión.</string>
+
+    <!-- POWER_SAVE_MODE -->
+    <string name="warning_power_save_title">El modo de ahorro de energía puede ralentizar la grabación</string>
+    <string name="warning_power_save_body">Desactivar el ahorro de batería le da a Rova toda la CPU/E-S para la sesión.</string>
+    <string name="warning_power_save_primary">Ajustes</string>
+    <string name="warning_power_save_why">El ahorro de batería limita la frecuencia de la CPU y la E/S en segundo plano. Rova podría perder fotogramas o retrasarse en la codificación, lo que puede dañar los límites de los clips en sesiones largas.</string>
+
+    <!-- Thermal sheet (defensive) titles -->
+    <string name="warning_thermal_shutdown_title">El dispositivo se sobrecalienta — grabación detenida</string>
+    <string name="warning_thermal_emergency_title">El dispositivo está críticamente caliente</string>
+    <string name="warning_thermal_critical_title">El dispositivo está muy caliente — la grabación puede detenerse</string>
+    <string name="warning_thermal_severe_title">El dispositivo está caliente — la calidad puede bajar</string>
+    <string name="warning_thermal_moderate_title">El dispositivo se está calentando</string>
+
+    <!-- Battery sheet (defensive) titles -->
+    <string name="warning_battery_critical_title">Batería crítica — la grabación puede detenerse</string>
+    <string name="warning_battery_low_title">Batería baja — considera cargar</string>
+
+    <!-- STORAGE_LOW_MID_REC (defensive sheet arm) -->
+    <string name="warning_storage_low_mid_rec_title">Queda poco almacenamiento</string>
+    <string name="warning_storage_low_mid_rec_body">Libera espacio en este dispositivo.</string>
+
+    <!-- STORAGE_FULL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_storage_full_autostopped_title">Grabación detenida</string>
+    <string name="warning_storage_full_autostopped_body">El almacenamiento se llenó.</string>
+
+    <!-- THERMAL_AUTOSTOPPED (defensive sheet arm) -->
+    <string name="warning_thermal_autostopped_title">Grabación detenida</string>
+    <string name="warning_thermal_autostopped_body">El dispositivo se sobrecalentó.</string>
+
+    <!-- CANT_MERGE -->
+    <string name="warning_cant_merge_title">Aún no se puede combinar</string>
+    <string name="warning_cant_merge_body">Libera espacio y reintenta, o conserva los segmentos sin procesar para más tarde.</string>
+    <string name="warning_cant_merge_primary">Liberar espacio y reintentar</string>
+    <string name="warning_cant_merge_secondary">Guardar solo los segmentos</string>
+    <string name="warning_cant_merge_tertiary">Descartar sesión</string>
+
+    <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
+    <string name="warning_camera_in_use_title">La cámara la está usando otra app</string>
+    <string name="warning_camera_in_use_body">Cierra la otra app de cámara.</string>
+    <string name="warning_camera_disabled_title">Cámara desactivada por política del dispositivo</string>
+
+    <!-- Mid-rec top banner: auto-action description -->
+    <string name="warning_banner_auto_stop_protect">Se detendrá automáticamente para proteger el dispositivo</string>
+
+    <!-- Mid-rec top banner copy -->
+    <string name="warning_banner_thermal_shutdown_title">El dispositivo se sobrecalienta — deteniendo</string>
+    <string name="warning_banner_thermal_shutdown_sub">La grabación se detendrá automáticamente.</string>
+    <string name="warning_banner_thermal_emergency_title">El dispositivo está críticamente caliente</string>
+    <string name="warning_banner_thermal_emergency_sub">Deténla ahora para que se enfríe.</string>
+    <string name="warning_banner_thermal_critical_title">El dispositivo está muy caliente</string>
+    <string name="warning_banner_thermal_critical_sub">La grabación puede detenerse pronto.</string>
+    <string name="warning_banner_thermal_severe_title">El dispositivo está caliente</string>
+    <string name="warning_banner_thermal_severe_sub">La calidad puede bajar.</string>
+    <string name="warning_banner_thermal_moderate_title">El dispositivo se está calentando</string>
+    <string name="warning_banner_thermal_moderate_sub">Vigila la temperatura.</string>
+    <string name="warning_banner_battery_critical_title">Batería crítica</string>
+    <string name="warning_banner_battery_critical_sub">La grabación puede detenerse pronto.</string>
+    <string name="warning_banner_battery_low_title">Batería baja</string>
+    <string name="warning_banner_battery_low_sub">Considera cargar.</string>
+    <string name="warning_banner_camera_in_use_title">Cámara en uso</string>
+    <string name="warning_banner_camera_in_use_sub">Otra app está usando la cámara.</string>
+    <string name="warning_banner_camera_disabled_title">Cámara desactivada</string>
+    <string name="warning_banner_camera_disabled_sub">Desactivada por política del dispositivo.</string>
+    <string name="warning_banner_storage_low_title">Queda poco almacenamiento</string>
+    <string name="warning_banner_storage_low_sub">Libera espacio en este dispositivo.</string>
+    <string name="warning_banner_storage_full_title">Grabación detenida</string>
+    <string name="warning_banner_storage_full_sub">El almacenamiento se llenó.</string>
+    <string name="warning_banner_storage_full_cta">Liberar espacio</string>
+    <string name="warning_banner_thermal_autostopped_title">Grabación detenida</string>
+    <string name="warning_banner_thermal_autostopped_sub">El dispositivo se sobrecalentó.</string>
+    <string name="warning_banner_thermal_autostopped_cta">Consejos para enfriar</string>
+
+    <!-- History strip / Settings chip chrome -->
+    <string name="warning_dismiss_cd">Descartar</string>
+    <string name="warning_view_action_label">Ver</string>
+    <string name="warning_show_details_label">Mostrar detalles</string>
+    <string name="warning_open_details_label">Abrir detalles</string>
+    <string name="warning_settings_section_header">PERMISOS Y ESTADO</string>
+    <!-- %1$s = severity badge (e.g. SOFT), %2$s = warning title -->
+    <string name="warning_chip_status_cd">Estado %1$s: %2$s</string>
+
+    <!-- Thermal tips sheet -->
+    <string name="warning_thermal_tips_title">Consejos para enfriar</string>
+    <string name="warning_thermal_tips_bullet">•  </string>
+    <string name="warning_thermal_tip_shade">Ve a la sombra o a una habitación más fresca.</string>
+    <string name="warning_thermal_tip_case">Quita la funda mientras el dispositivo se enfría.</string>
+    <string name="warning_thermal_tip_close_apps">Cierra otras apps que usen mucho la cámara.</string>
+    <string name="warning_thermal_tip_charging">Evita cargar mientras grabas.</string>
+    <string name="warning_thermal_tip_rest">Deja descansar el dispositivo 5 minutos antes de volver a grabar.</string>
+    <string name="warning_thermal_tips_dismiss">Entendido</string>
+
+    <!-- Recovery card (B3 i18n task 8) — RecoveryUiStateMapper titles/bodies + RecoveryCard chrome -->
+    <!-- Titles per terminator kind -->
+    <string name="recovery_title_user_stopped">Sesión detenida</string>
+    <string name="recovery_title_killed_by_system">Tu dispositivo detuvo la grabación</string>
+    <string name="recovery_title_force_stopped">La grabación se forzó a detenerse</string>
+    <!-- Bodies per terminator kind -->
+    <string name="recovery_body_user_stopped">Tu última sesión terminó antes de que los segmentos pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_body_killed_by_system">La gestión de batería de tu dispositivo detuvo la grabación antes de que los segmentos pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_body_force_stopped">La app se forzó a detenerse antes de que los segmentos de la última sesión pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <!-- CTA labels -->
+    <string name="recovery_discard_label">Descartar grabación</string>
+    <string name="recovery_merge_label">Combinar segmentos</string>
+    <string name="recovery_keep_raw_label">Conservar como clips sin procesar</string>
+    <string name="recovery_retry_merge_label">Reintentar combinación</string>
+    <!-- Discard CTA content description. %1$s = discard label -->
+    <string name="recovery_discard_cd">%1$s. Esta acción es permanente.</string>
+    <!-- Merge-failed inline error. %1$s = runtime failure reason -->
+    <string name="recovery_merge_failed_prefix">Falló la combinación: %1$s</string>
+    <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
+    <string name="recovery_artifact_recovered_segments">Se recuperaron %1$d segmento(s) del disco</string>
+    <string name="recovery_artifact_missing_segments">Falta(n) segmento(s) en los índices %1$s</string>
+    <string name="recovery_artifact_invalid_segments">Segmento(s) no válido(s) en los índices %1$s</string>
+    <string name="recovery_artifact_orphan_segments">Segmento(s) huérfano(s) en los índices %1$s</string>
+    <string name="recovery_artifact_invalid_orphans">%1$d archivo(s) huérfano(s) ilegible(s)</string>
+    <string name="recovery_artifact_duplicate_segments">Segmento(s) duplicado(s) en los índices %1$s</string>
+    <string name="recovery_artifact_unknown_files">%1$d archivo(s) desconocido(s) en la carpeta de la sesión</string>
+    <string name="recovery_artifact_malformed_records">%1$d registro(s) de manifiesto con formato incorrecto</string>
+    <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
+    <string name="recovery_tag_killed_by_system">Detenida por el sistema</string>
+    <string name="recovery_tag_force_stopped">Forzada a detenerse</string>
+    <string name="recovery_tag_user_stopped">Detenida por el usuario</string>
+    <!-- Progress strip -->
+    <string name="recovery_progress_header_merging">COMBINANDO</string>
+    <string name="recovery_progress_header_recovered">CLIPS RECUPERADOS</string>
+    <!-- Numeric chip. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_chip">%1$d / %2$d</string>
+    <!-- Progress strip "merging" content description. %1$d = filled, %2$d = total -->
+    <string name="recovery_progress_cd_merging">Combinando: %1$d de %2$d segmentos.</string>
+    <!-- Footer for hidden older sessions. %1$d = count -->
+    <string name="recovery_hidden_footer">+%1$d sesiones interrumpidas más antiguas</string>
+
+    <!-- Cross-domain shared labels (B3 i18n task 10) — common_* only for labels reused verbatim across >=2 domains -->
+    <string name="common_play">Reproducir</string>
+
+    <!-- Shared dialogs / RovaDialogs.kt (B3 i18n task 10) -->
+    <string name="dialog_custom_duration_title">Duración personalizada</string>
+    <string name="dialog_custom_duration_message">Introduce la duración en segundos (5 - 300):</string>
+    <string name="dialog_custom_duration_field_label">Duración en segundos</string>
+    <string name="dialog_custom_duration_error">El valor debe estar entre 5 y 300</string>
+    <string name="dialog_ok">Aceptar</string>
+    <string name="dialog_cancel">Cancelar</string>
+    <!-- Merge progress sheet. %1$s = coarse status text -->
+    <string name="dialog_merge_progress_cd">Combinando vídeos. %1$s</string>
+    <string name="dialog_merge_progress_title">Combinando vídeos</string>
+    <string name="dialog_merge_progress_keep_open">No cierres la app</string>
+    <string name="dialog_permissions_title">Permisos necesarios</string>
+    <string name="dialog_permissions_message">Rova necesita permisos de cámara y micrófono para grabar vídeos, y acceso al almacenamiento para guardarlos.</string>
+    <string name="dialog_permissions_grant">Conceder</string>
+
+    <!-- Session / last-recording cards · RovaCardComponents.kt (B3 i18n task 10) -->
+    <string name="card_session_recording">Grabación en curso</string>
+    <!-- %1$d = seconds until next capture -->
+    <string name="card_session_next_capture">Próxima captura en %1$d s</string>
+    <!-- %1$d = current loop, %2$d = total loops -->
+    <string name="card_session_loop_of">Ciclo %1$d de %2$d</string>
+    <!-- %1$d = current loop -->
+    <string name="card_session_loop">Ciclo %1$d</string>
+    <string name="card_session_live">EN DIRECTO</string>
+    <string name="card_session_queued">EN COLA</string>
+    <string name="card_last_recording_label">Última grabación</string>
+
+    <!-- Stepper control · RovaComponents.kt (B3 i18n task 10) -->
+    <string name="stepper_decrease_cd">Disminuir</string>
+    <string name="stepper_increase_cd">Aumentar</string>
+
+    <!-- Legacy preview screen · PreviewActivity.kt (B3 i18n task 10) -->
+    <string name="preview_title">Vista previa de Rova</string>
+    <string name="preview_back_cd">Atrás</string>
+    <string name="preview_replay_cd">Repetir</string>
+    <string name="preview_save_cd">Guardar</string>
+    <string name="preview_share_cd">Compartir</string>
+    <string name="preview_saved_to_gallery">✅ Guardado en la galería</string>
+    <string name="preview_save_failed">❌ Error al guardar</string>
+    <string name="preview_share_title">Compartir vídeo de Rova</string>
+    <string name="preview_share_not_ready">La grabación aún no está lista para compartir</string>
+    <string name="preview_share_no_app">No hay ninguna app disponible para compartir vídeos</string>
+</resources>
