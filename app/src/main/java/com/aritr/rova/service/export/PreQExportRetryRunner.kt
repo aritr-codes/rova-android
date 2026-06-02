@@ -100,6 +100,7 @@ internal class PreQExportRetryRunner(
             ExportTier.TIER3_API24_25 -> recoverTier3(manifest)
             ExportTier.TIER1_API29_PLUS ->
                 error("PreQExportRetryRunner.retry: Tier 1 reached dispatch — eligibility gate is broken")
+            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
         }
         return RetryOutcome.Ran(result)
     }

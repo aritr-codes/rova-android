@@ -261,7 +261,8 @@ data class SegmentRecord(
 enum class ExportTier {
     TIER1_API29_PLUS,
     TIER2_API26_28,
-    TIER3_API24_25
+    TIER3_API24_25,
+    SAF_DESTINATION   // ADR-0024 — setting-derived export route (full wiring in a later task)
 }
 
 /**
@@ -299,6 +300,7 @@ val ExportTier.peakBudgetMultiplier: Long
     get() = when (this) {
         ExportTier.TIER1_API29_PLUS -> 2L
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> 3L
+        ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
     }
 
 enum class ExportState {

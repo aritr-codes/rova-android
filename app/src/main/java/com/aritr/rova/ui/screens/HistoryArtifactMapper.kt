@@ -97,6 +97,7 @@ internal object HistoryArtifactMapper {
             manifest.pendingUri?.let(resolveTier1Uri)
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
             manifest.publicTargetPath?.let { File(it) }
+        ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
     }
 
     /**
@@ -116,6 +117,7 @@ internal object HistoryArtifactMapper {
     fun resolveShareUri(manifest: SessionManifest): String? = when (manifest.exportTier) {
         ExportTier.TIER1_API29_PLUS -> manifest.pendingUri
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> null
+        ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
     }
 
     /**
@@ -178,6 +180,7 @@ internal object HistoryArtifactMapper {
                     val path = sidePublic ?: return@forEach
                     File(path) to null
                 }
+                ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
             }
             out += PerSideArtifact(side = side, file = file, shareUri = shareUri)
         }

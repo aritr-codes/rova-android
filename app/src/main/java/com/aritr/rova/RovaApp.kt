@@ -502,6 +502,7 @@ class RovaApp : Application() {
                 }
                 ExportTier.TIER2_API26_28 -> tier2Exporter.recover(m, s)
                 ExportTier.TIER3_API24_25 -> tier3Exporter.recover(m, s)
+                ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
             }
         }
 

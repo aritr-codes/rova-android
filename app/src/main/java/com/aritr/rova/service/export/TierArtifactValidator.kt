@@ -67,6 +67,7 @@ internal object TierArtifactValidator {
                     val landscapeOk = isFileArtifactValid(manifest.landscapePublicTargetPath)
                     portraitOk || landscapeOk
                 }
+                ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
             }
         }
         // Single-mode — byte-identical to pre-T19 behavior.
@@ -74,6 +75,7 @@ internal object TierArtifactValidator {
             ExportTier.TIER1_API29_PLUS -> manifest.pendingUri?.let(tier1Probe) ?: false
             ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
                 isFileArtifactValid(manifest.publicTargetPath)
+            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
         }
     }
 

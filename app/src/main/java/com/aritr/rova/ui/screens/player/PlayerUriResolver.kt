@@ -103,6 +103,7 @@ internal object PlayerUriResolver {
                 } else {
                     manifest.publicTargetPath?.let { toFileUri(it) }
                 }
+            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
         }
         if (uri.isNullOrEmpty()) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found))

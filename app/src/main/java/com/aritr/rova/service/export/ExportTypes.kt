@@ -92,6 +92,16 @@ sealed class ExportResult {
         val requiredBytes: Long,
         val availableBytes: Long,
     ) : ExportResult()
+
+    /**
+     * ADR-0024 §failure classification — PERMANENT SAF failure: the
+     * persisted tree permission is gone (user revoked / cleared) or the
+     * transient-retry budget (3) is exhausted. Manifest is set FAILED and
+     * `WarningId.SAVE_FOLDER_UNAVAILABLE` is surfaced. Segments/private
+     * temp are retained so the user can re-pick and resume. Distinct from
+     * MuxFailed/CopyFailed which are transient (retained, retried silently).
+     */
+    data class SafFolderUnavailable(val cause: Throwable?) : ExportResult()
 }
 
 /**

@@ -123,6 +123,7 @@ internal object ExportPipeline {
                     onProgress = onProgress
                 )
             }
+            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
         }
     }
 
@@ -280,6 +281,7 @@ internal object ExportPipeline {
                 exporter.export(sessionId, segments, privateTempFile, publicTargetFile, side)
             }
             ExportTier.TIER1_API29_PLUS -> error("exportPreQ called with TIER1")
+            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
         }
     }
 
