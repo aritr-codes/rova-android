@@ -96,10 +96,12 @@ Dispatched by `manifest.exportTier == SAF_DESTINATION`. For a session in `MUXING
 
 | Class | Trigger | Action |
 |-------|---------|--------|
-| **Transient** | `openOutputStream`/`createDocument` throws `FileNotFoundException`/`IOException` while the tree is **still granted** (SD remounting, provider busy) | retain temp+segments, no terminal write, retry next cold launch. Bounded retry counter in the manifest; after N consecutive transient failures → escalate to permanent. |
+| **Transient** | `openOutputStream`/`createDocument` throws `FileNotFoundException`/`IOException` while the tree is **still granted** (SD remounting, provider busy) | retain temp+segments, no terminal write, retry next cold launch. Bounded retry counter in the manifest; after **3** consecutive transient failures → escalate to permanent. |
 | **Permanent** | tree absent from `persistedUriPermissions` (user revoked / cleared) or the tree document no longer resolves | `setExportFailed`, surface `WarningId.SAVE_FOLDER_UNAVAILABLE` (idle banner: "Save folder unavailable — pick a new folder or switch to internal"). The recording is **not lost** — segments/temp retained; user can re-pick and the next export attempt resumes. |
 
 The bounded retry counter closes codex's "silent infinite loop" concern.
+
+`WarningId.SAVE_FOLDER_UNAVAILABLE` is a **new** WarningCenter id and therefore follows `docs/WarningCenterContract.md`: a new `WarningId` enum value (flat-precedence slot — non-gating, idle banner tier alongside `EXACT_ALARM_DENIED`), a leaf `*Signal` under `ui/signals/`, and a precedence position. It does **not** gate Start. If the contract footprint proves heavier than the slice warrants during planning, surfacing may be reduced to a non-WarningCenter inline notice in Settings/History as a fallback — but the recording is retained regardless of how the failure is surfaced.
 
 ### createDocument collision / auto-rename (codex critique e)
 
