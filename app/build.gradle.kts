@@ -1653,6 +1653,36 @@ val checkNoHardcodedUiStrings = tasks.register("checkNoHardcodedUiStrings") {
     }
 }
 
+val checkLocaleConfigNoPseudolocale = tasks.register("checkLocaleConfigNoPseudolocale") {
+    group = "verification"
+    description = "Forbid pseudolocale tags (en-XA/ar-XB) in res/xml/locales_config.xml — they must never reach the system per-app-language list (ADR-0023 §No Pseudolocale In LocaleConfig)."
+    val configFile = file("src/main/res/xml/locales_config.xml")
+    inputs.file(configFile).withPropertyName("localesConfig")
+    doLast {
+        if (!configFile.exists()) {
+            throw GradleException("checkLocaleConfigNoPseudolocale: locales_config.xml missing: $configFile")
+        }
+        // Match pseudolocale tags only inside android:name="..." attribute values.
+        // Covers BCP-47 forms: en-XA, en-rXA, ar-XB, ar-rXB (case-insensitive).
+        val pseudo = Regex("""android:name\s*=\s*"[^"]*\b(en|ar)-r?X[AB]\b[^"]*"""", RegexOption.IGNORE_CASE)
+        val offenders = configFile.readLines()
+            .withIndex()
+            .filter { (_, line) -> pseudo.containsMatchIn(line) }
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (i, line) ->
+                "  ${configFile.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+            }
+            throw GradleException(
+                "Pseudolocale tag(s) found in locales_config.xml. Pseudolocales " +
+                    "(en_XA / ar_XB) are a DEBUG-ONLY QA tool and must never be " +
+                    "advertised as a user language (ADR-0023 §No Pseudolocale In " +
+                    "LocaleConfig). Remove them; keep generateLocaleConfig OFF. " +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1682,6 +1712,7 @@ afterEvaluate {
         dependsOn(checkWakeLockHeldRefresh)
         dependsOn(checkWakeLockZeroGapRefresh)
         dependsOn(checkNoHardcodedUiStrings)
+        dependsOn(checkLocaleConfigNoPseudolocale)
     }
 }
 
