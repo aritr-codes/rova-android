@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="record_recovery_chip">
+        <item quantity="one">%1$d grabación interrumpida · Revisar</item>
+        <item quantity="other">%1$d grabaciones interrumpidas · Revisar</item>
+    </plurals>
+    <plurals name="record_recovery_chip_cd">
+        <item quantity="one">%1$d grabación interrumpida. Revisar.</item>
+        <item quantity="other">%1$d grabaciones interrumpidas. Revisar.</item>
+    </plurals>
+    <plurals name="history_selected_count">
+        <item quantity="one">%d seleccionado</item>
+        <item quantity="other">%d seleccionados</item>
+    </plurals>
+    <plurals name="history_delete_failed_count">
+        <item quantity="one">No se pudo eliminar %d grabación</item>
+        <item quantity="other">No se pudieron eliminar %d grabaciones</item>
+    </plurals>
+    <plurals name="player_top_sub">
+        <item quantity="one">%1$d clip · %2$s en total</item>
+        <item quantity="other">%1$d clips · %2$s en total</item>
+    </plurals>
+    <plurals name="settings_warnings_hidden_count">
+        <item quantity="one">%d advertencia oculta</item>
+        <item quantity="other">%d advertencias ocultas</item>
+    </plurals>
+    <plurals name="recovery_progress_cd_recovered">
+        <item quantity="one">%1$d clip recuperado.</item>
+        <item quantity="other">%1$d clips recuperados.</item>
+    </plurals>
+    <plurals name="notification_complete_body_dur">
+        <item quantity="one">%1$d clip · %2$s en total · guardado en la Biblioteca</item>
+        <item quantity="other">%1$d clips · %2$s en total · guardados en la Biblioteca</item>
+    </plurals>
+    <plurals name="notification_complete_body_nodur">
+        <item quantity="one">%1$d clip guardado en la Biblioteca</item>
+        <item quantity="other">%1$d clips guardados en la Biblioteca</item>
+    </plurals>
+    <plurals name="notification_dots_complete_cd">
+        <item quantity="one">%1$d clip completado</item>
+        <item quantity="other">Los %1$d clips completados</item>
+    </plurals>
+</resources>
