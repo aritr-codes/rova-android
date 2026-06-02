@@ -2,6 +2,7 @@ package com.aritr.rova.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.aritr.rova.ui.locale.AppLocale
 import com.aritr.rova.ui.theme.ThemeMode
 import com.aritr.rova.ui.theme.themeModeFromStorage
 
@@ -99,6 +100,18 @@ class RovaSettings(context: Context) {
     var themeMode: ThemeMode
         get() = themeModeFromStorage(prefs.getString("theme_mode", null))
         set(value) = prefs.edit { putString("theme_mode", value.name) }
+
+    // i18n Phase B (ADR-0023) — chosen app language as a BCP-47 tag; null =
+    // follow system. Backed up (a genuine user preference, like themeMode).
+    // Reads coerce through AppLocale.localeTagFromStorage so an unknown/stale
+    // tag (incl. a language not yet shipped) falls back to system. On API 33+
+    // LocaleManager is the live applier; this value mirrors it as the single
+    // source of truth and feeds the API 24–32 attachBaseContext backport.
+    var localeTag: String?
+        get() = AppLocale.localeTagFromStorage(prefs.getString("locale_tag", null))
+        set(value) = prefs.edit {
+            if (value == null) remove("locale_tag") else putString("locale_tag", value)
+        }
 
     var enableBeeps: Boolean
         get() = prefs.getBoolean("enable_beeps", true)

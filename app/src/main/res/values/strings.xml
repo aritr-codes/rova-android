@@ -341,6 +341,9 @@
     <string name="settings_theme_mode_system">Follow system</string>
     <string name="settings_theme_mode_dark">Dark</string>
     <string name="settings_theme_mode_light">Light</string>
+    <string name="settings_language_label">Language</string>
+    <string name="settings_language_supporting">Choose the app language</string>
+    <string name="settings_language_system">System default</string>
 
     <!-- Recording-defaults rows -->
     <string name="settings_default_resolution_label">Default resolution</string>
