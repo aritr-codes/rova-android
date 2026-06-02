@@ -80,7 +80,12 @@ data class SessionManifest(
     val landscapePrivateTempPath: String? = null,
     val landscapePendingUri: String? = null,
     val landscapePublicTargetPath: String? = null,
-    val landscapeMediaScanCompleted: Boolean = false
+    val landscapeMediaScanCompleted: Boolean = false,
+    // ADR-0024: SAF export-route fields (B4 SD-card track)
+    val safTargetDocUri: String? = null,
+    val portraitSafTargetDocUri: String? = null,
+    val landscapeSafTargetDocUri: String? = null,
+    val safTransientRetryCount: Int = 0
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -111,6 +116,11 @@ data class SessionManifest(
         landscapePendingUri?.let { put("landscapePendingUri", it) }
         landscapePublicTargetPath?.let { put("landscapePublicTargetPath", it) }
         if (landscapeMediaScanCompleted) put("landscapeMediaScanCompleted", true)
+        // ADR-0024: SAF export-route fields
+        safTargetDocUri?.let { put("safTargetDocUri", it) }
+        portraitSafTargetDocUri?.let { put("portraitSafTargetDocUri", it) }
+        landscapeSafTargetDocUri?.let { put("landscapeSafTargetDocUri", it) }
+        if (safTransientRetryCount > 0) put("safTransientRetryCount", safTransientRetryCount)
     }
 
     companion object {
@@ -119,7 +129,7 @@ data class SessionManifest(
         // SessionConfig.mode. v1/v2/v3 manifests read with safe default
         // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6   // 5->6: SAF export-route fields (ADR-0024)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -162,7 +172,12 @@ data class SessionManifest(
             landscapePrivateTempPath = json.optString("landscapePrivateTempPath", "").ifEmpty { null },
             landscapePendingUri = json.optString("landscapePendingUri", "").ifEmpty { null },
             landscapePublicTargetPath = json.optString("landscapePublicTargetPath", "").ifEmpty { null },
-            landscapeMediaScanCompleted = json.optBoolean("landscapeMediaScanCompleted", false)
+            landscapeMediaScanCompleted = json.optBoolean("landscapeMediaScanCompleted", false),
+            // ADR-0024: SAF export-route fields
+            safTargetDocUri = json.optString("safTargetDocUri", "").ifEmpty { null },
+            portraitSafTargetDocUri = json.optString("portraitSafTargetDocUri", "").ifEmpty { null },
+            landscapeSafTargetDocUri = json.optString("landscapeSafTargetDocUri", "").ifEmpty { null },
+            safTransientRetryCount = json.optInt("safTransientRetryCount", 0)
         )
     }
 }
