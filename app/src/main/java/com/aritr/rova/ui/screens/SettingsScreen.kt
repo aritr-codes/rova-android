@@ -81,8 +81,10 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
+import com.aritr.rova.ui.locale.AppLocale
 import com.aritr.rova.ui.theme.ThemeMode
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -161,6 +163,10 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     var showFolderDialog by remember { mutableStateOf(false) }
     var openSheet by remember { mutableStateOf<RecordingDefaultSheet?>(null) }
     var openThemeSheet by remember { mutableStateOf(false) }
+    var openLanguageSheet by remember { mutableStateOf(false) }
+    val languageOptions = AppLocale.languagePickerOptions()
+    val showLanguageRow = AppLocale.shouldShowLanguagePicker(languageOptions)
+    val localeTag by settingsViewModel.localeTag.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -207,6 +213,17 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     onClick = { openThemeSheet = true },
                     trailing = { ChevronTrailing() },
                 )
+                if (showLanguageRow) {
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.Language,
+                        label = stringResource(R.string.settings_language_label),
+                        supporting = stringResource(R.string.settings_language_supporting),
+                        value = languageOptionLabel(localeTag),
+                        onClick = { openLanguageSheet = true },
+                        trailing = { ChevronTrailing() },
+                    )
+                }
             }
             SettingsSection(label = stringResource(R.string.settings_section_recording_defaults)) {
                 SettingsRow(
@@ -521,6 +538,20 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             onDismiss = { openThemeSheet = false },
         )
     }
+
+    if (openLanguageSheet) {
+        val systemLabel = stringResource(R.string.settings_language_system)
+        SettingsOptionSheet(
+            title = stringResource(R.string.settings_language_label),
+            options = languageOptions,
+            selected = languageOptions.firstOrNull { it.tag == localeTag } ?: languageOptions.first(),
+            optionLabel = { option ->
+                if (option.tag == null) systemLabel else endonymOf(option.tag)
+            },
+            onPick = { settingsViewModel.setLocale(context, it.tag) },
+            onDismiss = { openLanguageSheet = false },
+        )
+    }
 }
 
 private val KEEP_LATEST_OPTIONS = listOf(5, 10, 25, 50)
@@ -806,6 +837,16 @@ private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_mode_system)
     ThemeMode.DARK -> stringResource(R.string.settings_theme_mode_dark)
     ThemeMode.LIGHT -> stringResource(R.string.settings_theme_mode_light)
+}
+
+@Composable
+private fun languageOptionLabel(tag: String?): String =
+    if (tag == null) stringResource(R.string.settings_language_system) else endonymOf(tag)
+
+/** Endonym (language name in its own language), capitalised. */
+private fun endonymOf(tag: String): String {
+    val locale = java.util.Locale.forLanguageTag(tag)
+    return locale.getDisplayName(locale).replaceFirstChar { it.uppercase(locale) }
 }
 
 /** Which recording-default picker sheet is open in [SettingsScreen]. */
