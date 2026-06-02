@@ -103,7 +103,19 @@ internal object PlayerUriResolver {
                 } else {
                     manifest.publicTargetPath?.let { toFileUri(it) }
                 }
-            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
+            // ADR-0024 — the SAF doc URI is a `content://` Uri that
+            // ExoPlayer accepts directly via MediaItem.fromUri (same shape
+            // as Tier 1's MediaStore URI — no `_DATA`/`file://` round-trip).
+            ExportTier.SAF_DESTINATION ->
+                if (isPlusL) {
+                    when (side) {
+                        VideoSide.PORTRAIT -> manifest.portraitSafTargetDocUri
+                        VideoSide.LANDSCAPE -> manifest.landscapeSafTargetDocUri
+                        null -> null // unreachable — gated above
+                    }
+                } else {
+                    manifest.safTargetDocUri
+                }
         }
         if (uri.isNullOrEmpty()) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found))

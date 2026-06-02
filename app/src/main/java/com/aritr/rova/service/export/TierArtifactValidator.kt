@@ -50,6 +50,16 @@ internal object TierArtifactValidator {
      */
     fun isArtifactValid(
         manifest: SessionManifest,
+        // ADR-0024 — probes a SAF document URI for existence + non-zero length
+        // (production wires this to SafAndroidOps.validateDocument). Defaults
+        // to a constant `false` so every pre-B4 caller stays byte-identical.
+        //
+        // Placed BEFORE tier1Probe (despite being the new param) so that
+        // tier1Probe remains the LAST parameter: the existing call sites use
+        // trailing-lambda syntax `isArtifactValid(m) { uri -> ... }` which
+        // binds to the last param. Keeping tier1Probe last preserves every
+        // pre-B4 caller verbatim; new callers pass both by name.
+        safProbe: (uriString: String) -> Boolean = { false },
         tier1Probe: (uriString: String) -> Boolean
     ): Boolean {
         // P+L branch — at-least-one-side-valid satisfies the gate. The
@@ -67,7 +77,11 @@ internal object TierArtifactValidator {
                     val landscapeOk = isFileArtifactValid(manifest.landscapePublicTargetPath)
                     portraitOk || landscapeOk
                 }
-                ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
+                ExportTier.SAF_DESTINATION -> {
+                    val p = manifest.portraitSafTargetDocUri?.let(safProbe) ?: false
+                    val l = manifest.landscapeSafTargetDocUri?.let(safProbe) ?: false
+                    p || l
+                }
             }
         }
         // Single-mode — byte-identical to pre-T19 behavior.
@@ -75,7 +89,7 @@ internal object TierArtifactValidator {
             ExportTier.TIER1_API29_PLUS -> manifest.pendingUri?.let(tier1Probe) ?: false
             ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
                 isFileArtifactValid(manifest.publicTargetPath)
-            ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
+            ExportTier.SAF_DESTINATION -> manifest.safTargetDocUri?.let(safProbe) ?: false
         }
     }
 

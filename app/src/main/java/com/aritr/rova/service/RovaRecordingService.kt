@@ -3415,6 +3415,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 is ExportResult.FinalizeFailed,
                 is ExportResult.ManifestWriteFailed,
                 is ExportResult.InsufficientStorage,
+                // ADR-0024 — SAF folder unavailable is a NON-terminal
+                // failure: SafExporter already wrote FAILED (no COMPLETED
+                // here). Cold-launch recovery / Task 6 surface the warning.
+                is ExportResult.SafFolderUnavailable,
                 is ExportResult.UnknownSession -> {
                     // No terminal write — manifest is in FAILED (or
                     // intermediate) state. Cold-launch ExportRecoveryRunner

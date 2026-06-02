@@ -43,4 +43,8 @@ internal fun classifyMergeFailure(result: ExportResult): MergeFailureClass = whe
     is ExportResult.FinalizeFailed -> MergeFailureClass.Permanent(result)
     is ExportResult.ManifestWriteFailed -> MergeFailureClass.Permanent(result)
     is ExportResult.UnknownSession -> MergeFailureClass.Permanent(result)
+    // ADR-0024 — SafFolderUnavailable is a PERMANENT, non-retryable export
+    // failure surfaced to the user (WarningId.SAVE_FOLDER_UNAVAILABLE);
+    // mirrors the other permanent export failures, never silently retried.
+    is ExportResult.SafFolderUnavailable -> MergeFailureClass.Permanent(result)
 }

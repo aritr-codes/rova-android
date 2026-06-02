@@ -283,6 +283,15 @@ fun currentExportTier(): ExportTier = when {
 }
 
 /**
+ * ADR-0024 — route selection. A usable custom SAF folder wins over the
+ * SDK tier (the SAF route is API-orthogonal — it muxes a local temp and
+ * publishes to a DocumentsProvider on every minSdk). Falls back to the
+ * SDK-only [currentExportTier] when no usable folder is configured.
+ */
+fun currentExportTier(hasUsableSafFolder: Boolean): ExportTier =
+    if (hasUsableSafFolder) ExportTier.SAF_DESTINATION else currentExportTier()
+
+/**
  * Phase 1.6 (ROADMAP_v6 §1.6) — peak-budget multiplier per tier.
  * Multiplier is applied to the **capture-bytes** estimate
  * (`segmentDuration × loops × bytesPerSec`).
@@ -300,7 +309,10 @@ val ExportTier.peakBudgetMultiplier: Long
     get() = when (this) {
         ExportTier.TIER1_API29_PLUS -> 2L
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> 3L
-        ExportTier.SAF_DESTINATION -> TODO("wired in Task 5") // ADR-0024
+        // ADR-0024 — SAF muxes a local private temp of identical size then
+        // publishes via a sequential copy into the SAF doc, so the peak is
+        // the same as the pre-Q (Tier 2/3) path.
+        ExportTier.SAF_DESTINATION -> 3L
     }
 
 enum class ExportState {
