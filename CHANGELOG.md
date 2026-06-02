@@ -18,6 +18,7 @@ ADR-level invariants live in `docs/adr/`. Roadmaps live in `ROADMAP_v6.md`
 - Accessibility audit (WCAG 2.2 AA) — static, source-level audit of all 12 UI surfaces in `docs/accessibility/` (full report + prioritized remediation backlog). 161 findings (3 Blocker, ~58 Serious). Docs-only; no Kotlin changed.
 - ADR-0020 (Proposed) — "WCAG 2.2 AA by default" standing requirement for all new/changed UI, with a design stub for a future `checkA11y*` static-gate suite.
 - `ContrastMath` — pure WCAG 2.1 relative-luminance / contrast-ratio / alpha-composite helper (`ui/theme/`), with unit tests. Seed for the future `checkA11yNoLowAlphaTextToken` gate.
+- Spanish (`es`) app language — full translated catalog, selectable via Android's system per-app-language settings (Android 13+). In-app language picker remains hidden pending review (ADR-0023 staged-locale policy).
 
 ### Fixed
 - Accessibility contrast **Blockers** (WCAG 2.2 AA SC 1.4.3, ADR-0020): WarningSheetV3 body text (0.45→0.55α), RecoveryCard progress header (0.36→0.70α), and notification small-text (body/chrono/tail/count colors + count-pill size 8→10sp) raised to meet the 4.5:1 bar. Verified by `ContrastMathTest` against the audit-measured elevated backgrounds.

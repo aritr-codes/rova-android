@@ -29,7 +29,7 @@ The app is deliberately `ComponentActivity` + Compose, edge-to-edge (ADR-0011) w
 
 ### Picker gating — no empty promise
 
-The Settings Language row renders only when `AppLocale.shouldShowLanguagePicker(...)` is true, i.e. `SUPPORTED_USER_LOCALES` is non-empty. It is `emptyList()` this slice → row hidden. The first real-language slice appends one tag (+ `values-xx/` catalog + one `<locale>` line in `locales_config.xml`) and the row appears.
+The Settings Language row renders only when `AppLocale.shouldShowLanguagePicker(...)` is true, i.e. `SUPPORTED_USER_LOCALES` is non-empty. It is `emptyList()` this slice → row hidden. Catalog existence is decoupled from in-app reveal (see §Staged Locale Before Reveal): a *staging* slice may add the `values-xx/` catalog and the `<locale>` line in `locales_config.xml` (system-reachable) while `SUPPORTED_USER_LOCALES` still excludes the tag; a later *reveal* slice appends the tag and the in-app row appears.
 
 ### locales_config + pseudolocales
 
@@ -38,6 +38,12 @@ The Settings Language row renders only when `AppLocale.shouldShowLanguagePicker(
 ### §No Pseudolocale In LocaleConfig — `checkLocaleConfigNoPseudolocale`
 
 The 27th `check*` gate (wired into `preBuild`). Scans `res/xml/locales_config.xml`; fails with a `GradleException` citing this clause if it finds a pseudolocale tag (`en-XA`/`ar-XB`, incl. the `-rXA` resource form, case-insensitive) inside an `android:name` attribute. A line-oriented tripwire consistent with the existing gates, not a correctness proof.
+
+### §Staged Locale Before Reveal
+
+A locale catalog MAY ship in `locales_config.xml` (system-reachable on API 33+ via Settings ▸ App ▸ Language) while `AppLocale.SUPPORTED_USER_LOCALES` still excludes its tag (in-app Language row hidden), pending native-review sign-off. This **decouples catalog existence from in-app reveal**: the system per-app-language path may expose a staged (not-yet-reviewed) catalog; the in-app picker's "no empty-promise" invariant is unchanged because that row stays hidden until the catalog is reviewed.
+
+**`es` (Spanish) is the first staged locale** (catalog + `locales_config` line added; `SUPPORTED_USER_LOCALES` unchanged). Reveal is a later slice that appends `"es"` to `SUPPORTED_USER_LOCALES` after sign-off. Structural integrity of a staged catalog is guarded by Android lint (`MissingTranslation`/`ExtraTranslation`) plus the pure-JVM `SpanishCatalogParityTest`; translation polish is the native-review gate.
 
 ## Non-goals (Phase B-i)
 
