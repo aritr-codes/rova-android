@@ -33,11 +33,14 @@ class SpanishCatalogParityTest {
         return doc.documentElement
     }
 
-    /** All `%n$x`, `%x` format specifiers in a string, as an order-independent multiset. */
+    /** All `%n$x`, `%x` format specifiers (incl. precision/width forms like `%1$.1f`) in a string, as an order-independent multiset. */
     private fun formatArgs(text: String): Map<String, Int> {
         // %% is a literal percent — strip before scanning.
         val cleaned = text.replace("%%", "")
-        val rx = Regex("%(\\d+\\$)?[a-zA-Z]")
+        // %[argIndex$][flags/width/precision]conversion — the middle class captures
+        // forms like %1$.1f (precision) and %1$,d (grouping); excludes % so it can't
+        // run past a literal-percent boundary or into the next specifier.
+        val rx = Regex("%(\\d+\\$)?[^a-zA-Z%]*[a-zA-Z]")
         return rx.findAll(cleaned).map { it.value }.groupingBy { it }.eachCount()
     }
 
