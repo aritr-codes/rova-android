@@ -46,6 +46,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // i18n Phase B (ADR-0023) — bake en_XA (accent + ~30–40% text
+            // expansion + [bracket bounds]) and ar_XB (RTL bidi mirror) into the
+            // DEBUG apk only, as the localizability QA harness. Release is
+            // untouched; pseudolocales are never offered in the in-app picker.
+            isPseudoLocalesEnabled = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
