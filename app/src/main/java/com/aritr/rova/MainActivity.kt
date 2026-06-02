@@ -1,5 +1,6 @@
 package com.aritr.rova
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,13 +12,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.ui.MainScreen
 import com.aritr.rova.ui.isPinnedDarkRoute
+import com.aritr.rova.ui.locale.LocaleApplier
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.theme.resolveDarkTheme
 
 class MainActivity : ComponentActivity() {
+
+    // i18n Phase B (ADR-0023) — API 24–32 locale backport. On those API levels
+    // there is no LocaleManager, so the persisted tag is applied here, before
+    // the Compose tree resolves resources. No-op on API 33+ (LocaleManager
+    // already wrapped newBase) and when the tag is null (system default).
+    override fun attachBaseContext(newBase: Context) {
+        val tag = RovaSettings(newBase).localeTag
+        super.attachBaseContext(LocaleApplier.wrapContext(newBase, tag))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
