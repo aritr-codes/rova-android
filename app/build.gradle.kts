@@ -1747,6 +1747,8 @@ dependencies {
     // and the editor / transformer pipeline is NO-GO for v1.0.
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // B4 SAF export — DocumentFile API for tree-URI operations (ADR-0024)
+    implementation("androidx.documentfile:documentfile:1.0.1")
     testImplementation(libs.junit)
     // Phase 1.5 — JVM unit tests need a real org.json impl. The android.jar
     // shipped to JVM tests stubs JSONObject/JSONArray to throw at runtime;
