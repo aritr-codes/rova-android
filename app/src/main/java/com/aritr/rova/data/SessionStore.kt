@@ -109,13 +109,15 @@ open class SessionStore internal constructor(rootDirArg: File) {
      */
     fun createSession(
         config: SessionConfig,
-        audioMode: AudioMode = AudioMode.VIDEO_ONLY
+        audioMode: AudioMode = AudioMode.VIDEO_ONLY,
+        hasUsableSafFolder: Boolean = false
     ): SessionManifest {
         val sessionId = generateUniqueSessionId()
         // Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003): tier from the shared
         // SDK→tier helper so the service preflight (which runs BEFORE
         // createSession) and this manifest commit cannot drift apart.
-        val tier = currentExportTier()
+        // ADR-0024: hasUsableSafFolder=true freezes SAF_DESTINATION as the tier.
+        val tier = currentExportTier(hasUsableSafFolder)
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = System.currentTimeMillis(),

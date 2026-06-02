@@ -1155,7 +1155,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // recovery / UI / Phase 1.7 see the same audio-mode
                     // decision the FGS was started with.
                     val m = withContext(Dispatchers.IO) {
-                        sessionStore.createSession(config, currentAudioMode)
+                        sessionStore.createSession(config, currentAudioMode, hasUsableSafFolder())
                     }
                     currentSessionId = m.sessionId
                     currentSessionDir = sessionStore.sessionDir(m.sessionId)
@@ -3352,6 +3352,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             sessionDir = sessionDir,
             segments = segments,
             side = side,
+            // ADR-0024 — pass the frozen tier from the manifest so a SAF-frozen
+            // session dispatches to SafExporter rather than the live SDK tier.
+            // currentExportTier (field) is cached from m.exportTier at createSession
+            // time; it is non-null for any session that has reached runExportPipeline.
+            frozenTier = currentExportTier,
             onProgress = onProgress
         )
     }
@@ -3415,10 +3420,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 is ExportResult.FinalizeFailed,
                 is ExportResult.ManifestWriteFailed,
                 is ExportResult.InsufficientStorage,
-                // ADR-0024 — SAF folder unavailable is a NON-terminal
-                // failure: SafExporter already wrote FAILED (no COMPLETED
-                // here). Cold-launch recovery / Task 6 surface the warning.
-                is ExportResult.SafFolderUnavailable,
                 is ExportResult.UnknownSession -> {
                     // No terminal write — manifest is in FAILED (or
                     // intermediate) state. Cold-launch ExportRecoveryRunner
@@ -3426,6 +3427,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // routing); Phase 1.5 maps the resulting state to a
                     // discard-eligibility flag.
                     val msg = "Export failed: ${result.javaClass.simpleName}"
+                    RovaLog.e("performMerge: $msg")
+                    _serviceState.update { it.copy(mergeError = msg) }
+                    updateNotification(getString(R.string.notification_merge_failed))
+                    delay(3000)
+                }
+                is ExportResult.SafFolderUnavailable -> {
+                    // ADR-0024 — folder gone/revoked at export time. SafExporter
+                    // already wrote FAILED (no COMPLETED). Raise the flag so the
+                    // warning surfaces; recording retained for re-pick/resume.
+                    com.aritr.rova.data.RovaSettings(this).saveFolderUnavailable = true
+                    val msg = "Export failed: save folder unavailable"
                     RovaLog.e("performMerge: $msg")
                     _serviceState.update { it.copy(mergeError = msg) }
                     updateNotification(getString(R.string.notification_merge_failed))
@@ -3849,6 +3861,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
             tier = tier,
             mode = currentMode
         )
+
+    /**
+     * ADR-0024 — returns true when a usable SAF save folder is configured
+     * for this session. P+L sessions always fall back to the SDK tier
+     * (SAF is deferred for dual-stream this slice). Checks both the
+     * persisted tree URI and the live read+write permission grant.
+     */
+    private fun hasUsableSafFolder(): Boolean {
+        val settings = com.aritr.rova.data.RovaSettings(this)
+        val tree = settings.saveLocationTreeUri ?: return false
+        // P+L SAF is deferred this slice — P+L sessions fall back to the SDK tier.
+        if (settings.mode == "PortraitLandscape") return false
+        return com.aritr.rova.service.export.SafAndroidOps.isPersistedPermissionHeld(this, tree)
+    }
 
     private fun hasEnoughStorage(peakBytesRequired: Long): Boolean {
         return try {

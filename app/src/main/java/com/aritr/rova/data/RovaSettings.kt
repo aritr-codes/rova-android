@@ -131,6 +131,11 @@ class RovaSettings(context: Context) {
             if (value == null) remove("save_location_label") else putString("save_location_label", value)
         }
 
+    /** ADR-0024 — set true when a frozen SAF export found the folder gone/revoked. Drives WarningId.SAVE_FOLDER_UNAVAILABLE. Runtime (not backed up). */
+    var saveFolderUnavailable: Boolean
+        get() = runtimePrefs.getBoolean("save_folder_unavailable", false)
+        set(value) = runtimePrefs.edit { putBoolean("save_folder_unavailable", value) }
+
     var enableBeeps: Boolean
         get() = prefs.getBoolean("enable_beeps", true)
         set(value) = prefs.edit { putBoolean("enable_beeps", value) }
