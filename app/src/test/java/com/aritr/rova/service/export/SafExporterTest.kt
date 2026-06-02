@@ -165,6 +165,46 @@ class SafExporterTest {
         assertTrue(r is ExportResult.ManifestWriteFailed)
     }
 
+    // Review fix — recovery re-mux of a stale-but-invalid committed doc must reclaim the
+    // old partial/zero-byte orphan AFTER the fresh re-publish validates (not before), and
+    // only when it differs from the new doc — else partials pile up in the user's folder.
+    @Test fun recover_remux_reclaims_stale_invalid_doc_after_revalidated_republish() = runBlocking {
+        val stale = "content://tree/doc/STALE"
+        val deleted = mutableListOf<String>()
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+            emptyList(), ExportTier.SAF_DESTINATION,
+            safTargetDocUri = stale, exportState = ExportState.COPYING)
+        val r = exporter(
+            // stale validates false (forces re-mux); the freshly created NEW doc validates true
+            validateDoc = { uri -> uri != stale },
+            createDoc = { "content://tree/doc/NEW" },
+            deleteDoc = { uri -> deleted += uri; true }
+        ).recover(m, listOf(File(tempDir, "seg.mp4")))
+        assertTrue(r is RecoveryResult.Resumed)
+        assertTrue((r as RecoveryResult.Resumed).export is ExportResult.Success)
+        assertTrue("stale orphan reclaimed", stale in deleted)
+        assertTrue("new doc not deleted", "content://tree/doc/NEW" !in deleted)
+    }
+
+    // Review fix — the stale-reclaim must NOT fire when the re-publish itself fails to
+    // validate (validate-before-delete): a transient provider error must never destroy the
+    // prior committed doc before a durable replacement exists.
+    @Test fun recover_remux_keeps_stale_doc_when_republish_fails_validation() = runBlocking {
+        val stale = "content://tree/doc/STALE"
+        val deleted = mutableListOf<String>()
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+            emptyList(), ExportTier.SAF_DESTINATION,
+            safTargetDocUri = stale, exportState = ExportState.COPYING)
+        exporter(
+            validateDoc = { false },                 // stale invalid AND new doc invalid
+            createDoc = { "content://tree/doc/NEW" },
+            deleteDoc = { uri -> deleted += uri; true }
+        ).recover(m, listOf(File(tempDir, "seg.mp4")))
+        // only the failed NEW partial is cleaned; the stale prior doc is left untouched
+        assertTrue("new partial deleted", "content://tree/doc/NEW" in deleted)
+        assertTrue("stale doc preserved until valid replacement", stale !in deleted)
+    }
+
     // Fix C — recovery re-mux that fails with permission revoked must escalate to PERMANENT
     // (SafFolderUnavailable) via classify, not blindly RetryableFailure.
     @Test fun recover_remuxFails_permissionRevoked_escalates_permanent() = runBlocking {

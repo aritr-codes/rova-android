@@ -82,11 +82,22 @@ internal class SafExporter(
             // classify() handles permission-revoked-mid-remux (permanent) + the retry bump
             return toRecoveryOf(classify(ExportResult.MuxFailed(t), t), "saf-recover-remux", t)
         }
-        return RecoveryResult.Resumed(publish(privateTempFile))
+        // [staleDocUri] = the OLD committed-but-invalid doc; reclaimed only
+        // after the fresh re-publish durably validates (never before — see publish).
+        return RecoveryResult.Resumed(publish(privateTempFile, staleDocUri = docUri))
     }
 
     // create doc → commit-before-stream → copy → validate → finalize(clear)
-    private suspend fun publish(temp: File): ExportResult {
+    //
+    // [staleDocUri] is the previous committed SAF doc when this is a recovery
+    // re-publish (it was invalid, so a brand-new doc is created here). It is
+    // best-effort deleted ONLY after the replacement durably validates and only
+    // when it differs from the new doc — otherwise a crash mid-copy would leave a
+    // partial/zero-byte orphan in the user's folder (often the SD card), and the
+    // provider's name-collision auto-rename would pile up `name (1).mp4` siblings.
+    // Deleting only post-validation preserves validate-before-delete: a transient
+    // provider error never destroys a not-yet-replaced artifact.
+    private suspend fun publish(temp: File, staleDocUri: String? = null): ExportResult {
         val docUri: String = try {
             createDocument(displayName) ?: return classify(ExportResult.CopyFailed(failure()), null)
         } catch (t: Throwable) {
@@ -102,7 +113,13 @@ internal class SafExporter(
         } catch (t: Throwable) {
             RovaLog.w("$TAG: copy-to-SAF threw (validating before any delete)", t); t
         }
-        if (validateSafely(docUri)) return toExport(setFinalizedClear())
+        if (validateSafely(docUri)) {
+            if (staleDocUri != null && staleDocUri != docUri) {
+                RovaLog.d("$TAG: reclaiming stale partial SAF doc after successful re-publish")
+                safeDelete(staleDocUri)
+            }
+            return toExport(setFinalizedClear())
+        }
         RovaLog.w("$TAG: SAF doc failed validation; deleting partial")
         safeDelete(docUri)
         return classify(ExportResult.CopyFailed(copyError ?: failure()), copyError)
