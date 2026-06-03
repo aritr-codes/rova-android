@@ -133,6 +133,21 @@ Phase 1.5 reading export fields is **forbidden** (the export-clean predicate is 
 
 The UI surface for `OFFER_DISCARD` must enumerate every surviving artifact (file path + size + validity) so the user knows what they're discarding before confirming.
 
+### Completed-session retention
+
+> Added 2026-06-03 (owner sign-off). Pins finding #10 (storage bloat) as **working-as-designed** and documents the exact mechanism so a future refactor cannot silently start auto-deleting finished recordings. Guarded by `CompletedSessionRetentionTest`. Design: `docs/superpowers/specs/2026-06-03-completed-session-retention-contract-design.md`.
+
+A **successfully-COMPLETED session directory is retained** by the automatic Phase 1.7 cleanup pass. The session dir IS the manifest-backed Library/History index — `HistoryViewModel` enumerates recordings from `SessionStore.listSessionIds()` over `videos/<sessionId>/`, and the in-app player resolves its source from manifest fields (not from the dir). Deleting the dir removes the recording from History; its persistence is intentional. The only removal paths are an explicit user delete (`HistoryDeleter` → `SessionStore.discardSession`) or the opt-in keep-latest-N `RecordingRetentionCleaner` — never the automatic cleanup pass.
+
+**Mechanism (not a surviving manifest file).** `manifest.json` / `manifest.json.tmp` are excluded from the unknown-artifact survivor set, so the manifest file itself is never what keeps a dir alive. A real COMPLETED session always has **≥1 segment record** in its manifest (you cannot merge zero segments), and retention then holds via **either** of two paths, both of which yield `OFFER_DISCARD` (not `AUTO_DISCARD_ELIGIBLE`):
+
+1. **Segments deleted (normal post-merge).** `performMerge` deletes the on-disk `segment_*.mp4` files on export success but leaves the manifest's segment **records** intact. The next scan finds each manifest segment key with no disk file → `MissingSegmentAnomaly` → `OFFER_DISCARD` (anomaly present).
+2. **Segments survive (delete failed).** `performMerge`'s post-success cleanup is best-effort and swallows delete exceptions. If a segment file remains, there is no `MissingSegmentAnomaly`, but the surviving file makes `S_manifest_valid > 0` (`anySurvivors`) → still `OFFER_DISCARD`.
+
+Either way, `ExportCleanupPredicate` gate 1 requires `AUTO_DISCARD_ELIGIBLE`, so the dir is retained (see ADR 0006 §"Ownership table for `exportState` (B17)").
+
+**Degenerate edge (zero segment records → auto-deletable).** A COMPLETED manifest carrying **zero** segment records and no disk files has no missing keys, no survivors, and no anomalies → it classifies `AUTO_DISCARD_ELIGIBLE` and *would* be auto-deleted. The normal live merge path cannot reach this (no segments ⇒ no merge ⇒ no COMPLETED), **but** the late-terminal recovery writer `ExportRecoveryRunner` writes `COMPLETED` for any `FINALIZED` manifest with a valid artifact **without a segment-count guard** (`ExportRecoveryRunner.kt` — only an artifact-validity guard precedes the write). So an abnormal or corrupt empty-`segments` `FINALIZED` manifest reaches this state over persisted data, and its session dir (the History index entry) would be auto-deleted on the next cleanup pass even though its public artifact survives in MediaStore. This is a **known boundary**, not a normal recording path; it is left as-is here (adding the guard touches the guarded recovery writer — a separate slice). `CompletedSessionRetentionTest` fixes the behavior at this boundary so that any change — clearing `manifest.segments` on completion, exempting COMPLETED from `MissingSegmentAnomaly`, or adding the missing guard — shows up as a visible test diff.
+
 ### Orphan Ordering / Gap Rules
 
 The orphan analysis runs for every session directory the scan touches. The **append step (step 6 below) is gated on `T != COMPLETED`** per the Decision Matrix; for `T == COMPLETED`, the same enumeration runs but every candidate orphan flows directly into anomalies with no `appendSegment` call.
