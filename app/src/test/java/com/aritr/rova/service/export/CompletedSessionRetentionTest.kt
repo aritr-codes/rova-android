@@ -206,30 +206,37 @@ class CompletedSessionRetentionTest {
         assertTrue(store.sessionDir(sid).exists())
     }
 
-    // ── Degenerate edge: zero segment records → AUTO_DISCARD_ELIGIBLE ────────
+    // ── Zero-segment COMPLETED: retained, not auto-deleted ──────────────────
 
     @Test
-    fun `completed session with zero segment records is auto-discard-eligible`() = runBlocking {
-        // A COMPLETED manifest carrying NO segment records and no disk files has
-        // no missing keys, no survivors, no anomalies → AUTO_DISCARD_ELIGIBLE,
-        // i.e. it WOULD be auto-deleted. The normal live merge path can't reach
-        // this (no segments ⇒ no merge ⇒ no COMPLETED), but the late-terminal
-        // recovery writer `ExportRecoveryRunner` writes COMPLETED for any
-        // FINALIZED manifest with a valid artifact WITHOUT a segment-count guard
-        // — so an abnormal/corrupt empty-`segments` FINALIZED manifest reaches
-        // this state over persisted data. The boundary is documented in ADR-0005
-        // §"Completed-session retention"; this test fixes the behavior so any
-        // change (e.g. clearing manifest.segments on COMPLETED, or adding the
-        // missing guard) is a visible diff here.
-        val sid = "completed-empty-degenerate"
-        seedCompletedSession(sid, segmentRecordCount = 0)
+    fun `completed session with zero segment records is still retained, not auto-discard-eligible`() =
+        runBlocking {
+            // A COMPLETED manifest with NO segment records and no disk files has
+            // no missing keys, no survivors, no anomalies — so the only thing
+            // keeping it out of AUTO_DISCARD_ELIGIBLE is the COMPLETED terminal
+            // itself. `RecoveryScanner` exempts T == COMPLETED from auto-discard
+            // unconditionally (ADR-0005 §"Discard Eligibility"): a finished
+            // recording is never auto-deleted, even in this degenerate shape.
+            //
+            // Reachable over abnormal persisted data — the late-terminal recovery
+            // writer `ExportRecoveryRunner` writes COMPLETED for any FINALIZED
+            // manifest with a valid artifact without a segment-count guard.
+            val sid = "completed-empty-retained"
+            seedCompletedSession(sid, segmentRecordCount = 0)
 
-        val classification = newScanner().classify(sid, NOW)
+            val classification = newScanner().classify(sid, NOW)
 
-        assertEquals(TerminalAction.ALREADY_TERMINAL, classification.terminalAction)
-        assertTrue("no anomalies expected; got ${classification.anomalies}", classification.anomalies.isEmpty())
-        assertEquals(DiscardEligibility.AUTO_DISCARD_ELIGIBLE, classification.eligibility)
-    }
+            assertEquals(TerminalAction.ALREADY_TERMINAL, classification.terminalAction)
+            assertTrue("no anomalies expected; got ${classification.anomalies}", classification.anomalies.isEmpty())
+            assertEquals(DiscardEligibility.OFFER_DISCARD, classification.eligibility)
+
+            // Cleanup gate 1 therefore blocks deletion.
+            val manifest = store.loadManifest(sid)!!
+            assertFalse(
+                "zero-segment COMPLETED must not pass the cleanup delete gate",
+                ExportCleanupPredicate.shouldDelete(classification, manifest, null, cleanSweep)
+            )
+        }
 
     // ── Manual delete still removes a retained session ──────────────────────
 

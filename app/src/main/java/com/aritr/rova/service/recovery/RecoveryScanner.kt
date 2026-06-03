@@ -368,6 +368,17 @@ class RecoveryScanner(
             unknownFilenames.isNotEmpty()
         val eligibility = when {
             anomalies.isNotEmpty() || anySurvivors -> DiscardEligibility.OFFER_DISCARD
+            // ADR 0005 §"Discard Eligibility" — a COMPLETED session is a
+            // finished recording the user owns (the manifest-backed Library
+            // index); it is NEVER auto-deleted by the cleanup pass, only by an
+            // explicit user delete or the opt-in retention cleaner. Covers both
+            // COMPLETED writers (live performMerge + the late-terminal
+            // ExportRecoveryRunner write, which has no segment-count guard, so a
+            // degenerate empty-segments COMPLETED would otherwise fall through to
+            // AUTO_DISCARD_ELIGIBLE and be deleted). USER_STOPPED / KILLED_* empty
+            // shells stay auto-eligible. (codex review, completed-session
+            // retention contract.)
+            T == Terminated.COMPLETED -> DiscardEligibility.OFFER_DISCARD
             else -> DiscardEligibility.AUTO_DISCARD_ELIGIBLE
         }
 
