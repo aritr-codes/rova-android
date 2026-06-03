@@ -42,7 +42,10 @@ internal class SafExporter(
     private val copyFileToDocument: (src: File, docUri: String) -> Unit,
     private val validateDocument: (docUri: String) -> Boolean,
     private val deleteDocument: (docUri: String) -> Boolean,
-    private val isPermissionHeld: () -> Boolean
+    private val isPermissionHeld: () -> Boolean,
+    // B4 storage reclaim — deletes the LOCAL private temp (app-internal
+    // sessionDir file), distinct from `deleteDocument` (the SAF provider doc).
+    private val deleteLocalTemp: (file: File) -> Boolean = { it.delete() }
 ) {
     private companion object { const val TAG = "SafExporter"; const val RETRY_BUDGET = 3 }
 
@@ -69,6 +72,9 @@ internal class SafExporter(
     suspend fun recover(manifest: SessionManifest, segments: List<File>): RecoveryResult {
         val docUri = manifest.safTargetDocUri
         if (docUri != null && validateSafely(docUri)) {
+            // A prior run may have left the muxed private temp on disk before
+            // crashing pre-finalize; reclaim it now the committed doc is proven good.
+            safeDeleteLocal(privateTempFile)
             return toRecovery(setFinalizedClear())
         }
         if (!isPermissionHeld() || currentRetryCount() >= RETRY_BUDGET) {
@@ -118,6 +124,13 @@ internal class SafExporter(
                 RovaLog.d("$TAG: reclaiming stale partial SAF doc after successful re-publish")
                 safeDelete(staleDocUri)
             }
+            // B4 storage reclaim (parity with PreQExportCore.finalize): the SAF
+            // doc validated and is durable in the user's folder, so the local
+            // private temp is dead weight. Delete it BEFORE clearing
+            // privateTempPath — a crash in between is safe (recovery re-validates
+            // the committed doc and finalizes; the dangling path is harmless),
+            // whereas clearing first then crashing would orphan the temp forever.
+            safeDeleteLocal(temp)
             return toExport(setFinalizedClear())
         }
         RovaLog.w("$TAG: SAF doc failed validation; deleting partial")
@@ -172,6 +185,16 @@ internal class SafExporter(
 
     private fun safeDelete(docUri: String) {
         try { deleteDocument(docUri) } catch (t: Throwable) { RovaLog.w("$TAG: deleteDocument threw", t) }
+    }
+
+    /** Best-effort reclaim of the local private temp; a lingering file is non-fatal (the
+     *  SAF doc is the durable artifact) and the session dir delete eventually sweeps it. */
+    private fun safeDeleteLocal(file: File) {
+        try {
+            if (file.exists() && !deleteLocalTemp(file)) {
+                RovaLog.w("$TAG: failed to delete local private temp ${file.absolutePath}")
+            }
+        } catch (t: Throwable) { RovaLog.w("$TAG: deleteLocalTemp threw", t) }
     }
 
     /** validateDocument can throw (e.g. SecurityException on revoked SAF permission); treat a throw as "not valid". */

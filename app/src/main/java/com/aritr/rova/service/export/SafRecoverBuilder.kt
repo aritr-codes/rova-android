@@ -48,7 +48,19 @@ internal object SafRecoverBuilder {
             else manifest.landscapeSafTargetDocUri
         val displayName = existingDoc?.let { SafAndroidOps.displayNameOf(context, it) }
             ?: defaultRecoveredName(side)
-        val privateTemp = File(sessionDir, "$displayName.private")
+        // Prefer the AUTHORITATIVE persisted private-temp path: the live export
+        // recorded it under the originally-REQUESTED name, which can differ from
+        // displayNameOf(doc) when the provider auto-renamed on a name collision.
+        // Deriving the temp path from the display name would miss (orphan) the real
+        // temp on the validate-good recovery branch's reclaim. Reconstruct from the
+        // display name only when the field was never recorded. (codex review)
+        val persistedTempPath = when (side) {
+            null -> manifest.privateTempPath
+            VideoSide.PORTRAIT -> manifest.portraitPrivateTempPath
+            VideoSide.LANDSCAPE -> manifest.landscapePrivateTempPath
+        }
+        val privateTemp = persistedTempPath?.let { File(it) }
+            ?: File(sessionDir, "$displayName.private")
 
         val exporter = SafExporter(
             displayName = displayName,

@@ -32,10 +32,12 @@ class SafExporterTest {
         deleteDoc: (String) -> Boolean = { true },
         permissionHeld: () -> Boolean = { true },
         retryCount: Int = 0,
-        incrementRetry: suspend () -> ExportMutationResult = { wrote() }
+        incrementRetry: suspend () -> ExportMutationResult = { wrote() },
+        deleteLocalTemp: (File) -> Boolean = { it.delete() },
+        privateTempFile: File = File(tempDir, "saf_${System.nanoTime()}.private")
     ) = SafExporter(
         displayName = "Rova.mp4",
-        privateTempFile = File(tempDir, "saf_${System.nanoTime()}.private"),
+        privateTempFile = privateTempFile,
         setSafPrivateTemp = { _ -> calls.log += "setSafPrivateTemp"; wrote() },
         setSafTarget = { _ -> calls.log += "setSafTarget"; wrote() },
         setFinalizedClear = { calls.log += "finalizedClear"; wrote() },
@@ -48,7 +50,8 @@ class SafExporterTest {
         copyFileToDocument = copyToDoc,
         validateDocument = validateDoc,
         deleteDocument = deleteDoc,
-        isPermissionHeld = permissionHeld
+        isPermissionHeld = permissionHeld,
+        deleteLocalTemp = deleteLocalTemp
     )
 
     @Test fun happyPath_returns_Success_and_commits_target_before_finalize() = runBlocking {
@@ -60,6 +63,40 @@ class SafExporterTest {
         assertTrue("finalizedClear" in calls.log)
         // setSafTarget (commit-before-stream) precedes finalize
         assertTrue(calls.log.indexOf("setSafTarget") < calls.log.indexOf("finalizedClear"))
+    }
+
+    // B4 storage reclaim — a successful publish must delete the LOCAL private temp
+    // (the durable artifact now lives in the user's SAF folder); leaving it leaks a
+    // full copy of every recording into app-internal storage.
+    @Test fun export_success_deletes_local_private_temp() = runBlocking {
+        val temp = File(tempDir, "saf_reclaim_${System.nanoTime()}.private")
+        var deletedFile: File? = null
+        val r = exporter(
+            privateTempFile = temp,
+            deleteLocalTemp = { deletedFile = it; it.delete() }
+        ).export("s", emptyList())
+        assertTrue(r is ExportResult.Success)
+        assertEquals(temp.absolutePath, deletedFile?.absolutePath)
+        assertEquals(false, temp.exists())
+    }
+
+    // B4 storage reclaim — the recovery validate-good path (committed doc still valid,
+    // finalize write was lost) must also reclaim any lingering local private temp.
+    @Test fun recover_validatedDoc_deletes_lingering_local_temp() = runBlocking {
+        val temp = File(tempDir, "saf_recov_${System.nanoTime()}.private")
+        temp.writeBytes(ByteArray(16))
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+            emptyList(), ExportTier.SAF_DESTINATION,
+            safTargetDocUri = "content://tree/doc/good", exportState = ExportState.COPYING)
+        var deletedFile: File? = null
+        val r = exporter(
+            privateTempFile = temp,
+            validateDoc = { true },
+            deleteLocalTemp = { deletedFile = it; it.delete() }
+        ).recover(m, emptyList())
+        assertTrue(r is RecoveryResult.Resumed)
+        assertEquals(temp.absolutePath, deletedFile?.absolutePath)
+        assertEquals(false, temp.exists())
     }
 
     @Test fun muxFails_transient_returns_MuxFailed_and_bumps_retry_no_setFailed() = runBlocking {
