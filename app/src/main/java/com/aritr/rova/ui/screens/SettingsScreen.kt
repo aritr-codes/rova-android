@@ -145,13 +145,18 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     // Also re-seeds the recording-default flows on resume so changes made from
     // the record sheet while this screen was backgrounded are reflected.
     val lifecycleOwner = LocalLifecycleOwner.current
-    var batteryExempt by remember {
-        mutableStateOf(BatteryOptimizationHelper.isIgnoring(context))
-    }
+    // Derive the badge/dialog state from the SHARED batteryOptimizationSignal —
+    // not a second local read — so it can never contradict the Settings warning
+    // strip, which reads the same signal. The exemption grant fires no system
+    // broadcast, so the value is only fresh after an explicit refresh(); call it
+    // on resume (e.g. returning from the system battery dialog) so BOTH the badge
+    // and the warning strip re-read. Previously only the local copy refreshed,
+    // leaving the strip stale while the badge flipped (SaveFolderSignal-class bug).
+    val batteryExempt by app.batteryOptimizationSignal.isExempt.collectAsStateWithLifecycle()
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                batteryExempt = BatteryOptimizationHelper.isIgnoring(context)
+                app.batteryOptimizationSignal.refresh()
                 settingsViewModel.reloadRecordingDefaults()
             }
         }
