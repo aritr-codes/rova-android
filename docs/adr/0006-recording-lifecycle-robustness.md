@@ -222,6 +222,16 @@ action, NOT automatically on next cold launch.
 This locks the cross-phase ownership: each `exportState` value has
 exactly one owner at cold-launch time. No state strands.
 
+**Completed-session retention.** Once a `FINALIZED` session receives its late
+`markTerminated(COMPLETED, NONE)` (Row 13c), the session dir is **retained
+permanently** by the automatic cleanup pass — it is the manifest-backed
+Library/History index, removed only by explicit user delete or the opt-in
+keep-latest-N retention cleaner. The retention rides on the `MissingSegmentAnomaly`
+path (post-merge the on-disk segments are deleted but the manifest segment records
+survive → `OFFER_DISCARD` → `ExportCleanupPredicate` gate 1 blocks). Full mechanism
+and the degenerate zero-segment edge: ADR 0005 §"Completed-session retention"
+(guarded by `CompletedSessionRetentionTest`).
+
 `TerminalAction` gains a new variant:
 
 ```kotlin
