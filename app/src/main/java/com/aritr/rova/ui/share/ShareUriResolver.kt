@@ -26,8 +26,12 @@ import java.io.File
  * (single-video preview share button) so the two surfaces cannot
  * diverge on URI safety.
  */
-internal fun safeShareUri(context: Context, file: File, shareUri: Uri?): Uri? {
+internal fun safeShareUri(context: Context, file: File?, shareUri: Uri?): Uri? {
+    // Prefer the canonical share URI (Tier 1 MediaStore, or B4c SAF
+    // doc URI — both `content://`). SAF rows pass file == null, so the
+    // FileProvider fallback below is guarded against a null File.
     shareUri?.let { return it }
+    if (file == null) return null
     return try {
         FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
     } catch (_: IllegalArgumentException) {

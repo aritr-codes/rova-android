@@ -39,7 +39,8 @@ class HistoryArtifactMapperTest {
         portraitPublicTargetPath: String? = null,
         landscapePendingUri: String? = null,
         landscapePublicTargetPath: String? = null,
-        terminated: Terminated? = null
+        terminated: Terminated? = null,
+        safTargetDocUri: String? = null
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = 0L,
@@ -53,7 +54,8 @@ class HistoryArtifactMapperTest {
         portraitPublicTargetPath = portraitPublicTargetPath,
         landscapePendingUri = landscapePendingUri,
         landscapePublicTargetPath = landscapePublicTargetPath,
-        terminated = terminated
+        terminated = terminated,
+        safTargetDocUri = safTargetDocUri
     )
 
     // ─── finalizedManifests ────────────────────────────────────────
@@ -213,6 +215,59 @@ class HistoryArtifactMapperTest {
             publicTargetPath = "/storage/Movies/Rova/Rova_t3s.mp4"
         )
         assertNull(HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    // ─── SAF_DESTINATION (B4c / ADR-0024) ──────────────────────────
+
+    @Test
+    fun `SAF resolveArtifactFile returns null without invoking callback`() {
+        // A SAF artifact is a content:// document with no java.io.File.
+        // The mapper returns null so the History pipeline routes it down
+        // the content-URI branch instead of the file-based path.
+        val m = manifest(
+            "saf1", ExportState.FINALIZED, ExportTier.SAF_DESTINATION,
+            safTargetDocUri = "content://com.android.externalstorage.documents/document/abc"
+        )
+        var invoked = false
+        val resolved = HistoryArtifactMapper.resolveArtifactFile(m) {
+            invoked = true
+            File("/should/not/be/used")
+        }
+        assertNull(resolved)
+        assertFalse("Tier 1 callback must not fire for SAF", invoked)
+    }
+
+    @Test
+    fun `SAF resolveShareUri passes through safTargetDocUri`() {
+        // The SAF doc URI is itself a shareable content:// Uri — the
+        // History pipeline uses it as both the artifact identity and the
+        // share URI (same shape as Tier 1's MediaStore URI).
+        val docUri = "content://com.android.externalstorage.documents/document/xyz"
+        val m = manifest(
+            "saf2", ExportState.FINALIZED, ExportTier.SAF_DESTINATION,
+            safTargetDocUri = docUri
+        )
+        assertEquals(docUri, HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    @Test
+    fun `SAF resolveShareUri is null when safTargetDocUri is null`() {
+        val m = manifest(
+            "saf3", ExportState.FINALIZED, ExportTier.SAF_DESTINATION,
+            safTargetDocUri = null
+        )
+        assertNull(HistoryArtifactMapper.resolveShareUri(m))
+    }
+
+    @Test
+    fun `SAF finalizedManifests admits a FINALIZED SAF session`() {
+        val m = manifest(
+            "saf4", ExportState.FINALIZED, ExportTier.SAF_DESTINATION,
+            safTargetDocUri = "content://com.android.externalstorage.documents/document/k"
+        )
+        val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
+        assertEquals(1, finalized.size)
+        assertEquals("saf4", finalized.single().sessionId)
     }
 
     // ─── End-to-end (filter + tier dispatch) ───────────────────────

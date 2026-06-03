@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.screens
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import com.aritr.rova.data.QualityLabels
 
 object VideoMetadataUtils {
@@ -33,11 +35,23 @@ object VideoMetadataUtils {
      * Returns `(null, UNKNOWN_RESOLUTION)` when the file is
      * unreadable or has no decodable dimensions. Must be called off
      * the main thread.
+     *
+     * B4c (ADR-0024) — [key] is either an absolute file path (file
+     * rows) or a `content://` URI string (SAF rows). When it is a
+     * content URI the retriever is opened via
+     * `setDataSource(context, uri)` so SAF artifacts (no java.io.File)
+     * still yield a thumbnail + resolution. Any failure degrades to the
+     * `(null, UNKNOWN_RESOLUTION)` placeholder — a SAF row stays visible
+     * and tappable even with no thumbnail.
      */
-    fun extractMetadata(path: String): Pair<Bitmap?, String> {
+    fun extractMetadata(context: Context, key: String): Pair<Bitmap?, String> {
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(path)
+            if (key.startsWith("content://")) {
+                retriever.setDataSource(context, Uri.parse(key))
+            } else {
+                retriever.setDataSource(key)
+            }
             val thumb = retriever.getFrameAtTime(
                 1_000_000L,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC

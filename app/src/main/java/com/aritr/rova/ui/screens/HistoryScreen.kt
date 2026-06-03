@@ -103,7 +103,6 @@ import com.aritr.rova.ui.warnings.WarningCenterViewModel
 import com.aritr.rova.ui.warnings.WarningId
 import com.aritr.rova.ui.warnings.WarningScreen
 import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
-import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -213,7 +212,11 @@ fun HistoryScreen(
     }
 
     var isSelectionMode by remember { mutableStateOf(false) }
-    var selectedFiles by remember { mutableStateOf(setOf<File>()) }
+    // B4c (ADR-0024) — multi-select tracks rows by [VideoItem.stableKey]
+    // (absolute path for file rows, content-URI for SAF rows) instead of
+    // java.io.File, so SAF rows (which have no File) can be batch
+    // selected, shared, and deleted alongside file rows.
+    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
 
     // Phase 2.2 — Library "View Settings" popup state. `viewSettingsConfig` is the
     // resolved config for the dialog body; null hides the dialog. The 3-dot menu
@@ -257,9 +260,9 @@ fun HistoryScreen(
 
     LaunchedEffect(items) {
         if (isSelectionMode) {
-            val existingFiles = items.map { it.file }.toSet()
-            selectedFiles = selectedFiles.intersect(existingFiles)
-            if (selectedFiles.isEmpty()) isSelectionMode = false
+            val existingKeys = items.map { it.stableKey }.toSet()
+            selectedKeys = selectedKeys.intersect(existingKeys)
+            if (selectedKeys.isEmpty()) isSelectionMode = false
         }
     }
 
@@ -270,10 +273,10 @@ fun HistoryScreen(
     val nowMillis = remember(items) { System.currentTimeMillis() }
     val groupedItems = remember(items, nowMillis) {
         items.groupBy { item ->
-            HistoryRowFormatters.formatGroupHeader(item.file.lastModified(), nowMillis)
+            HistoryRowFormatters.formatGroupHeader(item.effectiveLastModified(), nowMillis)
         }
     }
-    val totalSize = remember(items) { items.sumOf { it.file.length() } }
+    val totalSize = remember(items) { items.sumOf { it.effectiveSize() } }
     val retentionPill = remember(items, context) {
         val settings = RovaSettings(context)
         HistoryRowFormatters.formatRetentionPill(
@@ -305,23 +308,23 @@ fun HistoryScreen(
                             Text(
                                 pluralStringResource(
                                     R.plurals.history_selected_count,
-                                    selectedFiles.size,
-                                    selectedFiles.size
+                                    selectedKeys.size,
+                                    selectedKeys.size
                                 )
                             )
                         },
                         navigationIcon = {
-                            IconButton(onClick = { isSelectionMode = false; selectedFiles = emptySet() }) {
+                            IconButton(onClick = { isSelectionMode = false; selectedKeys = emptySet() }) {
                                 Icon(Icons.Default.Close, stringResource(R.string.history_close_selection_cd))
                             }
                         },
                         actions = {
                             IconButton(onClick = {
-                                val itemsByFile = items.associateBy { it.file }
-                                val uris = ArrayList<Uri>(selectedFiles.size)
+                                val itemsByKey = items.associateBy { it.stableKey }
+                                val uris = ArrayList<Uri>(selectedKeys.size)
                                 var anyMissing = false
-                                selectedFiles.forEach { file ->
-                                    val item = itemsByFile[file]
+                                selectedKeys.forEach { key ->
+                                    val item = itemsByKey[key]
                                     val uri = item?.let { safeShareUri(context, it.file, it.shareUri) }
                                     if (uri != null) uris.add(uri) else anyMissing = true
                                 }
@@ -357,13 +360,14 @@ fun HistoryScreen(
                                 Icon(Icons.Default.Share, stringResource(R.string.history_share_cd))
                             }
                             IconButton(onClick = {
-                                // Resolve selected files to VideoItem so deleteItems
-                                // can access each entry's shareUri (the only delete
-                                // path that removes public-gallery rows on API 29+).
-                                val itemsByFile = items.associateBy { it.file }
-                                val toDelete = selectedFiles.mapNotNull { itemsByFile[it] }
+                                // Resolve selected rows to VideoItem so deleteItems
+                                // can access each entry's shareUri / docUri (the
+                                // only delete paths that remove public-gallery /
+                                // SAF rows on API 29+).
+                                val itemsByKey = items.associateBy { it.stableKey }
+                                val toDelete = selectedKeys.mapNotNull { itemsByKey[it] }
                                 isSelectionMode = false
-                                selectedFiles = emptySet()
+                                selectedKeys = emptySet()
                                 if (toDelete.isEmpty()) return@IconButton
                                 coroutineScope.launch {
                                     val result = viewModel.deleteItems(toDelete)
@@ -496,8 +500,8 @@ fun HistoryScreen(
                             )
                         }
 
-                        items(dateItems, key = { it.file.absolutePath }) { item ->
-                            val isSelected = selectedFiles.contains(item.file)
+                        items(dateItems, key = { it.stableKey }) { item ->
+                            val isSelected = selectedKeys.contains(item.stableKey)
                             // Phase 2.5 — manifest-backed rows route
                             // through the new in-app `player/{sessionId}`
                             // composable. Legacy file-only rows (no
@@ -517,11 +521,18 @@ fun HistoryScreen(
                                 { onOpenPlayer(item.sessionId, item.side) }
                             } else {
                                 {
-                                    val intent = Intent(context, PreviewActivity::class.java).apply {
-                                        putExtra("VIDEO_PATH", item.file.absolutePath)
-                                        item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                                    // Legacy file-only rows (no sessionId) keep the
+                                    // PreviewActivity path. A SAF row always has a
+                                    // sessionId (manifest-backed), so it routes to the
+                                    // in-app player above and never reaches this branch
+                                    // — but guard the File deref anyway.
+                                    item.file?.let { f ->
+                                        val intent = Intent(context, PreviewActivity::class.java).apply {
+                                            putExtra("VIDEO_PATH", f.absolutePath)
+                                            item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                                        }
+                                        context.startActivity(intent)
                                     }
-                                    context.startActivity(intent)
                                 }
                             }
                             LibraryRow(
@@ -531,17 +542,17 @@ fun HistoryScreen(
                                 isSelected = isSelected,
                                 onToggleSelection = {
                                     if (isSelectionMode) {
-                                        selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
-                                        if (selectedFiles.isEmpty()) isSelectionMode = false
+                                        selectedKeys = if (isSelected) selectedKeys - item.stableKey else selectedKeys + item.stableKey
+                                        if (selectedKeys.isEmpty()) isSelectionMode = false
                                     } else {
                                         isSelectionMode = true
-                                        selectedFiles = setOf(item.file)
+                                        selectedKeys = setOf(item.stableKey)
                                     }
                                 },
                                 onPlay = {
                                     if (isSelectionMode) {
-                                        selectedFiles = if (isSelected) selectedFiles - item.file else selectedFiles + item.file
-                                        if (selectedFiles.isEmpty()) isSelectionMode = false
+                                        selectedKeys = if (isSelected) selectedKeys - item.stableKey else selectedKeys + item.stableKey
+                                        if (selectedKeys.isEmpty()) isSelectionMode = false
                                     } else {
                                         playItem()
                                     }
@@ -616,19 +627,24 @@ fun LibraryRow(
     onMenuEdit: () -> Unit = {},
     onMenuViewSettings: () -> Unit = {}
 ) {
-    val primary = remember(item.file, nowMillis) {
-        HistoryRowFormatters.formatPrimaryDateTime(item.file.lastModified())
+    // B4c — read date/size/name via the effective accessors so SAF rows
+    // (file == null) use their DocumentFile-sourced metadata instead of
+    // NPE-ing on a File deref. File rows are byte-identical.
+    val lastModified = item.effectiveLastModified()
+    val sizeBytes = item.effectiveSize()
+    val primary = remember(item.stableKey, nowMillis) {
+        HistoryRowFormatters.formatPrimaryDateTime(lastModified)
     }
-    val time24 = remember(item.file) {
-        HistoryRowFormatters.formatTime24(item.file.lastModified())
+    val time24 = remember(item.stableKey) {
+        HistoryRowFormatters.formatTime24(lastModified)
     }
-    val sizeText = remember(item.file) {
-        HistoryRowFormatters.formatSize(item.file.length())
+    val sizeText = remember(item.stableKey) {
+        HistoryRowFormatters.formatSize(sizeBytes)
     }
-    val rowA11y = remember(primary, item.file, item.resolution) {
+    val rowA11y = remember(primary, item.stableKey, item.resolution) {
         HistoryRowFormatters.formatRowAccessibility(
             primaryDateTime = primary,
-            sizeBytes = item.file.length(),
+            sizeBytes = sizeBytes,
             quality = item.resolution
         )
     }
@@ -721,7 +737,7 @@ fun LibraryRow(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = item.file.name,
+                    text = item.effectiveName(),
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp
