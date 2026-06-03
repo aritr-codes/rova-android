@@ -880,8 +880,15 @@ fun RecordScreen(
                 onMergeFinished()
             } else {
                 scope.launch {
+                    // B4c — a gone/unwritable custom SAF folder is not a merge
+                    // failure with a Library recovery entry; show the accurate
+                    // "folder unavailable, recording kept" copy instead.
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.record_merge_failed)
+                        context.getString(
+                            if (serviceState.saveFolderUnavailable)
+                                R.string.record_save_folder_unavailable
+                            else R.string.record_merge_failed
+                        )
                     )
                 }
             }

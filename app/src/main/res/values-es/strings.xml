@@ -98,6 +98,7 @@
     <string name="notification_state_corrupted">Estado de la grabación dañado: %1$s</string>
     <string name="notification_merge_failed">Falló la combinación</string>
     <string name="notification_merge_failed_detail">Falló la combinación: %1$s</string>
+    <string name="notification_save_folder_unavailable">Carpeta de guardado no disponible: grabación conservada</string>
     <string name="notification_merge_state_save_failed">La grabación terminó, pero no se pudo guardar el estado — se reconciliará al próximo inicio.</string>
     <string name="notification_recording_stopped_detail">Grabación detenida: %1$s</string>
     <string name="notification_unknown_error">error desconocido</string>
@@ -256,6 +257,7 @@
 
     <!-- Merge failure snackbar -->
     <string name="record_merge_failed">Falló la combinación. Abre la Biblioteca para recuperar.</string>
+    <string name="record_save_folder_unavailable">Carpeta de guardado no disponible. Grabación conservada: elige otra ubicación en Ajustes.</string>
 
     <!-- History / Library screen (B3 i18n task 3) -->
     <string name="history_title">Biblioteca</string>

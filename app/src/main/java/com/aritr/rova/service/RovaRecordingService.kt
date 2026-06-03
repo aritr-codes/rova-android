@@ -110,6 +110,11 @@ data class RovaServiceState(
     val isMerging: Boolean = false,
     val mergeProgress: Float = 0f,
     val mergeError: String? = null,
+    // B4c — true when the export failed because the custom SAF save folder is
+    // gone/unwritable. Lets the record screen show an accurate "folder
+    // unavailable, recording kept" message instead of the generic merge-failed
+    // "Open Library to recover" copy (there is no Library entry for this case).
+    val saveFolderUnavailable: Boolean = false,
     val recordingError: String? = null,
     val isCameraActive: Boolean = false
 )
@@ -1155,7 +1160,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // recovery / UI / Phase 1.7 see the same audio-mode
                     // decision the FGS was started with.
                     val m = withContext(Dispatchers.IO) {
-                        sessionStore.createSession(config, currentAudioMode, hasUsableSafFolder())
+                        val safUsable = hasUsableSafFolder()
+                        // B4c (c) — don't silently switch the destination: if a
+                        // custom save folder was chosen for this single-mode
+                        // session but is now gone/unwritable, raise the advisory
+                        // so the user learns this recording lands in the default
+                        // location. The recording still succeeds either way.
+                        val settings = com.aritr.rova.data.RovaSettings(this@RovaRecordingService)
+                        if (!safUsable && settings.saveLocationTreeUri != null &&
+                            config.mode != "PortraitLandscape") {
+                            settings.saveFolderUnavailable = true
+                        }
+                        sessionStore.createSession(config, currentAudioMode, safUsable)
                     }
                     currentSessionId = m.sessionId
                     currentSessionDir = sessionStore.sessionDir(m.sessionId)
@@ -3439,8 +3455,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     com.aritr.rova.data.RovaSettings(this).saveFolderUnavailable = true
                     val msg = "Export failed: save folder unavailable"
                     RovaLog.e("performMerge: $msg")
-                    _serviceState.update { it.copy(mergeError = msg) }
-                    updateNotification(getString(R.string.notification_merge_failed))
+                    // B4c — flag the SAF-specific case so the record screen shows
+                    // "folder unavailable, recording kept" instead of the generic
+                    // merge-failed "Open Library to recover" (no Library entry here).
+                    _serviceState.update { it.copy(mergeError = msg, saveFolderUnavailable = true) }
+                    updateNotification(getString(R.string.notification_save_folder_unavailable))
                     delay(3000)
                 }
             }
@@ -3873,7 +3892,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val tree = settings.saveLocationTreeUri ?: return false
         // P+L SAF is deferred this slice — P+L sessions fall back to the SDK tier.
         if (settings.mode == "PortraitLandscape") return false
-        return com.aritr.rova.service.export.SafAndroidOps.isPersistedPermissionHeld(this, tree)
+        // B4c — probe write-usability, not just the grant: a folder deleted in a
+        // file manager keeps its persisted grant, so a grant-only check would
+        // freeze SAF and fail at export. isTargetWritable falls back to the SDK
+        // tier here when the folder is gone, so the recording still exports.
+        return com.aritr.rova.service.export.SafAndroidOps.isTargetWritable(this, tree)
     }
 
     private fun hasEnoughStorage(peakBytesRequired: Long): Boolean {

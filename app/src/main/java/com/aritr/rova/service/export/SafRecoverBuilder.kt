@@ -76,6 +76,9 @@ internal object SafRecoverBuilder {
             copyFileToDocument = { src, d -> SafAndroidOps.copyFileToDocument(context, src, d) },
             validateDocument = { d -> SafAndroidOps.validateDocument(context, d) },
             deleteDocument = { d -> SafAndroidOps.deleteDocument(context, d) },
+            // B4c — grant-only for the permanent/transient decision (a removable
+            // volume can be transiently unmounted); not-writable escalates to
+            // permanent via the retry budget, not on the first hiccup.
             isPermissionHeld = { SafAndroidOps.isPersistedPermissionHeld(context, treeUri) }
         )
         return exporter.recover(manifest, listSegments(sessionDir, side))

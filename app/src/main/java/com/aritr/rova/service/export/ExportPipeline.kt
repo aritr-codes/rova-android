@@ -187,6 +187,12 @@ internal object ExportPipeline {
             copyFileToDocument = { src, d -> SafAndroidOps.copyFileToDocument(context, src, d) },
             validateDocument = { d -> SafAndroidOps.validateDocument(context, d) },
             deleteDocument = { d -> SafAndroidOps.deleteDocument(context, d) },
+            // B4c — the PERMANENT/transient decision keys on the grant only, NOT
+            // on canWrite(): a removable volume can be transiently unmounted, so
+            // "not writable right now" must stay TRANSIENT (retry budget 3) and
+            // escalate to permanent only after the budget, rather than burning the
+            // manifest to FAILED on a momentary hiccup. Folder-gone-before-record
+            // is caught earlier by the writable freeze gate (hasUsableSafFolder).
             isPermissionHeld = { SafAndroidOps.isPersistedPermissionHeld(context, treeUri) }
         )
         return exporter.export(sessionId, segments)

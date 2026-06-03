@@ -31,6 +31,27 @@ internal object SafAndroidOps {
     }
 
     /**
+     * True iff the chosen folder is actually USABLE right now: the persisted
+     * grant is still held AND the tree document still exists and is writable.
+     *
+     * The grant survives the user deleting the folder in a file manager, so a
+     * grant-only check ([isPersistedPermissionHeld]) wrongly reports a deleted
+     * folder as available — the session then freezes as SAF, records, and only
+     * fails at export time with a misleading "Merge failed" (ADR-0024 §B4c
+     * folder-gone fix). Probing `DocumentFile.canWrite()` catches folder-gone
+     * up front, so the session falls back to the default tier at freeze (or
+     * surfaces SAVE_FOLDER_UNAVAILABLE if the folder vanishes mid-session).
+     * Best-effort: any provider throw is treated as "not usable".
+     */
+    fun isTargetWritable(context: Context, treeUri: String): Boolean = try {
+        isPersistedPermissionHeld(context, treeUri) &&
+            DocumentFile.fromTreeUri(context, Uri.parse(treeUri))?.canWrite() == true
+    } catch (t: Throwable) {
+        RovaLog.w("SafAndroidOps.isTargetWritable threw for $treeUri", t)
+        false
+    }
+
+    /**
      * Create a child "video/mp4" document under [treeUri]. Returns the
      * created doc Uri string, or null if creation failed. May throw —
      * caller classifies the throwable (permission-held → transient, else

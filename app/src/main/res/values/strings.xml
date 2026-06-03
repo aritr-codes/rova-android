@@ -97,6 +97,7 @@
     <string name="notification_state_corrupted">Recording state corrupted: %1$s</string>
     <string name="notification_merge_failed">Merge failed</string>
     <string name="notification_merge_failed_detail">Merge failed: %1$s</string>
+    <string name="notification_save_folder_unavailable">Save folder unavailable — recording kept</string>
     <string name="notification_merge_state_save_failed">Recording finished but state save failed — will reconcile on next launch.</string>
     <string name="notification_recording_stopped_detail">Recording stopped: %1$s</string>
     <string name="notification_unknown_error">unknown error</string>
@@ -255,6 +256,8 @@
 
     <!-- Merge failure snackbar -->
     <string name="record_merge_failed">Merge failed. Open Library to recover.</string>
+    <!-- B4c — SAF custom-folder-gone snackbar (not a Library-recoverable merge failure) -->
+    <string name="record_save_folder_unavailable">Save folder unavailable. Recording kept — pick a new location in Settings.</string>
 
     <!-- History / Library screen (B3 i18n task 3) -->
     <string name="history_title">Library</string>
