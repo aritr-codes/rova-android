@@ -23,6 +23,7 @@
 - **House test policy:** pure-JVM only. Anything touching `ContentResolver` / `DocumentsContract` / `SharedPreferences` is a thin seam injected as a lambda and is **not** unit-tested directly (mirrors the untested `Tier1AndroidOps`). The logic around it is tested via injected fakes.
 - **Run a single test:** `./gradlew :app:testDebugUnitTest --tests "com.aritr.rova.<Fqcn>"` (Windows: `gradlew.bat`; route Gradle through the PowerShell tool).
 - **Static-check gate:** new invariants need ADR clause → `check*` task → `preBuild` wiring (Task 10). Don't weaken an existing check.
+- **CORRECTION (post-Task-1):** `SafAndroidOps` was implemented with **`DocumentFile` + `Context`** (not raw `ContentResolver.query`) so it does not trip `checkExportPendingVisibilityOnQuery` (whose regex matches even `contentResolver.query(`). Every `SafAndroidOps.fn(...)` function therefore takes **`context: Context`** as its first arg, not `resolver`. At each call site in Tasks 5–7 pass the available `Context`: `context` (the `ExportPipeline.exportSaf` param / the Settings `context`), or `this` (a `Service`/`Application` is a `Context`). The code blocks below that show `resolver` were written against the earlier signature — substitute `Context`. Dependency `androidx.documentfile:documentfile:1.0.1` is added.
 
 ---
 
