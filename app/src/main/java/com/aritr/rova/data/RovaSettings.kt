@@ -182,11 +182,6 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("auto_export_enabled", true)
         set(value) = prefs.edit { putBoolean("auto_export_enabled", value) }
 
-    // Preferred MediaStore relative folder name; empty = caller default.
-    var exportFolderName: String
-        get() = prefs.getString("export_folder_name", "") ?: ""
-        set(value) = prefs.edit { putString("export_folder_name", value) }
-
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"

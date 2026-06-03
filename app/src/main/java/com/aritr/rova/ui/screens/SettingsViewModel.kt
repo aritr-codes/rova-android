@@ -30,10 +30,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val cameraGuidesEnabled = MutableStateFlow(settings.cameraGuidesEnabled)
     val autoDeleteEnabled = MutableStateFlow(settings.autoDeleteEnabled)
     val autoDeleteKeepLatest = MutableStateFlow(settings.autoDeleteKeepLatest)
-    // Phase 2.1B — UI/persistence-only surface for the Phase 0 key. No
-    // export-pipeline consumer reads this yet; Phase 5 will wire the
-    // gating consumer. Empty string = use the existing default folder.
-    val exportFolderName = MutableStateFlow(settings.exportFolderName)
 
     // B1 — recording defaults, surfaced as editable rows in App Settings.
     // These are the SAME persisted prefs the record SettingsSheet edits via
@@ -70,7 +66,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { cameraGuidesEnabled.collect { settings.cameraGuidesEnabled = it } }
         viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
         viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
-        viewModelScope.launch { exportFolderName.collect { settings.exportFolderName = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
         viewModelScope.launch { durationSeconds.collect { settings.durationSeconds = it } }
         viewModelScope.launch { intervalMinutes.collect { settings.intervalMinutes = it } }

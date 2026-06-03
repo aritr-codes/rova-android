@@ -381,9 +381,6 @@
     <string name="settings_auto_delete_label">Auto-delete old recordings</string>
     <string name="settings_auto_delete_supporting_on">Keeping the latest %1$d finished recordings.</string>
     <string name="settings_auto_delete_supporting_off">Off. Recordings stay until you delete them yourself.</string>
-    <string name="settings_export_folder_label">Export folder name</string>
-    <string name="settings_export_folder_supporting">Where finished videos appear inside your gallery.</string>
-    <string name="settings_export_folder_default">Default folder</string>
     <string name="settings_clear_cache_label">Clear cache</string>
     <string name="settings_clear_cache_supporting">Removes preview thumbnails and temporary files.</string>
     <string name="settings_clear_cache_cleared">Cleared %1$.1f MB</string>
@@ -406,14 +403,6 @@
     <string name="settings_privacy_label">Privacy policy</string>
     <string name="settings_privacy_supporting">Open the policy in your browser.</string>
     <string name="settings_privacy_no_browser">No browser available</string>
-
-    <!-- Export folder dialog -->
-    <string name="settings_export_folder_dialog_title">Export folder name</string>
-    <string name="settings_export_folder_field_label">Folder name</string>
-    <string name="settings_export_folder_preview_default">Videos will be saved to your default folder.</string>
-    <string name="settings_export_folder_preview_named">Videos will be saved to Movies / %1$s</string>
-    <string name="settings_export_folder_save">Save</string>
-    <string name="settings_export_folder_cancel">Cancel</string>
 
     <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
     <string name="settings_stepper_decrease_cd">Decrease %1$s</string>

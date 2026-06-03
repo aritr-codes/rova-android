@@ -382,9 +382,6 @@
     <string name="settings_auto_delete_label">Eliminar grabaciones antiguas automáticamente</string>
     <string name="settings_auto_delete_supporting_on">Conservando las últimas %1$d grabaciones terminadas.</string>
     <string name="settings_auto_delete_supporting_off">Desactivado. Las grabaciones permanecen hasta que las elimines tú.</string>
-    <string name="settings_export_folder_label">Nombre de la carpeta de exportación</string>
-    <string name="settings_export_folder_supporting">Dónde aparecen los vídeos terminados dentro de tu galería.</string>
-    <string name="settings_export_folder_default">Carpeta predeterminada</string>
     <string name="settings_clear_cache_label">Borrar caché</string>
     <string name="settings_clear_cache_supporting">Elimina las miniaturas de vista previa y los archivos temporales.</string>
     <string name="settings_clear_cache_cleared">Se borraron %1$.1f MB</string>
@@ -407,14 +404,6 @@
     <string name="settings_privacy_label">Política de privacidad</string>
     <string name="settings_privacy_supporting">Abre la política en tu navegador.</string>
     <string name="settings_privacy_no_browser">No hay ningún navegador disponible</string>
-
-    <!-- Export folder dialog -->
-    <string name="settings_export_folder_dialog_title">Nombre de la carpeta de exportación</string>
-    <string name="settings_export_folder_field_label">Nombre de la carpeta</string>
-    <string name="settings_export_folder_preview_default">Los vídeos se guardarán en tu carpeta predeterminada.</string>
-    <string name="settings_export_folder_preview_named">Los vídeos se guardarán en Movies / %1$s</string>
-    <string name="settings_export_folder_save">Guardar</string>
-    <string name="settings_export_folder_cancel">Cancelar</string>
 
     <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
     <string name="settings_stepper_decrease_cd">Disminuir %1$s</string>

@@ -116,9 +116,6 @@ import kotlinx.coroutines.launch
  *  - autoDeleteEnabled + autoDeleteKeepLatest chips ([5,10,25,50]) unchanged
  *  - Battery optimization CTA still routes through BatteryOptimizationHelper
  *  - Privacy + version row unchanged in destination
- *
- * exportFolderName surfaces here as a UI/persistence-only row. No
- * ExportPipeline / MediaStore consumer reads it yet; Phase 5 wires that.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,7 +134,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val cameraGuidesEnabled by settingsViewModel.cameraGuidesEnabled.collectAsStateWithLifecycle()
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
-    val exportFolderName by settingsViewModel.exportFolderName.collectAsStateWithLifecycle()
     val resolution by settingsViewModel.resolution.collectAsStateWithLifecycle()
     val durationSeconds by settingsViewModel.durationSeconds.collectAsStateWithLifecycle()
     val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
@@ -164,7 +160,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     }
 
     var showBatteryDialog by remember { mutableStateOf(false) }
-    var showFolderDialog by remember { mutableStateOf(false) }
     var openSheet by remember { mutableStateOf<RecordingDefaultSheet?>(null) }
     var openThemeSheet by remember { mutableStateOf(false) }
     var openLanguageSheet by remember { mutableStateOf(false) }
@@ -399,17 +394,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     )
                 }
                 SettingsDivider()
-                SettingsRow(
-                    icon = Icons.Default.Folder,
-                    label = stringResource(R.string.settings_export_folder_label),
-                    supporting = stringResource(R.string.settings_export_folder_supporting),
-                    value = exportFolderName.ifBlank {
-                        stringResource(R.string.settings_export_folder_default)
-                    },
-                    onClick = { showFolderDialog = true },
-                    trailing = { ChevronTrailing() }
-                )
-                SettingsDivider()
                 // B4 SAF track — custom save-location row (tree URI picker).
                 SettingsRow(
                     icon = Icons.Default.Folder,
@@ -537,17 +521,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         )
     }
 
-    if (showFolderDialog) {
-        ExportFolderDialog(
-            initial = exportFolderName,
-            onSave = { newValue ->
-                settingsViewModel.exportFolderName.value = newValue
-                showFolderDialog = false
-            },
-            onDismiss = { showFolderDialog = false }
-        )
-    }
-
     when (openSheet) {
         RecordingDefaultSheet.RESOLUTION -> SettingsOptionSheet(
             title = stringResource(R.string.settings_default_resolution_label),
@@ -629,36 +602,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 }
 
 private val KEEP_LATEST_OPTIONS = listOf(5, 10, 25, 50)
-
-/**
- * Phase 2.1B review-fix — defensive sanitizer for the export folder name
- * persisted via [RovaSettings.exportFolderName].
- *
- * Phase 5 will be the first export-pipeline consumer of this value, but
- * Phase 2.1B must not create bad persisted state in the meantime. Contract:
- *  - trim leading/trailing whitespace
- *  - cap at 32 characters (matches mockup's `maxlength="32"`)
- *  - single folder segment — strip path separators (`/`, `\`)
- *  - strip platform-invalid filename chars (`: * ? " < > |`)
- *  - strip ASCII control chars (`< 0x20`, `0x7F`)
- *  - reserved `.` / `..` resolve to the empty string
- *  - empty result means "use the existing default folder" — exactly the
- *    semantic [RovaSettings.exportFolderName] documents for `""`
- *
- * `internal` so the unit test in `SettingsExportFolderTest` can call it
- * directly without Compose / Android infra.
- */
-internal fun sanitizeExportFolderName(input: String): String {
-    val invalidChars = setOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
-    val filtered = input.filter { ch ->
-        ch.code >= 0x20 && ch.code != 0x7F && ch !in invalidChars
-    }
-    val trimmed = filtered.trim().take(32).trim()
-    return when (trimmed) {
-        "", ".", ".." -> ""
-        else -> trimmed
-    }
-}
 
 @Composable
 private fun SettingsSection(
@@ -925,49 +868,3 @@ private fun endonymOf(tag: String): String {
 
 /** Which recording-default picker sheet is open in [SettingsScreen]. */
 private enum class RecordingDefaultSheet { RESOLUTION, DURATION, INTERVAL, LOOPS }
-
-@Composable
-private fun ExportFolderDialog(
-    initial: String,
-    onSave: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var value by remember { mutableStateOf(initial) }
-    // Sanitize live so the preview reflects what would actually persist
-    // — typing "foo/bar" shows "foobar". Save persists the same value.
-    val sanitized = sanitizeExportFolderName(value)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.settings_export_folder_dialog_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { input -> value = input.take(32) },
-                    singleLine = true,
-                    label = { Text(text = stringResource(R.string.settings_export_folder_field_label)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = if (sanitized.isEmpty()) {
-                        stringResource(R.string.settings_export_folder_preview_default)
-                    } else {
-                        stringResource(R.string.settings_export_folder_preview_named, sanitized)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = rovaQuietText(dimAlpha = 0.6f)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(sanitized) }) {
-                Text(text = stringResource(R.string.settings_export_folder_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_export_folder_cancel))
-            }
-        }
-    )
-}
