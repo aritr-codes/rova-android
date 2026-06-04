@@ -97,6 +97,21 @@ fun PlayerScreen(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val isVaulted by viewModel.isVaulted.collectAsStateWithLifecycle()
+
+    // B5 / ADR-0025 — block screenshots / recents-thumbnail capture while
+    // playing a VAULTED recording. Keyed on isVaulted so the flag is added once
+    // the manifest resolves as vaulted and cleared on dispose (or if it ever
+    // flips back to false). Public playback is unaffected.
+    val secureActivity = context as? android.app.Activity
+    androidx.compose.runtime.DisposableEffect(isVaulted) {
+        if (isVaulted) {
+            secureActivity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        onDispose {
+            secureActivity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val editorPlaceholderMessage = stringResource(R.string.player_editor_coming_soon)

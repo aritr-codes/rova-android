@@ -680,6 +680,10 @@
     <string name="preview_share_no_app">No hay ninguna app disponible para compartir vídeos</string>
 
     <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
+    <string name="settings_section_privacy">Privacidad</string>
+    <string name="vault_empty_title">La caja fuerte está vacía</string>
+    <string name="vault_empty_body">Las grabaciones que muevas a la caja fuerte, o las nuevas grabaciones hechas mientras \"Ocultar nuevas grabaciones en la caja fuerte\" está activado, aparecen aquí.</string>
+    <string name="vault_open_entry_cd">Abrir la caja fuerte oculta</string>
     <string name="settings_hide_in_vault_title">Ocultar nuevas grabaciones en la caja fuerte</string>
     <string name="settings_hide_in_vault_summary">Las nuevas grabaciones permanecen en Rova y se ocultan de la galería. Para abrirlas aquí necesitas el bloqueo de pantalla del dispositivo. Los archivos no están cifrados en esta versión.</string>
     <string name="vault_title">Caja fuerte oculta</string>

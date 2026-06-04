@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
@@ -112,6 +113,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToRecord: () -> Unit = {},
     onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
+    onOpenVault: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -425,6 +427,17 @@ fun HistoryScreen(
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.history_back_cd))
+                            }
+                        },
+                        actions = {
+                            // B5 / ADR-0025 — hidden vault entry point. Auth is
+                            // gated at the nav layer (MainScreen) before the
+                            // vault route opens.
+                            IconButton(onClick = onOpenVault) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = stringResource(R.string.vault_open_entry_cd)
+                                )
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)

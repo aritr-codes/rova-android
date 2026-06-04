@@ -1,5 +1,6 @@
 package com.aritr.rova.ui
 
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -7,7 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.theme.RovaDarkSurface
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -24,6 +27,8 @@ import com.aritr.rova.ui.screens.SettingsScreen
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
+import com.aritr.rova.ui.vault.VaultAuthGate
+import com.aritr.rova.ui.vault.VaultScreen
 
 /**
  * B2 review fix — routes that paint full-bleed dark regardless of the app
@@ -115,6 +120,28 @@ fun MainScreen(
                 }
             }
             composable("history") {
+                // B5 / ADR-0025 — vault entry. Auth-gates on tap, then sets the
+                // in-memory unlock and navigates. With no enrolled lock we still
+                // navigate (contents remain hidden from the gallery) so the vault
+                // screen can show the honest no-lock banner.
+                val activity = context as FragmentActivity
+                val app = context.applicationContext as RovaApp
+                val onOpenVault: () -> Unit = {
+                    VaultAuthGate.authenticate(
+                        activity = activity,
+                        onSucceeded = {
+                            app.onVaultAuthSucceeded()
+                            navController.navigate("vault") { launchSingleTop = true }
+                        },
+                        onCancelled = {},
+                        onUnavailable = {
+                            app.onVaultAuthSucceeded()
+                            navController.navigate("vault") { launchSingleTop = true }
+                        },
+                        // TODO(B5): wire ActivityResult to flip lock on keyguard return
+                        launchKeyguard = { intent -> activity.startActivity(intent) },
+                    )
+                }
                 HistoryScreen(
                     onNavigateToRecord = {
                         navController.navigate("record") {
@@ -122,6 +149,7 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onOpenVault = onOpenVault,
                     onOpenPlayer = { sessionId, side ->
                         // Phase 2.5 — argumented routes do NOT use
                         // launchSingleTop because each (route, args)
@@ -173,6 +201,44 @@ fun MainScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
+            }
+            composable("vault") {
+                // B5 / ADR-0025 — `onLeaveVault()` must fire on BOTH the back
+                // chevron and a system-back, but NOT when the vault is merely
+                // covered by the player (vault -> player). Nav Compose disposes
+                // the vault destination's composition while the player is on top,
+                // so a dispose-based relock would fire on the way IN to the
+                // player and then bounce the user out on the way back (the
+                // re-entering vault's auto-relock LaunchedEffect would see the
+                // stale locked state and pop again). Instead, relock only on an
+                // actual pop: the back chevron callback and a BackHandler for
+                // system back. Navigating to the player leaves the vault
+                // unlocked, which is correct — the user is still viewing vault
+                // content, and the player applies its own FLAG_SECURE.
+                val app = context.applicationContext as RovaApp
+                val noLock = remember(context) {
+                    BiometricManager.from(context).canAuthenticate(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                    ) != BiometricManager.BIOMETRIC_SUCCESS
+                }
+                val leaveVault: () -> Unit = {
+                    app.onLeaveVault()
+                    navController.popBackStack()
+                }
+                androidx.activity.compose.BackHandler { leaveVault() }
+                VaultScreen(
+                    onOpenPlayer = { sessionId, side ->
+                        val route = if (side != null) {
+                            "player/$sessionId?side=${side.name}"
+                        } else {
+                            "player/$sessionId"
+                        }
+                        navController.navigate(route)
+                    },
+                    onBack = leaveVault,
+                    showNoLockWarning = noLock,
+                )
             }
             composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel, onBack = { navController.popBackStack() }) }
         }

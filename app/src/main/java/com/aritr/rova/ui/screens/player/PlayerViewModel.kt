@@ -64,6 +64,17 @@ class PlayerViewModel(
     private val _progress = MutableStateFlow(PlaybackProgress())
     val progress: StateFlow<PlaybackProgress> = _progress.asStateFlow()
 
+    /**
+     * B5 / ADR-0025 — true when the resolved manifest is VAULTED. The screen
+     * collects this to apply FLAG_SECURE so vault playback can't be
+     * screenshotted or surfaced in the recents thumbnail. Stays false for
+     * PUBLIC (and for in-flight VAULTING/UNVAULTING, which the vault list does
+     * not route into the player). Resolved once in [init] from the same
+     * manifest read that drives uiState.
+     */
+    private val _isVaulted = MutableStateFlow(false)
+    val isVaulted: StateFlow<Boolean> = _isVaulted.asStateFlow()
+
     private var exoPlayer: ExoPlayer? = null
     private var pollJob: Job? = null
 
@@ -101,6 +112,8 @@ class PlayerViewModel(
             val manifest = withContext(Dispatchers.IO) {
                 runCatching { loadManifest(sessionId) }.getOrNull()
             }
+            _isVaulted.value =
+                manifest?.vaultState == com.aritr.rova.data.VaultState.VAULTED
             val resolved = PlayerUriResolver.resolve(manifest, side)
             // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
             // uiState to Ready. The screen's `update` block reads
