@@ -182,6 +182,13 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("auto_export_enabled", true)
         set(value) = prefs.edit { putBoolean("auto_export_enabled", value) }
 
+    // B5 / ADR-0025 — when ON, new recordings go to the hidden vault
+    // (app-private storage, never published). Backed up (a genuine user
+    // preference, like themeMode). Default OFF preserves existing behavior.
+    var hideInVault: Boolean
+        get() = prefs.getBoolean("hide_in_vault", false)
+        set(value) = prefs.edit { putBoolean("hide_in_vault", value) }
+
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
