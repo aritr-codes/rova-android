@@ -423,6 +423,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
      */
     private var currentExportTier: com.aritr.rova.data.ExportTier? = null
 
+    /**
+     * B5 / ADR-0025 — service-side cache of the session's frozen
+     * `vaultIntentAtStart`, populated from the manifest at createSession time
+     * (mirrors [currentExportTier]). Passed to [ExportPipeline.export] so a
+     * vault-frozen session dispatches to the private vault route. Cleared in
+     * [releaseResources].
+     */
+    private var currentVaultIntent: Boolean = false
+
     inner class LocalBinder : Binder() {
         fun getService(): RovaRecordingService = this@RovaRecordingService
         // C1: State exposed through the binder, not via static companion accessor
@@ -1171,13 +1180,21 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             config.mode != "PortraitLandscape") {
                             settings.saveFolderUnavailable = true
                         }
-                        sessionStore.createSession(config, currentAudioMode, safUsable)
+                        sessionStore.createSession(
+                            config,
+                            currentAudioMode,
+                            safUsable,
+                            vaultIntentAtStart = settings.hideInVault
+                        )
                     }
                     currentSessionId = m.sessionId
                     currentSessionDir = sessionStore.sessionDir(m.sessionId)
                     // Phase 1.6: cache frozen tier from manifest; gate
                     // reads this, never SDK_INT.
                     currentExportTier = m.exportTier
+                    // B5 / ADR-0025: cache frozen vault intent for the export
+                    // dispatch; runExportPipeline passes it to ExportPipeline.export.
+                    currentVaultIntent = m.vaultIntentAtStart
                     pendingPersistJobs.clear()
                     stopNeedsRecovery = false
                     // ADR 0006 B-fix-5: reset currentStopReason at session
@@ -3151,6 +3168,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentSessionId = null
         currentSessionDir = null
         currentExportTier = null
+        currentVaultIntent = false
         pendingPersistJobs.clear()
         stopNeedsRecovery = false
         // ADR 0006 B-fix-5: clear gate-fired stop reason on teardown so
@@ -3395,6 +3413,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // currentExportTier (field) is cached from m.exportTier at createSession
             // time; it is non-null for any session that has reached runExportPipeline.
             frozenTier = currentExportTier,
+            // B5 / ADR-0025 — frozen vault intent; routes to the private vault
+            // exporter ahead of the SDK/SAF tiers when the session opted in.
+            vaultIntent = currentVaultIntent,
             onProgress = onProgress
         )
     }

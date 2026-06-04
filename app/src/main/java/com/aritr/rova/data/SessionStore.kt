@@ -110,7 +110,10 @@ open class SessionStore internal constructor(rootDirArg: File) {
     fun createSession(
         config: SessionConfig,
         audioMode: AudioMode = AudioMode.VIDEO_ONLY,
-        hasUsableSafFolder: Boolean = false
+        hasUsableSafFolder: Boolean = false,
+        // B5 / ADR-0025 — frozen at session start from RovaSettings.hideInVault.
+        // Default false keeps every pre-B5 caller unchanged.
+        vaultIntentAtStart: Boolean = false
     ): SessionManifest {
         val sessionId = generateUniqueSessionId()
         // Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003): tier from the shared
@@ -124,7 +127,8 @@ open class SessionStore internal constructor(rootDirArg: File) {
             config = config,
             segments = emptyList(),
             exportTier = tier,
-            audioMode = audioMode
+            audioMode = audioMode,
+            vaultIntentAtStart = vaultIntentAtStart
         )
         val dir = sessionDir(sessionId)
         if (!dir.exists()) dir.mkdirs()

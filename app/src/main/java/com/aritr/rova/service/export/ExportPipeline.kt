@@ -78,6 +78,11 @@ internal object ExportPipeline {
         // passes `manifest.exportTier` so a SAF-frozen session dispatches to
         // [exportSaf] instead of the SDK-derived tier.
         frozenTier: ExportTier? = null,
+        // B5 / ADR-0025 — the session's frozen vault intent. When true (frozen
+        // from `vaultIntentAtStart`) the export dispatches to [exportVault]
+        // ahead of the SDK/SAF tiers; the recording is merged to an app-private
+        // file and never published.
+        vaultIntent: Boolean = false,
         onProgress: (Float) -> Unit
     ): ExportResult {
         // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): include
@@ -95,6 +100,18 @@ internal object ExportPipeline {
             null -> ""
         }
         val displayName = "${baseName}${suffix}.mp4"
+        if (vaultIntent) {
+            return exportVault(
+                context = context,
+                sessionStore = sessionStore,
+                sessionId = sessionId,
+                sessionDir = sessionDir,
+                segments = segments,
+                displayName = displayName,
+                side = side,
+                onProgress = onProgress,
+            )
+        }
         return when (val tier = frozenTier ?: currentExportTier()) {
             ExportTier.SAF_DESTINATION -> exportSaf(
                 context = context,
@@ -194,6 +211,34 @@ internal object ExportPipeline {
             // manifest to FAILED on a momentary hiccup. Folder-gone-before-record
             // is caught earlier by the writable freeze gate (hasUsableSafFolder).
             isPermissionHeld = { SafAndroidOps.isPersistedPermissionHeld(context, treeUri) }
+        )
+        return exporter.export(sessionId, segments)
+    }
+
+    /**
+     * B5 / ADR-0025 — vault route. Merges to an app-private file under the
+     * session dir; never publishes. Frozen by `vaultIntentAtStart` and
+     * dispatched ahead of the SDK/SAF tiers.
+     */
+    private suspend fun exportVault(
+        context: Context,
+        sessionStore: SessionStore,
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        displayName: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        onProgress: (Float) -> Unit,
+    ): ExportResult {
+        val vaultFile = File(sessionDir, displayName)
+        val exporter = VaultExporter(
+            vaultFile = vaultFile,
+            mux = { segs, out -> VideoMerger.mergeSegments(segs, out, onProgress) },
+            setFinalized = { p ->
+                if (side == null) sessionStore.setVaultFinalized(sessionId, p)
+                else sessionStore.setVaultFinalizedForSide(sessionId, side, p)
+            },
+            setFailed = { sessionStore.setExportFailed(sessionId) },
         )
         return exporter.export(sessionId, segments)
     }
