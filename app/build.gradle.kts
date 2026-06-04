@@ -1341,6 +1341,45 @@ val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEn
     }
 }
 
+// ADR-0024 §commit-before-stream — a SAF byte write (openOutputStream / the
+// copyFileToDocument publish) must be preceded, in the same file, by a
+// setExportSafTarget / setSafTarget commit so the target doc Uri is durable in
+// the manifest before any byte is written (crash-safe validate-before-delete
+// recovery depends on it). SafAndroidOps.kt is the raw-stream seam and exempt.
+val checkSafTargetCommittedBeforeStream = tasks.register("checkSafTargetCommittedBeforeStream") {
+    group = "verification"
+    description = "SAF openOutputStream/copy must be preceded by a setExportSafTarget commit (ADR-0024 §commit-before-stream)."
+    val srcDir = file("src/main/java/com/aritr/rova/service/export")
+    inputs.dir(srcDir).withPropertyName("exportSrc")
+    doLast {
+        if (!srcDir.exists()) throw GradleException("export source dir missing: $srcDir")
+        val offenders = mutableListOf<String>()
+        srcDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
+            val lines = f.readLines()
+            val streamIdx = lines.indexOfFirst {
+                val t = it.trimStart()
+                !t.startsWith("//") && !t.startsWith("*") &&
+                    (it.contains("copyFileToDocument(") || it.contains("openOutputStream("))
+            }
+            if (streamIdx >= 0) {
+                val commitsBefore = lines.take(streamIdx).any {
+                    it.contains("setExportSafTarget") || it.contains("setSafTarget(")
+                }
+                // SafAndroidOps.kt holds the raw stream op (the seam) and is exempt.
+                if (!commitsBefore && f.name != "SafAndroidOps.kt") {
+                    offenders += "${f.relativeTo(rootDir)}:${streamIdx + 1}: SAF stream op without a prior setExportSafTarget commit"
+                }
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "ADR-0024 §commit-before-stream violation:\n" + offenders.joinToString("\n") { "  $it" } +
+                    "\nThe SAF target doc Uri MUST be committed to the manifest before any byte is written to it."
+            )
+        }
+    }
+}
+
 /**
  * Phase 1.7 commit-7 — ADR 0006 §"Terminal-Write Ordering" B7
  * tightening. `markTerminated(...,Terminated.COMPLETED,...)` writes
@@ -1785,6 +1824,7 @@ afterEvaluate {
         dependsOn(checkExportCleanupPredicate)
         dependsOn(checkExportNoCopyToPublicMovies)
         dependsOn(checkExportPipelineSingleEntry)
+        dependsOn(checkSafTargetCommittedBeforeStream)
         dependsOn(checkCompletedWriteOnlyFromPerformMerge)
         // dependsOn(checkCompletedWriteOnlyFromPerformMerge)  // bisect
         dependsOn(checkWakeLockBoundedAcquire)
@@ -1827,6 +1867,8 @@ dependencies {
     // and the editor / transformer pipeline is NO-GO for v1.0.
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // B4 SAF export — DocumentFile API for tree-URI operations (ADR-0024)
+    implementation("androidx.documentfile:documentfile:1.0.1")
     testImplementation(libs.junit)
     // Phase 1.5 — JVM unit tests need a real org.json impl. The android.jar
     // shipped to JVM tests stubs JSONObject/JSONArray to throw at runtime;

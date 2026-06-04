@@ -72,10 +72,6 @@ class RovaSettingsTest {
         assertTrue(settings().autoExportEnabled)
     }
 
-    @Test fun `exportFolderName default is empty`() {
-        assertEquals("", settings().exportFolderName)
-    }
-
     // ─── Round-trip: 10 pre-existing keys ─────────────────────────
 
     @Test fun `durationSeconds round-trip`() {
@@ -223,11 +219,6 @@ class RovaSettingsTest {
         assertFalse(s.autoExportEnabled)
     }
 
-    @Test fun `exportFolderName round-trip`() {
-        val s = settings(); s.exportFolderName = "Rova"
-        assertEquals("Rova", s.exportFolderName)
-    }
-
     // ─── Legacy blob: only 10 pre-existing keys present ───────────
 
     @Test fun `legacy blob with only 10 pre-existing keys reads documented defaults for 3 new keys`() {
@@ -257,10 +248,9 @@ class RovaSettingsTest {
         assertTrue(s.autoDeleteEnabled)
         assertEquals(25, s.autoDeleteKeepLatest)
 
-        // 3 new keys fall back to documented defaults
+        // new keys fall back to documented defaults
         assertFalse(s.onboardingCompleted)
         assertTrue(s.autoExportEnabled)
-        assertEquals("", s.exportFolderName)
     }
 
     // ─── snoozedWarningIds (Phase 4.1c) ───────────────────────────

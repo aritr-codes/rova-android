@@ -98,6 +98,7 @@
     <string name="notification_state_corrupted">Estado de la grabación dañado: %1$s</string>
     <string name="notification_merge_failed">Falló la combinación</string>
     <string name="notification_merge_failed_detail">Falló la combinación: %1$s</string>
+    <string name="notification_save_folder_unavailable">Carpeta de guardado no disponible: grabación conservada</string>
     <string name="notification_merge_state_save_failed">La grabación terminó, pero no se pudo guardar el estado — se reconciliará al próximo inicio.</string>
     <string name="notification_recording_stopped_detail">Grabación detenida: %1$s</string>
     <string name="notification_unknown_error">error desconocido</string>
@@ -256,6 +257,7 @@
 
     <!-- Merge failure snackbar -->
     <string name="record_merge_failed">Falló la combinación. Abre la Biblioteca para recuperar.</string>
+    <string name="record_save_folder_unavailable">Carpeta de guardado no disponible. Grabación conservada: elige otra ubicación en Ajustes.</string>
 
     <!-- History / Library screen (B3 i18n task 3) -->
     <string name="history_title">Biblioteca</string>
@@ -374,12 +376,14 @@
     <string name="settings_system_notifications_unavailable">Ajustes de notificaciones no disponibles en este dispositivo</string>
 
     <!-- Storage rows -->
+    <string name="settings_save_location_label">Ubicación de guardado</string>
+    <string name="settings_save_location_internal">Almacenamiento interno (predeterminado)</string>
+    <string name="settings_save_location_choose">Elegir carpeta…</string>
+    <string name="settings_save_location_use_internal">Usar almacenamiento interno</string>
+    <string name="settings_save_location_unusable">Esa carpeta no se puede usar para guardar. Elige otra.</string>
     <string name="settings_auto_delete_label">Eliminar grabaciones antiguas automáticamente</string>
     <string name="settings_auto_delete_supporting_on">Conservando las últimas %1$d grabaciones terminadas.</string>
     <string name="settings_auto_delete_supporting_off">Desactivado. Las grabaciones permanecen hasta que las elimines tú.</string>
-    <string name="settings_export_folder_label">Nombre de la carpeta de exportación</string>
-    <string name="settings_export_folder_supporting">Dónde aparecen los vídeos terminados dentro de tu galería.</string>
-    <string name="settings_export_folder_default">Carpeta predeterminada</string>
     <string name="settings_clear_cache_label">Borrar caché</string>
     <string name="settings_clear_cache_supporting">Elimina las miniaturas de vista previa y los archivos temporales.</string>
     <string name="settings_clear_cache_cleared">Se borraron %1$.1f MB</string>
@@ -402,14 +406,6 @@
     <string name="settings_privacy_label">Política de privacidad</string>
     <string name="settings_privacy_supporting">Abre la política en tu navegador.</string>
     <string name="settings_privacy_no_browser">No hay ningún navegador disponible</string>
-
-    <!-- Export folder dialog -->
-    <string name="settings_export_folder_dialog_title">Nombre de la carpeta de exportación</string>
-    <string name="settings_export_folder_field_label">Nombre de la carpeta</string>
-    <string name="settings_export_folder_preview_default">Los vídeos se guardarán en tu carpeta predeterminada.</string>
-    <string name="settings_export_folder_preview_named">Los vídeos se guardarán en Movies / %1$s</string>
-    <string name="settings_export_folder_save">Guardar</string>
-    <string name="settings_export_folder_cancel">Cancelar</string>
 
     <!-- Stepper sheet (SettingsStepperSheet) contentDescription -->
     <string name="settings_stepper_decrease_cd">Disminuir %1$s</string>
@@ -535,6 +531,11 @@
     <string name="warning_cant_merge_primary">Liberar espacio y reintentar</string>
     <string name="warning_cant_merge_secondary">Guardar solo los segmentos</string>
     <string name="warning_cant_merge_tertiary">Descartar sesión</string>
+
+    <!-- SAVE_FOLDER_UNAVAILABLE (B4b ADR-0024) -->
+    <string name="warning_save_folder_unavailable_title">Carpeta de guardado no disponible</string>
+    <string name="warning_save_folder_unavailable_body">La carpeta de guardado personalizada ya no es accesible. Abre Ajustes y elige una nueva ubicación.</string>
+    <string name="warning_save_folder_unavailable_primary">Abrir ajustes</string>
 
     <!-- CAMERA_IN_USE / CAMERA_DISABLED (sheet) -->
     <string name="warning_camera_in_use_title">La cámara la está usando otra app</string>

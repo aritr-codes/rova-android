@@ -142,5 +142,9 @@ class RecoveryMerger(
         is ExportResult.PendingInsertFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("pending insert failed"))
         is ExportResult.FinalizeFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("finalize failed"))
         is ExportResult.ManifestWriteFailed -> RecoveryMergeOutcome.MuxFailed(cause)
+        // ADR-0024 — terminal export failure surfaced to the user; mirrors
+        // the other permanent export failures, all of which map to MuxFailed
+        // (the outcome's "failed, show me" bucket). cause is nullable.
+        is ExportResult.SafFolderUnavailable -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("save folder unavailable"))
     }
 }

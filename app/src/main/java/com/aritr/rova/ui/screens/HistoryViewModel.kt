@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
@@ -28,7 +29,28 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 data class VideoItem(
-    val file: File,
+    /**
+     * On-disk artifact file. Non-null for every file-backed row
+     * (Tier 1 MediaStore `_DATA`-resolved, Tier 2/3 public path, P+L
+     * per-side, per-segment, and legacy file-system rows). **Null only
+     * for SAF content-URI rows** (ADR-0024 / B4c): a SAF artifact is a
+     * `content://` document with no `java.io.File` — its identity is
+     * [docUri]. Every `item.file` deref in the History UI MUST be
+     * null-guarded; use [stableKey] for identity, [modifiedAtMillis] /
+     * [sizeBytes] / [displayName] for the metadata a SAF row cannot get
+     * from a File.
+     */
+    val file: File?,
+    /**
+     * B4c (ADR-0024) — SAF content-document URI for rows exported to a
+     * user-chosen Storage Access Framework folder. Non-null **only** for
+     * SAF rows; null for every File-backed row. When non-null, [file] is
+     * null and [shareUri] equals this URI. The delete path validates and
+     * removes via `DocumentFile.fromSingleUri(...).delete()`; metadata
+     * (thumbnail/resolution) is extracted via
+     * `MediaMetadataRetriever.setDataSource(context, docUri)`.
+     */
+    val docUri: Uri? = null,
     val thumbnail: Bitmap?,
     val resolution: String,
     /**
@@ -81,7 +103,47 @@ data class VideoItem(
      * segments list.
      */
     val segmentIndex: Int? = null,
-)
+    /**
+     * B4c (ADR-0024) — last-modified wall-clock millis for SAF rows,
+     * where [file] is null and `File.lastModified()` is unavailable.
+     * Sourced from `DocumentFile.lastModified()` (falling back to the
+     * manifest's `terminatedAt`/`startedAt`) so SAF rows sort and group
+     * by date alongside file rows instead of clustering at epoch. Null
+     * for file rows — those read [file]`.lastModified()` directly.
+     */
+    val modifiedAtMillis: Long? = null,
+    /**
+     * B4c (ADR-0024) — artifact size in bytes for SAF rows (from
+     * `DocumentFile.length()`). Null for file rows, which read
+     * [file]`.length()`. Drives the per-row size caption + library
+     * total-size summary without a File deref.
+     */
+    val sizeBytes: Long? = null,
+    /**
+     * B4c (ADR-0024) — display name for SAF rows (from
+     * `DocumentFile.name`). Null for file rows, which read [file]`.name`.
+     */
+    val displayName: String? = null,
+) {
+    /**
+     * B4c — stable per-row identity that tolerates a null [file]. File
+     * rows key on the absolute path (byte-identical to the prior
+     * `file.absolutePath` key); SAF rows key on the content-URI string.
+     * Used for LazyColumn keys, multi-select membership, and the
+     * metadata cache so a null File never produces a `"null"` collision.
+     */
+    val stableKey: String
+        get() = file?.absolutePath ?: docUri?.toString() ?: "session:$sessionId"
+
+    /** Effective last-modified millis: [file]`.lastModified()` for file rows, [modifiedAtMillis] for SAF rows. */
+    fun effectiveLastModified(): Long = file?.lastModified() ?: modifiedAtMillis ?: 0L
+
+    /** Effective size in bytes: [file]`.length()` for file rows, [sizeBytes] for SAF rows. */
+    fun effectiveSize(): Long = file?.length() ?: sizeBytes ?: 0L
+
+    /** Effective display name: [file]`.name` for file rows, [displayName] for SAF rows. */
+    fun effectiveName(): String = file?.name ?: displayName ?: stableKey
+}
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -172,20 +234,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val legacyArtifacts = legacyFileSystemScan(app)
             .map { ResolvedRecording(file = it, shareUri = null, sessionId = null) }
 
-        // Union manifest-driven + legacy, de-dupe by absolute path,
-        // sort newest-first by mtime. Manifest-driven entries come
-        // first so a duplicate path keeps the URI-bearing record
-        // rather than the legacy null-URI one.
+        // Union manifest-driven + legacy, de-dupe by stable key (path
+        // for file rows, content-URI for SAF rows — B4c), sort
+        // newest-first by mtime. Manifest-driven entries come first so a
+        // duplicate key keeps the URI-bearing record rather than the
+        // legacy null-URI one.
         val seen = HashSet<String>()
         val recordings = (manifestArtifacts + legacyArtifacts)
-            .filter { seen.add(it.file.absolutePath) }
-            .sortedByDescending { it.file.lastModified() }
+            .filter { seen.add(it.stableKey) }
+            .sortedByDescending { it.effectiveLastModified() }
 
         val initial = recordings.map { rec -> buildItem(rec) }
         // Explicit containsKey: ConcurrentHashMap.contains resolves to
         // containsValue under Kotlin's Map operator overloads, which is
         // not what we want here (KT-18053).
-        val anyMissing = recordings.any { !metadataCache.containsKey(it.file.absolutePath) }
+        val anyMissing = recordings.any { !metadataCache.containsKey(it.stableKey) }
         if (emitPartial && anyMissing) {
             // First-paint emit: rows show up with placeholder thumb +
             // "—" resolution while metadata loads in parallel.
@@ -193,10 +256,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
 
         if (anyMissing) {
+            // B4c — the cache key is the stable key. For file rows that
+            // is the absolute path (extract via setDataSource(path)); for
+            // SAF rows it is the `content://` URI string, which
+            // [extractMetadata] detects and opens via
+            // setDataSource(context, uri).
             HistoryMetadataLoader.fillMissing(
-                paths = recordings.map { it.file.absolutePath },
+                paths = recordings.map { it.stableKey },
                 cache = metadataCache,
-                extract = { path -> VideoMetadataUtils.extractMetadata(path) }
+                extract = { key -> VideoMetadataUtils.extractMetadata(app, key) }
             )
         }
 
@@ -207,22 +275,28 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
 
         // Clean stale entries for deleted files
-        val currentPaths = recordings.map { it.file.absolutePath }.toSet()
-        metadataCache.keys.retainAll(currentPaths)
+        val currentKeys = recordings.map { it.stableKey }.toSet()
+        metadataCache.keys.retainAll(currentKeys)
 
         finalItems
     }
 
     private fun buildItem(rec: ResolvedRecording): VideoItem {
-        val cached = metadataCache[rec.file.absolutePath]
+        // B4c — cache is keyed on the stable key (path for file rows,
+        // content-URI for SAF rows) so a null file never NPEs here.
+        val cached = metadataCache[rec.stableKey]
         return VideoItem(
             file = rec.file,
+            docUri = rec.docUri,
             thumbnail = cached?.first,
             resolution = cached?.second ?: VideoMetadataUtils.UNKNOWN_RESOLUTION,
             shareUri = rec.shareUri,
             sessionId = rec.sessionId,
             side = rec.side,
-            segmentIndex = rec.segmentIndex
+            segmentIndex = rec.segmentIndex,
+            modifiedAtMillis = rec.modifiedAtMillis,
+            sizeBytes = rec.sizeBytes,
+            displayName = rec.displayName
         )
     }
 
@@ -284,7 +358,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private data class ResolvedRecording(
-        val file: File,
+        // B4c — nullable: SAF rows have no java.io.File (content-URI
+        // artifact). Every File-backed tier still populates this.
+        val file: File?,
         val shareUri: Uri?,
         val sessionId: String?,
         // Phase 6.1b smoke-fix #3 — non-null for P+L rows (one per
@@ -295,8 +371,23 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         // MULTI_SEGMENT_KEPT session's per-segment fanout; null for
         // single-mode, P+L, and legacy rows. Threaded into
         // [VideoItem.segmentIndex] via [buildItem].
-        val segmentIndex: Int? = null
-    )
+        val segmentIndex: Int? = null,
+        // B4c (ADR-0024) — SAF content-document URI. Non-null only for
+        // SAF rows (file == null); threaded into [VideoItem.docUri].
+        val docUri: Uri? = null,
+        // B4c — SAF row metadata sourced from DocumentFile, used when
+        // file == null so sort/group/size/name work without a File.
+        val modifiedAtMillis: Long? = null,
+        val sizeBytes: Long? = null,
+        val displayName: String? = null
+    ) {
+        // B4c — mirrors VideoItem.stableKey so the union/de-dup/sort and
+        // metadata-cache keying tolerate a null file.
+        val stableKey: String
+            get() = file?.absolutePath ?: docUri?.toString() ?: "session:$sessionId"
+
+        fun effectiveLastModified(): Long = file?.lastModified() ?: modifiedAtMillis ?: 0L
+    }
 
     private fun manifestDrivenArtifacts(
         sessionStore: SessionStore,
@@ -357,6 +448,39 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                             side = perSide.side
                         )
                     }
+                } else if (m.exportTier == ExportTier.SAF_DESTINATION) {
+                    // B4c (ADR-0024) — single-mode SAF row. The artifact
+                    // is a `content://` document with no java.io.File, so
+                    // instead of dropping on a null file (the File-based
+                    // path would), emit a content-URI row. The doc URI is
+                    // both the identity and the share URI; player nav is
+                    // by sessionId (PlayerUriResolver reads
+                    // safTargetDocUri from the manifest). Metadata
+                    // (last-modified / size / name) is read from the
+                    // DocumentFile so the row sorts/groups/sizes like a
+                    // file row; null-tolerant fallbacks keep it visible
+                    // even if the provider omits a field.
+                    val docUriStr = HistoryArtifactMapper.resolveShareUri(m)
+                        ?: return@flatMap emptyList()
+                    val docUri = Uri.parse(docUriStr)
+                    val doc = runCatching {
+                        androidx.documentfile.provider.DocumentFile
+                            .fromSingleUri(getApplication(), docUri)
+                    }.getOrNull()
+                    val modifiedAt = doc?.lastModified()?.takeIf { it > 0L }
+                        ?: m.terminatedAt ?: m.startedAt
+                    val sizeBytes = doc?.length()?.takeIf { it > 0L }
+                    listOf(
+                        ResolvedRecording(
+                            file = null,
+                            shareUri = docUri,
+                            sessionId = m.sessionId,
+                            docUri = docUri,
+                            modifiedAtMillis = modifiedAt,
+                            sizeBytes = sizeBytes,
+                            displayName = doc?.name
+                        )
+                    )
                 } else {
                     val file = HistoryArtifactMapper.resolveArtifactFile(m) { uri ->
                         resolveMediaStoreUriToFile(resolver, uri)
@@ -380,9 +504,22 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             .filter { rec ->
-                // Drop entries whose artifact is no longer on disk —
+                // Drop entries whose artifact is no longer present —
                 // user may have deleted the gallery entry externally.
-                runCatching { rec.file.exists() && rec.file.length() > 0L }.getOrDefault(false)
+                // B4c — SAF rows (file == null, docUri != null) validate
+                // via DocumentFile; file rows keep the existing
+                // exists()+length()>0 gate byte-identically.
+                runCatching {
+                    val docUri = rec.docUri
+                    if (docUri != null) {
+                        val doc = androidx.documentfile.provider.DocumentFile
+                            .fromSingleUri(getApplication(), docUri)
+                        doc != null && doc.exists() && doc.length() > 0L
+                    } else {
+                        val f = rec.file
+                        f != null && f.exists() && f.length() > 0L
+                    }
+                }.getOrDefault(false)
             }
     }
 
@@ -551,32 +688,52 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * so this path should only fire on cross-app drift.
      */
     private fun deleteOne(resolver: ContentResolver, item: VideoItem): Boolean {
+        // B4c (ADR-0024) — SAF row: no java.io.File and no MediaStore
+        // row. Delete the content document via DocumentFile (the SAF
+        // counterpart to ContentResolver.delete for MediaStore rows).
+        // discardSession cleanup runs afterwards in HistoryDeleter.
+        item.docUri?.let { docUri ->
+            return try {
+                val doc = androidx.documentfile.provider.DocumentFile
+                    .fromSingleUri(getApplication(), docUri)
+                // delete() true when removed; if the doc is already gone
+                // (!exists) treat as success so the row clears.
+                (doc?.delete() == true) || (doc?.exists() == false)
+            } catch (e: SecurityException) {
+                RovaLog.w("HistoryViewModel.deleteOne: SecurityException for SAF $docUri", e)
+                false
+            } catch (e: Exception) {
+                RovaLog.w("HistoryViewModel.deleteOne: failed for SAF $docUri", e)
+                false
+            }
+        }
+        val file = item.file
         return try {
             val uri: Uri? = item.shareUri
-                ?: queryMediaStoreUriByPath(resolver, item.file.absolutePath)?.let(Uri::parse)
+                ?: file?.let { queryMediaStoreUriByPath(resolver, it.absolutePath)?.let(Uri::parse) }
             if (uri != null) {
                 val rows = resolver.delete(uri, null, null)
                 if (rows > 0) {
-                    runCatching { item.file.delete() }
+                    runCatching { file?.delete() }
                     true
                 } else {
                     // Row already gone (deleted out-of-band by the
                     // gallery app, or never registered). Treat the
                     // file-system entry as the source of truth.
-                    item.file.delete() || !item.file.exists()
+                    file?.let { it.delete() || !it.exists() } ?: true
                 }
             } else {
-                item.file.delete() || !item.file.exists()
+                file?.let { it.delete() || !it.exists() } ?: false
             }
         } catch (e: SecurityException) {
             RovaLog.w(
-                "HistoryViewModel.deleteOne: SecurityException for ${item.file.absolutePath}",
+                "HistoryViewModel.deleteOne: SecurityException for ${file?.absolutePath}",
                 e
             )
             false
         } catch (e: Exception) {
             RovaLog.w(
-                "HistoryViewModel.deleteOne: failed for ${item.file.absolutePath}",
+                "HistoryViewModel.deleteOne: failed for ${file?.absolutePath}",
                 e
             )
             false

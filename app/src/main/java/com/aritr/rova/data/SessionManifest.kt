@@ -80,7 +80,12 @@ data class SessionManifest(
     val landscapePrivateTempPath: String? = null,
     val landscapePendingUri: String? = null,
     val landscapePublicTargetPath: String? = null,
-    val landscapeMediaScanCompleted: Boolean = false
+    val landscapeMediaScanCompleted: Boolean = false,
+    // ADR-0024: SAF export-route fields (B4 SD-card track)
+    val safTargetDocUri: String? = null,
+    val portraitSafTargetDocUri: String? = null,
+    val landscapeSafTargetDocUri: String? = null,
+    val safTransientRetryCount: Int = 0
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -111,6 +116,11 @@ data class SessionManifest(
         landscapePendingUri?.let { put("landscapePendingUri", it) }
         landscapePublicTargetPath?.let { put("landscapePublicTargetPath", it) }
         if (landscapeMediaScanCompleted) put("landscapeMediaScanCompleted", true)
+        // ADR-0024: SAF export-route fields
+        safTargetDocUri?.let { put("safTargetDocUri", it) }
+        portraitSafTargetDocUri?.let { put("portraitSafTargetDocUri", it) }
+        landscapeSafTargetDocUri?.let { put("landscapeSafTargetDocUri", it) }
+        if (safTransientRetryCount > 0) put("safTransientRetryCount", safTransientRetryCount)
     }
 
     companion object {
@@ -119,7 +129,7 @@ data class SessionManifest(
         // SessionConfig.mode. v1/v2/v3 manifests read with safe default
         // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6   // 5->6: SAF export-route fields (ADR-0024)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -162,7 +172,12 @@ data class SessionManifest(
             landscapePrivateTempPath = json.optString("landscapePrivateTempPath", "").ifEmpty { null },
             landscapePendingUri = json.optString("landscapePendingUri", "").ifEmpty { null },
             landscapePublicTargetPath = json.optString("landscapePublicTargetPath", "").ifEmpty { null },
-            landscapeMediaScanCompleted = json.optBoolean("landscapeMediaScanCompleted", false)
+            landscapeMediaScanCompleted = json.optBoolean("landscapeMediaScanCompleted", false),
+            // ADR-0024: SAF export-route fields
+            safTargetDocUri = json.optString("safTargetDocUri", "").ifEmpty { null },
+            portraitSafTargetDocUri = json.optString("portraitSafTargetDocUri", "").ifEmpty { null },
+            landscapeSafTargetDocUri = json.optString("landscapeSafTargetDocUri", "").ifEmpty { null },
+            safTransientRetryCount = json.optInt("safTransientRetryCount", 0)
         )
     }
 }
@@ -246,7 +261,8 @@ data class SegmentRecord(
 enum class ExportTier {
     TIER1_API29_PLUS,
     TIER2_API26_28,
-    TIER3_API24_25
+    TIER3_API24_25,
+    SAF_DESTINATION   // ADR-0024 — setting-derived export route (full wiring in a later task)
 }
 
 /**
@@ -267,6 +283,15 @@ fun currentExportTier(): ExportTier = when {
 }
 
 /**
+ * ADR-0024 — route selection. A usable custom SAF folder wins over the
+ * SDK tier (the SAF route is API-orthogonal — it muxes a local temp and
+ * publishes to a DocumentsProvider on every minSdk). Falls back to the
+ * SDK-only [currentExportTier] when no usable folder is configured.
+ */
+fun currentExportTier(hasUsableSafFolder: Boolean): ExportTier =
+    if (hasUsableSafFolder) ExportTier.SAF_DESTINATION else currentExportTier()
+
+/**
  * Phase 1.6 (ROADMAP_v6 §1.6) — peak-budget multiplier per tier.
  * Multiplier is applied to the **capture-bytes** estimate
  * (`segmentDuration × loops × bytesPerSec`).
@@ -284,6 +309,10 @@ val ExportTier.peakBudgetMultiplier: Long
     get() = when (this) {
         ExportTier.TIER1_API29_PLUS -> 2L
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> 3L
+        // ADR-0024 — SAF muxes a local private temp of identical size then
+        // publishes via a sequential copy into the SAF doc, so the peak is
+        // the same as the pre-Q (Tier 2/3) path.
+        ExportTier.SAF_DESTINATION -> 3L
     }
 
 enum class ExportState {

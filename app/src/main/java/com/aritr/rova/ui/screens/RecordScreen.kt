@@ -287,6 +287,7 @@ fun RecordScreen(
                     it.batteryOptimizationSignal.refresh()
                     it.cameraPermissionSignal.refresh()
                     it.microphonePermissionSignal.refresh()
+                    it.saveFolderSignal.refresh()                  // ← NEW (B4b ADR-0024)
                     it.storageSignal.recompute(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
@@ -872,6 +873,12 @@ fun RecordScreen(
             }
         } else if (wasMerging) {
             wasMerging = false
+            // B4c — the save-folder flag can flip at SESSION START (a custom
+            // folder gone at freeze → fell back to default) while the user never
+            // leaves the record screen, so ON_RESUME never re-reads it. Refresh
+            // here, on return to idle, so the SAVE_FOLDER_UNAVAILABLE advisory
+            // actually surfaces after a fallback recording.
+            rovaApp?.saveFolderSignal?.refresh()
             if (serviceState.mergeError == null) {
                 showCompleteCard = true
                 delay(900L)
@@ -879,8 +886,15 @@ fun RecordScreen(
                 onMergeFinished()
             } else {
                 scope.launch {
+                    // B4c — a gone/unwritable custom SAF folder is not a merge
+                    // failure with a Library recovery entry; show the accurate
+                    // "folder unavailable, recording kept" copy instead.
                     snackbarHostState.showSnackbar(
-                        context.getString(R.string.record_merge_failed)
+                        context.getString(
+                            if (serviceState.saveFolderUnavailable)
+                                R.string.record_save_folder_unavailable
+                            else R.string.record_merge_failed
+                        )
                     )
                 }
             }

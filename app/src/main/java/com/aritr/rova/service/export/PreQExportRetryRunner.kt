@@ -100,6 +100,10 @@ internal class PreQExportRetryRunner(
             ExportTier.TIER3_API24_25 -> recoverTier3(manifest)
             ExportTier.TIER1_API29_PLUS ->
                 error("PreQExportRetryRunner.retry: Tier 1 reached dispatch — eligibility gate is broken")
+            // ADR-0024 — SAF retry/recovery is driven by SafExporter.recover
+            // (RovaApp.buildSafRecover), never by this PreQ retry runner.
+            ExportTier.SAF_DESTINATION ->
+                error("SAF recovery uses SafExporter.recover, not PreQExportRetryRunner")
         }
         return RetryOutcome.Ran(result)
     }

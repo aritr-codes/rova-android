@@ -47,7 +47,8 @@ fun warningSurfaceFor(id: WarningId): WarningSurface = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED, WarningId.EXACT_ALARM_DENIED, WarningId.STORAGE_INSUFFICIENT -> WarningSurface.HardBlockSheet
     WarningId.MICROPHONE_DENIED -> WarningSurface.SoftSheet
     WarningId.NOTIFICATIONS_DENIED, WarningId.BATTERY_OPTIMIZATION_ON, WarningId.POWER_SAVE_MODE,
-    WarningId.CANT_MERGE -> WarningSurface.AdvisorySheet
+    WarningId.CANT_MERGE,
+    WarningId.SAVE_FOLDER_UNAVAILABLE -> WarningSurface.AdvisorySheet
     WarningId.THERMAL_SHUTDOWN, WarningId.THERMAL_EMERGENCY, WarningId.THERMAL_CRITICAL, WarningId.THERMAL_SEVERE, WarningId.THERMAL_MODERATE,
     WarningId.THERMAL_AUTOSTOPPED,
     WarningId.BATTERY_CRITICAL, WarningId.BATTERY_LOW, WarningId.CAMERA_IN_USE, WarningId.CAMERA_DISABLED,
@@ -111,7 +112,7 @@ internal data class WarningSheetContent(
 )
 
 /**
- * The 17-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
+ * The 21-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
  * Icons reuse the ones the old banner carried. Replaces `bannerContent` now that [WarningSheet] is live.
  * STORAGE_LOW_MID_REC (#11, R2) has a defensive arm — TopBanner-only, never renders as a sheet.
  */
@@ -212,6 +213,17 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
     )
     WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_in_use_title, R.string.warning_camera_in_use_body, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_disabled_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.SAVE_FOLDER_UNAVAILABLE -> WarningSheetContent(
+        // B4b (ADR-0024) — custom SAF save folder gone or permission revoked.
+        // Advisory sheet: user must open Settings > Save location to re-select.
+        Icons.Default.Storage, R.string.warning_save_folder_unavailable_title,
+        R.string.warning_save_folder_unavailable_body,
+        WarningAction(R.string.warning_save_folder_unavailable_primary, ActionTarget.APP_DETAILS_SETTINGS),
+        WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
+        overflow = listOf(
+            WarningAction(R.string.warning_action_dont_show_again, ActionTarget.SNOOZE_FOREVER),
+        ),
+    )
 }
 
 internal data class TopBannerContent(
@@ -319,7 +331,8 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.BATTERY_OPTIMIZATION_ON,
     WarningId.POWER_SAVE_MODE,
     WarningId.NOTIFICATIONS_DENIED,
-    WarningId.CANT_MERGE ->
+    WarningId.CANT_MERGE,
+    WarningId.SAVE_FOLDER_UNAVAILABLE ->
         error("midRecBannerContent called for non-mid-rec id $id — caller bug; gate on warningSurfaceFor(id) == TopBanner")
 }
 

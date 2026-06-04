@@ -97,6 +97,11 @@ internal object HistoryArtifactMapper {
             manifest.pendingUri?.let(resolveTier1Uri)
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
             manifest.publicTargetPath?.let { File(it) }
+        // ADR-0024 — a SAF artifact is a `content://` document with no
+        // java.io.File on disk (the private temp is cleared on finalize).
+        // Like Tier 1 (MediaStore URI), it has no plain file path; callers
+        // tolerate null and fall back to the content URI from resolveShareUri.
+        ExportTier.SAF_DESTINATION -> null
     }
 
     /**
@@ -116,6 +121,9 @@ internal object HistoryArtifactMapper {
     fun resolveShareUri(manifest: SessionManifest): String? = when (manifest.exportTier) {
         ExportTier.TIER1_API29_PLUS -> manifest.pendingUri
         ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> null
+        // ADR-0024 — the SAF doc URI is itself a shareable `content://` Uri
+        // (same shape as Tier 1's MediaStore URI); surface it directly.
+        ExportTier.SAF_DESTINATION -> manifest.safTargetDocUri
     }
 
     /**
@@ -178,6 +186,15 @@ internal object HistoryArtifactMapper {
                     val path = sidePublic ?: return@forEach
                     File(path) to null
                 }
+                // ADR-0024 — a SAF per-side artifact is a `content://`
+                // document with no java.io.File on disk. PerSideArtifact
+                // requires a non-null File (the History pipeline dedups,
+                // sorts, and deletes by file path), so — mirroring the
+                // Tier 1 "no resolvable File → return@forEach" structure —
+                // P+L SAF rows are skipped here. SAF History surfacing is
+                // a later UI slice (content-URI-only rows). The artifact
+                // itself is intact (portrait/landscapeSafTargetDocUri).
+                ExportTier.SAF_DESTINATION -> return@forEach
             }
             out += PerSideArtifact(side = side, file = file, shareUri = shareUri)
         }

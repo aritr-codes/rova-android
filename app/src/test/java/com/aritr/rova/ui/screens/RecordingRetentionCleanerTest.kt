@@ -104,7 +104,9 @@ class RecordingRetentionCleanerTest {
         // clean up — the cleaner cannot route the discard path
         // without a sessionId, so it skips them by design.
         val deleted = mutableListOf<File>()
-        val cleaner = RecordingRetentionCleaner(deleteItem = { deleted += it.file; true })
+        // B4c — VideoItem.file is now File? (null only for SAF rows);
+        // these fixtures always set a non-null file, so assert it here.
+        val cleaner = RecordingRetentionCleaner(deleteItem = { deleted += it.file!!; true })
         val items = (1..15).map { item(sessionId = null, name = "legacy_$it") }
         val result = cleaner.clean(enabled = true, keepLatest = 5, items = items)
         assertEquals(RecordingRetentionCleaner.Result.NoOp, result)

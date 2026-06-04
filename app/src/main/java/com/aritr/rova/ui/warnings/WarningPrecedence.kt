@@ -41,9 +41,10 @@ import com.aritr.rova.ui.signals.ThermalStatus
 internal object WarningPrecedence {
     /**
      * Resolves the single highest-priority active [WarningId] from the
-     * current snapshot of all 20 rows (12 source signals after Phase 4.3).
-     * [storageLowMidRec] is the last param with a `= false` default so
-     * existing positional call sites remain unambiguous.
+     * current snapshot of all 21 rows (13 source signals after B4b ADR-0024).
+     * [storageLowMidRec] was the last param with a `= false` default;
+     * [saveFolderUnavailable] is appended last so existing positional call
+     * sites remain unambiguous.
      *
      * Delegates to [allActive] and returns `firstOrNull()` — the single
      * highest-priority id, or `null` if none is active. Invariant:
@@ -62,11 +63,12 @@ internal object WarningPrecedence {
         storageLowMidRec: Boolean = false,             // ← NEW (last param, default = false to keep existing call sites compiling)
         autoStopEcho: TerminalEcho? = null,            // ← NEW (Phase 4 Slice 2)
         cantMergeActive: Boolean = false,              // ← NEW (Phase 4.3 — recovery merge pre-flight failed)
+        saveFolderUnavailable: Boolean = false,        // ← NEW (B4b ADR-0024 — custom save folder unusable)
     ): WarningId? = allActive(
         cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
         thermal, power, camera, microphonePermissionGranted,
         notificationsGranted, batteryOptimizationExempt, storageLowMidRec,
-        autoStopEcho, cantMergeActive,
+        autoStopEcho, cantMergeActive, saveFolderUnavailable,
     ).firstOrNull()
 
     /**
@@ -87,6 +89,7 @@ internal object WarningPrecedence {
         storageLowMidRec: Boolean = false,
         autoStopEcho: TerminalEcho? = null,
         cantMergeActive: Boolean = false,
+        saveFolderUnavailable: Boolean = false,        // ← NEW (B4b ADR-0024 — custom save folder unusable)
     ): List<WarningId> {
         val result = mutableListOf<WarningId>()
         if (!cameraPermissionGranted) result += WarningId.CAMERA_PERMISSION_DENIED          // #1
@@ -128,6 +131,7 @@ internal object WarningPrecedence {
         if (power.powerSaveMode) result += WarningId.POWER_SAVE_MODE                        // #18
         if (thermal == ThermalStatus.MODERATE) result += WarningId.THERMAL_MODERATE        // #19
         if (!notificationsGranted) result += WarningId.NOTIFICATIONS_DENIED                // #20
+        if (saveFolderUnavailable) result += WarningId.SAVE_FOLDER_UNAVAILABLE             // #21 (B4b ADR-0024)
         return result
     }
 }

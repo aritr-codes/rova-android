@@ -113,6 +113,29 @@ class RovaSettings(context: Context) {
             if (value == null) remove("locale_tag") else putString("locale_tag", value)
         }
 
+    // ADR-0024 (B4 SD-card track) — persisted SAF tree URI for the custom
+    // save location, plus a human-readable label for the Settings row.
+    // Backed up (a genuine user preference). null = no custom folder → the
+    // SDK-derived export tier is used. The persisted read+write grant is
+    // taken at pick time; export-time code re-checks it via
+    // SafAndroidOps.isPersistedPermissionHeld before trusting this value.
+    var saveLocationTreeUri: String?
+        get() = prefs.getString("save_location_tree_uri", null)
+        set(value) = prefs.edit {
+            if (value == null) remove("save_location_tree_uri") else putString("save_location_tree_uri", value)
+        }
+
+    var saveLocationLabel: String?
+        get() = prefs.getString("save_location_label", null)
+        set(value) = prefs.edit {
+            if (value == null) remove("save_location_label") else putString("save_location_label", value)
+        }
+
+    /** ADR-0024 — set true when a frozen SAF export found the folder gone/revoked. Drives WarningId.SAVE_FOLDER_UNAVAILABLE. Runtime (not backed up). */
+    var saveFolderUnavailable: Boolean
+        get() = runtimePrefs.getBoolean("save_folder_unavailable", false)
+        set(value) = runtimePrefs.edit { putBoolean("save_folder_unavailable", value) }
+
     var enableBeeps: Boolean
         get() = prefs.getBoolean("enable_beeps", true)
         set(value) = prefs.edit { putBoolean("enable_beeps", value) }
@@ -158,11 +181,6 @@ class RovaSettings(context: Context) {
     var autoExportEnabled: Boolean
         get() = prefs.getBoolean("auto_export_enabled", true)
         set(value) = prefs.edit { putBoolean("auto_export_enabled", value) }
-
-    // Preferred MediaStore relative folder name; empty = caller default.
-    var exportFolderName: String
-        get() = prefs.getString("export_folder_name", "") ?: ""
-        set(value) = prefs.edit { putString("export_folder_name", value) }
 
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */

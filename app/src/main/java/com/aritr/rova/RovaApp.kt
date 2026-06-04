@@ -37,6 +37,7 @@ import com.aritr.rova.ui.signals.NotificationPermissionSignal
 import com.aritr.rova.ui.signals.PowerSignal
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.SessionAutoStopEchoSignal
+import com.aritr.rova.ui.signals.SaveFolderSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
@@ -273,6 +274,17 @@ class RovaApp : Application() {
         RecoveryMergeOutcomeSignal()
     }
 
+    /**
+     * B4b (ADR-0024) — SAF save-folder unavailability signal. `true` once
+     * the exporter has permanently flagged the custom save folder as gone
+     * or permission-revoked. Drives the SAVE_FOLDER_UNAVAILABLE advisory
+     * warning in the WarningCenter. Lazy so cold-start receiver paths pay
+     * no cost. Refresh contract: host Activity ON_RESUME.
+     */
+    val saveFolderSignal: SaveFolderSignal by lazy {
+        SaveFolderSignal.forContext(this)
+    }
+
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
@@ -502,6 +514,7 @@ class RovaApp : Application() {
                 }
                 ExportTier.TIER2_API26_28 -> tier2Exporter.recover(m, s)
                 ExportTier.TIER3_API24_25 -> tier3Exporter.recover(m, s)
+                ExportTier.SAF_DESTINATION -> buildSafRecover(m, s)
             }
         }
 
@@ -510,12 +523,17 @@ class RovaApp : Application() {
                 // Per-side dispatch. A side with no per-side pointers is
                 // treated as a no-op via the per-side abandon's
                 // shared-failed skip, surfaced here as Abandoned.
+                // ADR-0024 — for a SAF P+L session the pending/private/public
+                // pointers are never populated; the per-side SAF doc URI is
+                // the work signal (a committed target → finalize/re-publish).
                 val portraitHasWork = m.portraitPendingUri != null ||
                     m.portraitPrivateTempPath != null ||
-                    m.portraitPublicTargetPath != null
+                    m.portraitPublicTargetPath != null ||
+                    m.portraitSafTargetDocUri != null
                 val landscapeHasWork = m.landscapePendingUri != null ||
                     m.landscapePrivateTempPath != null ||
-                    m.landscapePublicTargetPath != null
+                    m.landscapePublicTargetPath != null ||
+                    m.landscapeSafTargetDocUri != null
                 val portraitResult = if (portraitHasWork) {
                     tierRecover(m, com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT)()
                 } else {
@@ -551,8 +569,13 @@ class RovaApp : Application() {
             } else {
                 { false }
             }
+        // ADR-0024 — probe a SAF document URI for existence + non-zero
+        // length (DocumentsProvider, not MediaStore — no SDK floor).
+        val safProbe: (String) -> Boolean = { uri ->
+            com.aritr.rova.service.export.SafAndroidOps.validateDocument(applicationContext, uri)
+        }
         val validateTierArtifact: suspend (SessionManifest) -> Boolean = { m ->
-            com.aritr.rova.service.export.TierArtifactValidator.isArtifactValid(m, tier1Probe)
+            com.aritr.rova.service.export.TierArtifactValidator.isArtifactValid(m, tier1Probe = tier1Probe, safProbe = safProbe)
         }
 
         val orphanSweep: (suspend (Set<String>) -> OrphanSweepResult)? =
@@ -567,6 +590,34 @@ class RovaApp : Application() {
             recoverSession = recoverSession,
             validateTierArtifact = validateTierArtifact,
             orphanSweep = orphanSweep
+        )
+    }
+
+    /**
+     * ADR-0024 — SAF recovery dispatch. Delegates the actual re-mux /
+     * re-publish to [com.aritr.rova.service.export.SafRecoverBuilder] (which
+     * owns the lone `VideoMerger.mergeSegments` recovery call — kept under
+     * `service/export/` per the `checkExportPipelineSingleEntry` invariant).
+     * RovaApp only resolves the persisted tree URI + session directory; a
+     * cleared/absent grant short-circuits to a retryable failure so the next
+     * cold launch can re-attempt once the user re-grants.
+     */
+    private suspend fun buildSafRecover(
+        m: SessionManifest,
+        s: com.aritr.rova.service.dualrecord.VideoSide?
+    ): RecoveryResult {
+        val treeUri = RovaSettings(this).saveLocationTreeUri
+            ?: return RecoveryResult.RetryableFailure(
+                phase = "saf-no-tree",
+                cause = IllegalStateException("SAF manifest but no saved tree uri")
+            )
+        return com.aritr.rova.service.export.SafRecoverBuilder.recover(
+            context = applicationContext,
+            sessionStore = sessionStore,
+            manifest = m,
+            side = s,
+            treeUri = treeUri,
+            sessionDir = sessionStore.sessionDir(m.sessionId)
         )
     }
 

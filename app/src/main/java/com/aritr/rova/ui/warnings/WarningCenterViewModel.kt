@@ -46,6 +46,8 @@ class WarningCenterViewModel(
     autoStopEcho: StateFlow<TerminalEcho?> = MutableStateFlow<TerminalEcho?>(null).asStateFlow(), // ← NEW (Phase 4 Slice 2 — 11th source; default keeps pre-T6 call sites green)
     recoveryMergeOutcomeSignal: StateFlow<RecoveryMergeOutcomeSignal.State> =                    // ← NEW (Phase 4.3 — 12th source)
         MutableStateFlow<RecoveryMergeOutcomeSignal.State>(RecoveryMergeOutcomeSignal.State.Idle).asStateFlow(),
+    saveFolderUnavailable: StateFlow<Boolean> =                                                  // ← NEW (B4b ADR-0024 — 13th source)
+        MutableStateFlow(false).asStateFlow(),
     // v3 — injectable scope so plain-JVM unit tests can pass
     // `Dispatchers.Unconfined`-backed CoroutineScope and avoid the
     // `Dispatchers.Main` requirement of `viewModelScope`. Production
@@ -135,6 +137,7 @@ class WarningCenterViewModel(
             microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
             storageLowMidRec, autoStopEcho,                      // ← Phase 4 Slice 2
             _cantMergeActive,                                    // ← NEW (Phase 4.3)
+            saveFolderUnavailable,                               // ← NEW (B4b ADR-0024)
         ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     /** Phase 4.2 — multi-active stream parallel to [_resolvedWarning]; Eagerly so tests can read .value synchronously. */
@@ -144,6 +147,7 @@ class WarningCenterViewModel(
         microphonePermissionGranted, notificationsGranted, batteryOptimizationExempt,
         storageLowMidRec, autoStopEcho,
         _cantMergeActive,
+        saveFolderUnavailable,                               // ← NEW (B4b ADR-0024)
     ).stateIn(activeScope, SharingStarted.Eagerly, emptyList())
 
     /**
@@ -281,6 +285,7 @@ class WarningCenterViewModel(
             storageLowMidRec: Flow<Boolean>,
             autoStopEcho: Flow<TerminalEcho?>,
             cantMergeActive: Flow<Boolean>,
+            saveFolderUnavailable: Flow<Boolean> = MutableStateFlow(false).asStateFlow(), // ← NEW (B4b ADR-0024)
         ): Flow<List<WarningId>> {
             val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
@@ -297,7 +302,8 @@ class WarningCenterViewModel(
             ) { th, pw, cm, ae ->
                 NonBools4(th, pw, cm, ae)
             }
-            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive) { b, bo, n4, cm ->
+            // Outer arity = 5 (typed-combine limit; was 4 before B4b).
+            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive, saveFolderUnavailable) { b, bo, n4, cm, sfu ->
                 runCatching {
                     WarningPrecedence.allActive(
                         cameraPermissionGranted = b.cameraPermissionGranted,
@@ -312,6 +318,7 @@ class WarningCenterViewModel(
                         storageLowMidRec = b.storageLowMidRec,
                         autoStopEcho = n4.autoStopEcho,
                         cantMergeActive = cm,
+                        saveFolderUnavailable = sfu,                        // ← NEW (B4b ADR-0024)
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)
@@ -321,7 +328,7 @@ class WarningCenterViewModel(
         }
 
         /**
-         * Combine the twelve source flows => highest-priority active
+         * Combine the thirteen source flows => highest-priority active
          * [WarningId] via [WarningPrecedence.resolve]. WarningCenterContract
          * NO-GO #6: a throw inside the combine logic logs and degrades to
          * `null` — a failure to compute a banner must not itself become a
@@ -332,8 +339,9 @@ class WarningCenterViewModel(
          * `Bools6` combine (vararg). The four non-boolean flows
          * (thermal, power, camera, autoStopEcho — Phase 4 Slice 2 added
          * the last) are folded into a single `NonBools4` combine. Outer
-         * 4-arg combine then resolves (Phase 4.3 adds `cantMergeActive`
-         * as the 4th arg, keeping the outer arity within the typed overloads).
+         * 5-arg combine then resolves (Phase 4.3 adds `cantMergeActive`
+         * as the 4th arg; B4b ADR-0024 adds `saveFolderUnavailable` as the
+         * 5th arg — now at the typed-overload limit).
          */
         fun aggregate(
             cameraPermissionGranted: Flow<Boolean>,
@@ -348,6 +356,7 @@ class WarningCenterViewModel(
             storageLowMidRec: Flow<Boolean>,
             autoStopEcho: Flow<TerminalEcho?>,              // ← Phase 4 Slice 2
             cantMergeActive: Flow<Boolean>,                 // ← NEW (Phase 4.3)
+            saveFolderUnavailable: Flow<Boolean> = MutableStateFlow(false).asStateFlow(), // ← NEW (B4b ADR-0024)
         ): Flow<WarningId?> {
             val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
@@ -364,7 +373,8 @@ class WarningCenterViewModel(
             ) { th, pw, cm, ae ->
                 NonBools4(th, pw, cm, ae)
             }
-            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive) { b, bo, n4, cm ->
+            // Outer arity = 5 (typed-combine limit; was 4 before B4b).
+            return combine(bools6, batteryOptimizationExempt, nonBools4, cantMergeActive, saveFolderUnavailable) { b, bo, n4, cm, sfu ->
                 runCatching {
                     WarningPrecedence.resolve(
                         cameraPermissionGranted = b.cameraPermissionGranted,
@@ -378,7 +388,8 @@ class WarningCenterViewModel(
                         batteryOptimizationExempt = bo,
                         storageLowMidRec = b.storageLowMidRec,
                         autoStopEcho = n4.autoStopEcho,
-                        cantMergeActive = cm,                // ← NEW (Phase 4.3)
+                        cantMergeActive = cm,                    // ← NEW (Phase 4.3)
+                        saveFolderUnavailable = sfu,             // ← NEW (B4b ADR-0024)
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)

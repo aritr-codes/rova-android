@@ -73,6 +73,11 @@ internal object ExportPipeline {
         segments: List<File>,
         mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
         side: com.aritr.rova.service.dualrecord.VideoSide? = null,
+        // ADR-0024 — the session's frozen export route. When null (every
+        // pre-B4 caller) the SDK tier is computed live. RovaRecordingService
+        // passes `manifest.exportTier` so a SAF-frozen session dispatches to
+        // [exportSaf] instead of the SDK-derived tier.
+        frozenTier: ExportTier? = null,
         onProgress: (Float) -> Unit
     ): ExportResult {
         // Phase 1.7 commit-7 (NO-GO patch round 1, blocker 1): include
@@ -90,7 +95,17 @@ internal object ExportPipeline {
             null -> ""
         }
         val displayName = "${baseName}${suffix}.mp4"
-        return when (val tier = currentExportTier()) {
+        return when (val tier = frozenTier ?: currentExportTier()) {
+            ExportTier.SAF_DESTINATION -> exportSaf(
+                context = context,
+                sessionStore = sessionStore,
+                sessionId = sessionId,
+                sessionDir = sessionDir,
+                segments = segments,
+                displayName = displayName,
+                side = side,
+                onProgress = onProgress
+            )
             ExportTier.TIER1_API29_PLUS -> {
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                     // currentExportTier()'s contract maps SDK_INT → tier;
@@ -124,6 +139,63 @@ internal object ExportPipeline {
                 )
             }
         }
+    }
+
+    /**
+     * ADR-0024 — SAF export route. A destination variant of the pre-Q path:
+     * mux to a local private temp then publish into the user-chosen SAF
+     * document. The muxer NEVER targets a SAF descriptor — `mux` writes the
+     * local temp; [SafExporter] copies it into the doc. `VideoMerger.mergeSegments`
+     * is called inside `service/export/` here, satisfying the
+     * `checkExportPipelineSingleEntry` invariant 2.
+     */
+    private suspend fun exportSaf(
+        context: Context,
+        sessionStore: SessionStore,
+        sessionId: String,
+        sessionDir: File,
+        segments: List<File>,
+        displayName: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        onProgress: (Float) -> Unit
+    ): ExportResult {
+        val settings = com.aritr.rova.data.RovaSettings(context)
+        val treeUri = settings.saveLocationTreeUri
+            ?: return ExportResult.SafFolderUnavailable(null)   // setting cleared mid-flight
+        val privateTemp = File(sessionDir, "$displayName.private")
+        val exporter = SafExporter(
+            displayName = displayName,
+            privateTempFile = privateTemp,
+            setSafPrivateTemp = { p ->
+                if (side == null) sessionStore.setExportSafPrivateTemp(sessionId, p)
+                else sessionStore.setExportSafPrivateTempForSide(sessionId, side, p)
+            },
+            setSafTarget = { d ->
+                if (side == null) sessionStore.setExportSafTarget(sessionId, d)
+                else sessionStore.setExportSafTargetForSide(sessionId, side, d)
+            },
+            setFinalizedClear = {
+                if (side == null) sessionStore.setExportFinalized(sessionId, clearPrivateTempPath = true)
+                else sessionStore.setExportFinalizedForSide(sessionId, side, publicTargetPath = "", clearPrivateTempPath = true)
+            },
+            setFailed = { sessionStore.setExportFailed(sessionId) },
+            incrementRetry = { sessionStore.incrementSafTransientRetry(sessionId) },
+            currentRetryCount = { sessionStore.loadManifest(sessionId)?.safTransientRetryCount ?: 0 },
+            mux = { segs, out -> VideoMerger.mergeSegments(segs, out, onProgress) },
+            createDocument = { name -> SafAndroidOps.createDocument(context, treeUri, name) },
+            displayNameOf = { d -> SafAndroidOps.displayNameOf(context, d) },
+            copyFileToDocument = { src, d -> SafAndroidOps.copyFileToDocument(context, src, d) },
+            validateDocument = { d -> SafAndroidOps.validateDocument(context, d) },
+            deleteDocument = { d -> SafAndroidOps.deleteDocument(context, d) },
+            // B4c — the PERMANENT/transient decision keys on the grant only, NOT
+            // on canWrite(): a removable volume can be transiently unmounted, so
+            // "not writable right now" must stay TRANSIENT (retry budget 3) and
+            // escalate to permanent only after the budget, rather than burning the
+            // manifest to FAILED on a momentary hiccup. Folder-gone-before-record
+            // is caught earlier by the writable freeze gate (hasUsableSafFolder).
+            isPermissionHeld = { SafAndroidOps.isPersistedPermissionHeld(context, treeUri) }
+        )
+        return exporter.export(sessionId, segments)
     }
 
     /**
@@ -280,6 +352,8 @@ internal object ExportPipeline {
                 exporter.export(sessionId, segments, privateTempFile, publicTargetFile, side)
             }
             ExportTier.TIER1_API29_PLUS -> error("exportPreQ called with TIER1")
+            // SAF is dispatched by export() → exportSaf; it never reaches preQ.
+            ExportTier.SAF_DESTINATION -> error("exportPreQ called with SAF_DESTINATION")
         }
     }
 

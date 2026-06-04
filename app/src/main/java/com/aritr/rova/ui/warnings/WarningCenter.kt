@@ -344,6 +344,7 @@ internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
         storageLowMidRec = app.storageLowMidRecSignal.isLow,
         autoStopEcho = app.autoStopEchoSignal.state,                  // ← Phase 4 Slice 2
         recoveryMergeOutcomeSignal = app.recoveryMergeOutcomeSignal.state, // ← NEW (Phase 4.3)
+        saveFolderUnavailable = app.saveFolderSignal.state,               // ← NEW (B4b ADR-0024)
         initialSnoozedIds = initialSnoozed,
         onSnoozeChanged = { set ->
             settings.snoozedWarningIds = set.map(WarningId::name).toSet()
