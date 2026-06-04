@@ -3,11 +3,11 @@ package com.aritr.rova
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -20,7 +20,7 @@ import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.theme.resolveDarkTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     // i18n Phase B (ADR-0023) — API 24–32 locale backport. On those API levels
     // there is no LocaleManager, so the persisted tag is applied here, before

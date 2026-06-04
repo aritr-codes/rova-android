@@ -8,6 +8,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
@@ -42,6 +45,7 @@ import com.aritr.rova.ui.signals.SaveFolderSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
+import com.aritr.rova.ui.vault.VaultLockState
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import java.io.File
@@ -52,6 +56,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -315,6 +320,22 @@ class RovaApp : Application() {
 
     private val recoveryScanRan: AtomicBoolean = AtomicBoolean(false)
 
+    /**
+     * B5 / ADR-0025 (spec R5) — app-scoped, in-memory vault lock holder.
+     * Seeded locked at process boot; NEVER persisted. Re-auth on every
+     * vault entry and on app foreground. Callers mutate through
+     * [onVaultAuthSucceeded] / [onLeaveVault] and the ON_STOP relock
+     * observer registered in [onCreate] — never the private backer.
+     */
+    private val _vaultLock = MutableStateFlow(VaultLockState.initial())
+    val vaultLock: StateFlow<VaultLockState> = _vaultLock
+
+    /** B5/ADR-0025 (spec R5) — call after a successful BiometricPrompt/keyguard auth. */
+    fun onVaultAuthSucceeded() { _vaultLock.update { it.onAuthSucceeded() } }
+
+    /** B5/ADR-0025 (spec R5) — call when the vault route is popped. */
+    fun onLeaveVault() { _vaultLock.update { it.onLeaveVault() } }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -326,6 +347,16 @@ class RovaApp : Application() {
         // the registration on process death (Application.onTerminate is
         // not reliably invoked on production devices).
         thermalStatusSignal.start()
+        // B5/ADR-0025 (spec R5) — relock the vault when the whole app
+        // backgrounds. Mirrors the ADR-0021 ProcessLifecycleOwner pattern
+        // (the action is the vault relock, not camera). No unregister: the
+        // Application lives for the whole process.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                // B5/ADR-0025 (spec R5) — relock on app background; in-memory only, never persisted.
+                _vaultLock.update { it.onAppBackgrounded() }
+            }
+        })
     }
 
     /**
