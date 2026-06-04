@@ -6,6 +6,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.aritr.rova.R
 
 /**
  * B5 / ADR-0025 — the single non-testable auth seam. ALL framework calls
@@ -55,10 +56,9 @@ object VaultAuthGate {
                 showBiometricPrompt(activity, onSucceeded, onCancelled)
 
             VaultAuthPath.KEYGUARD_INTENT -> {
-                // TODO: move to strings.xml in the UI slice
                 val intent = keyguard?.createConfirmDeviceCredentialIntent(
-                    "Unlock vault",
-                    "Confirm your screen lock to view private recordings",
+                    activity.getString(R.string.vault_unlock_prompt_title),
+                    activity.getString(R.string.vault_unlock_prompt_subtitle),
                 )
                 if (intent != null) launchKeyguard(intent) else onUnavailable()
             }
@@ -119,9 +119,8 @@ object VaultAuthGate {
         // setNegativeButtonText is intentionally omitted: it is mutually
         // exclusive with DEVICE_CREDENTIAL and throws at build() if both are set.
         val info = BiometricPrompt.PromptInfo.Builder()
-            // TODO: move to strings.xml in the UI slice
-            .setTitle("Unlock vault")
-            .setSubtitle("Confirm your identity to view private recordings")
+            .setTitle(activity.getString(R.string.vault_unlock_prompt_title))
+            .setSubtitle(activity.getString(R.string.vault_unlock_prompt_subtitle))
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
                     BiometricManager.Authenticators.DEVICE_CREDENTIAL,
