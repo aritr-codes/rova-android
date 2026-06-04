@@ -164,10 +164,10 @@ Records the invariants: a vaulted export never enters MediaStore/public/SAF stor
 - **No-leak audit**: ensure no deep link, notification tap, share-sheet target, recents entry, or legacy player route can resolve a `VAULTED` session without live unlock state. History filtering + the gated route + the player branch must all agree.
 - **Share/export-out is a deliberate de-protection**: once shared/exported out, the copy is no longer gallery-hidden. UI should make that explicit.
 
-### Open items for owner / planning
-- **O1**: When a move-out is interrupted (`UNVAULTING`), should the recording show in the **vault** (still hidden) until publish confirms, or in a transient state? Proposed: keep it in the vault (hidden) until `PUBLIC` is reached.
-- **O2**: Is the companion "no non-vault route resolves a vaulted session" worth a second static gate, or is the no-leak audit + tests sufficient?
-- **O3**: Auto Backup exclusion scope — vault artifacts only, or all manifests?
+### Resolved decisions (owner approved 2026-06-04 — defaults kept)
+- **O1 → RESOLVED**: An interrupted move-out (`UNVAULTING`) keeps the recording **in the vault (hidden)** until `PUBLIC` is confirmed. The `VaultViewModel` therefore shows `VAULTED` **and** `UNVAULTING` (an in-flight move-out is still a vault item until publish verifies); the normal Library shows only `PUBLIC`. `VAULTING` is shown in neither stable list.
+- **O2 → RESOLVED**: For v1, the single `checkVaultExporterNoPublicPublish` gate **plus** the no-leak audit + tests is sufficient. The second "no non-vault route resolves a vaulted session" gate is **deferred** (the audit + route tests cover it; revisit if the route surface grows).
+- **O3 → RESOLVED**: Auto Backup exclusion covers the **vault video artifacts only** (the app-private vault files / directory). Session manifests are **not** excluded — excluding all manifests would break post-restore recovery for non-vault sessions, and the sensitive payload is the video, not the manifest. (Future encryption work, §12, can revisit manifest-level metadata exposure.)
 
 ## 12. Future extension — encryption at rest (not v1)
 
