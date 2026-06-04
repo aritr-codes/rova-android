@@ -4,6 +4,7 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.R
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.VaultState
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.text.UiText
 
@@ -38,6 +39,26 @@ import com.aritr.rova.ui.text.UiText
  * with the player's URI-only path.
  */
 internal object PlayerUriResolver {
+
+    /**
+     * Task 14 / ADR-0025 — sentinel scheme prefixed onto a VAULTED
+     * recording's app-private file path. The resolver stays pure (no
+     * `android.net.Uri` / `FileProvider`), so it cannot itself convert a
+     * vault file into the required `content://` URI. Instead it tags the
+     * raw path with this scheme; the Android wrapper
+     * ([PlayerViewModel.attachExoPlayer]) detects the prefix, strips it,
+     * and round-trips the file through
+     * `FileProvider.getUriForFile(context, "${applicationId}.provider", file)`.
+     *
+     * Vaulted files live under the app-private `videos/` dir
+     * (`getExternalFilesDir("videos")`), which `res/xml/file_paths.xml`
+     * exposes via `<external-files-path name="videos" path="videos/"/>`.
+     * Emitting a raw `file://` here (as Tier 2/3 do for public-storage
+     * paths) would throw `FileUriExposedException` when ExoPlayer's
+     * media source touches the private path — hence the FileProvider
+     * detour for the vault case only.
+     */
+    const val VAULT_FILE_SCHEME = "vaultfile://"
 
     /**
      * Resolves a manifest into [PlayerUiState]. `null` manifest →
@@ -81,7 +102,29 @@ internal object PlayerUriResolver {
             // forgot to thread it — fail closed rather than coin-flip.
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found))
         }
-        val uri = when (manifest.exportTier) {
+        // Task 14 / ADR-0025 — vault precedence. A VAULTED recording
+        // plays from its app-private merged file regardless of the
+        // FROZEN `exportTier` (which only records how it WOULD have
+        // published). This branch therefore runs BEFORE the tier `when`
+        // so a vaulted Tier1/Tier2/Tier3/SAF recording never falls
+        // through to its (now stale / deleted) public pointer. The path
+        // is tagged with [VAULT_FILE_SCHEME] so the Android wrapper
+        // converts it through FileProvider (vault files must never reach
+        // ExoPlayer as a raw `file://` — FileUriExposedException). The
+        // P+L null-side defensive gate already fired above (mode-based),
+        // so a P+L vault manifest with null side is Unavailable already.
+        val uri = if (manifest.vaultState == VaultState.VAULTED) {
+            val vaultPath = if (isPlusL) {
+                when (side) {
+                    VideoSide.PORTRAIT -> manifest.portraitVaultFilePath
+                    VideoSide.LANDSCAPE -> manifest.landscapeVaultFilePath
+                    null -> null // unreachable — gated above
+                }
+            } else {
+                manifest.vaultFilePath
+            }
+            vaultPath?.let { VAULT_FILE_SCHEME + it }
+        } else when (manifest.exportTier) {
             ExportTier.TIER1_API29_PLUS ->
                 if (isPlusL) {
                     when (side) {
