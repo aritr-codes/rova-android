@@ -697,7 +697,8 @@ open class SessionStore internal constructor(rootDirArg: File) {
             exportState = ExportState.FINALIZED,
             pendingUri = null,
             publicTargetPath = null,
-            safTargetDocUri = null
+            safTargetDocUri = null,
+            privateTempPath = null
         )
     }
 
