@@ -24,5 +24,9 @@
 -->
 <full-backup-content>
     <exclude domain="external" path="." />
+    <!-- B5 vault (ADR-0025): vault videos live under getExternalFilesDir("videos").
+         Redundant with the path="." root exclude above, but pinned explicitly so
+         the vault-artifact exclusion survives any future narrowing of that root. -->
+    <exclude domain="external" path="videos/" />
     <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
 </full-backup-content>

@@ -25,10 +25,15 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="external" path="." />
+        <!-- B5 vault (ADR-0025): explicit vault video-dir exclude (getExternalFilesDir("videos")).
+             Redundant with the path="." root exclude, pinned so it survives root narrowing. -->
+        <exclude domain="external" path="videos/" />
         <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="external" path="." />
+        <!-- B5 vault (ADR-0025): explicit vault video-dir exclude (getExternalFilesDir("videos")). -->
+        <exclude domain="external" path="videos/" />
         <exclude domain="sharedpref" path="rova_runtime_prefs.xml" />
     </device-transfer>
 </data-extraction-rules>
