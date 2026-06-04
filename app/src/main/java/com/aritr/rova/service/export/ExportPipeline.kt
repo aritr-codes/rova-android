@@ -260,6 +260,14 @@ internal object ExportPipeline {
         sessionDir: File,
         segments: List<File>,
         mediaScanWaiter: MediaScanWaiter = AndroidMediaScanWaiter(context),
+        // B5 / ADR-0025 — when true, the recovery re-merge routes to the
+        // vault ([exportVault]) instead of the SDK/SAF tiers and never
+        // publishes. Threaded into the internal [export] call so the vault
+        // intent is honored without recovery calling `export(` directly
+        // (which `checkExportPipelineSingleEntry` forbids outside
+        // RovaRecordingService). Default false keeps every pre-B5 caller
+        // byte-identical.
+        vaultIntent: Boolean = false,
         onProgress: (Float) -> Unit,
     ): ExportResult {
         val required = (segments.sumOf { it.length() } * 1.05).toLong()
@@ -277,6 +285,7 @@ internal object ExportPipeline {
             segments = segments,
             mediaScanWaiter = mediaScanWaiter,
             side = null,
+            vaultIntent = vaultIntent,
             onProgress = onProgress,
         )
     }

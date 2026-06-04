@@ -14,6 +14,7 @@ import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.export.AndroidMediaScanWaiter
 import com.aritr.rova.service.export.ExportCleanupPredicate
 import com.aritr.rova.service.export.ExportRecoveryReport
+import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.service.export.ExportRecoveryRunner
 import com.aritr.rova.service.export.combineRecoveryResults
 import com.aritr.rova.service.export.OrphanSweepResult
@@ -585,11 +586,47 @@ class RovaApp : Application() {
                 null
             }
 
+        // B5 / ADR-0025 — vault re-merge seam. A MERGE_TO_VAULT session
+        // (vault-intent recording whose merge never finished) re-merges to
+        // the app-private vault via `exportRecovered(vaultIntent = true)`.
+        // The vault intent is threaded THROUGH `exportRecovered` (which
+        // internally calls `export`); recovery never calls `export(`
+        // directly, preserving `checkExportPipelineSingleEntry`. Routing
+        // here — never through `recoverSession` (tier-recovery PUBLISHES) —
+        // is what guarantees a vault recording is never gallery-published.
+        val recoverVaultSession: suspend (SessionManifest) -> RecoveryResult = { m ->
+            val dir = sessionStore.sessionDir(m.sessionId)
+            val segments = m.segments
+                .map { java.io.File(dir, it.filename) }
+                .filter { it.exists() && it.length() > 0 }
+            val result = com.aritr.rova.service.export.ExportPipeline.exportRecovered(
+                context = applicationContext,
+                sessionStore = sessionStore,
+                sessionId = m.sessionId,
+                sessionDir = dir,
+                segments = segments,
+                vaultIntent = true,
+                onProgress = { },
+            )
+            // The runner consumes a RecoveryResult; map the ExportResult.
+            // Success → Resumed (artifact intact); any failure → RetryableFailure
+            // so cleanup gating leaves the dir for next-launch retry (a vault
+            // merge that failed must not have its segments swept).
+            when (result) {
+                is ExportResult.Success -> RecoveryResult.Resumed(result)
+                else -> RecoveryResult.RetryableFailure(
+                    phase = "vault-remerge",
+                    cause = IllegalStateException("vault re-merge did not succeed: $result")
+                )
+            }
+        }
+
         return ExportRecoveryRunner(
             sessionStore = sessionStore,
             recoverSession = recoverSession,
             validateTierArtifact = validateTierArtifact,
-            orphanSweep = orphanSweep
+            orphanSweep = orphanSweep,
+            recoverVaultSession = recoverVaultSession
         )
     }
 
