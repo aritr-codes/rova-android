@@ -95,7 +95,7 @@ The terminal-write decision depends only on `T` and `R`. The append decision dep
 | `UnknownArtifactAnomaly(filenames)` | `S_unknown > 0` | forces `OFFER_DISCARD` | reported only |
 | `MalformedManifestRecordAnomaly(filenames)` | manifest contains a `SegmentRecord` whose `filename` does not match `^segment_(\d{4})\.mp4$` | forces `OFFER_DISCARD` | manifest record cannot be reasoned about; surfaces for human review. Distinct from `UnknownArtifactAnomaly` (file on disk) — this is a manifest *record* problem. Both can fire for the same underlying name if the file also exists on disk. |
 
-A session with **no anomalies and no surviving segments** is `AUTO_DISCARD_ELIGIBLE` (per the eligibility table below). A session with any anomaly is `OFFER_DISCARD` at most. **Phase 1.5 emits these flags but never deletes** — see "Deletion Ownership" below.
+A session with **no anomalies and no surviving segments** is `AUTO_DISCARD_ELIGIBLE` (per the eligibility table below) — **except** a `COMPLETED` session, which is never auto-discard-eligible (see "Completed-session retention"). A session with any anomaly is `OFFER_DISCARD` at most. **Phase 1.5 emits these flags but never deletes** — see "Deletion Ownership" below.
 
 ### Media Validity Rules — `validateMediaFile(File)`
 
@@ -120,8 +120,8 @@ Phase 1.5 **never deletes a session directory**. The classifier computes a `Disc
 
 | Value | Conditions |
 |---|---|
-| `AUTO_DISCARD_ELIGIBLE` | `T` is a terminal value (`USER_STOPPED`, `COMPLETED`, `KILLED_BY_SYSTEM`, or `KILLED_FORCE_STOP`) AND `S_manifest_valid == 0` AND `S_manifest_missing == 0` AND `S_manifest_invalid == 0` AND `S_orphan_appendable == 0` AND `S_orphan_post_gap == 0` AND `S_orphan_invalid == 0` AND `S_orphan_duplicate == 0` AND `S_unknown == 0` AND no anomaly is open against the session |
-| `OFFER_DISCARD` | `T` is a terminal value but at least one orphan, invalid, missing, duplicate, unknown, or anomaly is present |
+| `AUTO_DISCARD_ELIGIBLE` | `T` is `USER_STOPPED`, `KILLED_BY_SYSTEM`, or `KILLED_FORCE_STOP` (**not** `COMPLETED`) AND `S_manifest_valid == 0` AND `S_manifest_missing == 0` AND `S_manifest_invalid == 0` AND `S_orphan_appendable == 0` AND `S_orphan_post_gap == 0` AND `S_orphan_invalid == 0` AND `S_orphan_duplicate == 0` AND `S_unknown == 0` AND no anomaly is open against the session |
+| `OFFER_DISCARD` | `T` is a terminal value AND (at least one orphan, invalid, missing, duplicate, unknown, or anomaly is present **OR** `T == COMPLETED`). A `COMPLETED` session is unconditionally `OFFER_DISCARD` (retained) — never `AUTO_DISCARD_ELIGIBLE` — see "Completed-session retention". |
 | `BLOCKED` | `T == null` (classification didn't happen — caller should retry next scan), OR session is owned by a live `ServiceController` |
 
 **Deletion ownership.** Phase 1.5 emits the flag; deletion is performed only by:
@@ -132,6 +132,21 @@ Phase 1.5 **never deletes a session directory**. The classifier computes a `Disc
 Phase 1.5 reading export fields is **forbidden** (the export-clean predicate is a Phase 1.7 responsibility); the architectural separation depends on Phase 1.5 not pre-empting Phase 1.7's read of those fields.
 
 The UI surface for `OFFER_DISCARD` must enumerate every surviving artifact (file path + size + validity) so the user knows what they're discarding before confirming.
+
+### Completed-session retention
+
+> Added 2026-06-03 (owner sign-off). Pins finding #10 (storage bloat) as **working-as-designed** and documents the exact mechanism so a future refactor cannot silently start auto-deleting finished recordings. Guarded by `CompletedSessionRetentionTest`. Design: `docs/superpowers/specs/2026-06-03-completed-session-retention-contract-design.md`.
+
+A **successfully-COMPLETED session directory is retained** by the automatic Phase 1.7 cleanup pass. The session dir IS the manifest-backed Library/History index — `HistoryViewModel` enumerates recordings from `SessionStore.listSessionIds()` over `videos/<sessionId>/`, and the in-app player resolves its source from manifest fields (not from the dir). Deleting the dir removes the recording from History; its persistence is intentional. The only removal paths are an explicit user delete (`HistoryDeleter` → `SessionStore.discardSession`) or the opt-in keep-latest-N `RecordingRetentionCleaner` — never the automatic cleanup pass.
+
+**Mechanism (not a surviving manifest file).** `manifest.json` / `manifest.json.tmp` are excluded from the unknown-artifact survivor set, so the manifest file itself is never what keeps a dir alive. A real COMPLETED session always has **≥1 segment record** in its manifest (you cannot merge zero segments), and retention then holds via **either** of two paths, both of which yield `OFFER_DISCARD` (not `AUTO_DISCARD_ELIGIBLE`):
+
+1. **Segments deleted (normal post-merge).** `performMerge` deletes the on-disk `segment_*.mp4` files on export success but leaves the manifest's segment **records** intact. The next scan finds each manifest segment key with no disk file → `MissingSegmentAnomaly` → `OFFER_DISCARD` (anomaly present).
+2. **Segments survive (delete failed).** `performMerge`'s post-success cleanup is best-effort and swallows delete exceptions. If a segment file remains, there is no `MissingSegmentAnomaly`, but the surviving file makes `S_manifest_valid > 0` (`anySurvivors`) → still `OFFER_DISCARD`.
+
+Either way, `ExportCleanupPredicate` gate 1 requires `AUTO_DISCARD_ELIGIBLE`, so the dir is retained (see ADR 0006 §"Ownership table for `exportState` (B17)").
+
+**Backstop — `COMPLETED` is never `AUTO_DISCARD_ELIGIBLE`.** The two paths above cover every *normal* completed session (≥1 segment record), but they ride on derived evidence. To make retention independent of that evidence, the eligibility computation exempts `COMPLETED` unconditionally: `T == COMPLETED` short-circuits to `OFFER_DISCARD` even when there are no anomalies and no survivors. This closes the one degenerate hole — a COMPLETED manifest carrying **zero** segment records and no disk files, which otherwise has no missing keys, no survivors, and no anomalies and would classify `AUTO_DISCARD_ELIGIBLE`. That shape is reachable over abnormal persisted data: the late-terminal recovery writer `ExportRecoveryRunner` writes `COMPLETED` for any `FINALIZED` manifest with a valid artifact **without a segment-count guard** (`ExportRecoveryRunner.kt:218`, guarded only by artifact validity). With the backstop, such a session is retained (its History-index dir survives alongside its MediaStore artifact) regardless of how the `COMPLETED` terminal was written. `USER_STOPPED` / `KILLED_BY_SYSTEM` / `KILLED_FORCE_STOP` empty shells remain `AUTO_DISCARD_ELIGIBLE` and auto-clean as before. Guarded by `CompletedSessionRetentionTest` and `RecoveryScannerTest`; adding the `ExportRecoveryRunner` segment-count guard is now moot for retention (a separate hygiene slice if ever wanted).
 
 ### Orphan Ordering / Gap Rules
 

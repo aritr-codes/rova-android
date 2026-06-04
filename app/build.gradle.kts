@@ -1722,6 +1722,85 @@ val checkLocaleConfigNoPseudolocale = tasks.register("checkLocaleConfigNoPseudol
     }
 }
 
+// ADR-0020 §Decision-3 (WCAG 2.2 AA — SC 2.3.3 "Animation from Interactions" /
+// SC 2.2.2 "Pause, Stop, Hide"): every looping/auto-playing Compose animation
+// must be gated on the system reduced-motion preference and fall back to a
+// static value. The reduced-motion seam is `ReducedMotion.isReduced` /
+// `rememberReduceMotion()` (ui/components/ReducedMotion.kt). This is the FIRST
+// of the four checkA11y* gates sketched in ADR-0020 (the other three stay STUB).
+//
+// File-level co-presence rule (same pragmatic-regex style as
+// checkNoHardcodedUiStrings): any .kt file that uses a RAW infinite-animation
+// primitive must also read the reduced-motion seam somewhere in the same file.
+//
+// Trigger primitives (RAW only): `rememberInfiniteTransition(` /
+// `infiniteRepeatable(`. The self-gating helpers `pulsingOpacity` /
+// `pulsingBorder` are deliberately NOT triggers — they consult ReducedMotion
+// internally, so their call sites (e.g. BackgroundRecordingBanner) are safe by
+// delegation and must not be flagged.
+//
+// Seam tokens (string-contains, not regex): `rememberReduceMotion(` /
+// `ReducedMotion.isReduced`. The seam helper RovaAnimations.kt carries both the
+// raw primitive and the seam read, so it passes naturally with no allowlist.
+//
+// Opt-out: a triggering line bearing `a11y-opt-out` is skipped — the sanctioned
+// hatch for a genuinely static or @Preview-only animation; spell a reason, e.g.
+// `// a11y-opt-out: static brand splash, not user-interrupting`.
+//
+// Accepted blind spot (mirrors checkNoHardcodedUiStrings): a file with a gated
+// animation in one composable and an ungated one in another passes. The
+// centralized seam makes per-file co-presence a strong signal; per-composable
+// proximity was rejected as brittle.
+val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
+    group = "verification"
+    description = "Require a reduced-motion seam read in any file using rememberInfiniteTransition/infiniteRepeatable — WCAG 2.2 AA SC 2.3.3/2.2.2 (ADR-0020 §Decision-3)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkA11yAnimationGated: Rova source dir missing: $srcDir")
+        }
+        // `\s*\(` tolerates the legal `rememberInfiniteTransition (` spacing variant.
+        val rawPrimitive = Regex("""rememberInfiniteTransition\s*\(|infiniteRepeatable\s*\(""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val lines = f.readLines()
+                val triggers = lines.withIndex().filter { (_, line) ->
+                    if (line.contains("a11y-opt-out")) return@filter false
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                    else rawPrimitive.containsMatchIn(line)
+                }
+                if (triggers.isEmpty()) return@mapNotNull null
+                val hasSeam = lines.any {
+                    it.contains("rememberReduceMotion(") || it.contains("ReducedMotion.isReduced")
+                }
+                if (hasSeam) null else f to triggers
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "ADR-0020 §Decision-3 violation (WCAG 2.2 AA — SC 2.3.3 Animation " +
+                    "from Interactions / SC 2.2.2 Pause, Stop, Hide): looping/" +
+                    "auto-playing animation primitive(s) used without a " +
+                    "reduced-motion guard in the same file. Every file that uses " +
+                    "`rememberInfiniteTransition` / `infiniteRepeatable` must also " +
+                    "read the reduced-motion seam (`rememberReduceMotion()` or " +
+                    "`ReducedMotion.isReduced`) and select a static value when " +
+                    "motion is reduced. For a genuinely static or @Preview-only " +
+                    "animation, add `// a11y-opt-out: <reason>` on the primitive " +
+                    "line.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1753,6 +1832,7 @@ afterEvaluate {
         dependsOn(checkWakeLockZeroGapRefresh)
         dependsOn(checkNoHardcodedUiStrings)
         dependsOn(checkLocaleConfigNoPseudolocale)
+        dependsOn(checkA11yAnimationGated)
     }
 }
 

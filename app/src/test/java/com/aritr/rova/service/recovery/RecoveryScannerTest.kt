@@ -180,6 +180,31 @@ class RecoveryScannerTest {
     }
 
     /**
+     * ADR 0005 §"Discard Eligibility" — a COMPLETED session is NEVER
+     * `AUTO_DISCARD_ELIGIBLE`. Even the degenerate empty shape (no segment
+     * records, no disk files, no anomalies) stays `OFFER_DISCARD` so the
+     * automatic cleanup pass never deletes a finished recording. Reachable over
+     * abnormal persisted data via `ExportRecoveryRunner`'s late-terminal write
+     * (no segment-count guard).
+     */
+    @Test
+    fun `COMPLETED empty session is OFFER_DISCARD, never AUTO_DISCARD_ELIGIBLE`() = runBlocking {
+        val sid = "completed-empty"
+        seedSession(
+            sessionId = sid,
+            manifestSegments = emptyList(),
+            diskSegmentNames = emptyList(),
+            terminated = Terminated.COMPLETED
+        )
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertEquals(TerminalAction.ALREADY_TERMINAL, classification.terminalAction)
+        assertTrue("anomalies must be empty; got ${classification.anomalies}", classification.anomalies.isEmpty())
+        assertEquals(DiscardEligibility.OFFER_DISCARD, classification.eligibility)
+    }
+
+    /**
      * ADR 0005 — Decision Matrix row 5: T=null AND stopRequested=true AND
      * empty session → markTerminated(USER_STOPPED). This is the Phase 1.3
      * prep-time stop carry-over (memory: project_phase15_recovery_carryover).

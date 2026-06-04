@@ -1904,6 +1904,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
             RovaLog.d("flipCamera: Ignored — recording in progress")
             return
         }
+        // P+L (DualShot) is rear-only — it binds the rear sensor's 4:3 source.
+        // The UI disables the flip control in P+L, but enforce it at the service
+        // too so a stray binder call / stale event can't strand a rear-only mode
+        // on the front selector (UI convention ≠ service invariant). (codex review)
+        if (currentMode == ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE) {
+            RovaLog.d("flipCamera: Ignored — P+L is rear-only")
+            return
+        }
         currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
             CameraSelector.DEFAULT_FRONT_CAMERA
         } else {
@@ -1926,6 +1934,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
     fun setMode(mode: String) {
         if (_serviceState.value.isRecording) {
             RovaLog.d("setMode: Ignored — recording in progress")
+            return
+        }
+        // Skip a redundant unbind/rebind when the requested mode is already the
+        // bound config (a ~2s camera-ready gap otherwise). The UI mode state is
+        // ViewModel-owned and already updated before this call, so skipping the
+        // camera reconfigure cannot desync it.
+        if (ModeReconfigurePolicy.shouldSkipReconfigure(
+                requestedMode = mode,
+                currentMode = currentMode,
+                isCameraActive = _serviceState.value.isCameraActive,
+                isFrontCamera = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+            )
+        ) {
+            RovaLog.d("setMode: already in mode '$mode' with camera active — skipping redundant reconfigure")
             return
         }
         currentMode = mode
