@@ -90,6 +90,17 @@ class RovaSettings(context: Context) {
         get() = runtimePrefs.getStringSet("dismissed_autostop_echo_ids", emptySet()) ?: emptySet()
         set(value) = runtimePrefs.edit { putStringSet("dismissed_autostop_echo_ids", value) }
 
+    /**
+     * Battery-optimization card rate-limit — epoch-millis of the last time the
+     * card was actually shown. Drives the "show at most once per 24h" gate
+     * (see [com.aritr.rova.ui.warnings.shouldSuppressBatteryCard]). Backed by
+     * [RUNTIME_PREFS_NAME] so reinstall resets it (same policy as `mode` +
+     * `snoozedWarningIds` — see backup_rules.xml + data_extraction_rules.xml).
+     */
+    var batteryOptCardLastShownAt: Long
+        get() = runtimePrefs.getLong("battery_opt_card_last_shown_at", 0L)
+        set(value) = runtimePrefs.edit { putLong("battery_opt_card_last_shown_at", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }

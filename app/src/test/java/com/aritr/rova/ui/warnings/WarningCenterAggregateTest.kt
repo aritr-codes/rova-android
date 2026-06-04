@@ -575,6 +575,86 @@ class WarningCenterAggregateTest {
     // Phase 4.2 — multi-active aggregation via recovery-merge signal
     // ──────────────────────────────────────────────────────────────────
 
+    // ──────────────────────────────────────────────────────────────────
+    // Battery-optimization card "once per 24h" rate-limit
+    // ──────────────────────────────────────────────────────────────────
+
+    private val day = BATTERY_CARD_RATE_LIMIT_MILLIS
+
+    /** Build a VM whose only active condition is BATTERY_OPTIMIZATION_ON (battery-opt not exempt). */
+    private fun makeBatteryVm(
+        initialBatteryCardLastShownAt: Long,
+        now: () -> Long,
+        onBatteryCardShown: ((Long) -> Unit)? = null,
+    ): WarningCenterViewModel {
+        val s = sources()
+        s.bo.value = false   // not exempt → BATTERY_OPTIMIZATION_ON would fire
+        return WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            initialBatteryCardLastShownAt = initialBatteryCardLastShownAt,
+            now = now,
+            onBatteryCardShown = onBatteryCardShown,
+        )
+    }
+
+    @Test
+    fun batteryCard_shownWithinWindow_isSuppressedThisSession() {
+        // Last shown just now, "now" is half a window later → suppressed.
+        val vm = makeBatteryVm(
+            initialBatteryCardLastShownAt = day,
+            now = { day + day / 2 },
+        )
+        assertNull(vm.activeWarning.value)
+    }
+
+    @Test
+    fun batteryCard_neverShown_isAllowedAndStampsTimestampOnce() {
+        val stamped = mutableListOf<Long>()
+        val vm = makeBatteryVm(
+            initialBatteryCardLastShownAt = 0L,   // never shown
+            now = { 12345L },
+            onBatteryCardShown = { stamped += it },
+        )
+        // Card is allowed (suppress decided false at init) and visible.
+        assertEquals(WarningId.BATTERY_OPTIMIZATION_ON, vm.activeWarning.value)
+        // Timestamp persisted exactly once with now().
+        assertEquals(listOf(12345L), stamped)
+    }
+
+    @Test
+    fun batteryCard_shownOverWindowAgo_isAllowedAgain() {
+        val stamped = mutableListOf<Long>()
+        val vm = makeBatteryVm(
+            initialBatteryCardLastShownAt = day,
+            now = { day * 3 },                     // well past one window
+            onBatteryCardShown = { stamped += it },
+        )
+        assertEquals(WarningId.BATTERY_OPTIMIZATION_ON, vm.activeWarning.value)
+        assertEquals(listOf(day * 3), stamped)
+    }
+
+    @Test
+    fun batteryCard_suppressedSession_doesNotStampTimestamp() {
+        val stamped = mutableListOf<Long>()
+        makeBatteryVm(
+            initialBatteryCardLastShownAt = day,
+            now = { day + 1 },                     // within window → suppressed
+            onBatteryCardShown = { stamped += it },
+        )
+        assertEquals(emptyList<Long>(), stamped)
+    }
+
     @Test
     fun `multi-active aggregation — 3 simultaneous warnings ordinal-sorted on History list`() {
         val recoverySignal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
