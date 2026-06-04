@@ -85,7 +85,18 @@ data class SessionManifest(
     val safTargetDocUri: String? = null,
     val portraitSafTargetDocUri: String? = null,
     val landscapeSafTargetDocUri: String? = null,
-    val safTransientRetryCount: Int = 0
+    val safTransientRetryCount: Int = 0,
+    // B5 / ADR-0025 — vault. `vaultIntentAtStart` is FROZEN at session
+    // start from RovaSettings.hideInVault and drives export routing for a
+    // new recording (a crash mid-record must still resolve to the vault).
+    // `vaultState` is the MUTABLE membership flag flipped by VaultExporter
+    // (on finalize) and VaultMover (on move in/out). `vaultFilePath` is the
+    // app-private merged file while VAULTED. Per-side variants for P+L.
+    val vaultIntentAtStart: Boolean = false,
+    val vaultState: VaultState = VaultState.PUBLIC,
+    val vaultFilePath: String? = null,
+    val portraitVaultFilePath: String? = null,
+    val landscapeVaultFilePath: String? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -121,6 +132,13 @@ data class SessionManifest(
         portraitSafTargetDocUri?.let { put("portraitSafTargetDocUri", it) }
         landscapeSafTargetDocUri?.let { put("landscapeSafTargetDocUri", it) }
         if (safTransientRetryCount > 0) put("safTransientRetryCount", safTransientRetryCount)
+        // B5 / ADR-0025 — emit vault keys only when non-default so schema-6
+        // single-mode manifests keep their byte-shape.
+        if (vaultIntentAtStart) put("vaultIntentAtStart", true)
+        if (vaultState != VaultState.PUBLIC) put("vaultState", vaultState.name)
+        vaultFilePath?.let { put("vaultFilePath", it) }
+        portraitVaultFilePath?.let { put("portraitVaultFilePath", it) }
+        landscapeVaultFilePath?.let { put("landscapeVaultFilePath", it) }
     }
 
     companion object {
@@ -129,7 +147,7 @@ data class SessionManifest(
         // SessionConfig.mode. v1/v2/v3 manifests read with safe default
         // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 6   // 5->6: SAF export-route fields (ADR-0024)
+        const val SCHEMA_VERSION = 7   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -177,7 +195,14 @@ data class SessionManifest(
             safTargetDocUri = json.optString("safTargetDocUri", "").ifEmpty { null },
             portraitSafTargetDocUri = json.optString("portraitSafTargetDocUri", "").ifEmpty { null },
             landscapeSafTargetDocUri = json.optString("landscapeSafTargetDocUri", "").ifEmpty { null },
-            safTransientRetryCount = json.optInt("safTransientRetryCount", 0)
+            safTransientRetryCount = json.optInt("safTransientRetryCount", 0),
+            vaultIntentAtStart = json.optBoolean("vaultIntentAtStart", false),
+            vaultState = json.optString("vaultState", "").ifEmpty { null }?.let {
+                runCatching { VaultState.valueOf(it) }.getOrNull()
+            } ?: VaultState.PUBLIC,
+            vaultFilePath = json.optString("vaultFilePath", "").ifEmpty { null },
+            portraitVaultFilePath = json.optString("portraitVaultFilePath", "").ifEmpty { null },
+            landscapeVaultFilePath = json.optString("landscapeVaultFilePath", "").ifEmpty { null }
         )
     }
 }
@@ -321,6 +346,22 @@ enum class ExportState {
     COPYING,
     FINALIZED,
     FAILED
+}
+
+/**
+ * B5 / ADR-0025 — vault membership. Mutable (move in/out), kept distinct
+ * from the FROZEN [ExportTier] (which records how a recording WOULD
+ * publish). PUBLIC = gallery-visible normal recording. VAULTED = in the
+ * vault, no public copy, [SessionManifest.vaultFilePath] is the artifact
+ * of record. VAULTING / UNVAULTING = in-flight move intermediates,
+ * recoverable on cold launch; hidden from the normal Library. See
+ * docs/superpowers/specs/2026-06-04-private-vault-design.md §4.1.
+ */
+enum class VaultState {
+    PUBLIC,
+    VAULTING,
+    VAULTED,
+    UNVAULTING,
 }
 
 /**
