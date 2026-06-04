@@ -26,8 +26,8 @@ import java.io.File
 internal class VaultExporter(
     private val vaultFile: File,
     private val mux: suspend (List<File>, File) -> Unit,
-    private val setFinalized: (String) -> Unit,
-    private val setFailed: () -> Unit,
+    private val setFinalized: suspend (String) -> Unit,
+    private val setFailed: suspend () -> Unit,
 ) {
     suspend fun export(sessionId: String, segments: List<File>): ExportResult {
         return try {
