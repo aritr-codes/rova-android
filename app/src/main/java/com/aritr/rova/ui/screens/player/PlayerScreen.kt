@@ -54,6 +54,7 @@ import androidx.media3.ui.PlayerView
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.screens.HistoryRowFormatters
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
@@ -100,17 +101,15 @@ fun PlayerScreen(
     val isVaulted by viewModel.isVaulted.collectAsStateWithLifecycle()
 
     // B5 / ADR-0025 — block screenshots / recents-thumbnail capture while
-    // playing a VAULTED recording. Keyed on isVaulted so the flag is added once
-    // the manifest resolves as vaulted and cleared on dispose (or if it ever
-    // flips back to false). Public playback is unaffected.
-    val secureActivity = context as? android.app.Activity
-    androidx.compose.runtime.DisposableEffect(isVaulted) {
-        if (isVaulted) {
-            secureActivity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        }
-        onDispose {
-            secureActivity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        }
+    // playing a VAULTED recording. Goes through the ref-counted controller so
+    // the vault list's delayed onDispose during the vault->player nav
+    // transition can't wipe this flag. Keyed on isVaulted: acquire once the
+    // manifest resolves as vaulted, release on dispose (only if we acquired).
+    // Public playback is unaffected.
+    val secureFlag = LocalSecureFlagController.current
+    DisposableEffect(secureFlag, isVaulted) {
+        if (isVaulted) secureFlag?.acquire()
+        onDispose { if (isVaulted) secureFlag?.release() }
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()

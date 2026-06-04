@@ -1,7 +1,5 @@
 package com.aritr.rova.ui.vault
 
-import android.app.Activity
-import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.screens.LibraryRow
 
 /**
@@ -81,13 +80,14 @@ fun VaultScreen(
     val items by viewModel.items.collectAsStateWithLifecycle()
     val lockState by app.vaultLock.collectAsStateWithLifecycle()
 
-    // FLAG_SECURE for the screen's lifetime — set on enter, cleared on dispose.
-    val activity = context as? Activity
-    DisposableEffect(Unit) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose {
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
+    // FLAG_SECURE for the screen's lifetime — set on enter, released on dispose.
+    // Goes through the ref-counted controller (B5 / ADR-0025) so the vault
+    // list's delayed onDispose during the vault->player nav transition can't
+    // wipe the player's flag.
+    val secureFlag = LocalSecureFlagController.current
+    DisposableEffect(secureFlag) {
+        secureFlag?.acquire()
+        onDispose { secureFlag?.release() }
     }
 
     LaunchedEffect(Unit) {
