@@ -1894,6 +1894,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.concurrent.futures.ktx)
     // Phase 2.5 — In-app player. media3-exoplayer drives playback over
     // the merged MP4; media3-ui provides PlayerView (the Compose wrapper
