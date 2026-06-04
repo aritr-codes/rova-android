@@ -398,6 +398,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 runCatching { sessionStore.loadManifest(sid) }.getOrNull()
             }
         return HistoryArtifactMapper.finalizedManifests(manifests)
+            // B5 / ADR-0025 (spec O1) — the normal Library shows ONLY
+            // PUBLIC recordings. A manifest whose vaultState is VAULTING /
+            // VAULTED / UNVAULTING is hidden here; the separate Vault
+            // screen surfaces VAULTED + UNVAULTING. AND-ed in on top of
+            // the FINALIZED-keep predicate so vaulted recordings vanish
+            // from the Library without touching any other filtering.
+            .filter { com.aritr.rova.ui.vault.isLibraryVisible(it.vaultState) }
             .flatMap { m ->
                 // Milestone 2 — MULTI_SEGMENT_KEPT fanout. Each kept segment
                 // becomes a standalone library row. Composition with the
