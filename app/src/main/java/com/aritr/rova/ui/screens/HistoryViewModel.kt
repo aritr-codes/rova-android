@@ -543,9 +543,23 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         return dir.listFiles()?.flatMap { entry ->
             when {
                 entry.isDirectory ->
-                    entry.listFiles()
-                        ?.filter { it.extension == "mp4" && it.name.startsWith("Rova_") }
-                        ?.toList() ?: emptyList()
+                    // B5 / ADR-0025 — fail-closed vault privacy. A session dir
+                    // with a manifest is owned by the manifest-driven path (which
+                    // applies the PUBLIC-only vault filter); the legacy scan only
+                    // surfaces truly manifest-less pre-Phase-1.7 dirs. Gating on
+                    // manifest *presence* (not load) keeps a vaulted recording's
+                    // plain Rova_*.mp4 out of the Library even if the manifest is
+                    // corrupt. See [legacyScanIncludesSessionDir].
+                    if (legacyScanIncludesSessionDir(
+                            File(entry, SessionStore.MANIFEST_NAME).exists()
+                        )
+                    ) {
+                        entry.listFiles()
+                            ?.filter { it.extension == "mp4" && it.name.startsWith("Rova_") }
+                            ?.toList() ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
                 entry.extension == "mp4" &&
                     !entry.name.startsWith("segment_bg_") &&
                     !entry.name.startsWith("segment_") ->
