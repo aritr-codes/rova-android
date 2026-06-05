@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,13 +27,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +51,7 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.screens.LibraryRow
+import kotlinx.coroutines.launch
 
 /**
  * B5 / ADR-0025 — the hidden vault list screen.
@@ -105,6 +111,12 @@ fun VaultScreen(
     }
 
     val nowMillis = remember(items) { System.currentTimeMillis() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // B5 / ADR-0025 (Task 22) — move-OUT confirmation. Holds the sessionId
+    // pending a "Move out of vault" action; non-null shows the warning
+    // dialog (the recording becomes gallery-visible again).
+    var pendingMoveOutSessionId by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -172,12 +184,45 @@ fun VaultScreen(
                             },
                             onMenuOpen = {
                                 item.sessionId?.let { sid -> onOpenPlayer(sid, item.side) }
+                            },
+                            // B5 / ADR-0025 (Task 22) — move-OUT. Single-mode
+                            // only (item.side == null): P+L per-side rows have
+                            // per-side vault pointers VaultAndroidOps can't
+                            // resolve, so the action is hidden for them. Auth
+                            // is already passed inside the unlocked vault.
+                            onMenuMoveOutOfVault = if (item.side == null) {
+                                item.sessionId?.let { sid -> { pendingMoveOutSessionId = sid } }
+                            } else {
+                                null
                             }
                         )
                     }
                 }
             }
         }
+    }
+
+    // B5 / ADR-0025 (Task 22) — move-OUT confirmation. Reuses the vault
+    // move/share warning string (moving out un-hides the recording).
+    pendingMoveOutSessionId?.let { sid ->
+        AlertDialog(
+            onDismissRequest = { pendingMoveOutSessionId = null },
+            title = { Text(stringResource(R.string.vault_move_out)) },
+            text = { Text(stringResource(R.string.vault_share_leaves_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingMoveOutSessionId = null
+                    coroutineScope.launch { viewModel.moveOutOfVault(sid) }
+                }) {
+                    Text(stringResource(R.string.vault_move_out))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingMoveOutSessionId = null }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            }
+        )
     }
 }
 

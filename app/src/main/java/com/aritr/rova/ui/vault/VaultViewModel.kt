@@ -8,6 +8,9 @@ import com.aritr.rova.RovaApp
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.service.export.VaultAndroidOps
+import com.aritr.rova.service.export.VaultMoverBuilder
+import com.aritr.rova.utils.RovaLog
 import com.aritr.rova.ui.screens.HistoryMetadataLoader
 import com.aritr.rova.ui.screens.VideoItem
 import com.aritr.rova.ui.screens.VideoMetadataUtils
@@ -62,6 +65,67 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             _items.value = loadItemsList()
         }
+    }
+
+    /**
+     * B5 / ADR-0025 (Task 22) — move-OUT. Republishes a vaulted recording
+     * to public storage (recomputed tier) and resets its state to PUBLIC.
+     * Auth is already satisfied — the caller is inside the unlocked vault —
+     * so no additional gate here.
+     *
+     * Single-mode only ([VaultMoverBuilder.isSingleModeMovable]): a P+L
+     * session has per-side vault pointers [VaultAndroidOps] cannot resolve.
+     *
+     * Ordering is guaranteed by [VaultMover.moveOut]: UNVAULTING →
+     * publishExisting → PUBLIC. On success the now-redundant app-private
+     * vault file is best-effort deleted (its path is captured BEFORE the
+     * move clears `vaultFilePath`). A crash between the PUBLIC commit and
+     * this delete leaves only a harmless app-private orphan — the public
+     * copy is the source of truth and the manifest no longer references the
+     * vault file.
+     */
+    suspend fun moveOutOfVault(sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val sessionStore = (app as? RovaApp)?.let {
+            runCatching { it.sessionStore }.getOrNull()
+        } ?: return@withContext false
+        val manifest = runCatching { sessionStore.loadManifest(sessionId) }.getOrNull()
+            ?: return@withContext false
+        if (!VaultMoverBuilder.isSingleModeMovable(manifest)) {
+            RovaLog.w("VaultViewModel.moveOutOfVault: P+L session $sessionId not movable; skipping")
+            return@withContext false
+        }
+        // Capture the private vault path BEFORE the move clears it, so the
+        // best-effort cleanup below can unlink the now-redundant file.
+        val vaultFilePath = manifest.vaultFilePath
+        val sessionDir = sessionStore.sessionDir(sessionId)
+        val outcomeHolder = arrayOfNulls<VaultAndroidOps.PublishOutcome>(1)
+        val mover = VaultMoverBuilder.buildMoveOut(
+            context = app,
+            sessionStore = sessionStore,
+            manifest = manifest,
+            sessionDir = sessionDir,
+            outcomeHolder = outcomeHolder,
+        )
+        val ok = try {
+            mover.moveOut(sessionId)
+            true
+        } catch (t: Throwable) {
+            RovaLog.w("VaultViewModel.moveOutOfVault: move-out failed for $sessionId", t)
+            false
+        }
+        if (ok && vaultFilePath != null) {
+            // Best-effort: the public copy is now the source of truth. A
+            // failure here leaves a harmless app-private orphan, not a
+            // privacy or data-loss issue.
+            try {
+                File(vaultFilePath).delete()
+            } catch (t: Throwable) {
+                RovaLog.w("VaultViewModel.moveOutOfVault: vault-file cleanup failed for $sessionId", t)
+            }
+        }
+        refresh()
+        ok
     }
 
     private suspend fun loadItemsList(): List<VideoItem> = withContext(Dispatchers.IO) {

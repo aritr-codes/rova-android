@@ -116,7 +116,17 @@ class ExportRecoveryRunner(
     // vault path compile unchanged — a `null` seam means the vault
     // re-merge is UNWIRED, which is treated as "skip" (never publish via
     // [recoverSession]), per codex review.
-    private val recoverVaultSession: (suspend (SessionManifest) -> RecoveryResult)? = null
+    private val recoverVaultSession: (suspend (SessionManifest) -> RecoveryResult)? = null,
+    // B5 / ADR-0025 (Task 22) — interrupted-move resume seam. Wired in
+    // RovaApp to build a [VaultMover] (via [VaultMoverBuilder]) for the
+    // session and call `finishVaulting` (RESUME_VAULTING) /
+    // `finishUnvaulting` (RESUME_UNVAULTING) — the private copy / state are
+    // already on disk, so only the destructive + terminal-commit half
+    // re-runs (both steps are idempotent on the post-crash state). Optional
+    // with a `null` default so existing callers/tests compile unchanged; a
+    // `null` seam means move-resume is UNWIRED and the runner skips (never
+    // mis-publishes a half-moved session), matching the prior TODO behavior.
+    private val resumeVaultMove: (suspend (SessionManifest, VaultRecoveryAction) -> Unit)? = null
 ) {
 
     /**
@@ -181,19 +191,47 @@ class ExportRecoveryRunner(
         //  - NONE → existing tier-recovery dispatch via [recoverSession].
         val perSession = LinkedHashMap<String, RecoveryResult>()
         for (m in manifests) {
-            if (!needsExportRecovery(m)) continue
             val vaultAction = vaultRecoveryAction(
                 vaultIntentAtStart = m.vaultIntentAtStart,
                 state = m.vaultState,
                 finalized = m.exportState == ExportState.FINALIZED
             )
+            // B5 / ADR-0025 (Task 22) — an interrupted move (VAULTING /
+            // UNVAULTING) must be resumed even when the EXPORT pipeline has
+            // nothing to do: the vaulted recording is already FINALIZED with
+            // a cleared privateTempPath, so `needsExportRecovery` is false.
+            // The move-resume gate keys off vaultState, NOT exportState, so
+            // it is evaluated before the export-recovery short-circuit.
+            // NONE / MERGE_TO_VAULT keep the original export-recovery guard.
+            val isMoveResume = vaultAction == VaultRecoveryAction.RESUME_VAULTING ||
+                vaultAction == VaultRecoveryAction.RESUME_UNVAULTING
+            if (!isMoveResume && !needsExportRecovery(m)) continue
             when (vaultAction) {
                 VaultRecoveryAction.RESUME_VAULTING, VaultRecoveryAction.RESUME_UNVAULTING -> {
-                    // TODO(Phase 6 / VaultMover): resume interrupted move (finishVaulting / finishUnvaulting). Until then, skip to avoid mis-publishing.
-                    RovaLog.d(
-                        "$TAG: ${m.sessionId} vaultState=${m.vaultState} (in-flight move) → " +
-                            "deferring move-resume to VaultMover; skipping recovery this launch"
-                    )
+                    // B5 / ADR-0025 (Task 22) — resume the interrupted move
+                    // via the VaultMover seam. finishVaulting / finishUnvaulting
+                    // re-run only the destructive + terminal-commit half
+                    // (deletePublic+setVaulted / publishExisting+setPublic),
+                    // both idempotent on the post-crash state. An unwired seam
+                    // (null) keeps the prior safe behavior: skip, never publish.
+                    val resume = resumeVaultMove
+                    if (resume == null) {
+                        RovaLog.w(
+                            "$TAG: ${m.sessionId} vaultState=${m.vaultState} (in-flight move) but " +
+                                "resumeVaultMove is unwired; skipping move-resume this launch"
+                        )
+                        continue
+                    }
+                    try {
+                        resume(m, vaultAction)
+                        RovaLog.d(
+                            "$TAG: ${m.sessionId} resumed in-flight move (${m.vaultState})"
+                        )
+                    } catch (t: Throwable) {
+                        // Leave the manifest in its intermediate state; the next
+                        // cold launch re-classifies VAULTING/UNVAULTING and retries.
+                        RovaLog.w("$TAG: resumeVaultMove threw for ${m.sessionId}", t)
+                    }
                     continue
                 }
                 VaultRecoveryAction.MERGE_TO_VAULT -> {

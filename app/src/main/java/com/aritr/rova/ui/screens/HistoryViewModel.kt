@@ -15,6 +15,7 @@ import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.service.export.VaultMoverBuilder
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -759,6 +760,51 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             )
             false
         }
+    }
+
+    /**
+     * B5 / ADR-0025 (Task 22) — move-IN. Hides a normal (PUBLIC) Library
+     * recording into the app-private vault: copies the public bytes to the
+     * session's vault file, then drops the public artifact (gallery row /
+     * SAF doc). No auth is required for move-in (sensitive direction is
+     * move-OUT). Runs entirely off the main thread; on completion the
+     * Library refreshes (the now-VAULTED row drops out via the
+     * PUBLIC-only filter).
+     *
+     * Single-mode only — a P+L session has per-side pointers that
+     * [VaultAndroidOps] cannot resolve; [VaultMoverBuilder.isSingleModeMovable]
+     * gates them out and this no-ops with a log.
+     *
+     * Failure is fail-closed by [VaultMover]'s ordering: a copy that fails
+     * leaves the public copy untouched (nothing hidden); a delete that
+     * fails leaves the session in VAULTING for a future recovery/move
+     * retry. We log and refresh either way.
+     *
+     * @return true when the move completed (VAULTED), false when it was
+     *   skipped (P+L, missing manifest/store) or threw.
+     */
+    suspend fun moveToVault(sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val sessionStore = (app as? RovaApp)?.let {
+            runCatching { it.sessionStore }.getOrNull()
+        } ?: return@withContext false
+        val manifest = runCatching { sessionStore.loadManifest(sessionId) }.getOrNull()
+            ?: return@withContext false
+        if (!VaultMoverBuilder.isSingleModeMovable(manifest)) {
+            RovaLog.w("HistoryViewModel.moveToVault: P+L session $sessionId not movable; skipping")
+            return@withContext false
+        }
+        val sessionDir = sessionStore.sessionDir(sessionId)
+        val mover = VaultMoverBuilder.buildMoveIn(app, sessionStore, manifest, sessionDir)
+        val ok = try {
+            mover.moveIn(sessionId)
+            true
+        } catch (t: Throwable) {
+            RovaLog.w("HistoryViewModel.moveToVault: move-in failed for $sessionId", t)
+            false
+        }
+        refresh()
+        ok
     }
 
     /**

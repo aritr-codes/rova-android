@@ -652,12 +652,68 @@ class RovaApp : Application() {
             }
         }
 
+        // B5 / ADR-0025 (Task 22) — interrupted-move resume. Builds a
+        // session-bound VaultMover via the same [VaultMoverBuilder] the UI
+        // uses (DRY), then calls the crash-resume entry for the move's
+        // direction. The private copy / intermediate state are already on
+        // disk, so finishVaulting / finishUnvaulting re-run only the
+        // destructive + terminal-commit half (both idempotent). For an
+        // UNVAULTING resume the redundant private vault file is best-effort
+        // deleted afterwards (path captured before setPublic clears it),
+        // mirroring the move-out UI path.
+        val resumeVaultMove: suspend (SessionManifest, com.aritr.rova.service.export.VaultRecoveryAction) -> Unit =
+            { m, action ->
+                if (!com.aritr.rova.service.export.VaultMoverBuilder.isSingleModeMovable(m)) {
+                    RovaLog.w("RovaApp.resumeVaultMove: P+L session ${m.sessionId} not movable; skipping")
+                } else {
+                    val dir = sessionStore.sessionDir(m.sessionId)
+                    when (action) {
+                        com.aritr.rova.service.export.VaultRecoveryAction.RESUME_VAULTING -> {
+                            val mover = com.aritr.rova.service.export.VaultMoverBuilder.buildMoveIn(
+                                context = applicationContext,
+                                sessionStore = sessionStore,
+                                manifest = m,
+                                sessionDir = dir,
+                            )
+                            mover.finishVaulting(m.sessionId)
+                        }
+                        com.aritr.rova.service.export.VaultRecoveryAction.RESUME_UNVAULTING -> {
+                            val vaultFilePath = m.vaultFilePath
+                            val outcomeHolder =
+                                arrayOfNulls<com.aritr.rova.service.export.VaultAndroidOps.PublishOutcome>(1)
+                            val mover = com.aritr.rova.service.export.VaultMoverBuilder.buildMoveOut(
+                                context = applicationContext,
+                                sessionStore = sessionStore,
+                                manifest = m,
+                                sessionDir = dir,
+                                outcomeHolder = outcomeHolder,
+                            )
+                            mover.finishUnvaulting(m.sessionId)
+                            if (vaultFilePath != null) {
+                                try {
+                                    java.io.File(vaultFilePath).delete()
+                                } catch (t: Throwable) {
+                                    RovaLog.w(
+                                        "RovaApp.resumeVaultMove: vault-file cleanup failed for ${m.sessionId}",
+                                        t
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            // Only RESUME_* actions reach this seam.
+                        }
+                    }
+                }
+            }
+
         return ExportRecoveryRunner(
             sessionStore = sessionStore,
             recoverSession = recoverSession,
             validateTierArtifact = validateTierArtifact,
             orphanSweep = orphanSweep,
-            recoverVaultSession = recoverVaultSession
+            recoverVaultSession = recoverVaultSession,
+            resumeVaultMove = resumeVaultMove
         )
     }
 
