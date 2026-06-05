@@ -82,6 +82,11 @@ internal class VaultAndroidOps(
      * Idempotent on the destination (overwrites). Throws on read/write
      * failure so the [VaultMover] ordering law keeps the public copy until
      * the private copy verifies.
+     *
+     * By design this copy runs BEFORE the VAULTING state is committed, and the
+     * window is deliberately NON-destructive: the public copy is untouched
+     * until [deletePublic], so a crash here leaves only a harmless,
+     * re-copyable private file (no privacy exposure, nothing to reconcile).
      */
     suspend fun copyToPrivate(manifest: SessionManifest, sessionDir: File) {
         val dest = vaultFileFor(manifest, sessionDir)
@@ -109,10 +114,16 @@ internal class VaultAndroidOps(
 
     /**
      * Move-IN delete: drop the public artifact once the private copy is
-     * committed. Best-effort per tier; logged but non-fatal on a partial
-     * failure (the private copy already exists, so the move can still
-     * complete — a leftover public copy is reconciled by the next move /
-     * recovery pass).
+     * committed. **Fail-closed** for the primary delete: if a still-present
+     * public artifact cannot be removed, this THROWS so the move stays in
+     * VAULTING (a future recovery / move pass retries). This is a privacy
+     * invariant — letting the move advance to VAULTED while the public copy
+     * is still gallery-visible would mark the recording hidden in-app while
+     * it remains visible on the device (codex review). "Already absent"
+     * (resolver delete of an unknown row, `file.delete()==false` but the file
+     * is gone, or a null/absent SAF doc) counts as SUCCESS, so a crash-resume
+     * re-run that finds the artifact already removed does NOT throw. Only the
+     * secondary MediaStore rescan remains best-effort.
      */
     suspend fun deletePublic(manifest: SessionManifest) {
         when (manifest.exportTier) {
@@ -122,10 +133,12 @@ internal class VaultAndroidOps(
                     RovaLog.w("deletePublic: Tier1 pendingUri null — nothing to delete")
                     return
                 }
+                // A 0-row delete = already gone = success (do NOT throw); only a
+                // thrown exception is fatal.
                 try {
                     resolver.delete(Uri.parse(uriString), null, null)
                 } catch (t: Throwable) {
-                    RovaLog.w("deletePublic: Tier1 resolver.delete threw for $uriString", t)
+                    throw IOException("deletePublic: Tier1 resolver.delete failed for $uriString", t)
                 }
             }
             ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> {
@@ -138,16 +151,18 @@ internal class VaultAndroidOps(
                 val deleted = try {
                     file.delete()
                 } catch (t: Throwable) {
-                    RovaLog.w("deletePublic: Tier2/3 file.delete threw for $path", t)
-                    false
+                    throw IOException("deletePublic: Tier2/3 file.delete failed for $path", t)
                 }
-                // Rescan the now-missing path so MediaStore drops the stale
-                // gallery row (codex review). scanFile on a deleted path is
-                // the platform-documented way to evict the index entry; the
-                // bounded waiter is the only sanctioned scanFile call site
-                // (checkScanFileBoundedWait). A timeout is harmless — the
-                // index settles on the next full media scan.
-                if (deleted) {
+                // Fail-closed: a real, still-present file we could not remove must NOT
+                // let the move advance to VAULTED (privacy: public copy would stay in the
+                // gallery). "Already absent" (delete()==false but file is gone) is success.
+                if (!deleted && file.exists()) {
+                    throw IOException("deletePublic: Tier2/3 could not remove public copy at $path")
+                }
+                // Rescan whenever the path is now gone (deleted OR already-absent) so a
+                // stale MediaStore row / broken-thumbnail entry is evicted. Bounded,
+                // timeout-harmless (checkScanFileBoundedWait), the only sanctioned scanFile.
+                if (deleted || !file.exists()) {
                     mediaScanWaiter.scanAndWait(file)
                 }
             }
@@ -157,10 +172,16 @@ internal class VaultAndroidOps(
                     RovaLog.w("deletePublic: SAF safTargetDocUri null — nothing to delete")
                     return
                 }
-                try {
-                    DocumentFile.fromSingleUri(context, Uri.parse(docUri))?.delete()
+                val doc = DocumentFile.fromSingleUri(context, Uri.parse(docUri))
+                val deleted = try {
+                    doc?.delete() ?: false
                 } catch (t: Throwable) {
-                    RovaLog.w("deletePublic: SAF delete threw for $docUri", t)
+                    throw IOException("deletePublic: SAF delete failed for $docUri", t)
+                }
+                // Already-gone (doc null / no longer exists) counts as success; only a
+                // present doc we failed to delete is fatal.
+                if (!deleted && doc?.exists() == true) {
+                    throw IOException("deletePublic: SAF could not remove public doc $docUri")
                 }
             }
         }
@@ -183,8 +204,10 @@ internal class VaultAndroidOps(
         val vaultPath = manifest.vaultFilePath
             ?: throw IOException("publishExisting: manifest has null vaultFilePath")
         val vaultFile = File(vaultPath)
-        if (!vaultFile.exists()) {
-            throw IOException("publishExisting: vault file missing at $vaultPath")
+        // Size guard: a zero-byte / truncated vault file must not reach a
+        // terminal PUBLIC commit (it would publish an unplayable file).
+        if (!vaultFile.isFile || vaultFile.length() == 0L) {
+            throw IOException("publishExisting: vault file missing or empty at $vaultPath")
         }
         val displayName = vaultFile.name
         return when (currentExportTier(hasUsableSafFolder())) {
