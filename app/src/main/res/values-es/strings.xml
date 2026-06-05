@@ -693,4 +693,8 @@
     <string name="vault_share_leaves_warning">Compartir o exportar copia esta grabación fuera de la caja fuerte. La copia deja de estar oculta.</string>
     <string name="vault_move_in">Mover a la caja fuerte</string>
     <string name="vault_move_out">Sacar de la caja fuerte</string>
+    <string name="vault_delete">Eliminar</string>
+    <string name="vault_delete_title">¿Eliminar de la caja fuerte?</string>
+    <string name="vault_delete_body">Esto elimina la grabación de forma permanente. No está en tu galería y no se puede recuperar.</string>
+    <string name="vault_delete_confirm">Eliminar</string>
 </resources>

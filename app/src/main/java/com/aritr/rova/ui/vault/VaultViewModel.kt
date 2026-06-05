@@ -128,6 +128,25 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         ok
     }
 
+    /**
+     * B5 / ADR-0025 — permanent delete from the vault. A vaulted recording's
+     * only copy is its app-private vault file (move-in removed the public
+     * copy), so this is irreversible — the caller MUST confirm first.
+     * Deletes the whole session directory (manifest + the vault file, and any
+     * per-side files for a P+L session) via [SessionStore.discardSession].
+     * UI-initiated deletion is allowed (ADR-0005 only restricts the cold-launch
+     * recovery sources, not a user action).
+     */
+    suspend fun deleteFromVault(sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val sessionStore = (app as? RovaApp)?.let { runCatching { it.sessionStore }.getOrNull() }
+            ?: return@withContext false
+        val ok = runCatching { sessionStore.discardSession(sessionId) }.isSuccess
+        if (!ok) RovaLog.w("VaultViewModel.deleteFromVault: discard failed for $sessionId")
+        refresh()
+        ok
+    }
+
     private suspend fun loadItemsList(): List<VideoItem> = withContext(Dispatchers.IO) {
         val app = getApplication<Application>()
         val sessionStore = (app as? RovaApp)?.let { runCatching { it.sessionStore }.getOrNull() }

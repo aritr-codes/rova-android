@@ -118,6 +118,12 @@ fun VaultScreen(
     // dialog (the recording becomes gallery-visible again).
     var pendingMoveOutSessionId by remember { mutableStateOf<String?>(null) }
 
+    // B5 / ADR-0025 — permanent-delete confirmation. Holds the sessionId
+    // pending a "Delete" action; non-null shows the strong irreversible-delete
+    // dialog. Offered for ALL vault rows (single-mode and P+L) because
+    // discardSession removes the whole session dir.
+    var pendingDeleteSessionId by remember { mutableStateOf<String?>(null) }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -194,6 +200,15 @@ fun VaultScreen(
                                 item.sessionId?.let { sid -> { pendingMoveOutSessionId = sid } }
                             } else {
                                 null
+                            },
+                            // B5 / ADR-0025 — permanent delete. Offered for ALL
+                            // vault rows including P+L: discardSession removes
+                            // the whole session dir, so it works for single-mode
+                            // and P+L alike. Note: for a P+L session that shows
+                            // two per-side rows, deleting either row removes the
+                            // whole session — acceptable for v1.
+                            onMenuDelete = item.sessionId?.let { sid ->
+                                { pendingDeleteSessionId = sid }
                             }
                         )
                     }
@@ -219,6 +234,34 @@ fun VaultScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingMoveOutSessionId = null }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            }
+        )
+    }
+
+    // B5 / ADR-0025 — permanent-delete confirmation. STRONG irreversible
+    // warning: a vaulted recording's only copy is its app-private vault file
+    // (move-in removed the public copy), so deletion cannot be undone. The
+    // confirm button is tinted with the error color to signal destruction.
+    pendingDeleteSessionId?.let { sid ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSessionId = null },
+            title = { Text(stringResource(R.string.vault_delete_title)) },
+            text = { Text(stringResource(R.string.vault_delete_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteSessionId = null
+                    coroutineScope.launch { viewModel.deleteFromVault(sid) }
+                }) {
+                    Text(
+                        text = stringResource(R.string.vault_delete_confirm),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSessionId = null }) {
                     Text(stringResource(R.string.dialog_cancel))
                 }
             }

@@ -693,4 +693,8 @@
     <string name="vault_share_leaves_warning">Sharing or exporting copies this recording out of the vault. The copy is no longer hidden.</string>
     <string name="vault_move_in">Move to vault</string>
     <string name="vault_move_out">Move out of vault</string>
+    <string name="vault_delete">Delete</string>
+    <string name="vault_delete_title">Delete from vault?</string>
+    <string name="vault_delete_body">This permanently deletes the recording. It is not in your gallery and cannot be recovered.</string>
+    <string name="vault_delete_confirm">Delete</string>
 </resources>

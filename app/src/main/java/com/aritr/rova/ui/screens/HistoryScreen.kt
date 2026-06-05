@@ -692,7 +692,12 @@ fun LibraryRow(
     // B5 / ADR-0025 (Task 22) — non-null only on the unlocked Vault screen
     // for movable vault rows. Republishes the recording to public storage
     // and clears its vault state. Null in the Library.
-    onMenuMoveOutOfVault: (() -> Unit)? = null
+    onMenuMoveOutOfVault: (() -> Unit)? = null,
+    // B5 / ADR-0025 — non-null only on the unlocked Vault screen. Permanently
+    // deletes the recording (its only copy — there is no gallery backup).
+    // The caller surfaces a strong confirmation before invoking. Null in the
+    // Library, which keeps its own multi-select delete flow.
+    onMenuDelete: (() -> Unit)? = null
 ) {
     // B4c — read date/size/name via the effective accessors so SAF rows
     // (file == null) use their DocumentFile-sourced metadata instead of
@@ -878,6 +883,24 @@ fun LibraryRow(
                             onClick = {
                                 menuExpanded = false
                                 moveOut()
+                            }
+                        )
+                    }
+                    // B5 / ADR-0025 — permanent delete, only on the unlocked
+                    // Vault screen (onMenuDelete non-null). Destructive: tinted
+                    // with the error color. The caller shows a strong
+                    // irreversible-delete confirmation before doing anything.
+                    onMenuDelete?.let { delete ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.vault_delete),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                delete()
                             }
                         )
                     }
