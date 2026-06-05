@@ -359,5 +359,8 @@ internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
         // card actually surfaces this session.
         initialBatteryCardLastShownAt = settings.batteryOptCardLastShownAt,
         onBatteryCardShown = { shownAt -> settings.batteryOptCardLastShownAt = shownAt },
+        // Power-save card "once per 24h" rate-limit — same posture as battery.
+        initialPowerSaveCardLastShownAt = settings.powerSaveCardLastShownAt,
+        onPowerSaveCardShown = { shownAt -> settings.powerSaveCardLastShownAt = shownAt },
     )
 }

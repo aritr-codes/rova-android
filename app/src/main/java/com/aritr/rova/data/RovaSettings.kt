@@ -101,6 +101,17 @@ class RovaSettings(context: Context) {
         get() = runtimePrefs.getLong("battery_opt_card_last_shown_at", 0L)
         set(value) = runtimePrefs.edit { putLong("battery_opt_card_last_shown_at", value) }
 
+    /**
+     * Power-save-mode card rate-limit — epoch-millis of the last time the
+     * "power-save mode may throttle recording" card (WarningId.POWER_SAVE_MODE)
+     * was actually shown. Mirrors [batteryOptCardLastShownAt] and reuses the
+     * same once-per-24h predicate ([com.aritr.rova.ui.warnings.shouldSuppressBatteryCard]).
+     * Backed by [RUNTIME_PREFS_NAME] so a reinstall resets it.
+     */
+    var powerSaveCardLastShownAt: Long
+        get() = runtimePrefs.getLong("power_save_card_last_shown_at", 0L)
+        set(value) = runtimePrefs.edit { putLong("power_save_card_last_shown_at", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }

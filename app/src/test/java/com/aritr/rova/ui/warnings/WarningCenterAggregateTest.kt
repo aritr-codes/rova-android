@@ -655,6 +655,109 @@ class WarningCenterAggregateTest {
         assertEquals(emptyList<Long>(), stamped)
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // Power-save card "once per 24h" rate-limit (mirrors battery, #18)
+    // ──────────────────────────────────────────────────────────────────
+
+    /** Build a VM whose only active condition is POWER_SAVE_MODE (#18). */
+    private fun makePowerSaveVm(
+        initialPowerSaveCardLastShownAt: Long,
+        now: () -> Long,
+        onPowerSaveCardShown: ((Long) -> Unit)? = null,
+    ): WarningCenterViewModel {
+        val s = sources()
+        // percent high (no battery warning), exempt battery-opt, power-save ON.
+        s.pw.value = PowerState(percent = 80, charging = false, powerSaveMode = true)
+        return WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            initialPowerSaveCardLastShownAt = initialPowerSaveCardLastShownAt,
+            now = now,
+            onPowerSaveCardShown = onPowerSaveCardShown,
+        )
+    }
+
+    @Test
+    fun powerSaveCard_shownWithinWindow_isSuppressedThisSession() {
+        val vm = makePowerSaveVm(
+            initialPowerSaveCardLastShownAt = day,
+            now = { day + day / 2 },               // within window → suppressed
+        )
+        assertNull(vm.activeWarning.value)
+    }
+
+    @Test
+    fun powerSaveCard_neverShown_isAllowedAndStampsTimestampOnce() {
+        val stamped = mutableListOf<Long>()
+        val vm = makePowerSaveVm(
+            initialPowerSaveCardLastShownAt = 0L,  // never shown
+            now = { 67890L },
+            onPowerSaveCardShown = { stamped += it },
+        )
+        assertEquals(WarningId.POWER_SAVE_MODE, vm.activeWarning.value)
+        assertEquals(listOf(67890L), stamped)
+    }
+
+    @Test
+    fun powerSaveCard_shownOverWindowAgo_isAllowedAgain() {
+        val stamped = mutableListOf<Long>()
+        val vm = makePowerSaveVm(
+            initialPowerSaveCardLastShownAt = day,
+            now = { day * 3 },                     // well past one window
+            onPowerSaveCardShown = { stamped += it },
+        )
+        assertEquals(WarningId.POWER_SAVE_MODE, vm.activeWarning.value)
+        assertEquals(listOf(day * 3), stamped)
+    }
+
+    @Test
+    fun powerSaveCard_suppressedSession_doesNotStampTimestamp() {
+        val stamped = mutableListOf<Long>()
+        makePowerSaveVm(
+            initialPowerSaveCardLastShownAt = day,
+            now = { day + 1 },                     // within window → suppressed
+            onPowerSaveCardShown = { stamped += it },
+        )
+        assertEquals(emptyList<Long>(), stamped)
+    }
+
+    @Test
+    fun powerSaveCard_suppression_isIndependentOfBatteryCard() {
+        // Power-save suppressed but battery-opt NOT exempt → battery card still
+        // surfaces (the two rate-limits are independent timestamps). Battery
+        // (#17) outranks power-save (#18) regardless.
+        val s = sources()
+        s.bo.value = false   // battery-opt not exempt → BATTERY_OPTIMIZATION_ON
+        s.pw.value = PowerState(percent = 80, charging = false, powerSaveMode = true)
+        val vm = WarningCenterViewModel(
+            cameraPermissionGranted = s.cameraPerm,
+            exactAlarmGranted = s.ea,
+            storageInsufficient = s.storage,
+            thermal = s.th,
+            power = s.pw,
+            camera = s.camState,
+            microphonePermissionGranted = s.mic,
+            notificationsGranted = s.nt,
+            batteryOptimizationExempt = s.bo,
+            storageLowMidRec = s.storageLowMidRec,
+            autoStopEcho = s.autoStopEcho,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            initialPowerSaveCardLastShownAt = day,
+            now = { day + 1 },                     // power-save suppressed
+        )
+        assertEquals(WarningId.BATTERY_OPTIMIZATION_ON, vm.activeWarning.value)
+    }
+
     @Test
     fun `multi-active aggregation — 3 simultaneous warnings ordinal-sorted on History list`() {
         val recoverySignal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
