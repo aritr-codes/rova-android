@@ -64,6 +64,17 @@ class PlayerViewModel(
     private val _progress = MutableStateFlow(PlaybackProgress())
     val progress: StateFlow<PlaybackProgress> = _progress.asStateFlow()
 
+    /**
+     * B5 / ADR-0025 — true when the resolved manifest is VAULTED. The screen
+     * collects this to apply FLAG_SECURE so vault playback can't be
+     * screenshotted or surfaced in the recents thumbnail. Stays false for
+     * PUBLIC (and for in-flight VAULTING/UNVAULTING, which the vault list does
+     * not route into the player). Resolved once in [init] from the same
+     * manifest read that drives uiState.
+     */
+    private val _isVaulted = MutableStateFlow(false)
+    val isVaulted: StateFlow<Boolean> = _isVaulted.asStateFlow()
+
     private var exoPlayer: ExoPlayer? = null
     private var pollJob: Job? = null
 
@@ -101,6 +112,8 @@ class PlayerViewModel(
             val manifest = withContext(Dispatchers.IO) {
                 runCatching { loadManifest(sessionId) }.getOrNull()
             }
+            _isVaulted.value =
+                manifest?.vaultState == com.aritr.rova.data.VaultState.VAULTED
             val resolved = PlayerUriResolver.resolve(manifest, side)
             // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
             // uiState to Ready. The screen's `update` block reads
@@ -139,13 +152,37 @@ class PlayerViewModel(
     private fun attachExoPlayer(uri: String) {
         val app = getApplication<Application>()
         val player = ExoPlayer.Builder(app).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(uri)))
+            setMediaItem(MediaItem.fromUri(resolvePlaybackUri(app, uri)))
             addListener(playerListener)
             playWhenReady = true
             prepare()
         }
         exoPlayer = player
         pushProgress()
+    }
+
+    /**
+     * Task 14 / ADR-0025 — turn the pure resolver's `mediaUri` string
+     * into the actual [Uri] ExoPlayer consumes. Tier 1 / SAF produce a
+     * `content://` URI and Tier 2/3 a `file://` URI — both parse
+     * directly. A VAULTED recording instead arrives tagged with
+     * [PlayerUriResolver.VAULT_FILE_SCHEME]: the app-private file path
+     * MUST be exposed as a FileProvider `content://` URI (not the raw
+     * `file://`, which throws `FileUriExposedException` once a media
+     * source touches the private path). The FileProvider authority is
+     * `${applicationId}.provider`, declared in AndroidManifest.xml and
+     * rooted at `res/xml/file_paths.xml`'s `videos/` entry.
+     */
+    private fun resolvePlaybackUri(app: Application, uri: String): Uri {
+        if (!uri.startsWith(PlayerUriResolver.VAULT_FILE_SCHEME)) {
+            return Uri.parse(uri)
+        }
+        val path = uri.removePrefix(PlayerUriResolver.VAULT_FILE_SCHEME)
+        return androidx.core.content.FileProvider.getUriForFile(
+            app,
+            "${app.packageName}.provider",
+            java.io.File(path)
+        )
     }
 
     fun togglePlayPause() {

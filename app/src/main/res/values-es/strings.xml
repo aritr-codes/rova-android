@@ -678,4 +678,23 @@
     <string name="preview_share_title">Compartir vídeo de Rova</string>
     <string name="preview_share_not_ready">La grabación aún no está lista para compartir</string>
     <string name="preview_share_no_app">No hay ninguna app disponible para compartir vídeos</string>
+
+    <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
+    <string name="settings_section_privacy">Privacidad</string>
+    <string name="vault_empty_title">La caja fuerte está vacía</string>
+    <string name="vault_empty_body">Las grabaciones que muevas a la caja fuerte, o las nuevas grabaciones hechas mientras \"Ocultar nuevas grabaciones en la caja fuerte\" está activado, aparecen aquí.</string>
+    <string name="vault_open_entry_cd">Abrir la caja fuerte oculta</string>
+    <string name="settings_hide_in_vault_title">Ocultar nuevas grabaciones en la caja fuerte</string>
+    <string name="settings_hide_in_vault_summary">Las nuevas grabaciones permanecen en Rova y se ocultan de la galería. Para abrirlas aquí necesitas el bloqueo de pantalla del dispositivo. Los archivos no están cifrados en esta versión.</string>
+    <string name="vault_title">Caja fuerte oculta</string>
+    <string name="vault_unlock_prompt_title">Desbloquear la caja fuerte</string>
+    <string name="vault_unlock_prompt_subtitle">Usa tu bloqueo de pantalla para ver las grabaciones ocultas</string>
+    <string name="vault_no_lock_warning">Configura un bloqueo de pantalla para proteger la caja fuerte. Las grabaciones siguen ocultas de la galería, pero el bloqueo dentro de la app está desactivado.</string>
+    <string name="vault_share_leaves_warning">Compartir o exportar copia esta grabación fuera de la caja fuerte. La copia deja de estar oculta.</string>
+    <string name="vault_move_in">Mover a la caja fuerte</string>
+    <string name="vault_move_out">Sacar de la caja fuerte</string>
+    <string name="vault_delete">Eliminar</string>
+    <string name="vault_delete_title">¿Eliminar de la caja fuerte?</string>
+    <string name="vault_delete_body">Esto elimina la grabación de forma permanente. No está en tu galería y no se puede recuperar.</string>
+    <string name="vault_delete_confirm">Eliminar</string>
 </resources>

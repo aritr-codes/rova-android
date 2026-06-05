@@ -59,6 +59,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // would race across the nullable boundary.
     val saveLocationLabel = MutableStateFlow(settings.saveLocationLabel)
 
+    // B5 / ADR-0025 (spec R4) — "hide new recordings in vault" toggle. Uses an
+    // EXPLICIT setter ([setHideInVault]) rather than a write-back collector
+    // because the ON->OFF transition is auth-gated at the UI layer: the Switch
+    // must NOT persist OFF until VaultAuthGate confirms, and a cancelled attempt
+    // must snap back to the persisted ON. A collector would persist on every
+    // flow assignment, defeating the gate. The flow drives the Switch's checked
+    // state so it always reflects the persisted value.
+    val hideInVault = MutableStateFlow(settings.hideInVault)
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
@@ -88,6 +97,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         intervalMinutes.value = settings.intervalMinutes
         loopCount.value = settings.loopCount
         saveLocationLabel.value = settings.saveLocationLabel
+        // B5 — reseed from disk on resume so a value changed elsewhere (or the
+        // toggle's persisted state after an auth-gated flip) is reflected. Safe
+        // because the setter is the only writer; this is a pure re-read.
+        hideInVault.value = settings.hideInVault
+    }
+
+    /**
+     * B5 / ADR-0025 (spec R4) — persist the vault-hide preference and update the
+     * flow. Called directly when turning ON (free) or from the
+     * [com.aritr.rova.ui.vault.VaultAuthGate] success / no-lock callbacks when
+     * turning OFF (auth-gated at the call site via [toggleRequiresAuth]).
+     */
+    fun setHideInVault(value: Boolean) {
+        settings.hideInVault = value
+        hideInVault.value = value
     }
 
     /**

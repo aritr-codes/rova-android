@@ -59,6 +59,14 @@ import com.aritr.rova.utils.RovaLog
  * tokens being present documents that the predicate covers each
  * load-bearing dimension.
  */
+/**
+ * B5 / ADR-0025 — a vault file is a KEPT artifact: never an orphan to
+ * delete. Any non-PUBLIC vault state with a vault file present must block
+ * deletion of the session's files.
+ */
+fun isVaultKeptArtifact(state: com.aritr.rova.data.VaultState, vaultFilePath: String?): Boolean =
+    state != com.aritr.rova.data.VaultState.PUBLIC && vaultFilePath != null
+
 internal object ExportCleanupPredicate {
 
     /**
@@ -131,6 +139,15 @@ internal object ExportCleanupPredicate {
         val deleted = mutableListOf<String>()
         for ((sessionId, classification) in classifications) {
             val manifest = sessionStore.loadManifest(sessionId) ?: continue
+            // B5 / ADR-0025 — a vault file is a KEPT artifact, never an orphan.
+            // Block deletion BEFORE the four-gate logic for any non-PUBLIC vault
+            // session that still holds a vault file (single-file or per-side P+L).
+            val perSideVaultKept = manifest.vaultState != com.aritr.rova.data.VaultState.PUBLIC &&
+                (manifest.portraitVaultFilePath != null || manifest.landscapeVaultFilePath != null)
+            if (isVaultKeptArtifact(manifest.vaultState, manifest.vaultFilePath) || perSideVaultKept) {
+                RovaLog.d("ExportCleanupPredicate: skipped $sessionId (vault kept artifact)")
+                continue
+            }
             val recoveryResult = report.perSession[sessionId]
             if (shouldDelete(classification, manifest, recoveryResult, report.sweep)) {
                 sessionStore.discardSession(sessionId)

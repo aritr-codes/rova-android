@@ -54,6 +54,7 @@ import androidx.media3.ui.PlayerView
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.screens.HistoryRowFormatters
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
@@ -82,6 +83,9 @@ import java.util.concurrent.TimeUnit
 fun PlayerScreen(
     sessionId: String,
     side: VideoSide? = null,
+    // B5 / ADR-0025 — deterministic secure flag passed by the vault list
+    // (true from the first composition). See the `shouldSecure` block below.
+    secure: Boolean = false,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -97,6 +101,25 @@ fun PlayerScreen(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val isVaulted by viewModel.isVaulted.collectAsStateWithLifecycle()
+
+    // B5 / ADR-0025 — block screenshots / recents-thumbnail capture while
+    // playing a VAULTED recording, via the ref-counted window controller.
+    //
+    // `secure` is the deterministic nav-arg the vault list passes (true from
+    // the very first composition); `isVaulted` is the async manifest-read
+    // fallback for any non-vault entry point. We secure on EITHER — `secure`
+    // closes the on-device race where the vault destination released its
+    // FLAG_SECURE ref (as the player covered it) before the slower isVaulted
+    // StateFlow had flipped true, leaving steady-state playback screenshottable.
+    // shouldSecure is a stable key, so the ref is acquired exactly once and
+    // released exactly once. Public playback (both false) is unaffected.
+    val secureFlag = LocalSecureFlagController.current
+    val shouldSecure = secure || isVaulted
+    DisposableEffect(secureFlag, shouldSecure) {
+        if (shouldSecure) secureFlag?.acquire()
+        onDispose { if (shouldSecure) secureFlag?.release() }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val editorPlaceholderMessage = stringResource(R.string.player_editor_coming_soon)

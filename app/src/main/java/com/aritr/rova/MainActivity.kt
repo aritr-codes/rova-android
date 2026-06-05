@@ -3,24 +3,29 @@ package com.aritr.rova
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aritr.rova.data.RovaSettings
+import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.MainScreen
+import com.aritr.rova.ui.SecureFlagController
 import com.aritr.rova.ui.isPinnedDarkRoute
 import com.aritr.rova.ui.locale.LocaleApplier
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.theme.resolveDarkTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     // i18n Phase B (ADR-0023) — API 24–32 locale backport. On those API levels
     // there is no LocaleManager, so the persisted tag is applied here, before
@@ -52,12 +57,26 @@ class MainActivity : ComponentActivity() {
             val navController = rememberNavController()
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
             val lightBars = if (isPinnedDarkRoute(currentRoute)) false else !dark
-            RovaTheme(darkTheme = dark, lightStatusBarIcons = lightBars) {
-                MainScreen(
-                    initialTab = initialTab,
-                    settingsViewModel = settingsViewModel,
-                    navController = navController,
+            // B5 / ADR-0025 — single ref-counted owner of this window's
+            // FLAG_SECURE. Vault list and vault player both secure the window
+            // and overlap during the nav transition; ref-counting keeps the
+            // flag on while ANY secure screen is active so the exiting screen's
+            // late onDispose can't wipe the entering screen's flag. remember
+            // keeps one stable instance bound to this single Activity window.
+            val secureController = remember {
+                SecureFlagController(
+                    onFirstAcquire = { window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) },
+                    onLastRelease = { window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) },
                 )
+            }
+            RovaTheme(darkTheme = dark, lightStatusBarIcons = lightBars) {
+                CompositionLocalProvider(LocalSecureFlagController provides secureController) {
+                    MainScreen(
+                        initialTab = initialTab,
+                        settingsViewModel = settingsViewModel,
+                        navController = navController,
+                    )
+                }
             }
         }
         handleNotificationAction(intent)

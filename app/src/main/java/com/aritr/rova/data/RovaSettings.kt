@@ -90,6 +90,28 @@ class RovaSettings(context: Context) {
         get() = runtimePrefs.getStringSet("dismissed_autostop_echo_ids", emptySet()) ?: emptySet()
         set(value) = runtimePrefs.edit { putStringSet("dismissed_autostop_echo_ids", value) }
 
+    /**
+     * Battery-optimization card rate-limit — epoch-millis of the last time the
+     * card was actually shown. Drives the "show at most once per 24h" gate
+     * (see [com.aritr.rova.ui.warnings.shouldSuppressBatteryCard]). Backed by
+     * [RUNTIME_PREFS_NAME] so reinstall resets it (same policy as `mode` +
+     * `snoozedWarningIds` — see backup_rules.xml + data_extraction_rules.xml).
+     */
+    var batteryOptCardLastShownAt: Long
+        get() = runtimePrefs.getLong("battery_opt_card_last_shown_at", 0L)
+        set(value) = runtimePrefs.edit { putLong("battery_opt_card_last_shown_at", value) }
+
+    /**
+     * Power-save-mode card rate-limit — epoch-millis of the last time the
+     * "power-save mode may throttle recording" card (WarningId.POWER_SAVE_MODE)
+     * was actually shown. Mirrors [batteryOptCardLastShownAt] and reuses the
+     * same once-per-24h predicate ([com.aritr.rova.ui.warnings.shouldSuppressBatteryCard]).
+     * Backed by [RUNTIME_PREFS_NAME] so a reinstall resets it.
+     */
+    var powerSaveCardLastShownAt: Long
+        get() = runtimePrefs.getLong("power_save_card_last_shown_at", 0L)
+        set(value) = runtimePrefs.edit { putLong("power_save_card_last_shown_at", value) }
+
     var loopCount: Int
         get() = prefs.getInt("loop_count", 10) // -1 for continuous
         set(value) = prefs.edit { putInt("loop_count", value) }
@@ -181,6 +203,13 @@ class RovaSettings(context: Context) {
     var autoExportEnabled: Boolean
         get() = prefs.getBoolean("auto_export_enabled", true)
         set(value) = prefs.edit { putBoolean("auto_export_enabled", value) }
+
+    // B5 / ADR-0025 — when ON, new recordings go to the hidden vault
+    // (app-private storage, never published). Backed up (a genuine user
+    // preference, like themeMode). Default OFF preserves existing behavior.
+    var hideInVault: Boolean
+        get() = prefs.getBoolean("hide_in_vault", false)
+        set(value) = prefs.edit { putBoolean("hide_in_vault", value) }
 
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */

@@ -110,7 +110,10 @@ open class SessionStore internal constructor(rootDirArg: File) {
     fun createSession(
         config: SessionConfig,
         audioMode: AudioMode = AudioMode.VIDEO_ONLY,
-        hasUsableSafFolder: Boolean = false
+        hasUsableSafFolder: Boolean = false,
+        // B5 / ADR-0025 — frozen at session start from RovaSettings.hideInVault.
+        // Default false keeps every pre-B5 caller unchanged.
+        vaultIntentAtStart: Boolean = false
     ): SessionManifest {
         val sessionId = generateUniqueSessionId()
         // Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003): tier from the shared
@@ -124,7 +127,8 @@ open class SessionStore internal constructor(rootDirArg: File) {
             config = config,
             segments = emptyList(),
             exportTier = tier,
-            audioMode = audioMode
+            audioMode = audioMode,
+            vaultIntentAtStart = vaultIntentAtStart
         )
         val dir = sessionDir(sessionId)
         if (!dir.exists()) dir.mkdirs()
@@ -669,6 +673,104 @@ open class SessionStore internal constructor(rootDirArg: File) {
             com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE ->
                 current.copy(landscapeMediaScanCompleted = true)
         }
+    }
+
+    /**
+     * B5 / ADR-0025 — finalize a vault export. The merged artifact now lives
+     * ONLY inside the private vault, so there is no public copy: this transition
+     * sets [VaultState.VAULTED] + the vault file path, marks the export
+     * [ExportState.FINALIZED], and clears every public pointer
+     * (`pendingUri`, `publicTargetPath`, `safTargetDocUri`).
+     *
+     * Does NOT touch [SessionManifest.terminated] — vault finalize uses
+     * `ExportState.FINALIZED` only and never writes `Terminated.COMPLETED`
+     * (that write is reserved for `RovaRecordingService.performMerge` per
+     * `checkCompletedWriteOnlyFromPerformMerge` / ADR 0006 B7).
+     */
+    suspend fun setVaultFinalized(
+        sessionId: String,
+        vaultFilePath: String
+    ): ExportMutationResult = mutateExport("setVaultFinalized", sessionId) { current ->
+        current.copy(
+            vaultState = VaultState.VAULTED,
+            vaultFilePath = vaultFilePath,
+            exportState = ExportState.FINALIZED,
+            pendingUri = null,
+            publicTargetPath = null,
+            safTargetDocUri = null,
+            privateTempPath = null
+        )
+    }
+
+    /**
+     * B5 / ADR-0025 — per-side analog of [setVaultFinalized] for P+L sessions.
+     * Routes to `portraitVaultFilePath` / `landscapeVaultFilePath` based on
+     * [side] and clears that side's public pointers (`*PendingUri`,
+     * `*PublicTargetPath`). Side-orthogonal: the other side's pointers are
+     * untouched. The shared `vaultState` flips to [VaultState.VAULTED] — vault
+     * membership is a whole-session property, not per-side.
+     */
+    suspend fun setVaultFinalizedForSide(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide,
+        vaultFilePath: String
+    ): ExportMutationResult = mutateExport("setVaultFinalizedForSide($side)", sessionId) { current ->
+        when (side) {
+            com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT -> current.copy(
+                vaultState = VaultState.VAULTED,
+                portraitVaultFilePath = vaultFilePath,
+                portraitPendingUri = null,
+                portraitPublicTargetPath = null
+            )
+            com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE -> current.copy(
+                vaultState = VaultState.VAULTED,
+                landscapeVaultFilePath = vaultFilePath,
+                landscapePendingUri = null,
+                landscapePublicTargetPath = null
+            )
+        }
+    }
+
+    /**
+     * B5 / ADR-0025 — set an in-flight vault move state ([VaultState.VAULTING]
+     * for move-in, [VaultState.UNVAULTING] for move-out) so cold-launch
+     * recovery can resume an interrupted move. When [vaultFilePath] is `null`
+     * the existing path is preserved; pass a non-null value only when the move
+     * targets a new on-disk path.
+     */
+    suspend fun setVaultState(
+        sessionId: String,
+        state: VaultState,
+        vaultFilePath: String? = null
+    ): ExportMutationResult = mutateExport("setVaultState($state)", sessionId) { current ->
+        current.copy(
+            vaultState = state,
+            vaultFilePath = vaultFilePath ?: current.vaultFilePath
+        )
+    }
+
+    /**
+     * B5 / ADR-0025 — move-out completion. The artifact left the vault and was
+     * republished to public storage: reset [VaultState.PUBLIC], clear the vault
+     * file path, and set the published pointers. Defaults to
+     * [ExportState.FINALIZED] with no public pointers so the caller can also use
+     * this as a plain "removed from vault" reset.
+     */
+    suspend fun setVaultMovedOut(
+        sessionId: String,
+        exportState: ExportState = ExportState.FINALIZED,
+        pendingUri: String? = null,
+        publicTargetPath: String? = null,
+        safTargetDocUri: String? = null
+    ): ExportMutationResult = mutateExport("setVaultMovedOut", sessionId) { current ->
+        current.copy(
+            vaultState = VaultState.PUBLIC,
+            vaultFilePath = null,
+            exportState = exportState,
+            pendingUri = pendingUri,
+            publicTargetPath = publicTargetPath,
+            safTargetDocUri = safTargetDocUri
+        )
     }
 
     /**

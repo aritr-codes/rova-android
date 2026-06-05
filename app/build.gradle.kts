@@ -1801,6 +1801,44 @@ val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
     }
 }
 
+// B5 / ADR-0025 — the core privacy invariant, mechanically enforced:
+// VaultExporter must never reach a public-publish API. A vaulted recording
+// stays app-private; any MediaStore insert / media scan / public-dir write
+// inside VaultExporter.kt would silently make it gallery-visible.
+val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPublicPublish") {
+    group = "verification"
+    description = "Forbid public-publish APIs in VaultExporter (ADR-0025 — vault recordings never publish)."
+    val vaultExporter = file("src/main/java/com/aritr/rova/service/export/VaultExporter.kt")
+    inputs.file(vaultExporter).withPropertyName("vaultExporterSource")
+    doLast {
+        if (!vaultExporter.exists()) {
+            throw GradleException("checkVaultExporterNoPublicPublish: VaultExporter.kt missing: $vaultExporter")
+        }
+        val forbidden = listOf(
+            "MediaStore",
+            "MediaScannerConnection",
+            "insertPendingRow",
+            "scanAndWait",
+            "DIRECTORY_MOVIES",
+            "IS_PENDING",
+            ".insert(",
+            "getExternalStoragePublicDirectory",
+        )
+        val hits = vaultExporter.readLines().withIndex().filter { (_, line) ->
+            val t = line.trimStart()
+            if (t.startsWith("//") || t.startsWith("*")) false
+            else forbidden.any { line.contains(it) }
+        }
+        if (hits.isNotEmpty()) {
+            val report = hits.joinToString("\n") { (i, line) -> "  VaultExporter.kt:${i + 1}: ${line.trim()}" }
+            throw GradleException(
+                "ADR-0025: VaultExporter must not reference any public-publish API " +
+                    "(vault recordings stay app-private). Offenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1833,6 +1871,7 @@ afterEvaluate {
         dependsOn(checkNoHardcodedUiStrings)
         dependsOn(checkLocaleConfigNoPseudolocale)
         dependsOn(checkA11yAnimationGated)
+        dependsOn(checkVaultExporterNoPublicPublish)
     }
 }
 
@@ -1855,6 +1894,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.concurrent.futures.ktx)
     // Phase 2.5 — In-app player. media3-exoplayer drives playback over
     // the merged MP4; media3-ui provides PlayerView (the Compose wrapper

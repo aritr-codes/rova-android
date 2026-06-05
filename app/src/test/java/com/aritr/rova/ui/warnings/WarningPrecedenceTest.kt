@@ -31,6 +31,8 @@ class WarningPrecedenceTest {
         storageLowMidRec: Boolean = false,                  // ← NEW
         autoStopEcho: TerminalEcho? = null,                 // ← NEW (Phase 4 Slice 2)
         cantMergeActive: Boolean = false,                   // ← NEW (Phase 4.3)
+        suppressBatteryCard: Boolean = false,               // ← NEW (once-per-24h rate-limit)
+        suppressPowerSaveCard: Boolean = false,             // ← NEW (once-per-24h rate-limit)
     ): WarningId? = WarningPrecedence.resolve(
         cameraPermissionGranted = cameraPermissionGranted,
         exactAlarmGranted = exactAlarmGranted,
@@ -44,6 +46,8 @@ class WarningPrecedenceTest {
         storageLowMidRec = storageLowMidRec,                // ← NEW (passed positionally to WarningPrecedence.resolve)
         autoStopEcho = autoStopEcho,                        // ← NEW (Phase 4 Slice 2)
         cantMergeActive = cantMergeActive,                  // ← NEW (Phase 4.3)
+        suppressBatteryCard = suppressBatteryCard,          // ← NEW (once-per-24h rate-limit)
+        suppressPowerSaveCard = suppressPowerSaveCard,      // ← NEW (once-per-24h rate-limit)
     )
 
     @Test fun `everything clear returns null`() = assertNull(resolve())
@@ -71,6 +75,15 @@ class WarningPrecedenceTest {
         assertEquals(WarningId.BATTERY_OPTIMIZATION_ON, resolve(batteryOptimizationExempt = false))
     @Test fun `power save mode on`() =
         assertEquals(WarningId.POWER_SAVE_MODE, resolve(powerSaveMode = true))
+    @Test fun `power save mode suppressed by rate-limit raises nothing`() =
+        assertNull(resolve(powerSaveMode = true, suppressPowerSaveCard = true))
+    @Test fun `battery optimization suppressed by rate-limit raises nothing`() =
+        assertNull(resolve(batteryOptimizationExempt = false, suppressBatteryCard = true))
+    @Test fun `power-save suppression does not suppress battery optimization`() =
+        assertEquals(
+            WarningId.BATTERY_OPTIMIZATION_ON,
+            resolve(batteryOptimizationExempt = false, powerSaveMode = true, suppressPowerSaveCard = true),
+        )
     @Test fun `thermal moderate`() =
         assertEquals(WarningId.THERMAL_MODERATE, resolve(thermal = ThermalStatus.MODERATE))
     @Test fun `notifications denied`() =

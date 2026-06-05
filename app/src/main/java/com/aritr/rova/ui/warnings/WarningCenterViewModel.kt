@@ -61,9 +61,42 @@ class WarningCenterViewModel(
     initialSnoozedIds: Set<WarningId> = emptySet(),
     private val onSnoozeChanged: ((Set<WarningId>) -> Unit)? = null,
     private val onAutoStopDismissed: ((String) -> Unit)? = null,  // ← NEW (Phase 4 Slice 2 callback)
+    // ── Battery-optimization card "once per 24h" rate-limit ──
+    // Persisted epoch-millis of the last time the card was shown, read ONCE
+    // at construction. The factory in WarningCenter.kt supplies the live
+    // value from RovaSettings.batteryOptCardLastShownAt; defaults keep
+    // pre-rate-limit call sites (tests, previews) green (never suppress).
+    initialBatteryCardLastShownAt: Long = 0L,
+    // Injectable time seam (project seam pattern) so the suppress decision is
+    // deterministic under JVM unit tests.
+    private val now: () -> Long = { System.currentTimeMillis() },
+    // One-shot persistence callback: invoked AT MOST once per session, the
+    // first time the battery card actually becomes the resolved warning while
+    // NOT suppressed. The factory writes RovaSettings.batteryOptCardLastShownAt.
+    private val onBatteryCardShown: ((Long) -> Unit)? = null,
+    // ── Power-save card "once per 24h" rate-limit (mirrors battery exactly) ──
+    // Read ONCE at construction; factory supplies RovaSettings.powerSaveCardLastShownAt.
+    initialPowerSaveCardLastShownAt: Long = 0L,
+    // One-shot persistence callback for the power-save card (WarningId.POWER_SAVE_MODE).
+    private val onPowerSaveCardShown: ((Long) -> Unit)? = null,
 ) : ViewModel() {
 
     private val activeScope: CoroutineScope get() = scope ?: viewModelScope
+
+    // Captured ONCE at construction, BEFORE any "shown now" write — otherwise
+    // recording the new timestamp would immediately re-suppress and the card
+    // would flash and vanish within the same session.
+    private val suppressBatteryCardThisSession: Boolean =
+        shouldSuppressBatteryCard(initialBatteryCardLastShownAt, now())
+
+    // One-shot guard so the timestamp is persisted exactly once per session.
+    private var batteryCardTimestampRecorded = false
+
+    // Power-save card — same once-per-24h posture, captured once at construction.
+    private val suppressPowerSaveCardThisSession: Boolean =
+        shouldSuppressBatteryCard(initialPowerSaveCardLastShownAt, now())
+
+    private var powerSaveCardTimestampRecorded = false
 
     // ── v3 — "Why this matters" expand toggle (in-memory; survives only while VM is in scope) ──
     private val _expandedWhy = MutableStateFlow<Set<WarningId>>(emptySet())
@@ -138,6 +171,8 @@ class WarningCenterViewModel(
             storageLowMidRec, autoStopEcho,                      // ← Phase 4 Slice 2
             _cantMergeActive,                                    // ← NEW (Phase 4.3)
             saveFolderUnavailable,                               // ← NEW (B4b ADR-0024)
+            suppressBatteryCard = suppressBatteryCardThisSession, // ← NEW (once-per-24h rate-limit)
+            suppressPowerSaveCard = suppressPowerSaveCardThisSession, // ← NEW (once-per-24h rate-limit)
         ).stateIn(activeScope, SharingStarted.WhileSubscribed(5_000L), null)
 
     /** Phase 4.2 — multi-active stream parallel to [_resolvedWarning]; Eagerly so tests can read .value synchronously. */
@@ -181,12 +216,12 @@ class WarningCenterViewModel(
         activeScope.launch {
             var previous: Set<WarningId> = emptySet()
             _allActive.collect { current ->
-                val now = current.toSet()
-                val downEdges = previous - now
+                val nowSet = current.toSet()
+                val downEdges = previous - nowSet
                 if (downEdges.isNotEmpty()) {
                     _historyStripDismissedThisSession.update { it - downEdges }
                 }
-                previous = now
+                previous = nowSet
             }
         }
     }
@@ -217,6 +252,35 @@ class WarningCenterViewModel(
         _snoozedForever,
     ) { resolved, snoozed -> resolved?.takeIf { it !in snoozed } }
         .stateIn(activeScope, SharingStarted.Eagerly, null)
+
+    init {
+        // Rate-limited-card timestamping — record "shown now" exactly once per
+        // session per card, the first time that card is the visible
+        // (snooze-filtered) warning while NOT suppressed this session. Each
+        // suppress decision was already captured at construction, so this write
+        // cannot self-suppress the currently-visible card. `activeWarning` is
+        // the public flow the UI actually renders; surfacing the id == the card
+        // was shown. This init block sits AFTER `activeWarning`'s declaration so
+        // the reference is fully initialized when the collector starts. Battery
+        // (#17) and power-save (#18) share one collector — same posture, one
+        // timestamp each.
+        val recordBattery = !suppressBatteryCardThisSession && onBatteryCardShown != null
+        val recordPowerSave = !suppressPowerSaveCardThisSession && onPowerSaveCardShown != null
+        if (recordBattery || recordPowerSave) {
+            activeScope.launch {
+                activeWarning.collect { id ->
+                    if (recordBattery && id == WarningId.BATTERY_OPTIMIZATION_ON && !batteryCardTimestampRecorded) {
+                        batteryCardTimestampRecorded = true
+                        onBatteryCardShown?.invoke(now())
+                    }
+                    if (recordPowerSave && id == WarningId.POWER_SAVE_MODE && !powerSaveCardTimestampRecorded) {
+                        powerSaveCardTimestampRecorded = true
+                        onPowerSaveCardShown?.invoke(now())
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Per-session dismiss state — the set of [WarningId]s the user has
@@ -357,6 +421,8 @@ class WarningCenterViewModel(
             autoStopEcho: Flow<TerminalEcho?>,              // ← Phase 4 Slice 2
             cantMergeActive: Flow<Boolean>,                 // ← NEW (Phase 4.3)
             saveFolderUnavailable: Flow<Boolean> = MutableStateFlow(false).asStateFlow(), // ← NEW (B4b ADR-0024)
+            suppressBatteryCard: Boolean = false,           // ← NEW (once-per-24h rate-limit; constant per session, decided at VM init)
+            suppressPowerSaveCard: Boolean = false,         // ← NEW (once-per-24h rate-limit; mirrors suppressBatteryCard)
         ): Flow<WarningId?> {
             val bools6: Flow<Bools6> = combine(
                 cameraPermissionGranted,
@@ -390,6 +456,8 @@ class WarningCenterViewModel(
                         autoStopEcho = n4.autoStopEcho,
                         cantMergeActive = cm,                    // ← NEW (Phase 4.3)
                         saveFolderUnavailable = sfu,             // ← NEW (B4b ADR-0024)
+                        suppressBatteryCard = suppressBatteryCard, // ← NEW (once-per-24h rate-limit)
+                        suppressPowerSaveCard = suppressPowerSaveCard, // ← NEW (once-per-24h rate-limit)
                     )
                 }.getOrElse { e ->
                     Log.w("WarningCenter", "warning resolution failed", e)

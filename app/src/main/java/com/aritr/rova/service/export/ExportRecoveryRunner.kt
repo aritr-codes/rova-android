@@ -105,7 +105,28 @@ class ExportRecoveryRunner(
     private val sessionStore: SessionStore,
     private val recoverSession: suspend (SessionManifest) -> RecoveryResult,
     private val validateTierArtifact: suspend (SessionManifest) -> Boolean,
-    private val orphanSweep: (suspend (referencedPendingUris: Set<String>) -> OrphanSweepResult)?
+    private val orphanSweep: (suspend (referencedPendingUris: Set<String>) -> OrphanSweepResult)?,
+    // B5 / ADR-0025 — vault re-merge seam. Wired in RovaApp to
+    // `ExportPipeline.exportRecovered(..., vaultIntent = true)` so a
+    // [VaultRecoveryAction.MERGE_TO_VAULT] session re-merges to the
+    // app-private vault and never publishes. Threading vault intent
+    // THROUGH `exportRecovered` (not calling `export(` here) keeps the
+    // `checkExportPipelineSingleEntry` invariant intact. Optional with a
+    // `null` default so existing callers/tests that never exercise the
+    // vault path compile unchanged — a `null` seam means the vault
+    // re-merge is UNWIRED, which is treated as "skip" (never publish via
+    // [recoverSession]), per codex review.
+    private val recoverVaultSession: (suspend (SessionManifest) -> RecoveryResult)? = null,
+    // B5 / ADR-0025 (Task 22) — interrupted-move resume seam. Wired in
+    // RovaApp to build a [VaultMover] (via [VaultMoverBuilder]) for the
+    // session and call `finishVaulting` (RESUME_VAULTING) /
+    // `finishUnvaulting` (RESUME_UNVAULTING) — the private copy / state are
+    // already on disk, so only the destructive + terminal-commit half
+    // re-runs (both steps are idempotent on the post-crash state). Optional
+    // with a `null` default so existing callers/tests compile unchanged; a
+    // `null` seam means move-resume is UNWIRED and the runner skips (never
+    // mis-publishes a half-moved session), matching the prior TODO behavior.
+    private val resumeVaultMove: (suspend (SessionManifest, VaultRecoveryAction) -> Unit)? = null
 ) {
 
     /**
@@ -155,20 +176,98 @@ class ExportRecoveryRunner(
         )
 
         // Step 2 — per-session recovery dispatch.
+        //
+        // B5 / ADR-0025 — vault-aware routing keys off vault membership,
+        // never exportTier. Per session we first classify the vault
+        // dimension via [vaultRecoveryAction]:
+        //  - MERGE_TO_VAULT → re-merge to the app-private vault via the
+        //    [recoverVaultSession] seam (vaultIntent=true through
+        //    exportRecovered). It must NEVER fall through to
+        //    [recoverSession] (tier-recovery PUBLISHES). If the seam is
+        //    unwired (null), skip — a vault session must not be published.
+        //  - RESUME_VAULTING / RESUME_UNVAULTING → an in-flight move was
+        //    interrupted; the move executors land in a later phase. Skip
+        //    (never publish a half-moved session).
+        //  - NONE → existing tier-recovery dispatch via [recoverSession].
         val perSession = LinkedHashMap<String, RecoveryResult>()
         for (m in manifests) {
-            if (!needsExportRecovery(m)) continue
-            val result = try {
-                recoverSession(m)
-            } catch (t: Throwable) {
-                // A throw from the tier dispatcher itself (not RecoveryResult-
-                // wrapped) is treated as RetryableFailure so cleanup gating
-                // suppresses physical deletion of the dir. The next cold
-                // launch will retry.
-                RovaLog.w("$TAG: recoverSession threw for ${m.sessionId}", t)
-                RecoveryResult.RetryableFailure("recoverSession", t)
+            val vaultAction = vaultRecoveryAction(
+                vaultIntentAtStart = m.vaultIntentAtStart,
+                state = m.vaultState,
+                finalized = m.exportState == ExportState.FINALIZED
+            )
+            // B5 / ADR-0025 (Task 22) — an interrupted move (VAULTING /
+            // UNVAULTING) must be resumed even when the EXPORT pipeline has
+            // nothing to do: the vaulted recording is already FINALIZED with
+            // a cleared privateTempPath, so `needsExportRecovery` is false.
+            // The move-resume gate keys off vaultState, NOT exportState, so
+            // it is evaluated before the export-recovery short-circuit.
+            // NONE / MERGE_TO_VAULT keep the original export-recovery guard.
+            val isMoveResume = vaultAction == VaultRecoveryAction.RESUME_VAULTING ||
+                vaultAction == VaultRecoveryAction.RESUME_UNVAULTING
+            if (!isMoveResume && !needsExportRecovery(m)) continue
+            when (vaultAction) {
+                VaultRecoveryAction.RESUME_VAULTING, VaultRecoveryAction.RESUME_UNVAULTING -> {
+                    // B5 / ADR-0025 (Task 22) — resume the interrupted move
+                    // via the VaultMover seam. finishVaulting / finishUnvaulting
+                    // re-run only the destructive + terminal-commit half
+                    // (deletePublic+setVaulted / publishExisting+setPublic),
+                    // both idempotent on the post-crash state. An unwired seam
+                    // (null) keeps the prior safe behavior: skip, never publish.
+                    val resume = resumeVaultMove
+                    if (resume == null) {
+                        RovaLog.w(
+                            "$TAG: ${m.sessionId} vaultState=${m.vaultState} (in-flight move) but " +
+                                "resumeVaultMove is unwired; skipping move-resume this launch"
+                        )
+                        continue
+                    }
+                    try {
+                        resume(m, vaultAction)
+                        RovaLog.d(
+                            "$TAG: ${m.sessionId} resumed in-flight move (${m.vaultState})"
+                        )
+                    } catch (t: Throwable) {
+                        // Leave the manifest in its intermediate state; the next
+                        // cold launch re-classifies VAULTING/UNVAULTING and retries.
+                        RovaLog.w("$TAG: resumeVaultMove threw for ${m.sessionId}", t)
+                    }
+                    continue
+                }
+                VaultRecoveryAction.MERGE_TO_VAULT -> {
+                    val vaultSeam = recoverVaultSession
+                    if (vaultSeam == null) {
+                        // Unwired vault seam. Skipping is the safe outcome:
+                        // routing through `recoverSession` would PUBLISH a
+                        // vault-intent recording (the exact bug to avoid).
+                        RovaLog.w(
+                            "$TAG: ${m.sessionId} needs MERGE_TO_VAULT but recoverVaultSession " +
+                                "is unwired; skipping to avoid publishing a vault-intent session"
+                        )
+                        continue
+                    }
+                    val result = try {
+                        vaultSeam(m)
+                    } catch (t: Throwable) {
+                        RovaLog.w("$TAG: recoverVaultSession threw for ${m.sessionId}", t)
+                        RecoveryResult.RetryableFailure("recoverVaultSession", t)
+                    }
+                    perSession[m.sessionId] = result
+                }
+                VaultRecoveryAction.NONE -> {
+                    val result = try {
+                        recoverSession(m)
+                    } catch (t: Throwable) {
+                        // A throw from the tier dispatcher itself (not RecoveryResult-
+                        // wrapped) is treated as RetryableFailure so cleanup gating
+                        // suppresses physical deletion of the dir. The next cold
+                        // launch will retry.
+                        RovaLog.w("$TAG: recoverSession threw for ${m.sessionId}", t)
+                        RecoveryResult.RetryableFailure("recoverSession", t)
+                    }
+                    perSession[m.sessionId] = result
+                }
             }
-            perSession[m.sessionId] = result
         }
         RovaLog.d("$TAG: per-session recovery dispatched for ${perSession.size} session(s)")
 

@@ -678,4 +678,23 @@
     <string name="preview_share_title">Share Rova Video</string>
     <string name="preview_share_not_ready">Recording not ready to share yet</string>
     <string name="preview_share_no_app">No app available to share videos</string>
+
+    <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="vault_empty_title">Vault is empty</string>
+    <string name="vault_empty_body">Recordings you move to the vault, or new recordings made while \"Hide new recordings in vault\" is on, appear here.</string>
+    <string name="vault_open_entry_cd">Open hidden vault</string>
+    <string name="settings_hide_in_vault_title">Hide new recordings in vault</string>
+    <string name="settings_hide_in_vault_summary">New recordings stay in Rova and are hidden from the gallery. They require your device screen lock to open here. Files are not encrypted in this version.</string>
+    <string name="vault_title">Hidden vault</string>
+    <string name="vault_unlock_prompt_title">Unlock vault</string>
+    <string name="vault_unlock_prompt_subtitle">Use your screen lock to view hidden recordings</string>
+    <string name="vault_no_lock_warning">Set a device screen lock to protect the vault. Recordings are still hidden from the gallery, but the in-app lock is off.</string>
+    <string name="vault_share_leaves_warning">Sharing or exporting copies this recording out of the vault. The copy is no longer hidden.</string>
+    <string name="vault_move_in">Move to vault</string>
+    <string name="vault_move_out">Move out of vault</string>
+    <string name="vault_delete">Delete</string>
+    <string name="vault_delete_title">Delete from vault?</string>
+    <string name="vault_delete_body">This permanently deletes the recording. It is not in your gallery and cannot be recovered.</string>
+    <string name="vault_delete_confirm">Delete</string>
 </resources>

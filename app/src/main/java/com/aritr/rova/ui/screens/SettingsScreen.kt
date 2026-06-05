@@ -86,6 +86,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.locale.AppLocale
@@ -93,7 +94,10 @@ import com.aritr.rova.ui.theme.ThemeMode
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.rovaQuietText
+import com.aritr.rova.ui.vault.VaultAuthGate
+import com.aritr.rova.ui.vault.toggleRequiresAuth
 import com.aritr.rova.ui.warnings.SettingsPermissionsSection
+import androidx.fragment.app.FragmentActivity
 import com.aritr.rova.ui.warnings.SettingsPermissionsSheetHost
 import com.aritr.rova.ui.warnings.WarningCenterViewModel
 import com.aritr.rova.ui.warnings.WarningId
@@ -139,6 +143,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
     val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
     val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
+    val hideInVault by settingsViewModel.hideInVault.collectAsStateWithLifecycle()
 
     // Re-read battery-exempt state on resume so returning from the system
     // settings screen flips the badge without forcing a manual refresh.
@@ -352,6 +357,43 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     supporting = stringResource(R.string.settings_vibrate_alerts_supporting),
                     checked = vibrateAlerts,
                     onCheckedChange = { settingsViewModel.vibrateAlerts.value = it }
+                )
+            }
+
+            // B5 / ADR-0025 — vault privacy toggle. ON->OFF is auth-gated
+            // (toggleRequiresAuth); turning ON is free. The Switch's checked
+            // state is driven by the persisted `hideInVault` flow, so a
+            // cancelled OFF-attempt snaps back to ON (the flow never changed).
+            SettingsSection(label = stringResource(R.string.settings_section_privacy)) {
+                SettingsRow(
+                    icon = Icons.Default.Lock,
+                    label = stringResource(R.string.settings_hide_in_vault_title),
+                    supporting = stringResource(R.string.settings_hide_in_vault_summary),
+                    checked = hideInVault,
+                    onCheckedChange = { desired ->
+                        val current = settingsViewModel.hideInVault.value
+                        if (toggleRequiresAuth(current, desired)) {
+                            // ON->OFF: require device-credential auth before
+                            // un-hiding. The Switch does not flip until the
+                            // flow is set in onSucceeded / onUnavailable.
+                            val activity = context as? FragmentActivity
+                            if (activity != null) {
+                                VaultAuthGate.authenticate(
+                                    activity = activity,
+                                    onSucceeded = { settingsViewModel.setHideInVault(false) },
+                                    onCancelled = { /* leave ON — flow unchanged, Switch snaps back */ },
+                                    // No screen lock enrolled — the in-app lock
+                                    // can't protect anything, so allow turning off.
+                                    onUnavailable = { settingsViewModel.setHideInVault(false) },
+                                    // TODO(B5): wire ActivityResult to flip lock on keyguard return
+                                    launchKeyguard = { intent -> activity.startActivity(intent) },
+                                )
+                            }
+                        } else {
+                            // Turning ON (or no-op) is free.
+                            settingsViewModel.setHideInVault(desired)
+                        }
+                    }
                 )
             }
 

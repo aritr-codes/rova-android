@@ -120,9 +120,10 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 6`() {
-        // Bumped 5 -> 6 for the ADR-0024 SAF target fields (safTargetDocUri,
-        // portrait/landscapeSafTargetDocUri, safTransientRetryCount).
-        assertEquals(6, SessionManifest.SCHEMA_VERSION)
+    fun `SCHEMA_VERSION is 7`() {
+        // Bumped 6 -> 7 for the B5 / ADR-0025 vault fields (vaultIntentAtStart,
+        // vaultState, vaultFilePath, portrait/landscapeVaultFilePath).
+        // Previously bumped 5 -> 6 for the ADR-0024 SAF target fields.
+        assertEquals(7, SessionManifest.SCHEMA_VERSION)
     }
 }

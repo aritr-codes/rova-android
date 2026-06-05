@@ -64,11 +64,14 @@ internal object WarningPrecedence {
         autoStopEcho: TerminalEcho? = null,            // ← NEW (Phase 4 Slice 2)
         cantMergeActive: Boolean = false,              // ← NEW (Phase 4.3 — recovery merge pre-flight failed)
         saveFolderUnavailable: Boolean = false,        // ← NEW (B4b ADR-0024 — custom save folder unusable)
+        suppressBatteryCard: Boolean = false,          // ← NEW (once-per-24h rate-limit; decided once per session before the timestamp write)
+        suppressPowerSaveCard: Boolean = false,        // ← NEW (once-per-24h rate-limit; mirrors suppressBatteryCard for #18 POWER_SAVE_MODE)
     ): WarningId? = allActive(
         cameraPermissionGranted, exactAlarmGranted, storageInsufficient,
         thermal, power, camera, microphonePermissionGranted,
         notificationsGranted, batteryOptimizationExempt, storageLowMidRec,
-        autoStopEcho, cantMergeActive, saveFolderUnavailable,
+        autoStopEcho, cantMergeActive, saveFolderUnavailable, suppressBatteryCard,
+        suppressPowerSaveCard,
     ).firstOrNull()
 
     /**
@@ -90,6 +93,8 @@ internal object WarningPrecedence {
         autoStopEcho: TerminalEcho? = null,
         cantMergeActive: Boolean = false,
         saveFolderUnavailable: Boolean = false,        // ← NEW (B4b ADR-0024 — custom save folder unusable)
+        suppressBatteryCard: Boolean = false,          // ← NEW (once-per-24h rate-limit; see shouldSuppressBatteryCard)
+        suppressPowerSaveCard: Boolean = false,        // ← NEW (once-per-24h rate-limit; see shouldSuppressBatteryCard)
     ): List<WarningId> {
         val result = mutableListOf<WarningId>()
         if (!cameraPermissionGranted) result += WarningId.CAMERA_PERMISSION_DENIED          // #1
@@ -127,8 +132,8 @@ internal object WarningPrecedence {
         if (cantMergeActive) result += WarningId.CANT_MERGE                                // #14
         if (thermal == ThermalStatus.SEVERE) result += WarningId.THERMAL_SEVERE             // #15
         if (!microphonePermissionGranted) result += WarningId.MICROPHONE_DENIED             // #16
-        if (!batteryOptimizationExempt) result += WarningId.BATTERY_OPTIMIZATION_ON        // #17
-        if (power.powerSaveMode) result += WarningId.POWER_SAVE_MODE                        // #18
+        if (!batteryOptimizationExempt && !suppressBatteryCard) result += WarningId.BATTERY_OPTIMIZATION_ON  // #17 (once-per-24h gate)
+        if (power.powerSaveMode && !suppressPowerSaveCard) result += WarningId.POWER_SAVE_MODE  // #18 (once-per-24h gate)
         if (thermal == ThermalStatus.MODERATE) result += WarningId.THERMAL_MODERATE        // #19
         if (!notificationsGranted) result += WarningId.NOTIFICATIONS_DENIED                // #20
         if (saveFolderUnavailable) result += WarningId.SAVE_FOLDER_UNAVAILABLE             // #21 (B4b ADR-0024)

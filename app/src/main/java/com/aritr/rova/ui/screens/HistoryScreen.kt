@@ -31,10 +31,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -49,6 +51,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -112,6 +115,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToRecord: () -> Unit = {},
     onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
+    onOpenVault: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -241,6 +245,12 @@ fun HistoryScreen(
             snackbarHostState.showSnackbar(context.getString(R.string.history_editor_coming_soon))
         }
     }
+
+    // B5 / ADR-0025 (Task 22) — move-IN confirmation. Holds the sessionId
+    // pending a "Move to vault" action; non-null shows the move/share
+    // warning dialog. No auth needed for move-in (sensitive direction is
+    // move-out, gated inside the unlocked vault).
+    var pendingMoveToVaultSessionId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -427,6 +437,17 @@ fun HistoryScreen(
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.history_back_cd))
                             }
                         },
+                        actions = {
+                            // B5 / ADR-0025 — hidden vault entry point. Auth is
+                            // gated at the nav layer (MainScreen) before the
+                            // vault route opens.
+                            IconButton(onClick = onOpenVault) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = stringResource(R.string.vault_open_entry_cd)
+                                )
+                            }
+                        },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
                 }
@@ -559,7 +580,20 @@ fun HistoryScreen(
                                 },
                                 onMenuOpen = playItem,
                                 onMenuEdit = onEditPlaceholder,
-                                onMenuViewSettings = { onOpenViewSettings(item) }
+                                onMenuViewSettings = { onOpenViewSettings(item) },
+                                // B5 / ADR-0025 (Task 22) — only manifest-backed
+                                // single-mode rows can be moved into the vault.
+                                // Legacy file-only rows (sessionId == null) have no
+                                // manifest to flip vaultState on; P+L per-side rows
+                                // (item.side != null) have per-side vault pointers
+                                // VaultAndroidOps can't resolve, so the VM no-ops —
+                                // gate them out here for parity with move-OUT
+                                // (VaultScreen), so neither shows a no-op action.
+                                onMenuMoveToVault = if (item.side == null) {
+                                    item.sessionId?.let { sid -> { pendingMoveToVaultSessionId = sid } }
+                                } else {
+                                    null
+                                }
                             )
                         }
                     }
@@ -572,6 +606,30 @@ fun HistoryScreen(
         LibrarySessionConfigDialog(
             config = cfg,
             onDismiss = { viewSettingsConfig = null }
+        )
+    }
+
+    // B5 / ADR-0025 (Task 22) — move-IN confirmation. Reuses the existing
+    // vault move/share warning string (the move hides the recording from
+    // the gallery). Confirm runs the move off the main thread in the VM.
+    pendingMoveToVaultSessionId?.let { sid ->
+        AlertDialog(
+            onDismissRequest = { pendingMoveToVaultSessionId = null },
+            title = { Text(stringResource(R.string.vault_move_in)) },
+            text = { Text(stringResource(R.string.vault_share_leaves_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingMoveToVaultSessionId = null
+                    coroutineScope.launch { viewModel.moveToVault(sid) }
+                }) {
+                    Text(stringResource(R.string.vault_move_in))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingMoveToVaultSessionId = null }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            }
         )
     }
 
@@ -625,7 +683,21 @@ fun LibraryRow(
     onPlay: () -> Unit,
     onMenuOpen: () -> Unit = {},
     onMenuEdit: () -> Unit = {},
-    onMenuViewSettings: () -> Unit = {}
+    onMenuViewSettings: () -> Unit = {},
+    // B5 / ADR-0025 (Task 22) — non-null only for normal (PUBLIC) Library
+    // rows that can be hidden into the vault. Null on the Vault screen and
+    // for legacy file-only rows (no sessionId), so the "Move to vault"
+    // overflow item is hidden there.
+    onMenuMoveToVault: (() -> Unit)? = null,
+    // B5 / ADR-0025 (Task 22) — non-null only on the unlocked Vault screen
+    // for movable vault rows. Republishes the recording to public storage
+    // and clears its vault state. Null in the Library.
+    onMenuMoveOutOfVault: (() -> Unit)? = null,
+    // B5 / ADR-0025 — non-null only on the unlocked Vault screen. Permanently
+    // deletes the recording (its only copy — there is no gallery backup).
+    // The caller surfaces a strong confirmation before invoking. Null in the
+    // Library, which keeps its own multi-select delete flow.
+    onMenuDelete: (() -> Unit)? = null
 ) {
     // B4c — read date/size/name via the effective accessors so SAF rows
     // (file == null) use their DocumentFile-sourced metadata instead of
@@ -792,6 +864,46 @@ fun LibraryRow(
                             onMenuViewSettings()
                         }
                     )
+                    // B5 / ADR-0025 (Task 22) — move-in entry, only on
+                    // movable PUBLIC rows (onMenuMoveToVault non-null).
+                    onMenuMoveToVault?.let { moveToVault ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.vault_move_in)) },
+                            onClick = {
+                                menuExpanded = false
+                                moveToVault()
+                            }
+                        )
+                    }
+                    // B5 / ADR-0025 (Task 22) — move-out entry, only on the
+                    // unlocked Vault screen (onMenuMoveOutOfVault non-null).
+                    onMenuMoveOutOfVault?.let { moveOut ->
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.vault_move_out)) },
+                            onClick = {
+                                menuExpanded = false
+                                moveOut()
+                            }
+                        )
+                    }
+                    // B5 / ADR-0025 — permanent delete, only on the unlocked
+                    // Vault screen (onMenuDelete non-null). Destructive: tinted
+                    // with the error color. The caller shows a strong
+                    // irreversible-delete confirmation before doing anything.
+                    onMenuDelete?.let { delete ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.vault_delete),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                delete()
+                            }
+                        )
+                    }
                 }
             }
         }

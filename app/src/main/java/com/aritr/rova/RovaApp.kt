@@ -8,12 +8,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.export.AndroidMediaScanWaiter
 import com.aritr.rova.service.export.ExportCleanupPredicate
 import com.aritr.rova.service.export.ExportRecoveryReport
+import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.service.export.ExportRecoveryRunner
 import com.aritr.rova.service.export.combineRecoveryResults
 import com.aritr.rova.service.export.OrphanSweepResult
@@ -41,6 +45,7 @@ import com.aritr.rova.ui.signals.SaveFolderSignal
 import com.aritr.rova.ui.signals.StorageLowMidRecSignal
 import com.aritr.rova.ui.signals.StorageSignal
 import com.aritr.rova.ui.signals.ThermalStatusSignal
+import com.aritr.rova.ui.vault.VaultLockState
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.utils.RovaLog
 import java.io.File
@@ -51,6 +56,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -314,6 +320,22 @@ class RovaApp : Application() {
 
     private val recoveryScanRan: AtomicBoolean = AtomicBoolean(false)
 
+    /**
+     * B5 / ADR-0025 (spec R5) — app-scoped, in-memory vault lock holder.
+     * Seeded locked at process boot; NEVER persisted. Re-auth on every
+     * vault entry and on app foreground. Callers mutate through
+     * [onVaultAuthSucceeded] / [onLeaveVault] and the ON_STOP relock
+     * observer registered in [onCreate] — never the private backer.
+     */
+    private val _vaultLock = MutableStateFlow(VaultLockState.initial())
+    val vaultLock: StateFlow<VaultLockState> = _vaultLock
+
+    /** B5/ADR-0025 (spec R5) — call after a successful BiometricPrompt/keyguard auth. */
+    fun onVaultAuthSucceeded() { _vaultLock.update { it.onAuthSucceeded() } }
+
+    /** B5/ADR-0025 (spec R5) — call when the vault route is popped. */
+    fun onLeaveVault() { _vaultLock.update { it.onLeaveVault() } }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -325,6 +347,16 @@ class RovaApp : Application() {
         // the registration on process death (Application.onTerminate is
         // not reliably invoked on production devices).
         thermalStatusSignal.start()
+        // B5/ADR-0025 (spec R5) — relock the vault when the whole app
+        // backgrounds. Mirrors the ADR-0021 ProcessLifecycleOwner pattern
+        // (the action is the vault relock, not camera). No unregister: the
+        // Application lives for the whole process.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                // B5/ADR-0025 (spec R5) — relock on app background; in-memory only, never persisted.
+                _vaultLock.update { it.onAppBackgrounded() }
+            }
+        })
     }
 
     /**
@@ -585,11 +617,97 @@ class RovaApp : Application() {
                 null
             }
 
+        // B5 / ADR-0025 — vault re-merge seam. A MERGE_TO_VAULT session
+        // (vault-intent recording whose merge never finished) re-merges to
+        // the app-private vault via `exportRecovered(vaultIntent = true)`.
+        // The vault intent is threaded THROUGH `exportRecovered` (which
+        // internally calls `export`); recovery never calls `export(`
+        // directly, preserving `checkExportPipelineSingleEntry`. Routing
+        // here — never through `recoverSession` (tier-recovery PUBLISHES) —
+        // is what guarantees a vault recording is never gallery-published.
+        val recoverVaultSession: suspend (SessionManifest) -> RecoveryResult = { m ->
+            val dir = sessionStore.sessionDir(m.sessionId)
+            val segments = m.segments
+                .map { java.io.File(dir, it.filename) }
+                .filter { it.exists() && it.length() > 0 }
+            val result = com.aritr.rova.service.export.ExportPipeline.exportRecovered(
+                context = applicationContext,
+                sessionStore = sessionStore,
+                sessionId = m.sessionId,
+                sessionDir = dir,
+                segments = segments,
+                vaultIntent = true,
+                onProgress = { },
+            )
+            // The runner consumes a RecoveryResult; map the ExportResult.
+            // Success → Resumed (artifact intact); any failure → RetryableFailure
+            // so cleanup gating leaves the dir for next-launch retry (a vault
+            // merge that failed must not have its segments swept).
+            when (result) {
+                is ExportResult.Success -> RecoveryResult.Resumed(result)
+                else -> RecoveryResult.RetryableFailure(
+                    phase = "vault-remerge",
+                    cause = IllegalStateException("vault re-merge did not succeed: $result")
+                )
+            }
+        }
+
+        // B5 / ADR-0025 (Task 22) — interrupted-move resume. Builds a
+        // session-bound VaultMover via the same [VaultMoverBuilder] the UI
+        // uses (DRY), then calls the crash-resume entry for the move's
+        // direction. The private copy / intermediate state are already on
+        // disk, so finishVaulting / finishUnvaulting re-run only the
+        // destructive + terminal-commit half (both idempotent). Unlike the
+        // UI move-out path, the resume seam deliberately does NOT delete the
+        // now-redundant private vault file: ADR-0005 forbids deletion APIs in
+        // the cold-launch recovery sources (checkRecoveryNoDeletion). The
+        // orphaned app-private file is harmless (invisible, no longer
+        // referenced by the PUBLIC manifest) and is reclaimed by the
+        // user-initiated move-out cleanup or a later export-cleanup sweep.
+        val resumeVaultMove: suspend (SessionManifest, com.aritr.rova.service.export.VaultRecoveryAction) -> Unit =
+            { m, action ->
+                if (!com.aritr.rova.service.export.VaultMoverBuilder.isSingleModeMovable(m)) {
+                    RovaLog.w("RovaApp.resumeVaultMove: P+L session ${m.sessionId} not movable; skipping")
+                } else {
+                    val dir = sessionStore.sessionDir(m.sessionId)
+                    when (action) {
+                        com.aritr.rova.service.export.VaultRecoveryAction.RESUME_VAULTING -> {
+                            val mover = com.aritr.rova.service.export.VaultMoverBuilder.buildMoveIn(
+                                context = applicationContext,
+                                sessionStore = sessionStore,
+                                manifest = m,
+                                sessionDir = dir,
+                            )
+                            mover.finishVaulting(m.sessionId)
+                        }
+                        com.aritr.rova.service.export.VaultRecoveryAction.RESUME_UNVAULTING -> {
+                            val outcomeHolder =
+                                arrayOfNulls<com.aritr.rova.service.export.VaultAndroidOps.PublishOutcome>(1)
+                            val mover = com.aritr.rova.service.export.VaultMoverBuilder.buildMoveOut(
+                                context = applicationContext,
+                                sessionStore = sessionStore,
+                                manifest = m,
+                                sessionDir = dir,
+                                outcomeHolder = outcomeHolder,
+                            )
+                            mover.finishUnvaulting(m.sessionId)
+                            // No private-file delete here — see the seam KDoc
+                            // (ADR-0005 checkRecoveryNoDeletion).
+                        }
+                        else -> {
+                            // Only RESUME_* actions reach this seam.
+                        }
+                    }
+                }
+            }
+
         return ExportRecoveryRunner(
             sessionStore = sessionStore,
             recoverSession = recoverSession,
             validateTierArtifact = validateTierArtifact,
-            orphanSweep = orphanSweep
+            orphanSweep = orphanSweep,
+            recoverVaultSession = recoverVaultSession,
+            resumeVaultMove = resumeVaultMove
         )
     }
 

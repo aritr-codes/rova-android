@@ -1,5 +1,6 @@
 package com.aritr.rova.ui
 
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -7,7 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.theme.RovaDarkSurface
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -24,6 +27,8 @@ import com.aritr.rova.ui.screens.SettingsScreen
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.screens.onboarding.OnboardingScreen
 import com.aritr.rova.ui.screens.player.PlayerScreen
+import com.aritr.rova.ui.vault.VaultAuthGate
+import com.aritr.rova.ui.vault.VaultScreen
 
 /**
  * B2 review fix — routes that paint full-bleed dark regardless of the app
@@ -115,6 +120,28 @@ fun MainScreen(
                 }
             }
             composable("history") {
+                // B5 / ADR-0025 — vault entry. Auth-gates on tap, then sets the
+                // in-memory unlock and navigates. With no enrolled lock we still
+                // navigate (contents remain hidden from the gallery) so the vault
+                // screen can show the honest no-lock banner.
+                val activity = context as FragmentActivity
+                val app = context.applicationContext as RovaApp
+                val onOpenVault: () -> Unit = {
+                    VaultAuthGate.authenticate(
+                        activity = activity,
+                        onSucceeded = {
+                            app.onVaultAuthSucceeded()
+                            navController.navigate("vault") { launchSingleTop = true }
+                        },
+                        onCancelled = {},
+                        onUnavailable = {
+                            app.onVaultAuthSucceeded()
+                            navController.navigate("vault") { launchSingleTop = true }
+                        },
+                        // TODO(B5): wire ActivityResult to flip lock on keyguard return
+                        launchKeyguard = { intent -> activity.startActivity(intent) },
+                    )
+                }
                 HistoryScreen(
                     onNavigateToRecord = {
                         navController.navigate("record") {
@@ -122,6 +149,7 @@ fun MainScreen(
                             launchSingleTop = true
                         }
                     },
+                    onOpenVault = onOpenVault,
                     onOpenPlayer = { sessionId, side ->
                         // Phase 2.5 — argumented routes do NOT use
                         // launchSingleTop because each (route, args)
@@ -147,13 +175,20 @@ fun MainScreen(
                 )
             }
             composable(
-                route = "player/{sessionId}?side={side}",
+                route = "player/{sessionId}?side={side}&secure={secure}",
                 arguments = listOf(
                     navArgument("sessionId") { type = NavType.StringType },
                     navArgument("side") {
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    // B5 / ADR-0025 — optional; the vault list passes secure=true.
+                    // Default false keeps every existing player route (Library,
+                    // recovery) byte-compatible and unsecured.
+                    navArgument("secure") {
+                        type = NavType.BoolType
+                        defaultValue = false
                     }
                 )
             ) { backStackEntry ->
@@ -166,13 +201,64 @@ fun MainScreen(
                 // on P+L manifests.
                 val sideStr = backStackEntry.arguments?.getString("side")
                 val side = sideStr?.let { runCatching { VideoSide.valueOf(it) }.getOrNull() }
+                // B5 / ADR-0025 — deterministic FLAG_SECURE from frame 1. The
+                // vault list passes secure=true so the window is secured the
+                // instant the player composes, instead of waiting for the async
+                // isVaulted manifest read. That race was the on-device hole: the
+                // vault destination's FLAG_SECURE ref is released as the player
+                // covers it (MainScreen disposes the vault composition), so if
+                // the player hadn't yet acquired via isVaulted the flag dropped
+                // to zero and steady-state playback was screenshottable.
+                val secure = backStackEntry.arguments?.getBoolean("secure") ?: false
                 RovaDarkSurface {
                     PlayerScreen(
                         sessionId = sessionId,
                         side = side,
+                        secure = secure,
                         onBack = { navController.popBackStack() }
                     )
                 }
+            }
+            composable("vault") {
+                // B5 / ADR-0025 — `onLeaveVault()` must fire on BOTH the back
+                // chevron and a system-back, but NOT when the vault is merely
+                // covered by the player (vault -> player). Nav Compose disposes
+                // the vault destination's composition while the player is on top,
+                // so a dispose-based relock would fire on the way IN to the
+                // player and then bounce the user out on the way back (the
+                // re-entering vault's auto-relock LaunchedEffect would see the
+                // stale locked state and pop again). Instead, relock only on an
+                // actual pop: the back chevron callback and a BackHandler for
+                // system back. Navigating to the player leaves the vault
+                // unlocked, which is correct — the user is still viewing vault
+                // content, and the player applies its own FLAG_SECURE.
+                val app = context.applicationContext as RovaApp
+                val noLock = remember(context) {
+                    BiometricManager.from(context).canAuthenticate(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                    ) != BiometricManager.BIOMETRIC_SUCCESS
+                }
+                val leaveVault: () -> Unit = {
+                    app.onLeaveVault()
+                    navController.popBackStack()
+                }
+                androidx.activity.compose.BackHandler { leaveVault() }
+                VaultScreen(
+                    onOpenPlayer = { sessionId, side ->
+                        // B5 / ADR-0025 — secure=true: every vault playback
+                        // secures the window from the first frame (deterministic;
+                        // not dependent on the async isVaulted manifest read).
+                        val route = if (side != null) {
+                            "player/$sessionId?side=${side.name}&secure=true"
+                        } else {
+                            "player/$sessionId?secure=true"
+                        }
+                        navController.navigate(route)
+                    },
+                    onBack = leaveVault,
+                    showNoLockWarning = noLock,
+                )
             }
             composable("settings") { SettingsScreen(settingsViewModel = settingsViewModel, onBack = { navController.popBackStack() }) }
         }

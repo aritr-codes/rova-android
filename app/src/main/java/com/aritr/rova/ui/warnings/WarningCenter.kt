@@ -353,5 +353,14 @@ internal fun buildWarningCenterViewModel(app: RovaApp): WarningCenterViewModel {
             settings.dismissedAutoStopEchoIds = settings.dismissedAutoStopEchoIds + sessionId
             app.autoStopEchoSignal.markDismissed(sessionId)
         },
+        // Battery-optimization card "once per 24h" rate-limit. The persisted
+        // timestamp is read ONCE here (suppress decision captured at VM init,
+        // before any write); the callback stamps "shown now" the first time the
+        // card actually surfaces this session.
+        initialBatteryCardLastShownAt = settings.batteryOptCardLastShownAt,
+        onBatteryCardShown = { shownAt -> settings.batteryOptCardLastShownAt = shownAt },
+        // Power-save card "once per 24h" rate-limit — same posture as battery.
+        initialPowerSaveCardLastShownAt = settings.powerSaveCardLastShownAt,
+        onPowerSaveCardShown = { shownAt -> settings.powerSaveCardLastShownAt = shownAt },
     )
 }
