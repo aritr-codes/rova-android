@@ -175,13 +175,20 @@ fun MainScreen(
                 )
             }
             composable(
-                route = "player/{sessionId}?side={side}",
+                route = "player/{sessionId}?side={side}&secure={secure}",
                 arguments = listOf(
                     navArgument("sessionId") { type = NavType.StringType },
                     navArgument("side") {
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    // B5 / ADR-0025 — optional; the vault list passes secure=true.
+                    // Default false keeps every existing player route (Library,
+                    // recovery) byte-compatible and unsecured.
+                    navArgument("secure") {
+                        type = NavType.BoolType
+                        defaultValue = false
                     }
                 )
             ) { backStackEntry ->
@@ -194,10 +201,20 @@ fun MainScreen(
                 // on P+L manifests.
                 val sideStr = backStackEntry.arguments?.getString("side")
                 val side = sideStr?.let { runCatching { VideoSide.valueOf(it) }.getOrNull() }
+                // B5 / ADR-0025 — deterministic FLAG_SECURE from frame 1. The
+                // vault list passes secure=true so the window is secured the
+                // instant the player composes, instead of waiting for the async
+                // isVaulted manifest read. That race was the on-device hole: the
+                // vault destination's FLAG_SECURE ref is released as the player
+                // covers it (MainScreen disposes the vault composition), so if
+                // the player hadn't yet acquired via isVaulted the flag dropped
+                // to zero and steady-state playback was screenshottable.
+                val secure = backStackEntry.arguments?.getBoolean("secure") ?: false
                 RovaDarkSurface {
                     PlayerScreen(
                         sessionId = sessionId,
                         side = side,
+                        secure = secure,
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -229,10 +246,13 @@ fun MainScreen(
                 androidx.activity.compose.BackHandler { leaveVault() }
                 VaultScreen(
                     onOpenPlayer = { sessionId, side ->
+                        // B5 / ADR-0025 — secure=true: every vault playback
+                        // secures the window from the first frame (deterministic;
+                        // not dependent on the async isVaulted manifest read).
                         val route = if (side != null) {
-                            "player/$sessionId?side=${side.name}"
+                            "player/$sessionId?side=${side.name}&secure=true"
                         } else {
-                            "player/$sessionId"
+                            "player/$sessionId?secure=true"
                         }
                         navController.navigate(route)
                     },
