@@ -15,10 +15,10 @@ internal class VaultMover(
     private val copyToPrivate: suspend () -> Unit,
     private val deletePublic: suspend () -> Unit,
     private val publishExisting: suspend () -> Unit,
-    private val setVaulting: () -> Unit,
-    private val setVaulted: () -> Unit,
-    private val setUnvaulting: () -> Unit,
-    private val setPublic: () -> Unit,
+    private val setVaulting: suspend () -> Unit,
+    private val setVaulted: suspend () -> Unit,
+    private val setUnvaulting: suspend () -> Unit,
+    private val setPublic: suspend () -> Unit,
 ) {
     suspend fun moveIn(sessionId: String) {
         copyToPrivate()

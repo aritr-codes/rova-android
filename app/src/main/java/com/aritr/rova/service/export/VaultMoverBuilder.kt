@@ -5,7 +5,6 @@ import com.aritr.rova.data.ExportMutationResult
 import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.data.VaultState
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.IOException
 
@@ -17,16 +16,14 @@ import java.io.IOException
  * wiring (and the suspend↔`() -> Unit` bridge) lives in exactly one
  * place so the UI path and the recovery-resume path can never drift.
  *
- * **Suspend bridge.** [VaultMover]'s four state-setter params are plain
- * `() -> Unit`, but the [SessionStore] mutators they must call
- * (`setVaultState`, `setVaultMovedOut`, `setExportSafTarget`) are
- * `suspend`. The whole move runs inside a single coroutine (the VM's
- * `viewModelScope` / the runner's suspend `run()`), and each atomic
- * manifest write is short, so the lambdas bridge through `runBlocking`
- * — the move coroutine is already off the main thread (Dispatchers.IO).
- * The suspend effects (`copyToPrivate` / `deletePublic` /
- * `publishExisting`) stay `suspend` and run on the move coroutine
- * directly; only the 4 *state-setters* cross the `() -> Unit` boundary.
+ * **All effects are `suspend`.** [VaultMover]'s four state-setter params
+ * are `suspend () -> Unit` (matching the four effect params), so the
+ * [SessionStore] mutators they call (`setVaultState`, `setVaultMovedOut`,
+ * `setExportSafTarget` — all `suspend`) are invoked directly, with no
+ * thread-blocking bridge. The whole move runs inside a single coroutine
+ * (the VM's `viewModelScope` / the runner's suspend `run()`), and every
+ * setter/effect suspends on that same coroutine — no pooled thread is
+ * ever blocked.
  *
  * **Scope: single-mode only.** [VaultAndroidOps] resolves a manifest's
  * single-mode pointers (`pendingUri` / `publicTargetPath` /
@@ -91,18 +88,14 @@ internal object VaultMoverBuilder {
             publishExisting = { error("VaultMoverBuilder.buildMoveIn: publishExisting is move-out only") },
             // Records the vault path so a crash-resume in VAULTING finds the file.
             setVaulting = {
-                runBlocking {
-                    requireWrote(
-                        "setVaulting",
-                        sessionStore.setVaultState(sessionId, VaultState.VAULTING, vaultFile.absolutePath)
-                    )
-                }
+                requireWrote(
+                    "setVaulting",
+                    sessionStore.setVaultState(sessionId, VaultState.VAULTING, vaultFile.absolutePath)
+                )
             },
             // setVaultState(VAULTED) preserves vaultFilePath (recoverable leftover).
             setVaulted = {
-                runBlocking {
-                    requireWrote("setVaulted", sessionStore.setVaultState(sessionId, VaultState.VAULTED))
-                }
+                requireWrote("setVaulted", sessionStore.setVaultState(sessionId, VaultState.VAULTED))
             },
             setUnvaulting = { error("VaultMoverBuilder.buildMoveIn: setUnvaulting is move-out only") },
             setPublic = { error("VaultMoverBuilder.buildMoveIn: setPublic is move-out only") },
@@ -147,25 +140,21 @@ internal object VaultMoverBuilder {
             setVaulting = { error("VaultMoverBuilder.buildMoveOut: setVaulting is move-in only") },
             setVaulted = { error("VaultMoverBuilder.buildMoveOut: setVaulted is move-in only") },
             setUnvaulting = {
-                runBlocking {
-                    requireWrote("setUnvaulting", sessionStore.setVaultState(sessionId, VaultState.UNVAULTING))
-                }
+                requireWrote("setUnvaulting", sessionStore.setVaultState(sessionId, VaultState.UNVAULTING))
             },
             // Commits PUBLIC + clears vaultFilePath + sets the EXACT pointer publishExisting returned.
             setPublic = {
                 val outcome = outcomeHolder[0]
                     ?: error("VaultMoverBuilder.buildMoveOut: setPublic ran before publishExisting populated the outcome")
-                runBlocking {
-                    requireWrote(
-                        "setPublic",
-                        sessionStore.setVaultMovedOut(
-                            sessionId = sessionId,
-                            pendingUri = outcome.pendingUri,
-                            publicTargetPath = outcome.publicTargetPath,
-                            safTargetDocUri = outcome.safTargetDocUri,
-                        )
+                requireWrote(
+                    "setPublic",
+                    sessionStore.setVaultMovedOut(
+                        sessionId = sessionId,
+                        pendingUri = outcome.pendingUri,
+                        publicTargetPath = outcome.publicTargetPath,
+                        safTargetDocUri = outcome.safTargetDocUri,
                     )
-                }
+                )
             },
         )
     }

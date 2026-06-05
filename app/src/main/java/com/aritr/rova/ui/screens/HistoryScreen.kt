@@ -582,11 +582,17 @@ fun HistoryScreen(
                                 onMenuEdit = onEditPlaceholder,
                                 onMenuViewSettings = { onOpenViewSettings(item) },
                                 // B5 / ADR-0025 (Task 22) — only manifest-backed
-                                // rows (sessionId != null) can be moved into the
-                                // vault; legacy file-only rows have no manifest to
-                                // flip vaultState on, so the item stays hidden.
-                                onMenuMoveToVault = item.sessionId?.let { sid ->
-                                    { pendingMoveToVaultSessionId = sid }
+                                // single-mode rows can be moved into the vault.
+                                // Legacy file-only rows (sessionId == null) have no
+                                // manifest to flip vaultState on; P+L per-side rows
+                                // (item.side != null) have per-side vault pointers
+                                // VaultAndroidOps can't resolve, so the VM no-ops —
+                                // gate them out here for parity with move-OUT
+                                // (VaultScreen), so neither shows a no-op action.
+                                onMenuMoveToVault = if (item.side == null) {
+                                    item.sessionId?.let { sid -> { pendingMoveToVaultSessionId = sid } }
+                                } else {
+                                    null
                                 }
                             )
                         }

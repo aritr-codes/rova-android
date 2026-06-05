@@ -192,6 +192,23 @@ internal class VaultAndroidOps(
      * storage through the low-level publishers (NO mux, NO segments, NO
      * [ExportPipeline.export] re-entry). Destination tier is recomputed now.
      *
+     * **Crash-window duplicate-copy risk (Tier1 / pre-Q only).** On move-OUT
+     * the publish finalizes the public row/file BEFORE the call site persists
+     * the new public pointer (`SessionStore.setVaultMovedOut`). If the app
+     * crashes in that narrow window — after [publishTier1] /
+     * [publishPreQ] finalizes but before the manifest pointer commits — the
+     * next cold-launch `RESUME_UNVAULTING` re-runs `publishExisting` and
+     * creates a SECOND public copy (a duplicate gallery entry). The recording
+     * is NEVER lost; at most one duplicate, only on a crash in a ~millisecond
+     * window. SAF is crash-resume-deduplicated: [publishSaf] deletes the prior
+     * committed doc before re-creating (ADR-0024 commit-before-stream gives it
+     * a persisted pointer to clean up). Tier1 / pre-Q CANNOT be cheaply
+     * guarded the same way because their new pending-row / file pointer was
+     * never committed to the manifest before finalize, so a re-run has nothing
+     * to dedup against. A full fix needs commit-before-finalize for the
+     * pending-row tier (mirroring ADR-0024) and is a tracked follow-up
+     * (Phase 6 / Task 23 hardening).
+     *
      * @return the new public pointer for the call site to persist via
      *   `SessionStore.setVaultMovedOut(...)`, as a [PublishOutcome] carrying
      *   exactly one of `pendingUri` / `publicTargetPath` / `safTargetDocUri`.
