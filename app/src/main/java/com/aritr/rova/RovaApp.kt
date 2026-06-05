@@ -657,10 +657,13 @@ class RovaApp : Application() {
         // uses (DRY), then calls the crash-resume entry for the move's
         // direction. The private copy / intermediate state are already on
         // disk, so finishVaulting / finishUnvaulting re-run only the
-        // destructive + terminal-commit half (both idempotent). For an
-        // UNVAULTING resume the redundant private vault file is best-effort
-        // deleted afterwards (path captured before setPublic clears it),
-        // mirroring the move-out UI path.
+        // destructive + terminal-commit half (both idempotent). Unlike the
+        // UI move-out path, the resume seam deliberately does NOT delete the
+        // now-redundant private vault file: ADR-0005 forbids deletion APIs in
+        // the cold-launch recovery sources (checkRecoveryNoDeletion). The
+        // orphaned app-private file is harmless (invisible, no longer
+        // referenced by the PUBLIC manifest) and is reclaimed by the
+        // user-initiated move-out cleanup or a later export-cleanup sweep.
         val resumeVaultMove: suspend (SessionManifest, com.aritr.rova.service.export.VaultRecoveryAction) -> Unit =
             { m, action ->
                 if (!com.aritr.rova.service.export.VaultMoverBuilder.isSingleModeMovable(m)) {
@@ -678,7 +681,6 @@ class RovaApp : Application() {
                             mover.finishVaulting(m.sessionId)
                         }
                         com.aritr.rova.service.export.VaultRecoveryAction.RESUME_UNVAULTING -> {
-                            val vaultFilePath = m.vaultFilePath
                             val outcomeHolder =
                                 arrayOfNulls<com.aritr.rova.service.export.VaultAndroidOps.PublishOutcome>(1)
                             val mover = com.aritr.rova.service.export.VaultMoverBuilder.buildMoveOut(
@@ -689,16 +691,8 @@ class RovaApp : Application() {
                                 outcomeHolder = outcomeHolder,
                             )
                             mover.finishUnvaulting(m.sessionId)
-                            if (vaultFilePath != null) {
-                                try {
-                                    java.io.File(vaultFilePath).delete()
-                                } catch (t: Throwable) {
-                                    RovaLog.w(
-                                        "RovaApp.resumeVaultMove: vault-file cleanup failed for ${m.sessionId}",
-                                        t
-                                    )
-                                }
-                            }
+                            // No private-file delete here — see the seam KDoc
+                            // (ADR-0005 checkRecoveryNoDeletion).
                         }
                         else -> {
                             // Only RESUME_* actions reach this seam.
