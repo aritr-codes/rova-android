@@ -175,7 +175,11 @@ internal class VaultAndroidOps(
      *   `SessionStore.setVaultMovedOut(...)`, as a [PublishOutcome] carrying
      *   exactly one of `pendingUri` / `publicTargetPath` / `safTargetDocUri`.
      */
-    suspend fun publishExisting(manifest: SessionManifest, sessionDir: File): PublishOutcome {
+    suspend fun publishExisting(
+        manifest: SessionManifest,
+        sessionDir: File,
+        setExportSafTarget: suspend (docUri: String) -> Unit,
+    ): PublishOutcome {
         val vaultPath = manifest.vaultFilePath
             ?: throw IOException("publishExisting: manifest has null vaultFilePath")
         val vaultFile = File(vaultPath)
@@ -195,7 +199,8 @@ internal class VaultAndroidOps(
                 }
             }
             ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> publishPreQ(displayName, vaultFile)
-            ExportTier.SAF_DESTINATION -> publishSaf(displayName, vaultFile)
+            ExportTier.SAF_DESTINATION ->
+                publishSaf(displayName, vaultFile, manifest.safTargetDocUri, setExportSafTarget)
         }
     }
 
@@ -259,12 +264,26 @@ internal class VaultAndroidOps(
 
     // --- SAF publish -------------------------------------------------------
 
-    private fun publishSaf(displayName: String, src: File): PublishOutcome {
+    private suspend fun publishSaf(
+        displayName: String,
+        src: File,
+        priorDocUri: String?,                       // manifest.safTargetDocUri, may be a stale/partial doc
+        setExportSafTarget: suspend (docUri: String) -> Unit,
+    ): PublishOutcome {
         val treeUri = RovaSettings(context).saveLocationTreeUri
             ?: throw IOException("publishExisting: SAF tier but saveLocationTreeUri is null")
+        // Crash-resume orphan guard: a previously committed SAF target (e.g. a partial
+        // doc from a publish that crashed mid-stream, or the stale pre-vault pointer)
+        // must not survive as a second copy. Best-effort delete before re-creating so
+        // the recording ends up in exactly one place (ADR-0025 move-out / Task 23 smoke).
+        priorDocUri?.let {
+            try { SafAndroidOps.deleteDocument(context, it) }
+            catch (t: Throwable) { RovaLog.w("publishExisting: SAF prior-target cleanup failed for $it", t) }
+        }
         val docUri = SafAndroidOps.createDocument(context, treeUri, displayName)
             ?: throw IOException("publishExisting: SAF createDocument returned null under $treeUri")
         try {
+            setExportSafTarget(docUri)                          // ADR-0024 commit-before-stream
             SafAndroidOps.copyFileToDocument(context, src, docUri)
         } catch (t: Throwable) {
             try { SafAndroidOps.deleteDocument(context, docUri) } catch (_: Throwable) {}
