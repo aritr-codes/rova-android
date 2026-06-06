@@ -689,6 +689,19 @@
     <!-- %1$s=nombre %2$s=frase-segundos %3$s=frase-espera %4$s=frase-repeticiones %5$s=resolución -->
     <string name="preset_cd_full">preajuste %1$s, %2$s, %3$s, %4$s, %5$s</string>
 
+    <!-- Custom preset save/naming (ADR-0026) -->
+    <string name="preset_save_chip">Guardar</string>
+    <string name="preset_save_chip_cd">Guardar la configuración actual como preajuste</string>
+    <string name="preset_name_dialog_title">Nombra este preajuste</string>
+    <string name="preset_name_field_label">Nombre del preajuste</string>
+    <string name="preset_name_error_blank">Escribe un nombre</string>
+    <string name="preset_name_error_duplicate">Ya tienes un preajuste con este nombre</string>
+    <string name="preset_name_error_too_long">El nombre es demasiado largo</string>
+    <string name="preset_delete_title">¿Eliminar preajuste?</string>
+    <string name="preset_delete_body">¿Eliminar «%1$s»? No se puede deshacer.</string>
+    <string name="preset_delete_confirm">Eliminar</string>
+    <string name="preset_chip_delete_action">Eliminar preajuste</string>
+
     <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
     <string name="settings_section_privacy">Privacidad</string>
     <string name="vault_empty_title">La caja fuerte está vacía</string>
