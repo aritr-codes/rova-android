@@ -682,7 +682,7 @@ internal class EglRouter(
                 // CameraX's SurfaceTexture transform — the suspected
                 // source of the deformation. Logged once per side.
                 if (target.side != null && diagLoggedSides.add(target.side)) {
-                    RovaLog.d(
+                    RovaLog.d {
                         "EglRouter diag side=${target.side} " +
                             "encoder=${target.width}x${target.height} " +
                             "viewport=[${target.viewportX},${target.viewportY}," +
@@ -690,7 +690,7 @@ internal class EglRouter(
                             "texMatrix=[${texMatrix.joinToString(",")}] " +
                             "uvTransform=[${target.uvTransform.joinToString(",")}] " +
                             "finalMatrix=[${finalMatrix.joinToString(",")}]"
-                    )
+                    }
                 }
 
                 vertexBuffer.position(0)
@@ -791,7 +791,7 @@ internal class EglRouter(
         if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
         if (++perfFrames < PERF_WINDOW) return
         fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
-        RovaLog.d(
+        RovaLog.d {
             "EglRouter perf [${perfFrames}f]: " +
                 "interval avg=${ms(perfIntervalSumNs / perfFrames)} max=${ms(perfIntervalMaxNs)} | " +
                 "updateTex avg=${ms(perfTexSumNs / perfFrames)} max=${ms(perfTexMaxNs)} | " +
@@ -800,7 +800,7 @@ internal class EglRouter(
                 "blit avg=${ms(perfBlitSumNs / perfFrames)} max=${ms(perfBlitMaxNs)} " +
                 "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
                 "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
-        )
+        }
         perfFrames = 0
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
         perfTexSumNs = 0L; perfTexMaxNs = 0L

@@ -66,7 +66,7 @@ object AlarmScheduler {
         if (canExact) {
             try {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
-                RovaLog.d("AlarmScheduler.arm($sessionId/$kind, seq=$seq, t=$triggerAtMillis) [exact]")
+                RovaLog.d { "AlarmScheduler.arm($sessionId/$kind, seq=$seq, t=$triggerAtMillis) [exact]" }
                 return
             } catch (se: SecurityException) {
                 // TOCTOU: permission revoked between canScheduleExactAlarms()
@@ -75,7 +75,7 @@ object AlarmScheduler {
             }
         }
         am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
-        RovaLog.d("AlarmScheduler.arm($sessionId/$kind, seq=$seq, t=$triggerAtMillis) [inexact]")
+        RovaLog.d { "AlarmScheduler.arm($sessionId/$kind, seq=$seq, t=$triggerAtMillis) [inexact]" }
     }
 
     /**
@@ -89,9 +89,9 @@ object AlarmScheduler {
         if (pi != null) {
             am.cancel(pi)
             pi.cancel()
-            RovaLog.d("AlarmScheduler.cancel($sessionId/$kind): pending slot cleared")
+            RovaLog.d { "AlarmScheduler.cancel($sessionId/$kind): pending slot cleared" }
         } else {
-            RovaLog.d("AlarmScheduler.cancel($sessionId/$kind): no pending slot")
+            RovaLog.d { "AlarmScheduler.cancel($sessionId/$kind): no pending slot" }
         }
     }
 

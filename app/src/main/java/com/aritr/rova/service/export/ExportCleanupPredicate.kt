@@ -130,10 +130,10 @@ internal object ExportCleanupPredicate {
         // Sweep gate is global — bail out before per-session work to
         // avoid logging spurious per-session "skipped" messages.
         if (report.sweep is OrphanSweepResult.QueryFailed) {
-            RovaLog.d(
+            RovaLog.d {
                 "ExportCleanupPredicate: sweep was QueryFailed; " +
                     "skipping all physical cleanup this run"
-            )
+            }
             return emptyList()
         }
         val deleted = mutableListOf<String>()
@@ -145,14 +145,14 @@ internal object ExportCleanupPredicate {
             val perSideVaultKept = manifest.vaultState != com.aritr.rova.data.VaultState.PUBLIC &&
                 (manifest.portraitVaultFilePath != null || manifest.landscapeVaultFilePath != null)
             if (isVaultKeptArtifact(manifest.vaultState, manifest.vaultFilePath) || perSideVaultKept) {
-                RovaLog.d("ExportCleanupPredicate: skipped $sessionId (vault kept artifact)")
+                RovaLog.d { "ExportCleanupPredicate: skipped $sessionId (vault kept artifact)" }
                 continue
             }
             val recoveryResult = report.perSession[sessionId]
             if (shouldDelete(classification, manifest, recoveryResult, report.sweep)) {
                 sessionStore.discardSession(sessionId)
                 deleted += sessionId
-                RovaLog.d("ExportCleanupPredicate: discarded $sessionId (post-recovery cleanup)")
+                RovaLog.d { "ExportCleanupPredicate: discarded $sessionId (post-recovery cleanup)" }
             }
         }
         return deleted

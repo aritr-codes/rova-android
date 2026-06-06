@@ -447,12 +447,12 @@ class RovaApp : Application() {
             // recovery mutates manifests (a setExportFailed during recovery
             // would clear pendingUri and orphan the row to the sweep).
             val exportReport = buildExportRecoveryRunner().run()
-            RovaLog.d(
+            RovaLog.d {
                 "RovaApp.runRecoveryScan: export recovery complete " +
                     "(perSession=${exportReport.perSession.size}, " +
                     "lateTerminals=${exportReport.lateTerminals.size}, " +
                     "sweep=${exportReport.sweep.javaClass.simpleName})"
-            )
+            }
 
             val scanner = RecoveryScanner(sessionStore)
             val classifications = scanner.classifyAll(scanStart)
@@ -468,7 +468,7 @@ class RovaApp : Application() {
                 sessionStore, classifications, exportReport
             )
             if (deleted.isNotEmpty()) {
-                RovaLog.d("RovaApp.runRecoveryScan: cleanup pass discarded ${deleted.size} session(s)")
+                RovaLog.d { "RovaApp.runRecoveryScan: cleanup pass discarded ${deleted.size} session(s)" }
             }
 
             _recoveryReport.value = RecoveryReport(
@@ -477,7 +477,7 @@ class RovaApp : Application() {
                 scanCompletedMillis = System.currentTimeMillis(),
                 deferred = false
             )
-            RovaLog.d("RovaApp.runRecoveryScan: classified ${classifications.size} session(s)")
+            RovaLog.d { "RovaApp.runRecoveryScan: classified ${classifications.size} session(s)" }
         }
     }
 

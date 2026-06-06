@@ -332,7 +332,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // matters when the controller is GONE (process killed),
                     // in which case RovaTickReceiver writes KILLED_BY_SYSTEM
                     // and we never run.
-                    RovaLog.d("SessionController.postTick($seq, WATCHDOG): liveness OK, no-op")
+                    RovaLog.d { "SessionController.postTick($seq, WATCHDOG): liveness OK, no-op" }
                 }
             }
         }
@@ -355,7 +355,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // makes this safe to invoke from a receiver context that is
             // about to call goAsync().finish() — we do not block the
             // broadcast slot.
-            RovaLog.d("SessionController.requestStop: sessionId=$sessionId")
+            RovaLog.d { "SessionController.requestStop: sessionId=$sessionId" }
             serviceScope.launch {
                 userStopRequested = true
                 // ADR 0006 B-fix-5: explicit StopReason.USER for the
@@ -453,7 +453,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     fun setSurfaceProvider(surfaceProvider: Preview.SurfaceProvider?) {
-        RovaLog.d("setSurfaceProvider: received: $surfaceProvider")
+        RovaLog.d { "setSurfaceProvider: received: $surfaceProvider" }
         currentSurfaceProvider = surfaceProvider
 
         if (surfaceProvider != null) {
@@ -479,7 +479,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // permission in system Settings and returns -- the UI
                     // surface arrives here, into a preview already bound to
                     // DUMMY. Rebind cleanly so the new SurfaceRequest fires.
-                    RovaLog.d("setSurfaceProvider: DUMMY -> UI, forcing camera reconfigure")
+                    RovaLog.d { "setSurfaceProvider: DUMMY -> UI, forcing camera reconfigure" }
                     serviceScope.launch { forceReconfigureCamera() }
                 } else {
                     // UI -> UI hot-swap (config change, screen rotation). Safe.
@@ -494,7 +494,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         } else {
             preview?.let { existingPreview ->
                 if (_serviceState.value.isPeriodicActive) {
-                    RovaLog.d("setSurfaceProvider: UI surface removed during active session, switching to dummy surface")
+                    RovaLog.d { "setSurfaceProvider: UI surface removed during active session, switching to dummy surface" }
                     existingPreview.setSurfaceProvider(createDummySurfaceProvider())
                 }
             }
@@ -505,7 +505,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         if (_serviceState.value.isPeriodicActive) return // Don't stop if recording
         previewStartJob?.cancel()
         previewStartJob = null
-        RovaLog.d("stopCameraPreview: Unbinding camera for background")
+        RovaLog.d { "stopCameraPreview: Unbinding camera for background" }
         try { cameraProvider?.unbindAll() } catch (_: Exception) {}
         currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
         currentDualRecording = null
@@ -545,9 +545,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     val waited = withTimeoutOrNull(500) {
                         while (currentSurfaceProvider == null) delay(20)
                     }
-                    RovaLog.d(
+                    RovaLog.d {
                         "startCameraPreview: surface grace ${if (waited != null) "UI arrived" else "expired -> DUMMY"}"
-                    )
+                    }
                 }
                 // ADR-0021 — the app may have backgrounded while we waited in
                 // the grace window. Do NOT bind the camera after a background
@@ -555,13 +555,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // job on ON_STOP; this re-check covers the ProcessLifecycleOwner
                 // ON_STOP dispatch delay.
                 if (!appForeground) {
-                    RovaLog.d("startCameraPreview: app backgrounded mid-grace, aborting setupCamera")
+                    RovaLog.d { "startCameraPreview: app backgrounded mid-grace, aborting setupCamera" }
                     return@launch
                 }
                 setupCamera()
             }
         } else {
-            RovaLog.d("startCameraPreview: Camera already active, skipping setup")
+            RovaLog.d { "startCameraPreview: Camera already active, skipping setup" }
         }
     }
 
@@ -1134,12 +1134,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
             )
             when (result) {
                 is com.aritr.rova.data.MarkTerminatedResult.Wrote ->
-                    RovaLog.d("markInitFailedAndStop: wrote USER_STOPPED/INIT_FAILED for $sessionId at $where")
+                    RovaLog.d { "markInitFailedAndStop: wrote USER_STOPPED/INIT_FAILED for $sessionId at $where" }
                 is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal ->
-                    RovaLog.d(
+                    RovaLog.d {
                         "markInitFailedAndStop: $sessionId already" +
                             " ${result.existingTerminated}/${result.existingStopReason}; suppressed at $where"
-                    )
+                    }
                 is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
                     RovaLog.e(
                         "markInitFailedAndStop: markTerminated FAILED for $sessionId at $where" +
@@ -1249,7 +1249,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         null
                     }
                 } ?: return@launch
-                RovaLog.d("startPeriodicRecording: session=${manifest.sessionId}")
+                RovaLog.d { "startPeriodicRecording: session=${manifest.sessionId}" }
 
                 // Phase 1.3 — re-post the foreground notification IMMEDIATELY
                 // after the controller is registered. From this point
@@ -1295,11 +1295,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // currentSurfaceProvider == null, falls back to the DUMMY
                 // surface, and the recording loop proceeds. flipCamera is
                 // unaffected — it owns its own forceReconfigureCamera path.
-                RovaLog.d(
+                RovaLog.d {
                     "startPeriodicRecording: forcing camera reconfigure on start" +
                         " (configured=$configuredResolution, requested=$resolutionStr," +
                         " surface=${if (currentSurfaceProvider != null) "UI" else "DUMMY"})"
-                )
+                }
                 forceReconfigureCamera()
 
                 // Wait for camera to be fully active before recording.
@@ -1321,7 +1321,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // Let CameraX pipeline fully stabilize (encoder init, frame production)
                 // Samsung devices need extra time for MediaCodec initialization
                 delay(2500)
-                RovaLog.d("startPeriodicRecording: Camera ready, starting recording loop")
+                RovaLog.d { "startPeriodicRecording: Camera ready, starting recording loop" }
 
                 outer@ while (isActive) {
                     if (limitLoops != -1 && segmentCount >= limitLoops) {
@@ -1375,7 +1375,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             // already in progress via state machine. NO
                             // terminal write, NO stopPeriodicRecordingAndMerge
                             // call (would race the in-flight teardown).
-                            RovaLog.d("startPeriodicRecording: AbortNoOp; breaking outer loop")
+                            RovaLog.d { "startPeriodicRecording: AbortNoOp; breaking outer loop" }
                             break@outer
                         }
                         SegmentResult.Terminated -> {
@@ -1443,7 +1443,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     }
                 }
             } catch (e: CancellationException) {
-                RovaLog.d("startPeriodicRecording: Cancelled")
+                RovaLog.d { "startPeriodicRecording: Cancelled" }
                 throw e
             } catch (e: Exception) {
                 // ADR 0006 row 7 (B-fix-1) — generic post-manifest setup
@@ -1481,7 +1481,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
      */
     private suspend fun forceReconfigureCamera() {
         setupMutex.withLock {
-            RovaLog.d("forceReconfigureCamera: Unbinding for fresh setup")
+            RovaLog.d { "forceReconfigureCamera: Unbinding for fresh setup" }
             try { cameraProvider?.unbindAll() } catch (e: Exception) {}
             currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
             currentDualRecording = null
@@ -1511,20 +1511,20 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // whitespace, log statements, and the serviceScope.launch + mutex
         // structure. Do NOT modify any line of the extracted body.
         setupMutex.withLock {
-            RovaLog.d("setupCamera: Starting setup workflow")
+            RovaLog.d { "setupCamera: Starting setup workflow" }
 
-            RovaLog.d("setupCamera: currentSurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "null (will use dummy)"}")
+            RovaLog.d { "setupCamera: currentSurfaceProvider=${if (currentSurfaceProvider != null) "UI" else "null (will use dummy)"}" }
 
             if (cameraProvider != null) {
                 if (_serviceState.value.isCameraActive) {
-                    RovaLog.d("setupCamera: Camera already active. Skipping setup.")
+                    RovaLog.d { "setupCamera: Camera already active. Skipping setup." }
                     return@withLock
                 }
                 if (_serviceState.value.isRecording) {
                     RovaLog.w("setupCamera: Attempted to setup while recording! Aborting.")
                     return@withLock
                 }
-                RovaLog.d("setupCamera: Unbinding existing provider for clean setup")
+                RovaLog.d { "setupCamera: Unbinding existing provider for clean setup" }
                 try { cameraProvider?.unbindAll() } catch (e: Exception) {}
                 markCameraUnbound()  // Phase 3.5
                 _serviceState.update { it.copy(isCameraActive = false) }
@@ -1537,7 +1537,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
-            RovaLog.d("setupCamera: Initializing UseCases (Preview + VideoCapture)")
+            RovaLog.d { "setupCamera: Initializing UseCases (Preview + VideoCapture)" }
 
             // Strict match against QualityPresets canonical labels:
             // any non-canonical resolutionStr falls through to Quality.FHD
@@ -1573,11 +1573,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
-            RovaLog.d("setupCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}")
+            RovaLog.d { "setupCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}" }
 
             try {
                 provider.unbindAll()
-                RovaLog.d("setupCamera: Binding to lifecycle")
+                RovaLog.d { "setupCamera: Binding to lifecycle" }
                 camera = provider.bindToLifecycle(
                     this,
                     currentCameraSelector,
@@ -1589,7 +1589,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 configuredResolution = resolutionStr
                 boundToDummy = useDummy
                 _serviceState.update { it.copy(isCameraActive = true) }
-                RovaLog.d("setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr, boundToDummy=$boundToDummy")
+                RovaLog.d { "setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr, boundToDummy=$boundToDummy" }
                 applyFlashState()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1683,10 +1683,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val sanitized = sanitizeSensorOrientation(rawSensorOrientation)
             val chosenSize = com.aritr.rova.service.dualrecord.internal.DualCameraSizeResolver
                 .resolveDualCameraSize(map)
-            RovaLog.d(
+            RovaLog.d {
                 "resolveDualCameraIntrinsics: size=${chosenSize.width}×${chosenSize.height} " +
                     "sensorOrientation=$sanitized (raw=$rawSensorOrientation, lensFacing=$lensFacing)"
-            )
+            }
             DualCameraIntrinsics(chosenSize, sanitized)
         } catch (e: Exception) {
             RovaLog.w("resolveDualCameraIntrinsics: $e — fallback")
@@ -1735,7 +1735,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private suspend fun setupDualCamera() {
         setupMutex.withLock {
             if (_serviceState.value.isCameraActive) {
-                RovaLog.d("setupDualCamera: camera already active, short-circuit")
+                RovaLog.d { "setupDualCamera: camera already active, short-circuit" }
                 return@withLock
             }
 
@@ -1748,7 +1748,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
-            RovaLog.d("setupDualCamera: Initializing UseCases (Preview + CameraEffect)")
+            RovaLog.d { "setupDualCamera: Initializing UseCases (Preview + CameraEffect)" }
 
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
@@ -1794,7 +1794,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // line in release (both flags forced false) confirms by absence
             // that observed behavior is legacy + stable.
             // NOTE: RovaLog has no .i() — use .d() (same D-deviation as Phase 6.1a).
-            RovaLog.d(
+            RovaLog.d {
                 "DualShot renderer mode: " +
                     "path=${if (config.useFirstPrinciplesRender) "v2-first-principles" else "legacy"}, " +
                     "snapshots=${if (config.enableMatrixSnapshots) "ENABLED" else "disabled"}, " +
@@ -1802,7 +1802,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     "displayRotation=${config.displayRotation}, " +
                     "lensFacing=${config.lensFacing}, " +
                     "sourceSize=${config.cameraInputWidth}x${config.cameraInputHeight}"
-            )
+            }
 
             currentDualRecorder = com.aritr.rova.service.dualrecord.DualVideoRecorder(config)
             // Phase 6.1c — replay any UI-registered preview surfaces onto
@@ -1850,7 +1850,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
-            RovaLog.d("setupDualCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}")
+            RovaLog.d { "setupDualCamera: SurfaceProvider=${if (useDummy) "DUMMY" else "UI"}" }
 
             val ucg = UseCaseGroup.Builder()
                 .addUseCase(preview!!)
@@ -1859,7 +1859,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             try {
                 provider.unbindAll()
-                RovaLog.d("setupDualCamera: Binding to lifecycle (UseCaseGroup)")
+                RovaLog.d { "setupDualCamera: Binding to lifecycle (UseCaseGroup)" }
                 camera = provider.bindToLifecycle(
                     this@RovaRecordingService,
                     currentCameraSelector,
@@ -1869,7 +1869,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 configuredResolution = "FHD"
                 boundToDummy = useDummy
                 _serviceState.update { it.copy(isCameraActive = true) }
-                RovaLog.d("setupDualCamera: Camera binding COMPLETED. boundToDummy=$boundToDummy")
+                RovaLog.d { "setupDualCamera: Camera binding COMPLETED. boundToDummy=$boundToDummy" }
                 applyFlashState()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1969,7 +1969,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 hasFrontCamera = hasFrontCamera(),
             )
         ) {
-            RovaLog.d("flipCamera: Ignored — disallowed (recording, P+L rear-only, or no front camera)")
+            RovaLog.d { "flipCamera: Ignored — disallowed (recording, P+L rear-only, or no front camera)" }
             return
         }
         currentCameraSelector = if (targetIsFront) {
@@ -2008,7 +2008,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
      */
     fun setMode(mode: String) {
         if (_serviceState.value.isRecording) {
-            RovaLog.d("setMode: Ignored — recording in progress")
+            RovaLog.d { "setMode: Ignored — recording in progress" }
             return
         }
         // Skip a redundant unbind/rebind when the requested mode is already the
@@ -2022,7 +2022,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 isFrontCamera = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
             )
         ) {
-            RovaLog.d("setMode: already in mode '$mode' with camera active — skipping redundant reconfigure")
+            RovaLog.d { "setMode: already in mode '$mode' with camera active — skipping redundant reconfigure" }
             return
         }
         currentMode = mode
@@ -2034,7 +2034,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // the front-cam state until they leave P+L.
         if (mode == "PortraitLandscape") {
             if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
-                RovaLog.d("setMode: P+L selected on front camera — auto-snapping to rear")
+                RovaLog.d { "setMode: P+L selected on front camera — auto-snapping to rear" }
                 currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 // B6 — reflect the in-memory snap into service state so the flip
                 // icon shows "rear" while in P+L. DELIBERATELY does NOT write the
@@ -2089,7 +2089,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 headlessSurface = it
             }
         }
-        RovaLog.d("createDummySurfaceProvider: headless surface ready (api ${Build.VERSION.SDK_INT})")
+        RovaLog.d { "createDummySurfaceProvider: headless surface ready (api ${Build.VERSION.SDK_INT})" }
         return surface.provider
     }
 
@@ -2296,7 +2296,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         when (val gate = checkSegmentGates()) {
             SegmentGateResult.Continue -> { /* proceed */ }
             SegmentGateResult.AbortNoOp -> {
-                RovaLog.d("recordSegment: layer-1 prerequisite missed; AbortNoOp")
+                RovaLog.d { "recordSegment: layer-1 prerequisite missed; AbortNoOp" }
                 return SegmentResult.AbortNoOp
             }
             is SegmentGateResult.Terminate -> {
@@ -2358,7 +2358,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // captures the same value as the segment's manifest filename.
             val segmentFilename = sessionStore.nextSegmentFilename(segmentCount)
             videoFile = File(sessionDir, segmentFilename)
-            RovaLog.d("recordSegment: Preparing file: ${videoFile?.absolutePath}")
+            RovaLog.d { "recordSegment: Preparing file: ${videoFile?.absolutePath}" }
 
             val outputOptions = FileOutputOptions.Builder(requireNotNull(videoFile)).build()
 
@@ -2397,7 +2397,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             currentRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
-                        RovaLog.d("Recording STARTED")
+                        RovaLog.d { "Recording STARTED" }
                     }
                     is VideoRecordEvent.Finalize -> {
                         currentRecording = null
@@ -2405,7 +2405,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             videoFile?.exists() == true &&
                             (videoFile?.length() ?: 0L) > 0L
                         if (success) {
-                            RovaLog.d("Recording FINALIZED. Size: ${videoFile?.length()} bytes")
+                            RovaLog.d { "Recording FINALIZED. Size: ${videoFile?.length()} bytes" }
                             updateNotification(
                                 getString(
                                     R.string.notification_segment_saved,
@@ -2464,7 +2464,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                     event.error == VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA,
                             )
                             if (suppress) {
-                                RovaLog.d("Final segment aborted by stop (no valid data) — expected, not surfaced")
+                                RovaLog.d { "Final segment aborted by stop (no valid data) — expected, not surfaced" }
                             } else {
                                 val errorMsg = if (event.hasError()) {
                                     describeRecordingError(event.error)
@@ -2489,7 +2489,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
             }
 
-            RovaLog.d("recordSegment: Recording initialized, waiting ${nSeconds}s")
+            RovaLog.d { "recordSegment: Recording initialized, waiting ${nSeconds}s" }
 
             // Phase 1.2 — watchdog. Arm an alarm BEFORE the recording delay
             // and keep it ARMED across delay → stop() → Finalize callback →
@@ -2520,7 +2520,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             delay(nSeconds * 1000)
 
-            RovaLog.d("recordSegment: Stopping recording normally")
+            RovaLog.d { "recordSegment: Stopping recording normally" }
             currentRecording?.stop()
             currentRecording = null
 
@@ -2547,7 +2547,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return if (success) SegmentResult.Success else SegmentResult.RetryableFailure
 
         } catch (e: CancellationException) {
-            RovaLog.d("recordSegment: Cancelled")
+            RovaLog.d { "recordSegment: Cancelled" }
             try { currentRecording?.stop() } catch (e2: Exception) {}
             currentRecording = null
 
@@ -2694,7 +2694,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 )
             }
 
-            RovaLog.d("recordSegmentDual: Recording initialized, waiting ${nSeconds}s")
+            RovaLog.d { "recordSegmentDual: Recording initialized, waiting ${nSeconds}s" }
 
             // Watchdog — same arm pattern as single-mode.
             watchdogSid = currentSessionId
@@ -2712,7 +2712,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             delay(durationMs)
 
-            RovaLog.d("recordSegmentDual: Stopping recording normally")
+            RovaLog.d { "recordSegmentDual: Stopping recording normally" }
             currentDualRecording?.stop()
             currentDualRecording = null
 
@@ -2728,7 +2728,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return if (success) SegmentResult.Success else SegmentResult.RetryableFailure
 
         } catch (e: CancellationException) {
-            RovaLog.d("recordSegmentDual: Cancelled")
+            RovaLog.d { "recordSegmentDual: Cancelled" }
             try { currentDualRecording?.stop() } catch (e2: Exception) {}
             currentDualRecording = null
 
@@ -2807,7 +2807,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     ) {
         when (event) {
             is com.aritr.rova.service.dualrecord.DualRecordEvent.Start -> {
-                RovaLog.d("recordSegmentDual: DualRecord Start")
+                RovaLog.d { "recordSegmentDual: DualRecord Start" }
             }
             is com.aritr.rova.service.dualrecord.DualRecordEvent.Status -> {
                 // Reserved — currently no status display for dual recording bytes
@@ -3227,7 +3227,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             return
         }
 
-        RovaLog.d("onTaskRemoved: No active background work, stopping service")
+        RovaLog.d { "onTaskRemoved: No active background work, stopping service" }
         stopSelf()
     }
 
@@ -3274,12 +3274,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
         tickSignals.close()
         serviceScope.cancel()
         _serviceState.update { RovaServiceState() }
-        RovaLog.d("releaseResources: Resources released")
+        RovaLog.d { "releaseResources: Resources released" }
     }
 
     private fun stopPeriodicRecordingAndMerge() {
         if (stopRequested) {
-            RovaLog.d("stopPeriodicRecordingAndMerge: stop already requested, ignoring duplicate call")
+            RovaLog.d { "stopPeriodicRecordingAndMerge: stop already requested, ignoring duplicate call" }
             return
         }
         stopRequested = true
@@ -3328,10 +3328,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     )
                     when (result) {
                         is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
-                            RovaLog.d(
+                            RovaLog.d {
                                 "stopPeriodicRecordingAndMerge: eager USER_STOPPED/$reason" +
                                     " written for $sid (B3)"
-                            )
+                            }
                             updateNotification(
                                 when (reason) {
                                     com.aritr.rova.data.StopReason.PERMISSION_REVOKED ->
@@ -3345,10 +3345,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             )
                         }
                         is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
-                            RovaLog.d(
+                            RovaLog.d {
                                 "stopPeriodicRecordingAndMerge: $sid already" +
                                     " ${result.existingTerminated}/${result.existingStopReason}; eager write suppressed"
-                            )
+                            }
                         }
                         is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
                             // ADR 0006 §"Caller contract on `Failed`":
@@ -3650,14 +3650,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         withContext(NonCancellable) {
                             when (val result = sessionStore.markTerminated(sid, reason, stopReason)) {
                                 is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
-                                    RovaLog.d("performMerge: wrote $reason / $stopReason for $sid")
+                                    RovaLog.d { "performMerge: wrote $reason / $stopReason for $sid" }
                                 }
                                 is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
-                                    RovaLog.d(
+                                    RovaLog.d {
                                         "performMerge: $sid already" +
                                             " ${result.existingTerminated}/${result.existingStopReason};" +
                                             " merge-success suppressed"
-                                    )
+                                    }
                                 }
                                 is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
                                     // ADR 0006 §"Caller contract on `Failed`
@@ -3882,14 +3882,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         withContext(NonCancellable) {
                             when (val result = sessionStore.markTerminated(sid, reason, stopReason)) {
                                 is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
-                                    RovaLog.d("performMergeDual: wrote $reason / $stopReason for $sid")
+                                    RovaLog.d { "performMergeDual: wrote $reason / $stopReason for $sid" }
                                 }
                                 is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
-                                    RovaLog.d(
+                                    RovaLog.d {
                                         "performMergeDual: $sid already" +
                                             " ${result.existingTerminated}/${result.existingStopReason};" +
                                             " merge-success suppressed"
-                                    )
+                                    }
                                 }
                                 is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
                                     RovaLog.e(
@@ -4117,7 +4117,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             delay(waitSeconds * 1000L)
             val ok = tickSignals.trySend(seq).isSuccess
             if (ok) {
-                RovaLog.d("waitForNextSegment: live delay delivered seq=$seq after ${waitSeconds}s")
+                RovaLog.d { "waitForNextSegment: live delay delivered seq=$seq after ${waitSeconds}s" }
             } else {
                 RovaLog.w("waitForNextSegment: live delay could not deliver seq=$seq; channel closed")
             }
@@ -4126,7 +4126,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val canRelax = shouldRelaxWakeLock(waitSeconds)
         if (canRelax) {
             releaseWakeLock()
-            RovaLog.d("waitForNextSegment: wakelock released during ${waitSeconds}s alarm-driven wait")
+            RovaLog.d { "waitForNextSegment: wakelock released during ${waitSeconds}s alarm-driven wait" }
         }
 
         // Best-effort notification countdown. May be paused by Doze; the
@@ -4165,7 +4165,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     var s: Int
                     do {
                         s = tickSignals.receive()
-                        if (s < seq) RovaLog.d("waitForNextSegment: discarding stale tick seq=$s (waiting for >= $seq)")
+                        if (s < seq) RovaLog.d { "waitForNextSegment: discarding stale tick seq=$s (waiting for >= $seq)" }
                     } while (s < seq)
                     s
                 }
@@ -4233,7 +4233,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         val ignoringOptimizations = powerManager.isIgnoringBatteryOptimizations(packageName)
         if (!ignoringOptimizations) {
-            RovaLog.d("shouldRelaxWakeLock: Keeping wakelock because battery optimizations are still active")
+            RovaLog.d { "shouldRelaxWakeLock: Keeping wakelock because battery optimizations are still active" }
         }
         return ignoringOptimizations
     }
@@ -4269,7 +4269,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // refresh model live in [WakeLockPolicy.ACQUIRE_TIMEOUT_MS].
             acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)
         }
-        RovaLog.d("acquireWakeLock: Partial wakelock acquired")
+        RovaLog.d { "acquireWakeLock: Partial wakelock acquired" }
     }
 
     private fun releaseWakeLock() {
@@ -4282,7 +4282,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // throw RuntimeException("WakeLock under-locked"); see
             // ADR 0006 §"WakeLock Ownership".
             WakeLockPolicy.safeRelease { existing.release() }
-            RovaLog.d("releaseWakeLock: Partial wakelock released")
+            RovaLog.d { "releaseWakeLock: Partial wakelock released" }
         }
     }
 }

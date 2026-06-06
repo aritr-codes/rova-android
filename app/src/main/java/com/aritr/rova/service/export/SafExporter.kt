@@ -109,7 +109,7 @@ internal class SafExporter(
         } catch (t: Throwable) {
             return classify(ExportResult.CopyFailed(t), t)
         }
-        displayNameOf(docUri)?.let { RovaLog.d("$TAG: created doc as '$it'") }
+        displayNameOf(docUri)?.let { name -> RovaLog.d { "$TAG: created doc as '$name'" } }
         commit(setSafTarget(docUri))?.let { return it }   // commit BEFORE the first byte
         // A provider may throw on close/flush even after the bytes are durable, so the
         // KEEP/DELETE decision hinges on validation, not on whether copy threw
@@ -121,7 +121,7 @@ internal class SafExporter(
         }
         if (validateSafely(docUri)) {
             if (staleDocUri != null && staleDocUri != docUri) {
-                RovaLog.d("$TAG: reclaiming stale partial SAF doc after successful re-publish")
+                RovaLog.d { "$TAG: reclaiming stale partial SAF doc after successful re-publish" }
                 safeDelete(staleDocUri)
             }
             // B4 storage reclaim (parity with PreQExportCore.finalize): the SAF

@@ -133,7 +133,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
         val dir = sessionDir(sessionId)
         if (!dir.exists()) dir.mkdirs()
         writeManifestAtomic(dir, manifest)
-        RovaLog.d("SessionStore: created session $sessionId (tier=$tier, audioMode=$audioMode)")
+        RovaLog.d { "SessionStore: created session $sessionId (tier=$tier, audioMode=$audioMode)" }
         return manifest
     }
 
@@ -240,10 +240,10 @@ open class SessionStore internal constructor(rootDirArg: File) {
                 attempts = 0
             )
         if (current.terminated != null) {
-            RovaLog.d(
+            RovaLog.d {
                 "SessionStore: markTerminated($sessionId, $terminated, $stopReason) skipped" +
                     " — already ${current.terminated}/${current.stopReason}"
-            )
+            }
             return@withContext MarkTerminatedResult.AlreadyTerminal(
                 existingTerminated = current.terminated,
                 existingStopReason = current.stopReason
@@ -264,10 +264,10 @@ open class SessionStore internal constructor(rootDirArg: File) {
             attempt++
             try {
                 writeManifestAtomic(dir, updated)
-                RovaLog.d(
+                RovaLog.d {
                     "SessionStore: markTerminated($sessionId, $terminated, $stopReason)" +
                         " written (attempt=$attempt)"
-                )
+                }
                 return@withContext MarkTerminatedResult.Wrote(terminated, stopReason)
             } catch (e: java.io.IOException) {
                 lastCause = e
@@ -324,7 +324,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
             attempt++
             try {
                 writeManifestAtomic(sessionDir(sessionId), updated)
-                RovaLog.d("SessionStore: $label($sessionId) written (attempt=$attempt)")
+                RovaLog.d { "SessionStore: $label($sessionId) written (attempt=$attempt)" }
                 return@withContext ExportMutationResult.Wrote(updated)
             } catch (e: java.io.IOException) {
                 lastCause = e
@@ -867,7 +867,7 @@ open class SessionStore internal constructor(rootDirArg: File) {
         val dir = sessionDir(sessionId)
         if (!dir.exists()) return
         dir.deleteRecursively()
-        RovaLog.d("SessionStore: discarded session $sessionId")
+        RovaLog.d { "SessionStore: discarded session $sessionId" }
     }
 
     fun nextSegmentFilename(currentSegmentCount: Int): String =
