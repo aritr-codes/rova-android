@@ -96,7 +96,21 @@ data class SessionManifest(
     val vaultState: VaultState = VaultState.PUBLIC,
     val vaultFilePath: String? = null,
     val portraitVaultFilePath: String? = null,
-    val landscapeVaultFilePath: String? = null
+    val landscapeVaultFilePath: String? = null,
+    /**
+     * B5 / ADR-0025 commit-before-finalize — in-flight public pointers for a
+     * move-OUT (VAULTED → PUBLIC), committed BEFORE the irreversible publish
+     * step finalizes, so a crash-resume dedups instead of double-publishing.
+     * Mirrors ADR-0024's commit-before-stream (SAF already immune via
+     * [safTargetDocUri]). Cleared by `SessionStore.setVaultMovedOut` on
+     * successful completion. Only one is ever non-null per move:
+     * - [pendingMoveOutUri]  — Tier1 pending-row Uri, committed after
+     *   `insertPendingRow` and before `withPendingFd`/`finalizePendingRow`.
+     * - [pendingMoveOutPath] — pre-Q `<name>.mp4.part` absolute path,
+     *   committed after `allocateNonColliding` and before the first byte.
+     */
+    val pendingMoveOutUri: String? = null,
+    val pendingMoveOutPath: String? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -139,6 +153,10 @@ data class SessionManifest(
         vaultFilePath?.let { put("vaultFilePath", it) }
         portraitVaultFilePath?.let { put("portraitVaultFilePath", it) }
         landscapeVaultFilePath?.let { put("landscapeVaultFilePath", it) }
+        // B5 / ADR-0025 commit-before-finalize — emit only while a move-out is
+        // in flight (schema-7 manifests keep their byte-shape otherwise).
+        pendingMoveOutUri?.let { put("pendingMoveOutUri", it) }
+        pendingMoveOutPath?.let { put("pendingMoveOutPath", it) }
     }
 
     companion object {
@@ -147,7 +165,8 @@ data class SessionManifest(
         // SessionConfig.mode. v1/v2/v3 manifests read with safe default
         // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
-        const val SCHEMA_VERSION = 7   // 6->7: vault fields (B5 / ADR-0025)
+        // 7->8: pendingMoveOut{Uri,Path} commit-before-finalize (B5 / ADR-0025).
+        const val SCHEMA_VERSION = 8   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -202,7 +221,11 @@ data class SessionManifest(
             } ?: VaultState.PUBLIC,
             vaultFilePath = json.optString("vaultFilePath", "").ifEmpty { null },
             portraitVaultFilePath = json.optString("portraitVaultFilePath", "").ifEmpty { null },
-            landscapeVaultFilePath = json.optString("landscapeVaultFilePath", "").ifEmpty { null }
+            landscapeVaultFilePath = json.optString("landscapeVaultFilePath", "").ifEmpty { null },
+            // B5 / ADR-0025 commit-before-finalize — schema-7 manifests lack
+            // these keys, so optString → "" → null (tolerant read).
+            pendingMoveOutUri = json.optString("pendingMoveOutUri", "").ifEmpty { null },
+            pendingMoveOutPath = json.optString("pendingMoveOutPath", "").ifEmpty { null }
         )
     }
 }

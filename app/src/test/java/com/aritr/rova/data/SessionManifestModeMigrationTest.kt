@@ -120,10 +120,10 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 7`() {
-        // Bumped 6 -> 7 for the B5 / ADR-0025 vault fields (vaultIntentAtStart,
-        // vaultState, vaultFilePath, portrait/landscapeVaultFilePath).
-        // Previously bumped 5 -> 6 for the ADR-0024 SAF target fields.
-        assertEquals(7, SessionManifest.SCHEMA_VERSION)
+    fun `SCHEMA_VERSION is 8`() {
+        // Bumped 7 -> 8 for the B5 / ADR-0025 commit-before-finalize move-out
+        // pointers (pendingMoveOutUri, pendingMoveOutPath).
+        // Previously: 6 -> 7 vault fields; 5 -> 6 ADR-0024 SAF target fields.
+        assertEquals(8, SessionManifest.SCHEMA_VERSION)
     }
 }

@@ -769,7 +769,65 @@ open class SessionStore internal constructor(rootDirArg: File) {
             exportState = exportState,
             pendingUri = pendingUri,
             publicTargetPath = publicTargetPath,
-            safTargetDocUri = safTargetDocUri
+            safTargetDocUri = safTargetDocUri,
+            // The move-out completed: the in-flight commit-before-finalize
+            // pointers have done their job; clear them so a stray re-run can't
+            // re-trigger dedup (B5 / ADR-0025).
+            pendingMoveOutUri = null,
+            pendingMoveOutPath = null
+        )
+    }
+
+    /**
+     * B5 / ADR-0025 commit-before-finalize — Tier1 move-out: commit the freshly
+     * inserted pending-row Uri to the manifest BEFORE `withPendingFd` /
+     * `finalizePendingRow` makes the public copy irreversible. On a crash after
+     * finalize but before [setVaultMovedOut], the next cold-launch resume reads
+     * this pointer and deletes the orphaned row before re-publishing — so the
+     * recording lands in exactly one public place. Mirrors [setExportSafTarget]
+     * (ADR-0024 commit-before-stream) for the pending-row tier.
+     */
+    suspend fun setPendingMoveOutTier1(
+        sessionId: String,
+        pendingRowUri: String
+    ): ExportMutationResult = mutateExport("setPendingMoveOutTier1", sessionId) { current ->
+        current.copy(pendingMoveOutUri = pendingRowUri)
+    }
+
+    /**
+     * B5 / ADR-0025 commit-before-finalize — pre-Q (Tier2/3) move-out: commit
+     * the `<name>.mp4.part` path BEFORE the first byte is written, so a
+     * crash-resume can delete the stale `.part` (or adopt an already-renamed
+     * target) instead of allocating a second non-colliding name. See
+     * [setPendingMoveOutTier1].
+     */
+    suspend fun setPendingMoveOutPreQ(
+        sessionId: String,
+        partPath: String
+    ): ExportMutationResult = mutateExport("setPendingMoveOutPreQ", sessionId) { current ->
+        current.copy(pendingMoveOutPath = partPath)
+    }
+
+    /**
+     * B5 / ADR-0025 (move-IN completion, cosmetic follow-up) — flip to
+     * [VaultState.VAULTED] AND clear the public pointers that
+     * [deletePublic] just removed from storage. Like [setVaultState] it
+     * PRESERVES [SessionManifest.vaultFilePath] (so a leftover public copy
+     * stays recoverable), but unlike it also nulls `pendingUri` /
+     * `publicTargetPath` / `safTargetDocUri` so the manifest no longer points
+     * at a deleted artifact (which otherwise lingers and falsely protects a
+     * dead MediaStore row from the orphan sweep). Replaces the bare
+     * `setVaultState(VAULTED)` move-in terminal.
+     */
+    suspend fun setVaultStateVaultedAndClearPublic(
+        sessionId: String
+    ): ExportMutationResult = mutateExport("setVaultStateVaultedAndClearPublic", sessionId) { current ->
+        current.copy(
+            vaultState = VaultState.VAULTED,
+            vaultFilePath = current.vaultFilePath,
+            pendingUri = null,
+            publicTargetPath = null,
+            safTargetDocUri = null
         )
     }
 

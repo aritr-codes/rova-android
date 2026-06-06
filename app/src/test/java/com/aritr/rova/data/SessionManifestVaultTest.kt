@@ -50,7 +50,39 @@ class SessionManifestVaultTest {
     }
 
     @Test
-    fun schemaVersion_isSeven() {
-        assertEquals(7, SessionManifest.SCHEMA_VERSION)
+    fun schemaVersion_isEight() {
+        assertEquals(8, SessionManifest.SCHEMA_VERSION)
+    }
+
+    // B5 / ADR-0025 commit-before-finalize follow-up: the in-flight public
+    // pointer committed on move-OUT before the irreversible Tier1 finalize /
+    // pre-Q rename, so a crash-resume can dedup instead of double-publishing.
+    @Test
+    fun roundTrip_preservesPendingMoveOutFields() {
+        val m = baseManifest().copy(
+            pendingMoveOutUri = "content://media/external/video/77",
+            pendingMoveOutPath = "/storage/emulated/0/Movies/Rova/Rova_x.mp4.part",
+        )
+        val back = SessionManifest.fromJson(m.toJson())
+        assertEquals("content://media/external/video/77", back.pendingMoveOutUri)
+        assertEquals("/storage/emulated/0/Movies/Rova/Rova_x.mp4.part", back.pendingMoveOutPath)
+    }
+
+    @Test
+    fun tolerantRead_oldManifestHasNoPendingMoveOutKeys_defaultsNull() {
+        val json: JSONObject = baseManifest().toJson()
+        json.remove("pendingMoveOutUri")
+        json.remove("pendingMoveOutPath")
+        json.put("schemaVersion", 7)
+        val back = SessionManifest.fromJson(json)
+        assertEquals(null, back.pendingMoveOutUri)
+        assertEquals(null, back.pendingMoveOutPath)
+    }
+
+    @Test
+    fun defaults_pendingMoveOutFieldsNull() {
+        val m = baseManifest()
+        assertEquals(null, m.pendingMoveOutUri)
+        assertEquals(null, m.pendingMoveOutPath)
     }
 }

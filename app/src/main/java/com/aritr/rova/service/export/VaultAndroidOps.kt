@@ -192,22 +192,21 @@ internal class VaultAndroidOps(
      * storage through the low-level publishers (NO mux, NO segments, NO
      * [ExportPipeline.export] re-entry). Destination tier is recomputed now.
      *
-     * **Crash-window duplicate-copy risk (Tier1 / pre-Q only).** On move-OUT
-     * the publish finalizes the public row/file BEFORE the call site persists
-     * the new public pointer (`SessionStore.setVaultMovedOut`). If the app
-     * crashes in that narrow window — after [publishTier1] /
-     * [publishPreQ] finalizes but before the manifest pointer commits — the
-     * next cold-launch `RESUME_UNVAULTING` re-runs `publishExisting` and
-     * creates a SECOND public copy (a duplicate gallery entry). The recording
-     * is NEVER lost; at most one duplicate, only on a crash in a ~millisecond
-     * window. SAF is crash-resume-deduplicated: [publishSaf] deletes the prior
-     * committed doc before re-creating (ADR-0024 commit-before-stream gives it
-     * a persisted pointer to clean up). Tier1 / pre-Q CANNOT be cheaply
-     * guarded the same way because their new pending-row / file pointer was
-     * never committed to the manifest before finalize, so a re-run has nothing
-     * to dedup against. A full fix needs commit-before-finalize for the
-     * pending-row tier (mirroring ADR-0024) and is a tracked follow-up
-     * (Phase 6 / Task 23 hardening).
+     * **Crash-window duplicate-copy: now guarded (ADR-0025 commit-before-
+     * finalize).** All three tiers are crash-resume-deduplicated:
+     * - SAF — [publishSaf] deletes the prior committed doc before re-creating
+     *   (ADR-0024 commit-before-stream gives it a persisted pointer to clean up).
+     * - Tier1 — [publishTier1] commits the freshly inserted pending-row Uri to
+     *   the manifest ([setPendingMoveOutTier1], persisted as
+     *   `pendingMoveOutUri`) BEFORE `withPendingFd`/`finalizePendingRow`. A
+     *   crash after finalize but before [SessionStore.setVaultMovedOut] leaves
+     *   that pointer; the resume drops the orphan row before re-publishing.
+     * - pre-Q — [publishPreQ] commits the `<name>.mp4.part` path
+     *   ([setPendingMoveOutPreQ], persisted as `pendingMoveOutPath`) BEFORE the
+     *   first byte. The resume ([PreQMoveOutResume]) adopts an already-renamed
+     *   target or deletes a stale `.part`, never minting a `<name>_2.mp4` dup.
+     * Result: a move-out lands the recording in exactly one public place even
+     * across a crash in the former ~millisecond window.
      *
      * @return the new public pointer for the call site to persist via
      *   `SessionStore.setVaultMovedOut(...)`, as a [PublishOutcome] carrying
@@ -217,6 +216,11 @@ internal class VaultAndroidOps(
         manifest: SessionManifest,
         sessionDir: File,
         setExportSafTarget: suspend (docUri: String) -> Unit,
+        // ADR-0025 commit-before-finalize: persist the in-flight public pointer
+        // BEFORE the irreversible publish step. Default no-ops keep older test
+        // call sites compiling; the move-out builder wires the real setters.
+        setPendingMoveOutTier1: suspend (pendingRowUri: String) -> Unit = {},
+        setPendingMoveOutPreQ: suspend (partPath: String) -> Unit = {},
     ): PublishOutcome {
         val vaultPath = manifest.vaultFilePath
             ?: throw IOException("publishExisting: manifest has null vaultFilePath")
@@ -233,12 +237,13 @@ internal class VaultAndroidOps(
                     // Defensive: currentExportTier maps SDK_INT → tier, so a
                     // TIER1 result on pre-Q is impossible. Fall back to the
                     // pre-Q publisher rather than crash.
-                    publishPreQ(displayName, vaultFile)
+                    publishPreQ(displayName, vaultFile, manifest.pendingMoveOutPath, setPendingMoveOutPreQ)
                 } else {
-                    publishTier1(displayName, vaultFile)
+                    publishTier1(displayName, vaultFile, manifest.pendingMoveOutUri, setPendingMoveOutTier1)
                 }
             }
-            ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 -> publishPreQ(displayName, vaultFile)
+            ExportTier.TIER2_API26_28, ExportTier.TIER3_API24_25 ->
+                publishPreQ(displayName, vaultFile, manifest.pendingMoveOutPath, setPendingMoveOutPreQ)
             ExportTier.SAF_DESTINATION ->
                 publishSaf(displayName, vaultFile, manifest.safTargetDocUri, setExportSafTarget)
         }
@@ -246,11 +251,29 @@ internal class VaultAndroidOps(
 
     // --- Tier1 publish (API 29+) -------------------------------------------
 
-    private suspend fun publishTier1(displayName: String, src: File): PublishOutcome {
+    private suspend fun publishTier1(
+        displayName: String,
+        src: File,
+        priorMoveOutUri: String?,
+        commitPendingMoveOut: suspend (String) -> Unit,
+    ): PublishOutcome {
+        // Crash-resume dedup: a committed pointer from a prior aborted run means
+        // that run may have finalized a public row before its manifest pointer
+        // landed. Drop that orphan before re-publishing so the recording ends up
+        // in exactly one public place (ADR-0025 commit-before-finalize). A
+        // `false` return means the row is already gone (fine). A THROW means a
+        // real delete error — propagate so we ABORT rather than risk publishing a
+        // second copy alongside an undeletable prior row (codex review).
+        priorMoveOutUri?.let { Tier1AndroidOps.deletePendingRow(resolver, it) }
         val uriString = Tier1AndroidOps.insertPendingRow(resolver, displayName)
             ?: throw IOException("publishExisting: Tier1 insertPendingRow returned null")
         var finalized = false
         try {
+            // Commit-before-finalize (mirrors ADR-0024 SAF commit-before-stream):
+            // persist the pending Uri BEFORE withPendingFd / finalizePendingRow
+            // make the public copy irreversible. Inside the try so a throwing
+            // (mandatory) commit still drops the just-inserted pending row.
+            commitPendingMoveOut(uriString)
             // Mode "rw" per ADR 0003 §FD Mode Amendment (checkPendingFdModeIsRW).
             Tier1AndroidOps.withPendingFd(resolver, uriString, "rw") { fd ->
                 writeFileToFd(src, fd)
@@ -276,15 +299,51 @@ internal class VaultAndroidOps(
 
     // --- Tier2/3 publish (pre-Q direct path) -------------------------------
 
-    private suspend fun publishPreQ(displayName: String, src: File): PublishOutcome {
+    private suspend fun publishPreQ(
+        displayName: String,
+        src: File,
+        priorPartPath: String?,
+        commitPendingMoveOut: suspend (String) -> Unit,
+    ): PublishOutcome {
         @Suppress("DEPRECATION")
         val publicDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
             "Rova"
         )
         publicDir.mkdirs()
+
+        // Crash-resume dedup (ADR-0025 commit-before-finalize). A committed
+        // `.part` pointer means a prior run got interrupted; the pure
+        // [PreQMoveOutResume] decides whether its public copy already exists
+        // (adopt it — no second file), or only a stale `.part` survives (drop
+        // it, publish fresh). Without this, allocateNonColliding would mint a
+        // `<name>_2.mp4` duplicate alongside the prior run's finished file.
+        priorPartPath?.let { prior ->
+            val priorTarget = File(prior.removeSuffix(".part"))
+            val action = PreQMoveOutResume.decide(
+                committedPartPath = prior,
+                // Adopt ONLY a byte-exact copy of the vault file — a foreign file
+                // that merely occupies the target path must not be claimed as
+                // this session's public artifact (codex review).
+                targetExistsAndAdoptable = priorTarget.isFile && priorTarget.length() == src.length(),
+                partExists = File(prior).exists(),
+            )
+            when (action) {
+                is PreQResumeAction.AdoptExistingTarget -> {
+                    mediaScanWaiter.scanAndWait(priorTarget)
+                    return PublishOutcome(publicTargetPath = action.targetPath)
+                }
+                is PreQResumeAction.DeleteStalePartThenProceed ->
+                    try { File(action.partPath).delete() } catch (_: Throwable) {}
+                PreQResumeAction.Proceed -> {}
+            }
+        }
+
         val target = allocateNonColliding(publicDir, displayName)
         val part = File(publicDir, target.name + ".part")
+        // Commit-before-write: persist the `.part` path BEFORE the first byte so
+        // a crash mid-copy is dedup-recoverable on the next cold launch.
+        commitPendingMoveOut(part.absolutePath)
         try {
             src.inputStream().use { input ->
                 FileOutputStream(part).use { input.copyTo(it) }

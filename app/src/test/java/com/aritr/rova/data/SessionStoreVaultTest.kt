@@ -123,4 +123,67 @@ class SessionStoreVaultTest {
         assertEquals("content://media/external/video/42", m.pendingUri)
         assertEquals("/Movies/Rova/Rova_x.mp4", m.publicTargetPath)
     }
+
+    // B5 / ADR-0025 commit-before-finalize follow-up ------------------------
+
+    @Test
+    fun setPendingMoveOutTier1_commitsInFlightPendingUri() = runBlocking {
+        val s = store(); val id = newSession(s)
+        s.setVaultFinalized(id, vaultFilePath = "/vault/$id/Rova_x.mp4")
+        s.setVaultState(id, VaultState.UNVAULTING)
+
+        s.setPendingMoveOutTier1(id, "content://media/external/video/100")
+
+        val m = s.loadManifest(id)!!
+        assertEquals("content://media/external/video/100", m.pendingMoveOutUri)
+        assertNull(m.pendingMoveOutPath)
+    }
+
+    @Test
+    fun setPendingMoveOutPreQ_commitsInFlightPartPath() = runBlocking {
+        val s = store(); val id = newSession(s)
+        s.setVaultFinalized(id, vaultFilePath = "/vault/$id/Rova_x.mp4")
+        s.setVaultState(id, VaultState.UNVAULTING)
+
+        s.setPendingMoveOutPreQ(id, "/Movies/Rova/Rova_x.mp4.part")
+
+        val m = s.loadManifest(id)!!
+        assertEquals("/Movies/Rova/Rova_x.mp4.part", m.pendingMoveOutPath)
+        assertNull(m.pendingMoveOutUri)
+    }
+
+    @Test
+    fun setVaultMovedOut_clearsInFlightPendingMoveOutPointers() = runBlocking {
+        val s = store(); val id = newSession(s)
+        s.setVaultFinalized(id, vaultFilePath = "/vault/$id/Rova_x.mp4")
+        s.setVaultState(id, VaultState.UNVAULTING)
+        s.setPendingMoveOutTier1(id, "content://media/external/video/100")
+
+        s.setVaultMovedOut(id, pendingUri = "content://media/external/video/42")
+
+        val m = s.loadManifest(id)!!
+        assertNull(m.pendingMoveOutUri)
+        assertNull(m.pendingMoveOutPath)
+        assertEquals("content://media/external/video/42", m.pendingUri)
+    }
+
+    // B5 #2 — move-IN must clear the now-deleted public pointers ------------
+
+    @Test
+    fun setVaultStateVaultedAndClearPublic_clearsPublicPointersPreservesVaultPath() = runBlocking {
+        val s = store(); val id = newSession(s)
+        s.setExportPending(id, "content://media/external/video/1")
+        s.setExportSafTarget(id, "content://tree/doc/9")
+        // Move-in records the vault path while still PUBLIC-pointed.
+        s.setVaultState(id, VaultState.VAULTING, vaultFilePath = "/vault/$id/Rova_x.mp4")
+
+        s.setVaultStateVaultedAndClearPublic(id)
+
+        val m = s.loadManifest(id)!!
+        assertEquals(VaultState.VAULTED, m.vaultState)
+        assertEquals("/vault/$id/Rova_x.mp4", m.vaultFilePath)
+        assertNull(m.pendingUri)
+        assertNull(m.publicTargetPath)
+        assertNull(m.safTargetDocUri)
+    }
 }
