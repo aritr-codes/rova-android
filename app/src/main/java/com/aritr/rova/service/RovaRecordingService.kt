@@ -3340,6 +3340,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                         getString(R.string.notification_stopped_low_storage)
                                     com.aritr.rova.data.StopReason.THERMAL ->
                                         getString(R.string.notification_stopped_thermal)
+                                    com.aritr.rova.data.StopReason.SCHEDULE_WINDOW ->
+                                        getString(R.string.notification_stopped_schedule_window)
                                     else -> getString(R.string.notification_stopping)
                                 }
                             )

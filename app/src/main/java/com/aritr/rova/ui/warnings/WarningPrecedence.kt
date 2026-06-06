@@ -126,7 +126,7 @@ internal object WarningPrecedence {
                 StopReason.LOW_STORAGE -> result += WarningId.STORAGE_FULL_AUTOSTOPPED
                 StopReason.THERMAL -> result += WarningId.THERMAL_AUTOSTOPPED
                 StopReason.USER, StopReason.PERMISSION_REVOKED,
-                StopReason.INIT_FAILED, StopReason.NONE -> Unit
+                StopReason.INIT_FAILED, StopReason.SCHEDULE_WINDOW, StopReason.NONE -> Unit
             }
         }
         if (cantMergeActive) result += WarningId.CANT_MERGE                                // #14
