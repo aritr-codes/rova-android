@@ -211,6 +211,20 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("hide_in_vault", false)
         set(value) = prefs.edit { putBoolean("hide_in_vault", value) }
 
+    /**
+     * B6 (front/back camera switch) — persisted lens preference. `true` means
+     * the front camera was last selected; `false` (default) means rear. Backed
+     * up (a genuine user preference, like `resolution`/`themeMode`), so it lives
+     * in `prefs` — NOT the reinstall-reset `runtimePrefs` that `mode` uses.
+     * Read once in `RovaRecordingService.onCreate` to seed `currentCameraSelector`
+     * and re-written by `flipCamera()`. The P+L snap-to-rear in `setMode` mutates
+     * the in-memory selector only and MUST NOT write this pref, so returning to
+     * Portrait restores the user's front choice.
+     */
+    var preferFrontCamera: Boolean
+        get() = prefs.getBoolean("prefer_front_camera", false)
+        set(value) = prefs.edit { putBoolean("prefer_front_camera", value) }
+
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
