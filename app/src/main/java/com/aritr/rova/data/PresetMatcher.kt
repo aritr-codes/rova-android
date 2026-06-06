@@ -8,10 +8,12 @@ package com.aritr.rova.data
  * not identity. A user custom whose values equal a built-in resolves to the
  * built-in id. Resolution is compared canonically so legacy aliases ("1080p",
  * "UHD") match; loopCount is compared exactly, including the -1 continuous sentinel.
+ * A null or unrecognized resolution yields no match (Custom) — we never coerce
+ * unknown input to the FHD default, which would be a false positive (review).
  */
 object PresetMatcher {
     fun match(duration: Int, interval: Int, loopCount: Int, resolution: String?): String? {
-        val res = QualityPresets.canonicalizeOrDefault(resolution)
+        val res = QualityPresets.canonicalize(resolution) ?: return null
         return BuiltInPresets.all.firstOrNull { p ->
             p.duration == duration &&
                 p.interval == interval &&

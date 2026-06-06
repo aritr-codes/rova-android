@@ -75,6 +75,8 @@ object PresetJson {
         if (rawId.isNotEmpty() && rawId.startsWith("custom.")) return rawId
         // Missing, blank, or reserved `builtin.` -> derive a stable custom id.
         val key = "${p.name}|${p.duration}|${p.interval}|${p.loopCount}|${p.resolution}"
-        return "custom." + key.hashCode().absoluteValue.toString(16)
+        // toLong() before absoluteValue: Int.MIN_VALUE.absoluteValue overflows to a
+        // negative Int; widening to Long first keeps the derived id non-negative (review).
+        return "custom." + key.hashCode().toLong().absoluteValue.toString(16)
     }
 }

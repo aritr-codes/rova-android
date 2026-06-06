@@ -27,4 +27,13 @@ class PresetMatcherTest {
         // Same duration/interval/quality as Continuous but finite loop -> no match.
         assertNull(PresetMatcher.match(60, 0, 5, "HD"))
     }
+
+    @Test fun nullResolutionDoesNotMatch() {
+        // Must NOT coerce null to the FHD default (would falsely match Standard).
+        assertNull(PresetMatcher.match(30, 2, 20, null))
+    }
+
+    @Test fun unknownResolutionDoesNotMatch() {
+        assertNull(PresetMatcher.match(30, 2, 20, "garbage"))
+    }
 }

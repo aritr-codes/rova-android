@@ -48,4 +48,19 @@ class PresetJsonTest {
     @Test fun garbageDecodesEmpty() {
         assertEquals(emptyList<RovaPreset>(), PresetJson.decode("not json"))
     }
+
+    @Test fun nonCustomNonBuiltinIdIsReDerived() {
+        // Only `custom.*` ids survive verbatim; any other id is re-namespaced.
+        val odd = """[{"id":"random.thing","name":"Z","duration":20,"interval":2,"loopCount":5,"resolution":"HD"}]"""
+        val decoded = PresetJson.decode(odd)
+        assertEquals(1, decoded.size)
+        assertTrue(decoded[0].id.startsWith("custom."))
+    }
+
+    @Test fun decodedPresetIsNeverBuiltIn() {
+        val envelope = """{"presetSchemaVersion":2,"presets":[{"id":"custom.x","name":"Y","duration":30,"interval":2,"loopCount":20,"resolution":"FHD"}]}"""
+        val decoded = PresetJson.decode(envelope)
+        assertEquals(1, decoded.size)
+        assertTrue(!decoded[0].isBuiltIn)
+    }
 }
