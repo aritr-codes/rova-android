@@ -181,6 +181,17 @@ class RovaSettings(context: Context) {
         get() = prefs.getString("custom_presets", "[]") ?: "[]"
         set(value) = prefs.edit { putString("custom_presets", value) }
 
+    // ADR-0026 — set true once the first-run Standard seed has run (or been
+    // skipped for an existing user). Prevents re-seeding on later launches.
+    var presetSeeded: Boolean
+        get() = prefs.getBoolean("preset_seeded", false)
+        set(value) = prefs.edit { putBoolean("preset_seeded", value) }
+
+    /** True if any recording-default pref key has ever been written (existing user). */
+    fun hasAnyRecordingPref(): Boolean =
+        prefs.contains("duration") || prefs.contains("interval") ||
+            prefs.contains("loop_count") || prefs.contains("resolution")
+
     // Storage retention — Keep latest N finalized recordings.
     // Default OFF so the existing manual-delete-only behavior is
     // unchanged; the user opts in via Settings.
