@@ -10,9 +10,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.data.RovaPreset
 
 /**
@@ -36,6 +39,12 @@ fun PresetRow(
     ) {
         presets.forEach { p ->
             val selected = p.id == activePresetId
+            val clipPhrase = pluralStringResource(R.plurals.preset_cd_clip_seconds, p.duration, p.duration)
+            val waitPhrase = if (p.interval <= 0) stringResource(R.string.preset_cd_no_gap)
+                else pluralStringResource(R.plurals.preset_cd_every_minutes, p.interval, p.interval)
+            val repeatsPhrase = if (p.loopCount < 0) stringResource(R.string.preset_cd_until_stop)
+                else pluralStringResource(R.plurals.preset_cd_repeats_times, p.loopCount, p.loopCount)
+            val cd = stringResource(R.string.preset_cd_full, p.name, clipPhrase, waitPhrase, repeatsPhrase, p.resolution)
             FilterChip(
                 selected = selected,
                 onClick = { onApply(p) },
@@ -43,15 +52,9 @@ fun PresetRow(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .heightIn(min = 48.dp)
-                    .semantics { contentDescription = presetSpoken(p) },
+                    .semantics { contentDescription = cd },
             )
         }
     }
 }
 
-/** "Standard preset, 30 seconds clip, every 2 minutes, 20 times, FHD." */
-private fun presetSpoken(p: RovaPreset): String {
-    val repeats = if (p.loopCount < 0) "until you stop" else "${p.loopCount} times"
-    val wait = if (p.interval <= 0) "no gap" else "every ${p.interval} minutes"
-    return "${p.name} preset, ${p.duration} seconds clip, $wait, $repeats, ${p.resolution}"
-}

@@ -682,6 +682,12 @@
     <string name="preview_share_not_ready">La grabación aún no está lista para compartir</string>
     <string name="preview_share_no_app">No hay ninguna app disponible para compartir vídeos</string>
 
+    <!-- B6 / ADR-0026 — preset chip content description assembler (ADR-0022/0023) -->
+    <string name="preset_cd_no_gap">sin pausa</string>
+    <string name="preset_cd_until_stop">hasta que pares</string>
+    <!-- %1$s=nombre %2$s=frase-segundos %3$s=frase-espera %4$s=frase-repeticiones %5$s=resolución -->
+    <string name="preset_cd_full">preajuste %1$s, %2$s, %3$s, %4$s, %5$s</string>
+
     <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
     <string name="settings_section_privacy">Privacidad</string>
     <string name="vault_empty_title">La caja fuerte está vacía</string>

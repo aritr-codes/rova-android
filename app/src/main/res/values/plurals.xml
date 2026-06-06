@@ -57,4 +57,18 @@
         <item quantity="one">All %1$d clip complete</item>
         <item quantity="other">All %1$d clips complete</item>
     </plurals>
+
+    <!-- B6 / ADR-0026 — preset chip content description parts (ADR-0022/0023) -->
+    <plurals name="preset_cd_clip_seconds">
+        <item quantity="one">%d second clip</item>
+        <item quantity="other">%d seconds clip</item>
+    </plurals>
+    <plurals name="preset_cd_every_minutes">
+        <item quantity="one">every %d minute</item>
+        <item quantity="other">every %d minutes</item>
+    </plurals>
+    <plurals name="preset_cd_repeats_times">
+        <item quantity="one">%d time</item>
+        <item quantity="other">%d times</item>
+    </plurals>
 </resources>

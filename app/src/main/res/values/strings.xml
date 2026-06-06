@@ -682,6 +682,12 @@
     <string name="preview_share_not_ready">Recording not ready to share yet</string>
     <string name="preview_share_no_app">No app available to share videos</string>
 
+    <!-- B6 / ADR-0026 — preset chip content description assembler (ADR-0022/0023) -->
+    <string name="preset_cd_no_gap">no gap</string>
+    <string name="preset_cd_until_stop">until you stop</string>
+    <!-- %1$s=name %2$s=clip-seconds phrase %3$s=wait phrase %4$s=repeats phrase %5$s=resolution -->
+    <string name="preset_cd_full">%1$s preset, %2$s, %3$s, %4$s, %5$s</string>
+
     <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
     <string name="settings_section_privacy">Privacy</string>
     <string name="vault_empty_title">Vault is empty</string>
