@@ -865,6 +865,8 @@ fun RecordScreen(
                     presets = allPresets,
                     activePresetId = activePresetId,
                     onApplyPreset = viewModel::applyPreset,
+                    onSavePreset = viewModel::savePreset,
+                    onDeletePreset = viewModel::deletePreset,
                     statusText = statusText,
                     flashMode = flashMode,
                     flipEnabled = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera,
