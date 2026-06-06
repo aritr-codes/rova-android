@@ -28,6 +28,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    androidResources {
+        // Ship only the locales Rova actually translates (en + es, ADR-0023).
+        // Without this, every AndroidX/Compose/Media3/CameraX dependency drags
+        // its own ~70 transitive `values-*/strings` folders into the bundle.
+        // AGP 8.8+ DSL — replaces the deprecated `resConfigs`. Keep this list in
+        // lockstep with the in-app locale picker and `checkNoHardcodedUiStrings`
+        // discipline: adding a translated locale means adding it here too.
+        localeFilters += listOf("en", "es")
+    }
+
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.isFile) {
