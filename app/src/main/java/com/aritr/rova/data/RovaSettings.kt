@@ -187,6 +187,34 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("preset_seeded", false)
         set(value) = prefs.edit { putBoolean("preset_seeded", value) }
 
+    // --- Daily recording window (ADR-0027) — off by default. ---
+    var scheduleEnabled: Boolean
+        get() = prefs.getBoolean("schedule_enabled", false)
+        set(value) = prefs.edit { putBoolean("schedule_enabled", value) }
+
+    /** Minutes past local midnight, 0..1439. Default 09:00. */
+    var scheduleStartMinuteOfDay: Int
+        get() = prefs.getInt("schedule_start_minute", 9 * 60)
+        set(value) = prefs.edit { putInt("schedule_start_minute", value) }
+
+    /** Minutes past local midnight, 0..1439. Default 17:00. */
+    var scheduleStopMinuteOfDay: Int
+        get() = prefs.getInt("schedule_stop_minute", 17 * 60)
+        set(value) = prefs.edit { putInt("schedule_stop_minute", value) }
+
+    /** Weekday bitmask: bit0=Mon..bit6=Sun; 0 = every day. Default every day. */
+    var scheduleWeekdayMask: Int
+        get() = prefs.getInt("schedule_weekday_mask", 0)
+        set(value) = prefs.edit { putInt("schedule_weekday_mask", value) }
+
+    fun scheduleSnapshot(): com.aritr.rova.service.scheduler.ScheduleSettingsSnapshot =
+        com.aritr.rova.service.scheduler.ScheduleSettingsSnapshot(
+            enabled = scheduleEnabled,
+            startMinuteOfDay = scheduleStartMinuteOfDay,
+            stopMinuteOfDay = scheduleStopMinuteOfDay,
+            weekdayMask = scheduleWeekdayMask,
+        )
+
     /** True if any recording-default pref key has ever been written (existing user). */
     fun hasAnyRecordingPref(): Boolean =
         prefs.contains("duration") || prefs.contains("interval") ||
