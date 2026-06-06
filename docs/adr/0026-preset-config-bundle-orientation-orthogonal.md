@@ -38,3 +38,31 @@ presets. The original mockup conflated "mode" (orientation) with preset
   labels via `Text(p.name)` (so the no-hardcoded-strings gate does not apply).
   Their TalkBack content descriptions ARE localized (en/es, ADR-0022/0023).
   Per-locale built-in *name* overrides are a deferred follow-up, not a v1 gap.
+
+## Amendment 2026-06-06 — custom preset save/naming
+
+Custom presets are now user-creatable from the Record settings sheet:
+
+- **Save affordance.** A "+ Save" chip appears in the PRESETS FlowRow **only when
+  `activePresetId == null`** (the current config matches no preset = "Custom")
+  **and the sheet is editable** (no active/merging session). It opens a naming
+  dialog.
+- **Name + tuple uniqueness.** A custom name must be non-blank, ≤ 40 chars, and
+  unique case-insensitively against both built-in and existing custom names
+  (`PresetSaveValidator`). A config whose tuple already matches any preset cannot
+  be saved (guarded in `savePreset`; unreachable via the conditional chip).
+- **Active reflection.** `activePresetId` now reflects customs via
+  `PresetMatcher.matchActive` — **built-in value-match takes precedence**, then
+  the first custom value-match.
+- **Delete.** Custom chips delete via long-press → confirm dialog. The long-press
+  is exposed to TalkBack/Switch/Voice as a labelled custom action
+  (`onLongClickLabel`), satisfying WCAG SC 2.5.1 / 2.1.1 without a visible ✕.
+  Built-in chips are not deletable.
+- **Mid-session guards.** `savePreset`/`deletePreset` no-op while a session is
+  active or merging (VM-side, mirroring `applyPreset`).
+
+No new `check*` gate: the slice adds no statically-scannable invariant beyond
+orientation-orthogonality, which `checkPresetNoOrientation` already enforces via
+the unchanged `RovaPreset` / `BuiltInPresets` shape. Name/tuple uniqueness and
+active-reflection are runtime behaviors covered by `PresetSaveValidatorTest` and
+`PresetMatcherTest`.
