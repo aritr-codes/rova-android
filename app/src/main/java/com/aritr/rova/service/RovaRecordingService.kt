@@ -355,18 +355,21 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // makes this safe to invoke from a receiver context that is
             // about to call goAsync().finish() — we do not block the
             // broadcast slot.
-            RovaLog.d("SessionController.requestStop: sessionId=$sessionId")
+            requestStop(com.aritr.rova.data.StopReason.USER)
+        }
+
+        override fun requestStop(reason: com.aritr.rova.data.StopReason) {
+            // ADR 0006 B-fix-5 / ADR-0027: explicit StopReason for the
+            // notification-STOP / UI-stop / scheduled-window-close paths.
+            // Belt-and-braces with the eager-write fallback
+            // (`currentStopReason ?: StopReason.USER`) — explicit assignment
+            // makes the intent visible at the call site and prevents any
+            // future first-writer-wins race from inheriting a null/stale value.
+            RovaLog.d("SessionController.requestStop: sessionId=$sessionId reason=$reason")
             serviceScope.launch {
                 userStopRequested = true
-                // ADR 0006 B-fix-5: explicit StopReason.USER for the
-                // notification-STOP / UI-stop path. Belt-and-braces with
-                // the eager-write fallback (`currentStopReason ?:
-                // StopReason.USER`) — but explicit assignment makes the
-                // intent visible at the call site and prevents any
-                // future first-writer-wins race from inheriting an
-                // unrelated null/stale value.
                 if (currentStopReason == null) {
-                    currentStopReason = com.aritr.rova.data.StopReason.USER
+                    currentStopReason = reason
                 }
                 stopPeriodicRecordingAndMerge()
             }
@@ -417,6 +420,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var limitLoops = -1 // -1 for continuous
     private var resolutionStr = QualityPresets.DEFAULT
     private var configuredResolution: String? = null // Track what resolution the camera is currently configured for
+
+    // ADR-0027 — daily-window provenance for this session. Set from the start
+    // intent; persisted in the manifest (recovery evidence) and read by the
+    // segment-loop self-heal to stop at window end.
+    private var startedBySchedule = false
+    private var scheduleWindowEndMillis = 0L
 
     /**
      * Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003). Frozen export tier for the
@@ -639,7 +648,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
          * pattern is API-safe on pre-31 runtimes: the class symbol is only
          * resolved when the SDK gate passes.
          */
-        fun start(context: Context, nSeconds: Float, mMinutes: Float, limitLoops: Int = -1, resolution: String = QualityPresets.DEFAULT): StartResult {
+        fun start(
+            context: Context,
+            nSeconds: Float,
+            mMinutes: Float,
+            limitLoops: Int = -1,
+            resolution: String = QualityPresets.DEFAULT,
+            startedBySchedule: Boolean = false,
+            scheduleWindowEndMillis: Long = 0L,
+        ): StartResult {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !isAppVisible(context)) {
                 RovaLog.w("start: refusing to launch camera recording while app is backgrounded")
                 return StartResult.Blocked(StartBlocked.APP_NOT_VISIBLE)
@@ -649,6 +666,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 putExtra("M_MINUTES", mMinutes)
                 putExtra("LIMIT_LOOPS", limitLoops)
                 putExtra("RESOLUTION", resolution)
+                putExtra("STARTED_BY_SCHEDULE", startedBySchedule)
+                putExtra("SCHEDULE_WINDOW_END_MS", scheduleWindowEndMillis)
             }
             return try {
                 ContextCompat.startForegroundService(context, intent)
@@ -995,6 +1014,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         mMinutes = intent.getFloatExtra("M_MINUTES", 10f).toLong()
         limitLoops = intent.getIntExtra("LIMIT_LOOPS", -1)
         resolutionStr = intent.getStringExtra("RESOLUTION") ?: QualityPresets.DEFAULT
+        startedBySchedule = intent.getBooleanExtra("STARTED_BY_SCHEDULE", false)
+        scheduleWindowEndMillis = intent.getLongExtra("SCHEDULE_WINDOW_END_MS", 0L)
         segmentCount = 0
         stopRequested = false
         userStopRequested = false
@@ -1207,7 +1228,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             config,
                             currentAudioMode,
                             safUsable,
-                            vaultIntentAtStart = settings.hideInVault
+                            vaultIntentAtStart = settings.hideInVault,
+                            startedBySchedule = startedBySchedule,
+                            scheduleWindowEndMillis = scheduleWindowEndMillis
                         )
                     }
                     currentSessionId = m.sessionId
@@ -1409,6 +1432,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // are derived from it); this update only mirrors
                     // it onto the StateFlow.
                     _serviceState.update { it.copy(segmentCount = segmentCount) }
+
+                    // ADR-0027 self-heal: if a scheduled window has elapsed, stop
+                    // here even if the window-close alarm was throttled or missed
+                    // in Doze. Idempotent with the ScheduleStopReceiver path —
+                    // stopPeriodicRecordingAndMerge guards re-entry, and
+                    // currentStopReason is first-writer-wins so a reason already
+                    // latched by the receiver (or a gate) survives. Like every
+                    // user-stop, the captured segments are still merged; the
+                    // session is classified USER_STOPPED + SCHEDULE_WINDOW.
+                    if (startedBySchedule && scheduleWindowEndMillis > 0L &&
+                        System.currentTimeMillis() >= scheduleWindowEndMillis
+                    ) {
+                        RovaLog.d("startPeriodicRecording: schedule window elapsed — self-heal stop")
+                        userStopRequested = true
+                        if (currentStopReason == null) {
+                            currentStopReason = com.aritr.rova.data.StopReason.SCHEDULE_WINDOW
+                        }
+                        stopPeriodicRecordingAndMerge()
+                        break@outer
+                    }
 
                     if (limitLoops != -1 && segmentCount >= limitLoops) {
                         stopPeriodicRecordingAndMerge()

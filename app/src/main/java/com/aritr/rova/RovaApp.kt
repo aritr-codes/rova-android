@@ -832,6 +832,45 @@ class RovaApp : Application() {
         activity.startActivity(android.content.Intent.createChooser(send, null))
     }
 
+    /**
+     * ADR-0027 — invoked from [MainActivity] when the user taps the
+     * window-open notification. Starts the camera FGS via the normal Start flow
+     * (the Activity is foregrounded by the tap, so the one legal camera-start
+     * site / isAppVisible gate is satisfied), tagging the session as
+     * schedule-started with its window-end so the service self-heals at close.
+     * Reads the same recording defaults the manual Start flow uses.
+     */
+    fun startScheduledRecording(activityContext: Context) {
+        val s = RovaSettings(this)
+        val windowEnd = com.aritr.rova.service.scheduler.ScheduleArmer.currentWindowEnd(
+            System.currentTimeMillis(), java.util.TimeZone.getDefault(), s.scheduleSnapshot(),
+        ) ?: 0L
+        com.aritr.rova.service.RovaRecordingService.start(
+            context = activityContext,
+            nSeconds = s.durationSeconds.toFloat(),
+            mMinutes = s.intervalMinutes.toFloat(),
+            limitLoops = s.loopCount,
+            resolution = s.resolution,
+            startedBySchedule = true,
+            scheduleWindowEndMillis = windowEnd,
+        )
+    }
+
+    /**
+     * ADR-0027 — silent window-close. Forwards a cooperative stop with
+     * reason=SCHEDULE_WINDOW to the live in-process controller (no getService,
+     * no new stop pathway). If the process is dead there is nothing recording
+     * to stop; cold-launch recovery classifies from evidence (ADR-0027 §6).
+     */
+    fun requestScheduleWindowStop() {
+        val controller = com.aritr.rova.service.ServiceController.current()
+        if (controller != null) {
+            controller.requestStop(com.aritr.rova.data.StopReason.SCHEDULE_WINDOW)
+        } else {
+            RovaLog.d("requestScheduleWindowStop: no live controller; nothing to stop")
+        }
+    }
+
     companion object {
         @Volatile
         private var instance: RovaApp? = null

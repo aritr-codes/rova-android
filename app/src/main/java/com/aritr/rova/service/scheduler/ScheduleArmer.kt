@@ -46,6 +46,32 @@ object ScheduleArmer {
         return ScheduleArming(startAt, stopAt)
     }
 
+    /**
+     * If [nowMillis] falls inside an eligible window, returns that window's stop
+     * instant; otherwise null. Used by the one-tap start path (ADR-0027) to tell
+     * the service when to self-heal. Checks the window starting today (offset 0)
+     * and the one starting yesterday (offset -1, still open for overnight
+     * windows). A window's weekday eligibility is keyed to its START day.
+     */
+    fun currentWindowEnd(nowMillis: Long, zone: TimeZone, settings: ScheduleSettingsSnapshot): Long? {
+        if (!settings.enabled) return null
+        for (dayOffset in 0 downTo -1) {
+            val startCal = Calendar.getInstance(zone).apply {
+                timeInMillis = nowMillis
+                add(Calendar.DAY_OF_YEAR, dayOffset)
+                set(Calendar.HOUR_OF_DAY, settings.startMinuteOfDay / 60)
+                set(Calendar.MINUTE, settings.startMinuteOfDay % 60)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            if (!isEligible(startCal, settings.weekdayMask)) continue
+            val startAt = startCal.timeInMillis
+            val stopAt = stopForStart(startAt, zone, settings)
+            if (nowMillis in startAt until stopAt) return stopAt
+        }
+        return null
+    }
+
     private fun nextStart(now: Long, zone: TimeZone, s: ScheduleSettingsSnapshot): Long? {
         // 0..7 covers a full week + 1, so any set weekday is guaranteed hit.
         for (dayOffset in 0..7) {

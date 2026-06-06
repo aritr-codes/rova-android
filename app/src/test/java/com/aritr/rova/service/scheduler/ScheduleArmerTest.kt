@@ -89,4 +89,31 @@ class ScheduleArmerTest {
         assertEquals(at(utc, 2026, 6, 10, 9, 0), r.startAtMillis)
         assertEquals(at(utc, 2026, 6, 11, 9, 0), r.stopAtMillis)
     }
+
+    @Test
+    fun currentWindowEnd_insideSameDayWindow_returnsTodayStop() {
+        val s = ScheduleSettingsSnapshot(true, min(9, 0), min(17, 0), 0)
+        val end = ScheduleArmer.currentWindowEnd(at(utc, 2026, 6, 10, 12, 0), utc, s)
+        assertEquals(at(utc, 2026, 6, 10, 17, 0), end)
+    }
+
+    @Test
+    fun currentWindowEnd_outsideWindow_returnsNull() {
+        val s = ScheduleSettingsSnapshot(true, min(9, 0), min(17, 0), 0)
+        assertNull(ScheduleArmer.currentWindowEnd(at(utc, 2026, 6, 10, 8, 0), utc, s))
+    }
+
+    @Test
+    fun currentWindowEnd_overnightAfterMidnight_returnsNextDayStop() {
+        // window 22:00-06:00 started yesterday; now 02:00 is still inside.
+        val s = ScheduleSettingsSnapshot(true, min(22, 0), min(6, 0), 0)
+        val end = ScheduleArmer.currentWindowEnd(at(utc, 2026, 6, 11, 2, 0), utc, s)
+        assertEquals(at(utc, 2026, 6, 11, 6, 0), end)
+    }
+
+    @Test
+    fun currentWindowEnd_disabled_returnsNull() {
+        val s = ScheduleSettingsSnapshot(false, min(9, 0), min(17, 0), 0)
+        assertNull(ScheduleArmer.currentWindowEnd(at(utc, 2026, 6, 10, 12, 0), utc, s))
+    }
 }

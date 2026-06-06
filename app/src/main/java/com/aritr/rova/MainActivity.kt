@@ -107,6 +107,13 @@ class MainActivity : FragmentActivity() {
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
                 if (sessionId != null) (application as RovaApp).shareRecording(this, sessionId)
             }
+            ACTION_SCHEDULE_AUTO_ARM -> {
+                // ADR-0027 — the user tapped the window-open notification. The
+                // Activity is now foregrounded, satisfying the camera-FGS
+                // isAppVisible gate; start the scheduled recording here (the one
+                // legal camera-start site).
+                (application as RovaApp).startScheduledRecording(this)
+            }
         }
     }
 
@@ -122,6 +129,9 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_SESSION_ID = "com.aritr.rova.EXTRA_SESSION_ID"
         const val EXTRA_TARGET_TAB = "com.aritr.rova.EXTRA_TARGET_TAB"
         const val TAB_HISTORY = "history"
+
+        /** ADR-0027 — window-open notification tap → start the scheduled recording. */
+        const val ACTION_SCHEDULE_AUTO_ARM = "com.aritr.rova.action.SCHEDULE_AUTO_ARM"
     }
 }
 
