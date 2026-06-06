@@ -20,8 +20,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
+import com.aritr.rova.data.BuiltInPresets
+import com.aritr.rova.data.FirstRunSeedPolicy
+import com.aritr.rova.data.PresetJson
+import com.aritr.rova.data.PresetMatcher
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * ViewModel for RecordScreen.
@@ -175,6 +181,21 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+
+        // ADR-0026 — one-time first-run seed of the Standard preset. Gated so an
+        // existing user's config is never clobbered (FirstRunSeedPolicy).
+        if (FirstRunSeedPolicy.shouldSeed(settings.presetSeeded, settings.hasAnyRecordingPref())) {
+            val std = BuiltInPresets.default
+            settings.durationSeconds = std.duration
+            settings.intervalMinutes = std.interval
+            settings.loopCount = std.loopCount
+            settings.resolution = std.resolution
+            duration.value = std.duration
+            interval.value = std.interval
+            loopCount.value = std.loopCount
+            resolution.value = std.resolution
+        }
+        settings.presetSeeded = true
     }
 
     /**
@@ -315,11 +336,11 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
             duration = duration.value,
             interval = interval.value,
             loopCount = loopCount.value,
-            resolution = resolution.value
+            resolution = resolution.value,
         )
         val updated = _customPresets.value + newPreset
         _customPresets.value = updated
-        persistPresets(updated)
+        persistPresets(updated) // encode() stamps a stable custom.* id
     }
 
     fun deletePreset(preset: RovaPreset) {
@@ -328,35 +349,33 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         persistPresets(updated)
     }
 
-    private fun loadPresetsFromSettings(): List<RovaPreset> {
-        return try {
-            val array = JSONArray(settings.customPresetsJson)
-            (0 until array.length()).map { i ->
-                val obj = array.getJSONObject(i)
-                RovaPreset(
-                    obj.getString("name"),
-                    obj.getInt("duration"),
-                    obj.getInt("interval"),
-                    obj.getInt("loopCount"),
-                    obj.getString("resolution")
-                )
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    private fun loadPresetsFromSettings(): List<RovaPreset> =
+        PresetJson.decode(settings.customPresetsJson)
 
     private fun persistPresets(presets: List<RovaPreset>) {
-        val array = JSONArray()
-        presets.forEach { p ->
-            array.put(JSONObject().apply {
-                put("name", p.name)
-                put("duration", p.duration)
-                put("interval", p.interval)
-                put("loopCount", p.loopCount)
-                put("resolution", p.resolution)
-            })
-        }
-        settings.customPresetsJson = array.toString()
+        settings.customPresetsJson = PresetJson.encode(presets)
     }
+
+    /** ADR-0026 — apply a preset's config bundle. Does NOT touch orientation. */
+    fun applyPreset(preset: RovaPreset) {
+        // Same mid-session guard as reloadRecordingDefaults()/cycleMode().
+        val s = _serviceState.value
+        if (s.isPeriodicActive || s.isMerging) return
+        duration.value = preset.duration
+        interval.value = preset.interval
+        loopCount.value = preset.loopCount
+        resolution.value = preset.resolution
+    }
+
+    /** Built-ins first, then user customs. */
+    val allPresets: StateFlow<List<RovaPreset>> =
+        _customPresets.map { BuiltInPresets.all + it }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, BuiltInPresets.all)
+
+    /** The active built-in id (value match) or null = "Custom". */
+    val activePresetId: StateFlow<String?> =
+        combine(duration, interval, loopCount, resolution) { d, i, l, r ->
+            PresetMatcher.match(d, i, l, r)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, PresetMatcher.match(
+            duration.value, interval.value, loopCount.value, resolution.value))
 }

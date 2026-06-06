@@ -71,6 +71,8 @@ fun RecordScreen(
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
     val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
+    val allPresets by viewModel.allPresets.collectAsStateWithLifecycle()
+    val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
 
         // Phase 4.1c — one shared WarningCenterViewModel instance feeds both
         // WarningCenter mounts (idle + active HUD) AND the Settings sheet's
@@ -736,15 +738,7 @@ fun RecordScreen(
                 // states show the card at 75% opacity). Suppressed only during
                 // the brief post-merge MergeCompleteCard grace window.
                 if (!showCompleteCard) {
-                    RecordSettingsCard(
-                        durationSeconds = duration,
-                        loopCount = loopCount,
-                        intervalMinutes = interval,
-                        quality = resolution,
-                        mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
-                        onOpenSheet = { viewModel.openSettingsSheet() },
-                        onCycleMode = { viewModel.cycleMode() },
-                        dimmed = hudState != RecordHudState.Idle,
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -756,8 +750,24 @@ fun RecordScreen(
                                 bottom = RecordChromeMetrics.bottomNavClearance + RecordChromeMetrics.settingsCardLift,
                                 start = 16.dp,
                                 end = 16.dp,
-                            ),
-                    )
+                            )
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // ADR-0026 — presets now live inside the settings sheet
+                        // (between RECORDING MODE and SETTINGS), not as a loose
+                        // idle chip row. See the SettingsSheet call below.
+                        RecordSettingsCard(
+                            durationSeconds = duration,
+                            loopCount = loopCount,
+                            intervalMinutes = interval,
+                            quality = resolution,
+                            mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
+                            onOpenSheet = { viewModel.openSettingsSheet() },
+                            onCycleMode = { viewModel.cycleMode() },
+                            dimmed = hudState != RecordHudState.Idle,
+                        )
+                    }
                 }
 
                 // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
@@ -852,6 +862,9 @@ fun RecordScreen(
                     quality = resolution,
                     currentMode = mode,
                     editable = !isUiLocked,
+                    presets = allPresets,
+                    activePresetId = activePresetId,
+                    onApplyPreset = viewModel::applyPreset,
                     statusText = statusText,
                     flashMode = flashMode,
                     flipEnabled = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera,
