@@ -11,6 +11,8 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +30,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.annotation.StringRes
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -41,12 +47,18 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aritr.rova.R
 import com.aritr.rova.data.QualityPresets
+import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SettingsSheetTokens
@@ -73,6 +85,12 @@ fun SettingsSheet(
     quality: String,
     currentMode: String,
     editable: Boolean,
+    // ADR-0026 — presets relocated into the sheet (between RECORDING MODE and
+    // SETTINGS). One tap applies the whole config bundle; the selected chip
+    // reflects [activePresetId] (null = current values match no preset).
+    presets: List<RovaPreset>,
+    activePresetId: String?,
+    onApplyPreset: (RovaPreset) -> Unit,
     statusText: String,
     flashMode: Int,
     flipEnabled: Boolean,
@@ -120,6 +138,9 @@ fun SettingsSheet(
                 quality = quality,
                 currentMode = currentMode,
                 editable = editable,
+                presets = presets,
+                activePresetId = activePresetId,
+                onApplyPreset = onApplyPreset,
                 onDurationChange = onDurationChange,
                 onLoopCountChange = onLoopCountChange,
                 onIntervalChange = onIntervalChange,
@@ -221,6 +242,9 @@ private fun SettingsPanel(
     quality: String,
     currentMode: String,
     editable: Boolean,
+    presets: List<RovaPreset>,
+    activePresetId: String?,
+    onApplyPreset: (RovaPreset) -> Unit,
     onDurationChange: (Int) -> Unit,
     onLoopCountChange: (Int) -> Unit,
     onIntervalChange: (Int) -> Unit,
@@ -285,6 +309,16 @@ private fun SettingsPanel(
         SheetSectionLabel(stringResource(R.string.settings_sheet_section_recording_mode))
         Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
         ModeTabs(currentMode = currentMode, enabled = editable, onPick = onModePick)
+        Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
+
+        SheetSectionLabel(stringResource(R.string.settings_sheet_section_presets))
+        Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
+        PresetSection(
+            presets = presets,
+            activePresetId = activePresetId,
+            enabled = editable,
+            onApply = onApplyPreset,
+        )
         Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
 
         SheetSectionLabel(stringResource(R.string.settings_sheet_section_settings))
@@ -523,6 +557,120 @@ private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onCl
     ) {
         Text(label, style = RovaTokens.sheetChip, color = textColor)
     }
+}
+
+/* ── Presets (ADR-0026) ───────────────────────────────────────────────── */
+
+/**
+ * Preset chips — one tap applies the whole config bundle via [onApply]. Wraps
+ * onto multiple lines (preset names are longer than the quality chips), so a
+ * [FlowRow] rather than the horizontal-scroll row this replaced. Disabled while
+ * a session is active (`enabled = editable`), mirroring the steppers below.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PresetSection(
+    presets: List<RovaPreset>,
+    activePresetId: String?,
+    enabled: Boolean,
+    onApply: (RovaPreset) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.chipGroupGap),
+        verticalArrangement = Arrangement.spacedBy(SettingsSheetTokens.chipGroupGap),
+    ) {
+        presets.forEach { preset ->
+            PresetSheetChip(
+                preset = preset,
+                selected = preset.id == activePresetId,
+                enabled = enabled,
+                onClick = { onApply(preset) },
+            )
+        }
+    }
+}
+
+/**
+ * Sheet-native preset chip — same fill/stroke styling as [QualityChip], plus a
+ * leading check icon when selected so the selected state is conveyed by more
+ * than colour (WCAG 1.4.1, ADR-0020). `selected` semantics + a spoken
+ * [presetSpokenDescription] make it screen-reader complete; a >=48dp min height
+ * keeps the touch target comfortable.
+ */
+@Composable
+private fun PresetSheetChip(
+    preset: RovaPreset,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
+    val fill = if (selected) SettingsSheetTokens.chipOnFill else Color.Transparent
+    val stroke = if (selected) SettingsSheetTokens.chipOnStroke else SettingsSheetTokens.chipOffStroke
+    val textColor = if (selected) SettingsSheetTokens.chipOnText else SettingsSheetTokens.chipOffText
+    val cd = presetSpokenDescription(preset)
+    Row(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, stroke, shape)
+            .then(
+                if (enabled) {
+                    Modifier.focusHighlight(shape).clickable(role = Role.Button) { onClick() }
+                } else {
+                    Modifier
+                },
+            )
+            .alpha(if (enabled) 1f else 0.5f)
+            // selected -> the check icon already conveys this visually; here it is
+            // for assistive tech. `disabled()` mid-session so TalkBack announces the
+            // chip is unavailable, not just dimmed (codex a11y review).
+            .semantics {
+                this.selected = selected
+                contentDescription = cd
+                if (!enabled) disabled()
+            }
+            .padding(
+                horizontal = SettingsSheetTokens.chipPaddingH,
+                vertical = SettingsSheetTokens.chipPaddingV,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                // null — the chip's own contentDescription already names the preset.
+                contentDescription = null,
+                tint = textColor,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(preset.name, style = RovaTokens.sheetChip, color = textColor)
+    }
+}
+
+/**
+ * The screen-reader phrase for a preset chip, e.g. "Standard preset, 30 second
+ * clips, every 2 minutes, repeats 20 times, FHD". Built from the same
+ * localized `preset_cd_*` resources the old idle PresetRow used.
+ */
+@Composable
+private fun presetSpokenDescription(p: RovaPreset): String {
+    val clipPhrase = pluralStringResource(R.plurals.preset_cd_clip_seconds, p.duration, p.duration)
+    val waitPhrase = if (p.interval <= 0) {
+        stringResource(R.string.preset_cd_no_gap)
+    } else {
+        pluralStringResource(R.plurals.preset_cd_every_minutes, p.interval, p.interval)
+    }
+    val repeatsPhrase = if (p.loopCount < 0) {
+        stringResource(R.string.preset_cd_until_stop)
+    } else {
+        pluralStringResource(R.plurals.preset_cd_repeats_times, p.loopCount, p.loopCount)
+    }
+    return stringResource(R.string.preset_cd_full, p.name, clipPhrase, waitPhrase, repeatsPhrase, p.resolution)
 }
 
 /* ── Reset snoozed warnings (Phase 4.1c) ──────────────────────────────── */

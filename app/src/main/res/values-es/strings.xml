@@ -416,6 +416,7 @@
 
     <!-- Record settings sheet (SettingsSheet) -->
     <string name="settings_sheet_section_recording_mode">Modo de grabación</string>
+    <string name="settings_sheet_section_presets">Preajustes</string>
     <string name="settings_sheet_section_settings">Ajustes</string>
     <string name="settings_sheet_mode_portrait">Vertical</string>
     <string name="settings_sheet_mode_landscape">Horizontal</string>

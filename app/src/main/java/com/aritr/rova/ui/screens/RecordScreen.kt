@@ -754,17 +754,9 @@ fun RecordScreen(
                             .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // ADR-0026 — preset chip row, idle only. Positioned directly
-                        // above the "Customize" settings card. Hidden while a session
-                        // is active so the active HUD owns the user's attention.
-                        if (hudState == RecordHudState.Idle) {
-                            PresetRow(
-                                presets = allPresets,
-                                activePresetId = activePresetId,
-                                onApply = viewModel::applyPreset,
-                                modifier = Modifier,
-                            )
-                        }
+                        // ADR-0026 — presets now live inside the settings sheet
+                        // (between RECORDING MODE and SETTINGS), not as a loose
+                        // idle chip row. See the SettingsSheet call below.
                         RecordSettingsCard(
                             durationSeconds = duration,
                             loopCount = loopCount,
@@ -870,6 +862,9 @@ fun RecordScreen(
                     quality = resolution,
                     currentMode = mode,
                     editable = !isUiLocked,
+                    presets = allPresets,
+                    activePresetId = activePresetId,
+                    onApplyPreset = viewModel::applyPreset,
                     statusText = statusText,
                     flashMode = flashMode,
                     flipEnabled = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera,
