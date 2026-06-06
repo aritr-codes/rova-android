@@ -2450,14 +2450,31 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                 pendingPersistJobs.add(deferred)
                             }
                         } else {
-                            val errorMsg = if (event.hasError()) {
-                                describeRecordingError(event.error)
+                            // A stop in flight aborts the in-flight segment mid-capture; CameraX
+                            // finalizes it with ERROR_NO_VALID_DATA (or an empty file, no error).
+                            // That is the EXPECTED outcome of a user/loop stop, not a capture
+                            // failure — surfacing it flashed a false "No video data was captured"
+                            // snackbar (~4s) while the merge of the valid prior segments succeeded.
+                            // Suppress exactly that case; genuine failures (other error codes, or
+                            // any no-data outside a stop) still surface. (FinalizeErrorPolicy.)
+                            val suppress = FinalizeErrorPolicy.shouldSuppress(
+                                stopInFlight = stopRequested || userStopRequested,
+                                hasError = event.hasError(),
+                                isNoValidData = event.hasError() &&
+                                    event.error == VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA,
+                            )
+                            if (suppress) {
+                                RovaLog.d("Final segment aborted by stop (no valid data) — expected, not surfaced")
                             } else {
-                                getString(R.string.notification_empty_segment)
+                                val errorMsg = if (event.hasError()) {
+                                    describeRecordingError(event.error)
+                                } else {
+                                    getString(R.string.notification_empty_segment)
+                                }
+                                RovaLog.e("Recording ERROR: $errorMsg")
+                                _serviceState.update { it.copy(recordingError = errorMsg) }
+                                updateNotification(errorMsg)
                             }
-                            RovaLog.e("Recording ERROR: $errorMsg")
-                            _serviceState.update { it.copy(recordingError = errorMsg) }
-                            updateNotification(errorMsg)
                             if (videoFile?.exists() == true) videoFile?.delete()
                         }
                         if (!recordingResult.isCompleted) {
