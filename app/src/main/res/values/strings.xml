@@ -91,7 +91,23 @@
     <string name="notification_stopped_permission_revoked">Stopped — required permission revoked. Re-grant in Settings.</string>
     <string name="notification_stopped_low_storage">Stopped — device storage low. Free up space.</string>
     <string name="notification_stopped_thermal">Stopped — device overheated. Let it cool down.</string>
+    <string name="notification_stopped_schedule_window">Recording stopped — scheduled window ended.</string>
     <string name="notification_stopping">Stopping recording…</string>
+    <!-- Daily recording window (ADR-0027) -->
+    <string name="schedule_section_title">Scheduled recording</string>
+    <string name="schedule_enable_label">Daily recording window</string>
+    <string name="schedule_enable_desc">Automatically record between two times each day.</string>
+    <string name="schedule_start_time_label">Start time</string>
+    <string name="schedule_stop_time_label">Stop time</string>
+    <string name="schedule_weekdays_label">Days</string>
+    <string name="schedule_every_day">Every day</string>
+    <string name="schedule_one_tap_note">At the start time Rova shows a notification — tap it once to begin recording. Stopping is automatic.</string>
+    <string name="schedule_notifications_required">Turn on notifications so Rova can prompt you when the window opens.</string>
+    <string name="schedule_exact_alarm_required">Allow exact alarms for accurate start/stop times.</string>
+    <string name="schedule_start_notif_title">Rova scheduled recording</string>
+    <string name="schedule_start_notif_body">Your recording window is open — tap to start.</string>
+    <string name="schedule_channel_name">Scheduled recording</string>
+    <string name="schedule_channel_desc">Prompts when your daily recording window opens.</string>
     <string name="notification_stopped_state_save_failed">Stopped — recording state could not be saved. Will recover on next launch.</string>
     <string name="notification_stopped_recovery_offered">Recording stopped — finishing will be offered when you reopen Rova</string>
     <string name="notification_state_corrupted">Recording state corrupted: %1$s</string>
