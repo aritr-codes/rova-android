@@ -236,5 +236,9 @@ data class RovaPreset(
     val duration: Int,
     val interval: Int,
     val loopCount: Int, // -1 for infinite
-    val resolution: String
+    val resolution: String,
+    /** Stable identity. Built-ins use the reserved `builtin.*` prefix; customs use `custom.*`. */
+    val id: String = "",
+    /** Runtime tag only — never persisted. Customs always deserialize to false. */
+    val isBuiltIn: Boolean = false,
 )
