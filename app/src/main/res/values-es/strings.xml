@@ -151,6 +151,9 @@
     <!-- Camera controls (contentDescription) -->
     <string name="record_flash_cd">Flash</string>
     <string name="record_flip_camera_cd">Cambiar de cámara</string>
+    <string name="record_switch_to_front_cd">Cambiar a cámara frontal</string>
+    <string name="record_switch_to_rear_cd">Cambiar a cámara trasera</string>
+    <string name="record_switching_camera">Cambiando…</string>
 
     <!-- Idle settings card -->
     <string name="record_swipe_to_edit">DESLIZA PARA EDITAR</string>

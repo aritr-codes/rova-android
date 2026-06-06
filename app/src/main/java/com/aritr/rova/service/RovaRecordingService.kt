@@ -116,7 +116,15 @@ data class RovaServiceState(
     // "Open Library to recover" copy (there is no Library entry for this case).
     val saveFolderUnavailable: Boolean = false,
     val recordingError: String? = null,
-    val isCameraActive: Boolean = false
+    val isCameraActive: Boolean = false,
+    // B6 — true when the bound selector is the front camera. Drives the
+    // record-screen flip-button icon/contentDescription swap. Updated after the
+    // onCreate lens load, every flipCamera, and the setMode P+L snap-to-rear.
+    val isFrontCamera: Boolean = false,
+    // B6 (codex review) — whether the device exposes a front sensor. Gates the
+    // flip button so a front-less device never shows a dead toggle (which would
+    // also latch the "Switching…" overlay on a no-op tap). Set once in onCreate.
+    val hasFrontCamera: Boolean = false
 )
 
 /**
@@ -739,7 +747,22 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     override fun onCreate() {
         super.onCreate()
-        currentMode = RovaSettings(this).mode
+        val settings = RovaSettings(this)
+        currentMode = settings.mode
+        // B6 — restore the persisted lens choice. Backed-up pref (survives
+        // reinstall like resolution/themeMode), unlike `mode` which resets.
+        // Resolve through availability so a stale "prefer front" pref on a
+        // front-less device seeds rear (and self-heals the pref) instead of
+        // stranding the preview black (codex review).
+        val deviceHasFrontCamera = hasFrontCamera()
+        val seedFront = LensFlipPolicy.resolveIsFront(settings.preferFrontCamera, deviceHasFrontCamera)
+        if (settings.preferFrontCamera && !seedFront) settings.preferFrontCamera = false
+        currentCameraSelector = if (seedFront) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        } else {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        _serviceState.update { it.copy(isFrontCamera = seedFront, hasFrontCamera = deviceHasFrontCamera) }
         lifecycleRegistry = LifecycleRegistry(this)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         createNotificationChannel()
@@ -1594,6 +1617,21 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 configuredResolution = null
                 boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
+                // B6 (codex review) — if the FRONT lens failed to bind (front
+                // sensor present per PackageManager but unusable, or an OEM quirk),
+                // fall back to rear so the user isn't stranded on a black preview
+                // (and the "Switching…" overlay, which clears on isCameraActive),
+                // and self-heal the pref so the next cold launch doesn't repeat
+                // the front bind. Rear binds on effectively every device, so this
+                // re-entry resolves in one pass (the rear path never re-enters
+                // this branch).
+                if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                    RovaLog.w("setupCamera: front-camera bind failed — falling back to rear")
+                    currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                    RovaSettings(this@RovaRecordingService).preferFrontCamera = false
+                    _serviceState.update { it.copy(isFrontCamera = false) }
+                    serviceScope.launch { forceReconfigureCamera() }
+                }
             }
         }
     }
@@ -1917,25 +1955,45 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     fun flipCamera() {
-        if (_serviceState.value.isRecording) {
-            RovaLog.d("flipCamera: Ignored — recording in progress")
+        // Single source of truth for the flip guard (B6). Blocks mid-recording
+        // (a rebind would strand the active Recording) and P+L (DualShot is
+        // rear-only — it binds the rear sensor's 4:3 source). The UI disables
+        // the flip control in P+L, but enforce it at the service too so a stray
+        // binder call / stale event can't strand a rear-only mode on the front
+        // selector (UI convention ≠ service invariant). (codex review)
+        val targetIsFront = currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA
+        if (!LensFlipPolicy.shouldAllowFlip(
+                mode = currentMode,
+                isRecording = _serviceState.value.isRecording,
+                targetIsFront = targetIsFront,
+                hasFrontCamera = hasFrontCamera(),
+            )
+        ) {
+            RovaLog.d("flipCamera: Ignored — disallowed (recording, P+L rear-only, or no front camera)")
             return
         }
-        // P+L (DualShot) is rear-only — it binds the rear sensor's 4:3 source.
-        // The UI disables the flip control in P+L, but enforce it at the service
-        // too so a stray binder call / stale event can't strand a rear-only mode
-        // on the front selector (UI convention ≠ service invariant). (codex review)
-        if (currentMode == ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE) {
-            RovaLog.d("flipCamera: Ignored — P+L is rear-only")
-            return
-        }
-        currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+        currentCameraSelector = if (targetIsFront) {
             CameraSelector.DEFAULT_FRONT_CAMERA
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
+        // B6 — persist the new lens choice so it survives process death / next
+        // cold start (backed-up pref). Reflect into service state for the UI
+        // icon/contentDescription swap.
+        RovaSettings(this).preferFrontCamera = targetIsFront
+        _serviceState.update { it.copy(isFrontCamera = targetIsFront) }
         serviceScope.launch { forceReconfigureCamera() }
     }
+
+    /**
+     * B6 — whether this device exposes a front sensor. Cheap PackageManager
+     * feature probe (API 9+); gates the flip-to-front path and seeds/restores
+     * the persisted lens so a front choice is never bound on a front-less
+     * device (codex review — would strand the preview black and repeat across
+     * launches).
+     */
+    private fun hasFrontCamera(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)
 
     /**
      * Phase 6 — Mode picker.
@@ -1974,11 +2032,31 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // The RecordScreen flip button is also disabled in P+L mode
         // (RecordCameraControls.flipEnabled) so the user can't re-enter
         // the front-cam state until they leave P+L.
-        if (mode == "PortraitLandscape" &&
-            currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
-        ) {
-            RovaLog.d("setMode: P+L selected on front camera — auto-snapping to rear")
-            currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+        if (mode == "PortraitLandscape") {
+            if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                RovaLog.d("setMode: P+L selected on front camera — auto-snapping to rear")
+                currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                // B6 — reflect the in-memory snap into service state so the flip
+                // icon shows "rear" while in P+L. DELIBERATELY does NOT write the
+                // preferFrontCamera pref: the snap is transient/mode-driven, so
+                // leaving Portrait→P+L→Portrait restores the user's front choice
+                // (re-seeded in the else branch below).
+                _serviceState.update { it.copy(isFrontCamera = false) }
+            }
+        } else {
+            // B6 (codex review) — entering a single mode (Portrait/Landscape):
+            // restore the persisted lens (front only if the device has one) so a
+            // P+L excursion never leaves the selector and the pref inconsistent.
+            // Idempotent for Portrait↔Landscape switches.
+            val front = LensFlipPolicy.resolveIsFront(
+                RovaSettings(this).preferFrontCamera, hasFrontCamera()
+            )
+            currentCameraSelector = if (front) {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            } else {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
+            _serviceState.update { it.copy(isFrontCamera = front) }
         }
         serviceScope.launch { forceReconfigureCamera() }
     }

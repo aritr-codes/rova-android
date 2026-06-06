@@ -69,6 +69,86 @@ object RecordChromeIcons {
         }.build()
     }
 
+    /**
+     * B6 — "switch to FRONT camera" affordance, shown when the REAR lens is
+     * active. A camera body with a small selfie/person glyph (Material
+     * `camera_front` equivalent). Stroke-authored neutral white like the other
+     * cam-control glyphs; the consuming `Icon(..., tint = …)` recolours it.
+     */
+    val cameraFront: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "RecordChromeCameraFront",
+            defaultWidth = 16.dp, defaultHeight = 16.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            val stroke = SolidColor(Color.White)
+            // camera body (rounded rect)
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(4f, 7f)
+                horizontalLineTo(20f)
+                verticalLineTo(19f)
+                horizontalLineTo(4f)
+                close()
+            }
+            // shutter / lens hump on top
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9f, 7f)
+                lineTo(10.5f, 4.5f)
+                horizontalLineTo(13.5f)
+                lineTo(15f, 7f)
+            }
+            // person head (selfie indicator)
+            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(13.5f, 12f)
+                arcTo(1.5f, 1.5f, 0f, true, true, 10.5f, 12f)
+                arcTo(1.5f, 1.5f, 0f, true, true, 13.5f, 12f)
+                close()
+            }
+            // person shoulders
+            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9.5f, 17f)
+                arcTo(2.5f, 2.5f, 0f, false, true, 14.5f, 17f)
+            }
+        }.build()
+    }
+
+    /**
+     * B6 — "switch to REAR camera" affordance, shown when the FRONT lens is
+     * active. A camera body with a centred lens ring (Material `camera_rear`
+     * equivalent). Stroke-authored neutral white.
+     */
+    val cameraRear: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "RecordChromeCameraRear",
+            defaultWidth = 16.dp, defaultHeight = 16.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            val stroke = SolidColor(Color.White)
+            // camera body (rounded rect)
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(4f, 7f)
+                horizontalLineTo(20f)
+                verticalLineTo(19f)
+                horizontalLineTo(4f)
+                close()
+            }
+            // shutter / lens hump on top
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9f, 7f)
+                lineTo(10.5f, 4.5f)
+                horizontalLineTo(13.5f)
+                lineTo(15f, 7f)
+            }
+            // centred lens ring (rear sensor)
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(15f, 13f)
+                arcTo(3f, 3f, 0f, true, true, 9f, 13f)
+                arcTo(3f, 3f, 0f, true, true, 15f, 13f)
+                close()
+            }
+        }.build()
+    }
+
     /** `.nav-ico` Library glyph — bordered grid. */
     val library: ImageVector by lazy {
         ImageVector.Builder(

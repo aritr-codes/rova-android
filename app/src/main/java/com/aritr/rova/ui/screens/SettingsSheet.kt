@@ -76,6 +76,9 @@ fun SettingsSheet(
     statusText: String,
     flashMode: Int,
     flipEnabled: Boolean,
+    // B6 — bound-lens state for the flip-button icon/CD swap in the peek's
+    // RecordCameraControls.
+    isFrontCamera: Boolean,
     onCycleFlash: () -> Unit,
     onFlip: () -> Unit,
     onDurationChange: (Int) -> Unit,
@@ -101,6 +104,7 @@ fun SettingsSheet(
                 statusText = statusText,
                 flashMode = flashMode,
                 flipEnabled = flipEnabled,
+                isFrontCamera = isFrontCamera,
                 controlsEnabled = editable,
                 onCycleFlash = onCycleFlash,
                 onFlip = onFlip,
@@ -141,6 +145,7 @@ private fun SettingsPeek(
     statusText: String,
     flashMode: Int,
     flipEnabled: Boolean,
+    isFrontCamera: Boolean,
     controlsEnabled: Boolean,
     onCycleFlash: () -> Unit,
     onFlip: () -> Unit,
@@ -197,6 +202,7 @@ private fun SettingsPeek(
             onFlip = onFlip,
             enabled = controlsEnabled,
             flipEnabled = flipEnabled,
+            isFrontCamera = isFrontCamera,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .windowInsetsPadding(WindowInsets.statusBars)

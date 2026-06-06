@@ -172,6 +172,9 @@ fun RecordCameraControls(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     flipEnabled: Boolean = enabled,
+    // B6 — true when the FRONT lens is currently bound. Swaps the flip glyph +
+    // contentDescription so the affordance names the lens the tap will switch TO.
+    isFrontCamera: Boolean = false,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
@@ -210,9 +213,17 @@ fun RecordCameraControls(
         // and entry-level Samsung devices like the A17 don't support
         // concurrent rear+front camera streams either).
         GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
+            // B6 — name the lens the tap switches TO (front active → "rear"
+            // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
+            // requirement; strings are localized resources (checkNoHardcodedUiStrings).
+            val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
+            val flipCd = stringResource(
+                if (isFrontCamera) R.string.record_switch_to_rear_cd
+                else R.string.record_switch_to_front_cd,
+            )
             Icon(
-                RecordChromeIcons.flipCamera,
-                contentDescription = stringResource(R.string.record_flip_camera_cd),
+                flipIcon,
+                contentDescription = flipCd,
                 tint = flipTint,
                 modifier = Modifier.size(16.dp),
             )

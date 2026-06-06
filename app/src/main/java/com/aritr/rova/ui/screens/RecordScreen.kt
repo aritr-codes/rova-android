@@ -429,6 +429,18 @@ fun RecordScreen(
         }
     }
 
+    // B6 — a lens flip kicks off a ~2s unbind/rebind during which the camera
+    // is inactive (black). `flipInFlight` is raised by the flip taps below and
+    // cleared once the camera comes back active, so the loading overlay can read
+    // "Switching…" (intentional) instead of the generic "Initializing Camera…".
+    // No animation here beyond the existing indeterminate spinner, so no
+    // reduced-motion gate applies (checkA11yAnimationGated only triggers on
+    // rememberInfiniteTransition / infiniteRepeatable).
+    var flipInFlight by remember { mutableStateOf(false) }
+    LaunchedEffect(isCameraActive) {
+        if (isCameraActive) flipInFlight = false
+    }
+
     // Camera Disconnected Alert
     if (serviceState.isRecording && !isCameraActive) {
         AlertDialog(
@@ -583,7 +595,15 @@ fun RecordScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.height(16.dp))
-                            Text(stringResource(R.string.record_initializing_camera), color = Color.White)
+                            // B6 — during a lens flip the black gap is intentional;
+                            // label it "Switching…" instead of the cold-start copy.
+                            Text(
+                                stringResource(
+                                    if (flipInFlight) R.string.record_switching_camera
+                                    else R.string.record_initializing_camera,
+                                ),
+                                color = Color.White,
+                            )
                         }
                     }
                 }
@@ -765,13 +785,17 @@ fun RecordScreen(
                     // in P+L; `onFlip` lambda also re-checks to prevent
                     // accessibility-tool callers from bypassing the visual
                     // disable.
-                    val flipAllowed = !isUiLocked && mode != "PortraitLandscape"
+                    // B6 (codex review) — also require a front sensor: a
+                    // front-less device must not show a dead flip toggle (a no-op
+                    // tap would latch the "Switching…" overlay).
+                    val flipAllowed = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera
                     RecordCameraControls(
                         flashMode = flashMode,
                         onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
-                        onFlip = { if (flipAllowed) viewModel.flipCamera() },
+                        onFlip = { if (flipAllowed) { flipInFlight = true; viewModel.flipCamera() } },
                         enabled = !isUiLocked,
                         flipEnabled = flipAllowed,
+                        isFrontCamera = serviceState.isFrontCamera,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.statusBars)
@@ -830,10 +854,14 @@ fun RecordScreen(
                     editable = !isUiLocked,
                     statusText = statusText,
                     flashMode = flashMode,
-                    flipEnabled = !isUiLocked && mode != "PortraitLandscape",
+                    flipEnabled = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera,
+                    isFrontCamera = serviceState.isFrontCamera,
                     onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
                     onFlip = {
-                        if (!isUiLocked && mode != "PortraitLandscape") viewModel.flipCamera()
+                        if (!isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera) {
+                            flipInFlight = true
+                            viewModel.flipCamera()
+                        }
                     },
                     onDurationChange = { viewModel.duration.value = it },
                     onLoopCountChange = { viewModel.loopCount.value = it },
