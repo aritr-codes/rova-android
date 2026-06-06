@@ -24,6 +24,8 @@ import com.aritr.rova.data.BuiltInPresets
 import com.aritr.rova.data.FirstRunSeedPolicy
 import com.aritr.rova.data.PresetJson
 import com.aritr.rova.data.PresetMatcher
+import com.aritr.rova.data.PresetSaveValidator
+import com.aritr.rova.data.QualityPresets
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -331,19 +333,35 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     // --- Preset management ---
 
     fun savePreset(name: String) {
-        val newPreset = RovaPreset(
-            name = name,
-            duration = duration.value,
-            interval = interval.value,
-            loopCount = loopCount.value,
-            resolution = resolution.value,
+        // Mid-session guard — same as applyPreset. UI gates this behind `editable`,
+        // but a stale dialog, a future caller, or a test could still reach it (codex review).
+        val s = _serviceState.value
+        if (s.isPeriodicActive || s.isMerging) return
+        val trimmed = name.trim()
+        val d = duration.value
+        val i = interval.value
+        val l = loopCount.value
+        val r = resolution.value
+        // Resolution must be canonicalizable, else the saved custom could never
+        // match active (codex review).
+        if (QualityPresets.canonicalize(r) == null) return
+        val current = _customPresets.value
+        // Defensive: the dialog already blocks these; guard the contract.
+        if (PresetSaveValidator.validateName(trimmed, current) != PresetSaveValidator.Result.Ok) return
+        // Tuple-duplicate guard: unreachable via the conditional + Save chip (only
+        // shown when activePresetId == null), but guard the API anyway.
+        if (PresetMatcher.matchActive(current, d, i, l, r) != null) return
+        val updated = current + RovaPreset(
+            name = trimmed, duration = d, interval = i, loopCount = l, resolution = r,
         )
-        val updated = _customPresets.value + newPreset
         _customPresets.value = updated
         persistPresets(updated) // encode() stamps a stable custom.* id
     }
 
     fun deletePreset(preset: RovaPreset) {
+        // Same mid-session guard (codex review — VM-side, not only UI).
+        val s = _serviceState.value
+        if (s.isPeriodicActive || s.isMerging) return
         val updated = _customPresets.value - preset
         _customPresets.value = updated
         persistPresets(updated)
@@ -372,10 +390,15 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         _customPresets.map { BuiltInPresets.all + it }
             .stateIn(viewModelScope, SharingStarted.Eagerly, BuiltInPresets.all)
 
-    /** The active built-in id (value match) or null = "Custom". */
+    /** The active preset id — built-in value match first, then custom; null = "Custom". */
     val activePresetId: StateFlow<String?> =
-        combine(duration, interval, loopCount, resolution) { d, i, l, r ->
-            PresetMatcher.match(d, i, l, r)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, PresetMatcher.match(
-            duration.value, interval.value, loopCount.value, resolution.value))
+        combine(duration, interval, loopCount, resolution, _customPresets) { d, i, l, r, customs ->
+            PresetMatcher.matchActive(customs, d, i, l, r)
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            PresetMatcher.matchActive(
+                _customPresets.value, duration.value, interval.value, loopCount.value, resolution.value,
+            ),
+        )
 }
