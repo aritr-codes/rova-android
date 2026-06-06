@@ -4,9 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,11 +34,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -47,16 +58,20 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aritr.rova.R
+import com.aritr.rova.data.PresetSaveValidator
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.ui.components.focusHighlight
@@ -91,6 +106,8 @@ fun SettingsSheet(
     presets: List<RovaPreset>,
     activePresetId: String?,
     onApplyPreset: (RovaPreset) -> Unit,
+    onSavePreset: (String) -> Unit,
+    onDeletePreset: (RovaPreset) -> Unit,
     statusText: String,
     flashMode: Int,
     flipEnabled: Boolean,
@@ -141,6 +158,8 @@ fun SettingsSheet(
                 presets = presets,
                 activePresetId = activePresetId,
                 onApplyPreset = onApplyPreset,
+                onSavePreset = onSavePreset,
+                onDeletePreset = onDeletePreset,
                 onDurationChange = onDurationChange,
                 onLoopCountChange = onLoopCountChange,
                 onIntervalChange = onIntervalChange,
@@ -245,6 +264,8 @@ private fun SettingsPanel(
     presets: List<RovaPreset>,
     activePresetId: String?,
     onApplyPreset: (RovaPreset) -> Unit,
+    onSavePreset: (String) -> Unit,
+    onDeletePreset: (RovaPreset) -> Unit,
     onDurationChange: (Int) -> Unit,
     onLoopCountChange: (Int) -> Unit,
     onIntervalChange: (Int) -> Unit,
@@ -261,6 +282,11 @@ private fun SettingsPanel(
             topEnd = SettingsSheetTokens.sheetCornerRadius,
         )
     }
+    // Custom preset save/delete dialog state (sheet-scoped). The naming dialog
+    // opens from the conditional "+ Save" chip; pendingDelete from a chip long-press.
+    var namingVisible by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<RovaPreset?>(null) }
+    val customNames = presets.filter { !it.isBuiltIn }
     Column(
         modifier = modifier
             .clip(panelShape)
@@ -318,6 +344,8 @@ private fun SettingsPanel(
             activePresetId = activePresetId,
             enabled = editable,
             onApply = onApplyPreset,
+            onRequestSave = { namingVisible = true },
+            onRequestDelete = { pendingDelete = it },
         )
         Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
 
@@ -379,6 +407,39 @@ private fun SettingsPanel(
                 color = SettingsSheetTokens.ctaText,
             )
         }
+    }
+    if (namingVisible) {
+        PresetNameDialog(
+            existingCustoms = customNames,
+            onDismiss = { namingVisible = false },
+            onConfirm = { name ->
+                namingVisible = false
+                onSavePreset(name)
+            },
+        )
+    }
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.preset_delete_title)) },
+            text = { Text(stringResource(R.string.preset_delete_body, target.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    onDeletePreset(target)
+                }) {
+                    Text(
+                        text = stringResource(R.string.preset_delete_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -574,6 +635,8 @@ private fun PresetSection(
     activePresetId: String?,
     enabled: Boolean,
     onApply: (RovaPreset) -> Unit,
+    onRequestSave: () -> Unit,
+    onRequestDelete: (RovaPreset) -> Unit,
 ) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -586,7 +649,18 @@ private fun PresetSection(
                 selected = preset.id == activePresetId,
                 enabled = enabled,
                 onClick = { onApply(preset) },
+                // Long-press deletes user customs only; built-ins are read-only.
+                onLongClick = if (!preset.isBuiltIn) {
+                    { onRequestDelete(preset) }
+                } else {
+                    null
+                },
             )
+        }
+        // "+ Save" appears only when the current config matches no preset
+        // (activePresetId == null = genuinely Custom) and the sheet is editable.
+        if (activePresetId == null && enabled) {
+            SavePresetChip(onClick = onRequestSave)
         }
     }
 }
@@ -596,20 +670,28 @@ private fun PresetSection(
  * leading check icon when selected so the selected state is conveyed by more
  * than colour (WCAG 1.4.1, ADR-0020). `selected` semantics + a spoken
  * [presetSpokenDescription] make it screen-reader complete; a >=48dp min height
- * keeps the touch target comfortable.
+ * keeps the touch target comfortable. Custom (non-built-in) chips support
+ * long-press-to-delete via [onLongClick] + a TalkBack custom action label.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PresetSheetChip(
     preset: RovaPreset,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
 ) {
     val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
     val fill = if (selected) SettingsSheetTokens.chipOnFill else Color.Transparent
     val stroke = if (selected) SettingsSheetTokens.chipOnStroke else SettingsSheetTokens.chipOffStroke
     val textColor = if (selected) SettingsSheetTokens.chipOnText else SettingsSheetTokens.chipOffText
     val cd = presetSpokenDescription(preset)
+    // The long-press label surfaces delete as a TalkBack/Switch/Voice custom
+    // action — the non-gesture equivalent required by WCAG SC 2.5.1 / 2.1.1
+    // (codex a11y review). Sighted-touch discoverability is an accepted tradeoff
+    // (delete is rare, destructive, and confirmed).
+    val deleteLabel = stringResource(R.string.preset_chip_delete_action)
     Row(
         modifier = Modifier
             .heightIn(min = 48.dp)
@@ -618,15 +700,19 @@ private fun PresetSheetChip(
             .border(1.dp, stroke, shape)
             .then(
                 if (enabled) {
-                    Modifier.focusHighlight(shape).clickable(role = Role.Button) { onClick() }
+                    Modifier
+                        .focusHighlight(shape)
+                        .combinedClickable(
+                            role = Role.Button,
+                            onClick = onClick,
+                            onLongClick = onLongClick,
+                            onLongClickLabel = if (onLongClick != null) deleteLabel else null,
+                        )
                 } else {
                     Modifier
                 },
             )
             .alpha(if (enabled) 1f else 0.5f)
-            // selected -> the check icon already conveys this visually; here it is
-            // for assistive tech. `disabled()` mid-session so TalkBack announces the
-            // chip is unavailable, not just dimmed (codex a11y review).
             .semantics {
                 this.selected = selected
                 contentDescription = cd
@@ -642,13 +728,48 @@ private fun PresetSheetChip(
         if (selected) {
             Icon(
                 imageVector = Icons.Filled.Check,
-                // null — the chip's own contentDescription already names the preset.
                 contentDescription = null,
                 tint = textColor,
                 modifier = Modifier.size(16.dp),
             )
         }
         Text(preset.name, style = RovaTokens.sheetChip, color = textColor)
+    }
+}
+
+/**
+ * The "+ Save" affordance — styled like an unselected [PresetSheetChip] with a
+ * leading Add icon. Shown only when the config matches no preset; tapping opens
+ * the naming dialog. (ADR-0026.)
+ */
+@Composable
+private fun SavePresetChip(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
+    val textColor = SettingsSheetTokens.chipOffText
+    val cd = stringResource(R.string.preset_save_chip_cd)
+    Row(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(Color.Transparent)
+            .border(1.dp, SettingsSheetTokens.chipOffStroke, shape)
+            .focusHighlight(shape)
+            .clickable(role = Role.Button) { onClick() }
+            .semantics { contentDescription = cd }
+            .padding(
+                horizontal = SettingsSheetTokens.chipPaddingH,
+                vertical = SettingsSheetTokens.chipPaddingV,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = null,
+            tint = textColor,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(stringResource(R.string.preset_save_chip), style = RovaTokens.sheetChip, color = textColor)
     }
 }
 
@@ -671,6 +792,64 @@ private fun presetSpokenDescription(p: RovaPreset): String {
         pluralStringResource(R.plurals.preset_cd_repeats_times, p.loopCount, p.loopCount)
     }
     return stringResource(R.string.preset_cd_full, p.name, clipPhrase, waitPhrase, repeatsPhrase, p.resolution)
+}
+
+/**
+ * Naming dialog for saving the current config as a custom preset. Live-validates
+ * via [PresetSaveValidator]: OK is disabled until the name is valid, and the
+ * error announces through a polite live region (WCAG SC 4.1.3, ADR-0020). The
+ * field gets a programmatic label (SC 4.1.2). An empty untouched field shows no
+ * error (OK simply stays disabled).
+ */
+@Composable
+private fun PresetNameDialog(
+    existingCustoms: List<RovaPreset>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    val result = PresetSaveValidator.validateName(text, existingCustoms)
+    val isOk = result == PresetSaveValidator.Result.Ok
+    val errorRes: Int? = when (result) {
+        PresetSaveValidator.Result.DuplicateName -> R.string.preset_name_error_duplicate
+        PresetSaveValidator.Result.TooLong -> R.string.preset_name_error_too_long
+        PresetSaveValidator.Result.Blank -> if (text.isNotEmpty()) R.string.preset_name_error_blank else null
+        PresetSaveValidator.Result.Ok -> null
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.preset_name_dialog_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text(stringResource(R.string.preset_name_field_label)) },
+                    isError = errorRes != null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                )
+                if (errorRes != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(errorRes),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (isOk) onConfirm(text.trim()) }, enabled = isOk) {
+                Text(stringResource(R.string.dialog_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dialog_cancel))
+            }
+        },
+    )
 }
 
 /* ── Reset snoozed warnings (Phase 4.1c) ──────────────────────────────── */
