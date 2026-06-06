@@ -142,6 +142,7 @@ git commit -m "feat(preset): RovaPreset gains id + isBuiltIn (ADR-0026)"
 ```kotlin
 package com.aritr.rova.data
 
+import com.aritr.rova.ui.screens.RecordSettingBounds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
