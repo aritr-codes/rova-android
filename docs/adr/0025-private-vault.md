@@ -48,6 +48,22 @@ Recovery keys off `vaultIntentAtStart` (record path) and `vaultState` (in-flight
 
 Vaulted recordings play via a **FileProvider `content://`** URI (not `file://`, avoiding `FileUriExposedException`), reachable only from inside the unlocked vault. Vault list + vault player screens set `FLAG_SECURE` (no screenshots, no recents-thumbnail leak). The vault video directory is excluded from **Auto Backup + device transfer** so private recordings never sync off-device (manifests are *not* excluded — that would break post-restore recovery for non-vault sessions, and the sensitive payload is the video).
 
+### Amendment (2026-06-05) — move-out commit-before-finalize (schema 7 → 8)
+
+The original move-out published the public copy **before** persisting the new public pointer (`setVaultMovedOut`). A crash in that ~millisecond window — after the Tier1 row finalized / the pre-Q `.part` renamed, but before the manifest committed — let the next cold-launch `RESUME_UNVAULTING` re-publish and mint a **second** public copy (a duplicate gallery entry; the recording was never lost). SAF was already immune via ADR-0024 commit-before-stream. This amendment extends the same discipline to the Tier1 and pre-Q tiers.
+
+`SessionManifest` gains two in-flight pointers, **schema bumped 7 → 8** (additive, tolerant read → old manifests default both to `null`):
+- `pendingMoveOutUri` — Tier1 pending-row Uri.
+- `pendingMoveOutPath` — pre-Q `<name>.mp4.part` absolute path.
+
+**Ordering law (the irreversible step is always preceded by a committed pointer):**
+- **Tier1:** `insertPendingRow` → **commit `pendingMoveOutUri`** (`setPendingMoveOutTier1`) → `withPendingFd` → `finalizePendingRow`. On resume, drop the committed orphan row before re-inserting; a delete that *throws* (vs a `false` "already gone") aborts rather than risk a second copy beside an undeletable row.
+- **pre-Q:** `allocateNonColliding` → **commit `pendingMoveOutPath`** (`setPendingMoveOutPreQ`) → write `.part` → `renameTo`. On resume, the pure `PreQMoveOutResume` adopts an already-renamed target **only when it is byte-exact** (`length == vaultFile.length`, so a foreign/truncated file at the path is never claimed), else deletes a stale `.part` and publishes fresh.
+
+The commit is **mandatory** (`requireWrote`): a failed manifest write aborts the move *before* the irreversible publish (vault file intact, retries next cold launch) — a silently-swallowed commit would re-open the very window this closes. `setVaultMovedOut` clears both pointers on success. No new `check*` gate (the ordering is dynamic; the JVM tests on `PreQMoveOutResume` + the `SessionStore` setters cover it). The dedup deletes live in `service/export/VaultAndroidOps.kt`, outside the `checkRecoveryNoDeletion` scope (`service/recovery/` + `RovaApp.kt`) — deletion remains forbidden in the scan path, permitted in the user/recovery move path.
+
+**Move-in stale-pointer cleanup (cosmetic sibling).** Move-in completion now uses `setVaultStateVaultedAndClearPublic` instead of bare `setVaultState(VAULTED)`: it preserves `vaultFilePath` (recoverable leftover) but nulls the public pointers (`pendingUri` / `publicTargetPath` / `safTargetDocUri`) that `deletePublic` just removed, so the manifest no longer points at a deleted artifact (which otherwise falsely protected a dead MediaStore row from the orphan sweep).
+
 ## Non-goals (v1)
 
 No file encryption at rest (documented future extension — the `vaultState` + `vaultFilePath` model layers under a Keystore-gated cipher without reshape); no per-recording vault choice at record time; no auth at record time; no retroactive vaulting of existing recordings when the toggle flips (forward-only; existing recordings move only by explicit user action).

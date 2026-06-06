@@ -68,9 +68,11 @@ internal object VaultMoverBuilder {
      * Ordering (enforced by [VaultMover.moveIn]): copyToPrivate →
      * setVaulting(path) → deletePublic → setVaulted.
      *
-     * `setVaulted` deliberately uses `setVaultState(VAULTED)` (which
-     * PRESERVES `vaultFilePath`) rather than a finalize that clears it —
-     * a leftover public copy stays recoverable.
+     * `setVaulted` uses `setVaultStateVaultedAndClearPublic` — it PRESERVES
+     * `vaultFilePath` (a leftover public copy stays recoverable) but clears the
+     * now-deleted public pointers (`pendingUri` / `publicTargetPath` /
+     * `safTargetDocUri`) so the manifest stops pointing at the artifact
+     * [deletePublic] just removed (ADR-0025 move-in stale-pointer follow-up).
      */
     fun buildMoveIn(
         context: Context,
@@ -93,9 +95,10 @@ internal object VaultMoverBuilder {
                     sessionStore.setVaultState(sessionId, VaultState.VAULTING, vaultFile.absolutePath)
                 )
             },
-            // setVaultState(VAULTED) preserves vaultFilePath (recoverable leftover).
+            // Preserves vaultFilePath (recoverable leftover) AND clears the
+            // now-deleted public pointers (ADR-0025 move-in stale-pointer fix).
             setVaulted = {
-                requireWrote("setVaulted", sessionStore.setVaultState(sessionId, VaultState.VAULTED))
+                requireWrote("setVaulted", sessionStore.setVaultStateVaultedAndClearPublic(sessionId))
             },
             setUnvaulting = { error("VaultMoverBuilder.buildMoveIn: setUnvaulting is move-out only") },
             setPublic = { error("VaultMoverBuilder.buildMoveIn: setPublic is move-out only") },
@@ -131,11 +134,29 @@ internal object VaultMoverBuilder {
             copyToPrivate = { error("VaultMoverBuilder.buildMoveOut: copyToPrivate is move-in only") },
             deletePublic = { error("VaultMoverBuilder.buildMoveOut: deletePublic is move-in only") },
             publishExisting = {
-                outcomeHolder[0] = ops.publishExisting(manifest, sessionDir) { docUri ->
-                    // ADR-0024 commit-before-stream: persist the SAF doc Uri
-                    // BEFORE the publisher streams the first byte.
-                    sessionStore.setExportSafTarget(sessionId, docUri)
-                }
+                outcomeHolder[0] = ops.publishExisting(
+                    manifest,
+                    sessionDir,
+                    setExportSafTarget = { docUri ->
+                        // ADR-0024 commit-before-stream: persist the SAF doc Uri
+                        // BEFORE the publisher streams the first byte.
+                        sessionStore.setExportSafTarget(sessionId, docUri)
+                    },
+                    // ADR-0025 commit-before-finalize: persist the in-flight
+                    // Tier1 pending-row / pre-Q `.part` pointer BEFORE the
+                    // irreversible finalize / rename. MANDATORY (requireWrote): a
+                    // SILENTLY-failed commit would let the publish finalize with no
+                    // dedup pointer, so a crash before setPublic re-opens the exact
+                    // duplicate window this fix closes (codex review). On failure
+                    // the move aborts BEFORE the irreversible step — the vault file
+                    // is intact and the session retries on the next cold launch.
+                    setPendingMoveOutTier1 = { uri ->
+                        requireWrote("setPendingMoveOutTier1", sessionStore.setPendingMoveOutTier1(sessionId, uri))
+                    },
+                    setPendingMoveOutPreQ = { path ->
+                        requireWrote("setPendingMoveOutPreQ", sessionStore.setPendingMoveOutPreQ(sessionId, path))
+                    },
+                )
             },
             setVaulting = { error("VaultMoverBuilder.buildMoveOut: setVaulting is move-in only") },
             setVaulted = { error("VaultMoverBuilder.buildMoveOut: setVaulted is move-in only") },
