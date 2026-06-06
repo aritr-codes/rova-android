@@ -689,6 +689,19 @@
     <!-- %1$s=name %2$s=clip-seconds phrase %3$s=wait phrase %4$s=repeats phrase %5$s=resolution -->
     <string name="preset_cd_full">%1$s preset, %2$s, %3$s, %4$s, %5$s</string>
 
+    <!-- Custom preset save/naming (ADR-0026) -->
+    <string name="preset_save_chip">Save</string>
+    <string name="preset_save_chip_cd">Save current settings as a preset</string>
+    <string name="preset_name_dialog_title">Name this preset</string>
+    <string name="preset_name_field_label">Preset name</string>
+    <string name="preset_name_error_blank">Enter a name</string>
+    <string name="preset_name_error_duplicate">You already have a preset with this name</string>
+    <string name="preset_name_error_too_long">Name is too long</string>
+    <string name="preset_delete_title">Delete preset?</string>
+    <string name="preset_delete_body">Delete \"%1$s\"? This can\'t be undone.</string>
+    <string name="preset_delete_confirm">Delete</string>
+    <string name="preset_chip_delete_action">Delete preset</string>
+
     <!-- B5 private vault (ADR-0025) — honest copy: hidden-from-gallery, not encrypted -->
     <string name="settings_section_privacy">Privacy</string>
     <string name="vault_empty_title">Vault is empty</string>
