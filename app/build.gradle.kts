@@ -1722,6 +1722,48 @@ val checkLocaleConfigNoPseudolocale = tasks.register("checkLocaleConfigNoPseudol
     }
 }
 
+// ADR-0026 — a preset is a config bundle ONLY; orientation/mode must never become
+// a RovaPreset field, or the preset/orientation vocabulary collision returns.
+// Scans the two preset source files for an orientation/mode property declaration.
+val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
+    group = "verification"
+    description = "Forbid an orientation/mode field on RovaPreset/BuiltInPresets — preset = config bundle only (ADR-0026)."
+    val files = listOf(
+        file("src/main/java/com/aritr/rova/data/RovaSettings.kt"),
+        file("src/main/java/com/aritr/rova/data/BuiltInPresets.kt"),
+    )
+    inputs.files(files).withPropertyName("presetSources")
+    doLast {
+        // `val mode`/`var mode`/`val orientation` etc. as a declared property.
+        val offendingProp = Regex("""(^|\s)(val|var)\s+(mode|orientation)\b""")
+        // RovaPreset's parameter list must not name a mode/orientation field.
+        val ctorParam = Regex("""\b(mode|orientation)\s*:""")
+        val rovaPresetSrc = files[0]
+        if (!rovaPresetSrc.exists()) {
+            throw GradleException("checkPresetNoOrientation: source missing: $rovaPresetSrc")
+        }
+        // Narrow to the RovaPreset declaration block to avoid matching unrelated
+        // `mode` usage elsewhere in RovaSettings.kt (e.g. the legacy `mode` pref).
+        val text = rovaPresetSrc.readText()
+        val start = text.indexOf("data class RovaPreset")
+        if (start >= 0) {
+            val end = text.indexOf(")", start).let { if (it < 0) text.length else it }
+            val block = text.substring(start, end)
+            if (ctorParam.containsMatchIn(block)) {
+                throw GradleException(
+                    "checkPresetNoOrientation: RovaPreset must not declare a mode/orientation field (ADR-0026)."
+                )
+            }
+        }
+        val builtIns = files[1]
+        if (builtIns.exists() && offendingProp.containsMatchIn(builtIns.readText())) {
+            throw GradleException(
+                "checkPresetNoOrientation: BuiltInPresets must not declare a mode/orientation property (ADR-0026)."
+            )
+        }
+    }
+}
+
 // ADR-0020 §Decision-3 (WCAG 2.2 AA — SC 2.3.3 "Animation from Interactions" /
 // SC 2.2.2 "Pause, Stop, Hide"): every looping/auto-playing Compose animation
 // must be gated on the system reduced-motion preference and fall back to a
@@ -1871,6 +1913,7 @@ afterEvaluate {
         dependsOn(checkNoHardcodedUiStrings)
         dependsOn(checkLocaleConfigNoPseudolocale)
         dependsOn(checkA11yAnimationGated)
+        dependsOn(checkPresetNoOrientation)
         dependsOn(checkVaultExporterNoPublicPublish)
     }
 }
