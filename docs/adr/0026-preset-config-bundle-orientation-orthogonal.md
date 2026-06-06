@@ -33,3 +33,8 @@ presets. The original mockup conflated "mode" (orientation) with preset
   a custom whose values equal a built-in displays as that built-in. This is intended.
 - Future per-clip "phases" land as additive optional fields under the same
   envelope, no corner.
+- Built-in preset **names** ("Quick Sample", "Standard", "Long Session",
+  "Continuous") are intentionally English/code-defined in v1 and surface as chip
+  labels via `Text(p.name)` (so the no-hardcoded-strings gate does not apply).
+  Their TalkBack content descriptions ARE localized (en/es, ADR-0022/0023).
+  Per-locale built-in *name* overrides are a deferred follow-up, not a v1 gap.
