@@ -96,7 +96,9 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.locale.AppLocale
-import com.aritr.rova.ui.theme.ThemeMode
+import com.aritr.rova.ui.theme.GlassRole
+import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.ThemeSelection
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.rovaQuietText
@@ -148,7 +150,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val durationSeconds by settingsViewModel.durationSeconds.collectAsStateWithLifecycle()
     val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
     val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
-    val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
+    val themeSelection by settingsViewModel.themeSelection.collectAsStateWithLifecycle()
     val hideInVault by settingsViewModel.hideInVault.collectAsStateWithLifecycle()
     // ADR-0027 — daily recording window state.
     val scheduleEnabled by settingsViewModel.scheduleEnabled.collectAsStateWithLifecycle()
@@ -281,25 +283,36 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 warningIds = settingsWarnings,
                 onOpenSheet = { sheetWarningId = it },
             )
-            SettingsSection(label = stringResource(R.string.settings_section_appearance)) {
-                SettingsRow(
-                    icon = Icons.Default.DarkMode,
-                    label = stringResource(R.string.settings_theme_label),
-                    supporting = stringResource(R.string.settings_theme_supporting),
-                    value = themeModeLabel(themeMode),
-                    onClick = { openThemeSheet = true },
-                    trailing = { ChevronTrailing() },
-                )
-                if (showLanguageRow) {
-                    SettingsDivider()
+            // ADR-0028 PR1 proof surface — the Appearance section renders through
+            // GlassSurface(role = Card), so the active palette's glass tint is
+            // visible here (Tide vs Aurora etc. differ). This is the only surface
+            // migrated to GlassSurface in PR1.
+            GlassSurface(
+                role = GlassRole.Card,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                SettingsSection(label = stringResource(R.string.settings_section_appearance)) {
                     SettingsRow(
-                        icon = Icons.Default.Language,
-                        label = stringResource(R.string.settings_language_label),
-                        supporting = stringResource(R.string.settings_language_supporting),
-                        value = languageOptionLabel(localeTag),
-                        onClick = { openLanguageSheet = true },
+                        icon = Icons.Default.DarkMode,
+                        label = stringResource(R.string.settings_theme_label),
+                        supporting = stringResource(R.string.settings_theme_supporting),
+                        value = themeSelectionLabel(themeSelection),
+                        onClick = { openThemeSheet = true },
                         trailing = { ChevronTrailing() },
                     )
+                    if (showLanguageRow) {
+                        SettingsDivider()
+                        SettingsRow(
+                            icon = Icons.Default.Language,
+                            label = stringResource(R.string.settings_language_label),
+                            supporting = stringResource(R.string.settings_language_supporting),
+                            value = languageOptionLabel(localeTag),
+                            onClick = { openLanguageSheet = true },
+                            trailing = { ChevronTrailing() },
+                        )
+                    }
                 }
             }
             SettingsSection(label = stringResource(R.string.settings_section_recording_defaults)) {
@@ -713,21 +726,34 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     }
 
     if (openThemeSheet) {
-        val systemLabel = stringResource(R.string.settings_theme_mode_system)
-        val darkLabel = stringResource(R.string.settings_theme_mode_dark)
-        val lightLabel = stringResource(R.string.settings_theme_mode_light)
+        // ADR-0028 — Wave-1 ThemeSelection picker (Follow-System + signature six).
+        // Wave-2 palettes exist in the enum but are not surfaced until a later PR.
+        // Labels are resolved here (composable context) because SettingsOptionSheet's
+        // optionLabel is a plain lambda, mirroring the prior theme-sheet pattern.
+        val followLabel = stringResource(R.string.settings_theme_selection_follow_system)
+        val auroraLabel = stringResource(R.string.settings_theme_selection_aurora)
+        val tideLabel = stringResource(R.string.settings_theme_selection_tide)
+        val jadeLabel = stringResource(R.string.settings_theme_selection_jade)
+        val duskLabel = stringResource(R.string.settings_theme_selection_dusk)
+        val eclipseLabel = stringResource(R.string.settings_theme_selection_eclipse)
+        val daylightLabel = stringResource(R.string.settings_theme_selection_daylight)
         SettingsOptionSheet(
             title = stringResource(R.string.settings_theme_label),
-            options = ThemeMode.entries,
-            selected = themeMode,
-            optionLabel = { mode ->
-                when (mode) {
-                    ThemeMode.SYSTEM -> systemLabel
-                    ThemeMode.DARK -> darkLabel
-                    ThemeMode.LIGHT -> lightLabel
+            options = ThemeSelection.wave1Picker,
+            selected = themeSelection,
+            optionLabel = { sel ->
+                when (sel) {
+                    ThemeSelection.FOLLOW_SYSTEM -> followLabel
+                    ThemeSelection.AURORA -> auroraLabel
+                    ThemeSelection.TIDE -> tideLabel
+                    ThemeSelection.JADE -> jadeLabel
+                    ThemeSelection.DUSK -> duskLabel
+                    ThemeSelection.ECLIPSE -> eclipseLabel
+                    ThemeSelection.DAYLIGHT -> daylightLabel
+                    else -> sel.name
                 }
             },
-            onPick = { settingsViewModel.themeMode.value = it },
+            onPick = { settingsViewModel.themeSelection.value = it },
             onDismiss = { openThemeSheet = false },
         )
     }
@@ -1065,10 +1091,16 @@ private fun BatteryOptimizationDialog(
 }
 
 @Composable
-private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.SYSTEM -> stringResource(R.string.settings_theme_mode_system)
-    ThemeMode.DARK -> stringResource(R.string.settings_theme_mode_dark)
-    ThemeMode.LIGHT -> stringResource(R.string.settings_theme_mode_light)
+private fun themeSelectionLabel(sel: ThemeSelection): String = when (sel) {
+    ThemeSelection.FOLLOW_SYSTEM -> stringResource(R.string.settings_theme_selection_follow_system)
+    ThemeSelection.AURORA -> stringResource(R.string.settings_theme_selection_aurora)
+    ThemeSelection.TIDE -> stringResource(R.string.settings_theme_selection_tide)
+    ThemeSelection.JADE -> stringResource(R.string.settings_theme_selection_jade)
+    ThemeSelection.DUSK -> stringResource(R.string.settings_theme_selection_dusk)
+    ThemeSelection.ECLIPSE -> stringResource(R.string.settings_theme_selection_eclipse)
+    ThemeSelection.DAYLIGHT -> stringResource(R.string.settings_theme_selection_daylight)
+    // Wave-2 not yet surfaced in the picker; fall back to the enum name (never shown in PR1).
+    else -> sel.name
 }
 
 @Composable
