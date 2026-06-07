@@ -133,7 +133,16 @@ data class RovaServiceState(
     // B6 (codex review) — whether the device exposes a front sensor. Gates the
     // flip button so a front-less device never shows a dead toggle (which would
     // also latch the "Switching…" overlay on a no-op tap). Set once in onCreate.
-    val hasFrontCamera: Boolean = false
+    val hasFrontCamera: Boolean = false,
+    // Bug 3 — true ONLY while a real cold camera-acquire bind is in flight
+    // (inside setupSingleCamera/setupDualCamera, between the start of the bind
+    // body and every exit). The "Initializing Camera" overlay reads this flag
+    // instead of an isCameraActive composition edge, so a warm nav-return
+    // surface re-swap (RecordScreen re-enters composition, recreates PreviewView)
+    // can no longer flash a spinner despite the camera staying warm (ADR-0021).
+    // MUST be cleared on every setup exit path or the overlay latches on — see
+    // the try/finally in setupSingleCamera/setupDualCamera.
+    val coldAcquireInProgress: Boolean = false
 )
 
 /**
@@ -1021,7 +1030,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // Bug A — reset the saved-clip counters so the UI never sees a
                 // prior session's count during this session's merge / summary.
                 exportedClipCount = 0,
-                mergeClipCount = 0
+                mergeClipCount = 0,
+                // Bug 3 — cleanliness: never carry a stale cold-acquire flag into
+                // a new session. The setup try/finally already guarantees clearing,
+                // this is belt-and-braces alongside the Bug A resets.
+                coldAcquireInProgress = false
             )
         }
 
@@ -1554,6 +1567,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
+            // Bug 3 — past the no-op guards: a real cold bind is now committed.
+            // Raise the cold-acquire flag and clear it on EVERY exit (success,
+            // bind-failure catch, or any throw) via finally so the overlay can't
+            // latch on. The early no-op returns above (already-active, recording
+            // guard, provider==null) intentionally never raised the flag.
+            markColdAcquire(true)
+            try {
             RovaLog.d("setupCamera: Initializing UseCases (Preview + VideoCapture)")
 
             // Strict match against QualityPresets canonical labels:
@@ -1649,6 +1669,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     _serviceState.update { it.copy(isFrontCamera = false) }
                     serviceScope.launch { forceReconfigureCamera() }
                 }
+            }
+            } finally {
+                // Bug 3 — single guaranteed clear for every exit of the bind body.
+                markColdAcquire(false)
             }
         }
     }
@@ -1765,6 +1789,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
+            // Bug 3 — past the no-op guards: a real cold bind is now committed.
+            // Raise the cold-acquire flag; the finally below clears it on every
+            // exit (success or bind-failure catch) so the overlay can't latch.
+            markColdAcquire(true)
+            try {
             RovaLog.d("setupDualCamera: Initializing UseCases (Preview + CameraEffect)")
 
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
@@ -1910,6 +1939,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
+            } finally {
+                // Bug 3 — single guaranteed clear for every exit of the bind body.
+                markColdAcquire(false)
+            }
         }
     }
 
@@ -1931,6 +1964,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private fun markCameraUnbound() {
         (application as RovaApp).cameraStateSignal.onCameraUnbound()
         cameraStateObserver = null
+    }
+
+    // Bug 3 — publish the real cold-acquire signal that gates the
+    // "Initializing Camera" overlay. Raised at the start of the bind body in
+    // setupSingleCamera/setupDualCamera and cleared on EVERY exit path via a
+    // try/finally, so the overlay shows only during a genuine cold bind — never
+    // on a warm nav-return surface re-swap (ADR-0021).
+    private fun markColdAcquire(active: Boolean) {
+        _serviceState.update { it.copy(coldAcquireInProgress = active) }
     }
 
     // R1: Guard against flipping camera while a segment is actively recording.
