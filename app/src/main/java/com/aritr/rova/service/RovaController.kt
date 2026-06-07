@@ -54,4 +54,11 @@ interface RovaController {
 
     /** Phase 1.3: cooperative stop request. Phase 1.2 callers must not invoke. */
     fun requestStop()
+
+    /**
+     * ADR-0027: cooperative stop carrying an explicit [com.aritr.rova.data.StopReason]
+     * (e.g. [com.aritr.rova.data.StopReason.SCHEDULE_WINDOW] for the daily-window
+     * close). First-writer-wins on the reason is preserved by the implementation.
+     */
+    fun requestStop(reason: com.aritr.rova.data.StopReason)
 }

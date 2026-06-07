@@ -50,8 +50,9 @@ class SessionManifestVaultTest {
     }
 
     @Test
-    fun schemaVersion_isEight() {
-        assertEquals(8, SessionManifest.SCHEMA_VERSION)
+    fun schemaVersion_isNine() {
+        // 8 -> 9: ADR-0027 daily-window schedule fields.
+        assertEquals(9, SessionManifest.SCHEMA_VERSION)
     }
 
     // B5 / ADR-0025 commit-before-finalize follow-up: the in-flight public

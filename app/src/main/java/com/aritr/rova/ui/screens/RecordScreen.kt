@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
+import com.aritr.rova.ui.components.MergeCompleteCount
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
 import com.aritr.rova.ui.warnings.ThermalTipsSheet
@@ -213,7 +214,19 @@ fun RecordScreen(
     DisposableEffect(previewView) {
         viewModel.setSurfaceProvider(previewView.surfaceProvider)
         onDispose {
-            viewModel.setSurfaceProvider(null)
+            // Bug 3 — only null the provider when a periodic session is ACTIVE.
+            // Then the service swaps to its DUMMY surface so background recording
+            // keeps producing frames (the existing isPeriodicActive path).
+            //
+            // When idle+warm, do NOT null it: the service's setSurfaceProvider(null)
+            // branch is a no-op while idle, so nulling here only clears
+            // currentSurfaceProvider/pendingSurfaceProvider and forces a fresh
+            // attach (new SurfaceRequest → brief black) on the next tab-return.
+            // Keeping the provider makes the return the device-tested UI→UI
+            // hot-swap instead of a churn (ADR-0021 warm-keep).
+            if (viewModel.serviceState.value.isPeriodicActive) {
+                viewModel.setSurfaceProvider(null)
+            }
         }
     }
 
@@ -340,7 +353,10 @@ fun RecordScreen(
         isRecording = serviceState.isRecording,
         isMerging = serviceState.isMerging,
         mergeProgress = serviceState.mergeProgress,
-        segmentCount = serviceState.segmentCount
+        segmentCount = serviceState.segmentCount,
+        // Bug A — real merge total so the band reads "clip X of Y" on an
+        // early stop where segmentCount is still 0.
+        mergeClipCount = serviceState.mergeClipCount
     )
 
     // R2 — drive StorageLowMidRecSignal while in an active HUD state.
@@ -400,36 +416,16 @@ fun RecordScreen(
         }
     }
 
-    // Beta-smoke fix: cover CameraX preview warm-up with the existing
-    // loading overlay. The service flips `isCameraActive` true the
-    // moment `bindToLifecycle` returns, but PreviewView's TextureView
-    // does not receive its first frame until ~500-1500 ms later
-    // (especially after the unconditional `forceReconfigureCamera` at
-    // record-start in commit e79f225). Without this grace, the user
-    // sees an unexplained black gap before the first frame. Setting
-    // `cameraWarmingUp = true` for 1500 ms after the false→true
-    // transition keeps the "Initializing Camera..." overlay on screen
-    // through that window. Idle preview (no transition) is unaffected.
-    var cameraWarmingUp by remember { mutableStateOf(false) }
-    // ADR-0021: the overlay must bridge a real cold-acquire black gap only.
-    // `prevCameraActive` is seeded to the CURRENT camera state so a fresh
-    // re-composition (e.g. returning to the Record tab while the camera
-    // stayed warm — RecordScreen leaves composition on tab-away and
-    // re-enters on return) is NOT mistaken for a false→true transition.
-    // Without this seed the LaunchedEffect re-fired on every tab return and
-    // showed "Initializing Camera…" for 1.5 s despite no rebind.
-    var prevCameraActive by remember { mutableStateOf(isCameraActive) }
-    LaunchedEffect(isCameraActive) {
-        val coldAcquire = isCameraActive && !prevCameraActive
-        prevCameraActive = isCameraActive
-        if (coldAcquire) {
-            cameraWarmingUp = true
-            delay(1500)
-            cameraWarmingUp = false
-        } else if (!isCameraActive) {
-            cameraWarmingUp = false
-        }
-    }
+    // Bug 3 — the overlay is now gated on a REAL service cold-acquire signal
+    // (RovaServiceState.coldAcquireInProgress, set by markColdAcquire while a
+    // bind is genuinely in flight), NOT an isCameraActive composition edge. The
+    // old `cameraWarmingUp` / `prevCameraActive` LaunchedEffect-edge timer re-fired
+    // on every tab return (RecordScreen leaves composition on tab-away and
+    // recreates its PreviewView on return), flashing "Initializing Camera…" for
+    // 1.5 s despite the warm-kept camera never rebinding (ADR-0021). Reading the
+    // service flag means a warm nav-return surface re-swap shows nothing, and a
+    // genuine cold start shows the overlay for exactly the real bind window.
+    val coldAcquireInProgress = serviceState.coldAcquireInProgress
 
     // B6 — a lens flip kicks off a ~2s unbind/rebind during which the camera
     // is inactive (black). `flipInFlight` is raised by the flip taps below and
@@ -512,6 +508,8 @@ fun RecordScreen(
     val statusDetail: String?
     when (hudState) {
         RecordHudState.Recording -> { statusText = stringResource(R.string.record_status_recording); statusDetail = stringResource(R.string.record_status_detail_clip_of, clipElapsedSeconds, duration) }
+        // Bug B — startup grace before the first clip; static detail (no countdown).
+        RecordHudState.Starting  -> { statusText = stringResource(R.string.record_status_starting); statusDetail = stringResource(R.string.record_status_detail_preparing) }
         RecordHudState.Waiting   -> { statusText = stringResource(R.string.record_status_on_break); statusDetail = stringResource(R.string.record_status_detail_next_in, displayedCountdownSeconds) }
         is RecordHudState.Merging -> { statusText = stringResource(R.string.record_status_merging); statusDetail = null }
         RecordHudState.Idle -> { statusText = stringResource(R.string.record_status_ready); statusDetail = null }
@@ -580,14 +578,22 @@ fun RecordScreen(
                     }
                 }
 
-                // Loading Overlay — also held during the 1500 ms
-                // CameraX warm-up window so the user does not see an
-                // unexplained black gap between bind and first frame.
-                // Suppressed when camera permission is missing: there's no
-                // camera to initialize, and the auto-presented hard-block
-                // sheet already explains why — a "Initializing Camera…"
-                // spinner there would be wrong copy.
-                if ((!isCameraActive || cameraWarmingUp) && !serviceState.isMerging && hasCapturePermissions) {
+                // Loading Overlay — shown ONLY during a genuine cold camera
+                // acquire (service coldAcquireInProgress) or an in-flight lens
+                // flip. Bug 3: the bare `!isCameraActive` term was DROPPED — it
+                // let the brief warm-return surface gap flash a spinner even
+                // though the camera never rebound. Suppressed when camera
+                // permission is missing (no camera to initialize; the hard-block
+                // sheet already explains why) and during a merge (the merge HUD
+                // owns the screen). Show-gate lives in RecordOverlayPolicy; the
+                // Initializing-vs-Switching TEXT selection below is unchanged.
+                if (RecordOverlayPolicy.showInitializingOverlay(
+                        coldAcquire = coldAcquireInProgress,
+                        flipInFlight = flipInFlight,
+                        isMerging = serviceState.isMerging,
+                        hasCapturePermissions = hasCapturePermissions,
+                    )
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -698,6 +704,7 @@ fun RecordScreen(
                         // once for all states below the `when` (dimmed when active).
                     }
                     RecordHudState.Recording,
+                    RecordHudState.Starting,
                     RecordHudState.Waiting,
                     is RecordHudState.Merging -> {
                         // R2 active-state HUD: WarningCenter (mid-rec TopBanner) +
@@ -908,14 +915,20 @@ fun RecordScreen(
     LaunchedEffect(serviceState.isMerging, serviceState.mergeError) {
         if (serviceState.isMerging) {
             wasMerging = true
-            // Stash the running clip count so the post-merge card
-            // can still describe the session after the service has
-            // flipped its counters back to zero.
-            if (serviceState.segmentCount > 0) {
-                lastCompleteClipCount = serviceState.segmentCount
-            }
+            // Bug A — the count is resolved on the FALLING edge (below), not
+            // here. On the rising edge `exportedClipCount` is not yet published
+            // (performMerge sets it only on the success path), so stashing here
+            // captured 0 on an early user-stop ("0 clips saved to library").
         } else if (wasMerging) {
             wasMerging = false
+            // Bug A — resolve the real saved-clip count right before the
+            // MergeCompleteCard shows. exportedClipCount is success-owned (set
+            // in performMerge); segmentCount is the loop-exhaust fallback.
+            val real = MergeCompleteCount.resolve(
+                serviceState.exportedClipCount,
+                serviceState.segmentCount,
+            )
+            if (real > 0) lastCompleteClipCount = real
             // B4c — the save-folder flag can flip at SESSION START (a custom
             // folder gone at freeze → fell back to default) while the user never
             // leaves the record screen, so ON_RESUME never re-reads it. Refresh

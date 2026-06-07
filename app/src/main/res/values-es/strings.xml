@@ -92,7 +92,23 @@
     <string name="notification_stopped_permission_revoked">Detenida — se revocó un permiso necesario. Vuelve a concederlo en Ajustes.</string>
     <string name="notification_stopped_low_storage">Detenida — poco almacenamiento en el dispositivo. Libera espacio.</string>
     <string name="notification_stopped_thermal">Detenida — el dispositivo se sobrecalentó. Deja que se enfríe.</string>
+    <string name="notification_stopped_schedule_window">Grabación detenida: terminó la ventana programada.</string>
     <string name="notification_stopping">Deteniendo la grabación…</string>
+    <!-- Ventana de grabación diaria (ADR-0027) -->
+    <string name="schedule_section_title">Grabación programada</string>
+    <string name="schedule_enable_label">Ventana de grabación diaria</string>
+    <string name="schedule_enable_desc">Graba automáticamente entre dos horas cada día.</string>
+    <string name="schedule_start_time_label">Hora de inicio</string>
+    <string name="schedule_stop_time_label">Hora de fin</string>
+    <string name="schedule_weekdays_label">Días</string>
+    <string name="schedule_every_day">Todos los días</string>
+    <string name="schedule_one_tap_note">A la hora de inicio, Rova muestra una notificación: tócala una vez para empezar a grabar. La detención es automática.</string>
+    <string name="schedule_notifications_required">Activa las notificaciones para que Rova pueda avisarte cuando se abra la ventana.</string>
+    <string name="schedule_exact_alarm_required">Permite alarmas exactas para horas de inicio/fin precisas.</string>
+    <string name="schedule_start_notif_title">Grabación programada de Rova</string>
+    <string name="schedule_start_notif_body">Tu ventana de grabación está abierta: toca para empezar.</string>
+    <string name="schedule_channel_name">Grabación programada</string>
+    <string name="schedule_channel_desc">Avisa cuando se abre tu ventana de grabación diaria.</string>
     <string name="notification_stopped_state_save_failed">Detenida — no se pudo guardar el estado de la grabación. Se recuperará al próximo inicio.</string>
     <string name="notification_stopped_recovery_offered">Grabación detenida — al reabrir Rova se ofrecerá finalizarla</string>
     <string name="notification_state_corrupted">Estado de la grabación dañado: %1$s</string>
@@ -189,6 +205,9 @@
     <string name="record_hud_status_recording">Grabando</string>
     <string name="record_hud_status_on_break">En pausa</string>
     <string name="record_hud_status_merging">Combinando…</string>
+    <!-- Bug B — gracia de arranque antes del primer clip (distinta de la pausa entre clips) -->
+    <string name="record_hud_status_starting">Preparando…</string>
+    <string name="record_hud_starting_caption">· iniciando grabación</string>
     <string name="record_hud_time_left">· quedan %1$s</string>
     <string name="record_hud_time_next_in">· siguiente en %1$s</string>
     <string name="record_hud_time_percent">· %1$d%%</string>
@@ -236,11 +255,16 @@
     <string name="record_hud_announce_on_break">En pausa.</string>
     <string name="record_hud_announce_on_break_loop">En pausa. Ciclo %1$d.</string>
     <string name="record_hud_announce_on_break_loop_of">En pausa. Ciclo %1$d de %2$d.</string>
+    <!-- Bug B — anuncio de la gracia de arranque -->
+    <string name="record_hud_announce_starting">Preparando para grabar.</string>
 
     <!-- Status pill copy (idle/active) -->
     <string name="record_status_recording">Grabando</string>
     <string name="record_status_on_break">En pausa</string>
     <string name="record_status_merging">Combinando</string>
+    <!-- Bug B — gracia de arranque antes del primer clip -->
+    <string name="record_status_starting">Preparando…</string>
+    <string name="record_status_detail_preparing">iniciando grabación…</string>
     <string name="record_status_ready">Listo para grabar</string>
     <string name="record_status_detail_clip_of">%1$d s de %2$d s</string>
     <string name="record_status_detail_next_in">siguiente en %1$d s</string>

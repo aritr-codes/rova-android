@@ -33,6 +33,10 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
                      android:minSdkVersion="31" />
 
+    <!-- ADR-0027: re-arm the daily-window alarms after reboot / app replace.
+         The boot receiver ONLY re-arms — it never starts the camera FGS. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:name=".RovaApp"
         android:allowBackup="true"
@@ -94,6 +98,37 @@
             <intent-filter>
                 <action android:name="com.aritr.rova.action.STOP" />
                 <data android:scheme="rova" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ADR-0027: daily recording window. Start/Stop are exported=false
+             (only the same-UID OS AlarmManager delivers); PendingIntent
+             identity uses Intent.data = rova://schedule/{start,stop}. The boot
+             receiver is exported=true (the OS sends BOOT_COMPLETED). None of
+             these start the camera FGS — checkScheduleReceiverNoFgsStart. -->
+        <receiver
+            android:name=".service.schedule.ScheduleStartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.aritr.rova.action.SCHEDULE_WINDOW_START" />
+                <data android:scheme="rova" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".service.schedule.ScheduleStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.aritr.rova.action.SCHEDULE_WINDOW_STOP" />
+                <data android:scheme="rova" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".service.schedule.ScheduleBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

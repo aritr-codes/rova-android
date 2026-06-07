@@ -1,7 +1,13 @@
 package com.aritr.rova.ui.screens
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Schedule
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -144,6 +150,16 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
     val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
     val hideInVault by settingsViewModel.hideInVault.collectAsStateWithLifecycle()
+    // ADR-0027 — daily recording window state.
+    val scheduleEnabled by settingsViewModel.scheduleEnabled.collectAsStateWithLifecycle()
+    val scheduleStartMinute by settingsViewModel.scheduleStartMinute.collectAsStateWithLifecycle()
+    val scheduleStopMinute by settingsViewModel.scheduleStopMinute.collectAsStateWithLifecycle()
+    val scheduleWeekdayMask by settingsViewModel.scheduleWeekdayMask.collectAsStateWithLifecycle()
+    // POST_NOTIFICATIONS request launcher (API 33+); whatever the result, the
+    // window still arms — the inline note tells the user if notifications are off.
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* reflected by NotificationManagerCompat at fire time */ }
 
     // Re-read battery-exempt state on resume so returning from the system
     // settings screen flips the badge without forcing a manual refresh.
@@ -395,6 +411,89 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                         }
                     }
                 )
+            }
+
+            // ADR-0027 — daily recording window. Master switch + (when on)
+            // start/stop time rows, weekday chips, and a one-tap explainer.
+            SettingsSection(label = stringResource(R.string.schedule_section_title)) {
+                SettingsRow(
+                    icon = Icons.Default.Schedule,
+                    label = stringResource(R.string.schedule_enable_label),
+                    supporting = stringResource(R.string.schedule_enable_desc),
+                    checked = scheduleEnabled,
+                    onCheckedChange = { desired ->
+                        if (desired && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(
+                                context, android.Manifest.permission.POST_NOTIFICATIONS
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        settingsViewModel.setScheduleEnabled(desired)
+                    }
+                )
+                if (scheduleEnabled) {
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.Schedule,
+                        label = stringResource(R.string.schedule_start_time_label),
+                        value = formatMinuteOfDay(scheduleStartMinute),
+                        onClick = {
+                            showTimePicker(context, scheduleStartMinute) {
+                                settingsViewModel.setScheduleStartMinute(it)
+                            }
+                        },
+                        trailing = { ChevronTrailing() },
+                    )
+                    SettingsDivider()
+                    SettingsRow(
+                        icon = Icons.Default.Schedule,
+                        label = stringResource(R.string.schedule_stop_time_label),
+                        value = formatMinuteOfDay(scheduleStopMinute),
+                        onClick = {
+                            showTimePicker(context, scheduleStopMinute) {
+                                settingsViewModel.setScheduleStopMinute(it)
+                            }
+                        },
+                        trailing = { ChevronTrailing() },
+                    )
+                    SettingsDivider()
+                    ScheduleWeekdayChips(
+                        mask = scheduleWeekdayMask,
+                        onChange = { settingsViewModel.setScheduleWeekdayMask(it) },
+                    )
+                    Text(
+                        text = stringResource(R.string.schedule_one_tap_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = rovaQuietText(dimAlpha = 0.55f),
+                        modifier = Modifier.padding(
+                            start = RovaTokens.screenEdgeMargin,
+                            end = RovaTokens.screenEdgeMargin,
+                            top = 8.dp,
+                            bottom = 4.dp,
+                        ),
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val am = context.getSystemService(android.app.AlarmManager::class.java)
+                        if (am != null && !am.canScheduleExactAlarms()) {
+                            SettingsRow(
+                                icon = Icons.Default.Schedule,
+                                label = stringResource(R.string.schedule_exact_alarm_required),
+                                onClick = {
+                                    try {
+                                        context.startActivity(
+                                            Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                        )
+                                    } catch (_: ActivityNotFoundException) {
+                                        // No settings activity on this OEM build; the
+                                        // scheduler degrades to inexact alarms.
+                                    }
+                                },
+                                trailing = { ChevronTrailing() },
+                            )
+                        }
+                    }
+                }
             }
 
             SettingsSection(label = stringResource(R.string.settings_section_notifications)) {
@@ -783,6 +882,75 @@ private fun ChevronTrailing() {
         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
         modifier = Modifier.size(20.dp)
     )
+}
+
+/**
+ * ADR-0027 — weekday selector for the daily window. Bit i = day eligible, where
+ * bit 0=Mon..bit 6=Sun (matches ScheduleArmer). Empty mask (0) = every day; the
+ * "Every day" chip clears the mask, day chips toggle their bit.
+ */
+@Composable
+private fun ScheduleWeekdayChips(mask: Int, onChange: (Int) -> Unit) {
+    // Mon..Sun short labels — locale-aware via Calendar would be ideal, but the
+    // chip strip stays compact with fixed two-letter forms; full a11y label is
+    // the day name below. Kept ASCII to avoid a strings explosion (7 keys/lang).
+    val dayLabels = listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.schedule_weekdays_label),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+            modifier = Modifier.padding(
+                start = RovaTokens.screenEdgeMargin,
+                end = RovaTokens.screenEdgeMargin,
+                top = 4.dp,
+            ),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = RovaTokens.screenEdgeMargin, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip(
+                selected = mask == 0,
+                onClick = { onChange(0) },
+                label = { Text(stringResource(R.string.schedule_every_day)) },
+            )
+            dayLabels.forEachIndexed { bit, label ->
+                FilterChip(
+                    selected = mask != 0 && (mask and (1 shl bit)) != 0,
+                    onClick = {
+                        // Toggle this bit; clearing the last bit falls back to
+                        // "every day" (mask 0) so the window never has zero days.
+                        val toggled = mask xor (1 shl bit)
+                        onChange(toggled)
+                    },
+                    label = { Text(label) },
+                )
+            }
+        }
+    }
+}
+
+/** ADR-0027 — minutes-past-midnight → "HH:mm" (24h, locale-stable). */
+private fun formatMinuteOfDay(minuteOfDay: Int): String {
+    val h = (minuteOfDay / 60).coerceIn(0, 23)
+    val m = (minuteOfDay % 60).coerceIn(0, 59)
+    return "%02d:%02d".format(h, m)
+}
+
+/** ADR-0027 — framework time picker; reports the chosen minute-of-day. */
+private fun showTimePicker(context: Context, minuteOfDay: Int, onPicked: (Int) -> Unit) {
+    android.app.TimePickerDialog(
+        context,
+        { _, hourOfDay, minute -> onPicked(hourOfDay * 60 + minute) },
+        minuteOfDay / 60,
+        minuteOfDay % 60,
+        true,
+    ).show()
 }
 
 @Composable

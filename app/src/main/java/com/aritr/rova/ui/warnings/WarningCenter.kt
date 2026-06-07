@@ -287,7 +287,7 @@ internal fun effectiveIdleTopBannerId(
     StopReason.THERMAL -> WarningId.THERMAL_AUTOSTOPPED
     null,
     StopReason.USER, StopReason.PERMISSION_REVOKED,
-    StopReason.INIT_FAILED, StopReason.NONE -> precedenceId
+    StopReason.INIT_FAILED, StopReason.SCHEDULE_WINDOW, StopReason.NONE -> precedenceId
 }
 
 /**

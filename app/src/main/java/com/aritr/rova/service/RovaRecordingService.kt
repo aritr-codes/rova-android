@@ -109,6 +109,15 @@ data class RovaServiceState(
     val currentLoop: Int = 0,
     val isMerging: Boolean = false,
     val mergeProgress: Float = 0f,
+    // Bug A — the real saved-clip count, set in performMerge / performMergeDual
+    // on the export-success path. Feeds the post-merge summary card so an early
+    // user-stop (segmentCount still 0, but the partial clip IS saved) reads the
+    // true count instead of "0 clips saved to library".
+    val exportedClipCount: Int = 0,
+    // Bug A — published BEFORE isMerging flips true so the in-merge "Merging
+    // clip X of Y" band shows the real total even on an early stop (segmentCount
+    // is still 0 there because the loop never completed an iteration).
+    val mergeClipCount: Int = 0,
     val mergeError: String? = null,
     // B4c — true when the export failed because the custom SAF save folder is
     // gone/unwritable. Lets the record screen show an accurate "folder
@@ -124,7 +133,16 @@ data class RovaServiceState(
     // B6 (codex review) — whether the device exposes a front sensor. Gates the
     // flip button so a front-less device never shows a dead toggle (which would
     // also latch the "Switching…" overlay on a no-op tap). Set once in onCreate.
-    val hasFrontCamera: Boolean = false
+    val hasFrontCamera: Boolean = false,
+    // Bug 3 — true ONLY while a real cold camera-acquire bind is in flight
+    // (inside setupSingleCamera/setupDualCamera, between the start of the bind
+    // body and every exit). The "Initializing Camera" overlay reads this flag
+    // instead of an isCameraActive composition edge, so a warm nav-return
+    // surface re-swap (RecordScreen re-enters composition, recreates PreviewView)
+    // can no longer flash a spinner despite the camera staying warm (ADR-0021).
+    // MUST be cleared on every setup exit path or the overlay latches on — see
+    // the try/finally in setupSingleCamera/setupDualCamera.
+    val coldAcquireInProgress: Boolean = false
 )
 
 /**
@@ -355,18 +373,21 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // makes this safe to invoke from a receiver context that is
             // about to call goAsync().finish() — we do not block the
             // broadcast slot.
-            RovaLog.d { "SessionController.requestStop: sessionId=$sessionId" }
+            requestStop(com.aritr.rova.data.StopReason.USER)
+        }
+
+        override fun requestStop(reason: com.aritr.rova.data.StopReason) {
+            // ADR 0006 B-fix-5 / ADR-0027: explicit StopReason for the
+            // notification-STOP / UI-stop / scheduled-window-close paths.
+            // Belt-and-braces with the eager-write fallback
+            // (`currentStopReason ?: StopReason.USER`) — explicit assignment
+            // makes the intent visible at the call site and prevents any
+            // future first-writer-wins race from inheriting a null/stale value.
+            RovaLog.d { "SessionController.requestStop: sessionId=$sessionId reason=$reason" }
             serviceScope.launch {
                 userStopRequested = true
-                // ADR 0006 B-fix-5: explicit StopReason.USER for the
-                // notification-STOP / UI-stop path. Belt-and-braces with
-                // the eager-write fallback (`currentStopReason ?:
-                // StopReason.USER`) — but explicit assignment makes the
-                // intent visible at the call site and prevents any
-                // future first-writer-wins race from inheriting an
-                // unrelated null/stale value.
                 if (currentStopReason == null) {
-                    currentStopReason = com.aritr.rova.data.StopReason.USER
+                    currentStopReason = reason
                 }
                 stopPeriodicRecordingAndMerge()
             }
@@ -417,6 +438,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var limitLoops = -1 // -1 for continuous
     private var resolutionStr = QualityPresets.DEFAULT
     private var configuredResolution: String? = null // Track what resolution the camera is currently configured for
+
+    // ADR-0027 — daily-window provenance for this session. Set from the start
+    // intent; persisted in the manifest (recovery evidence) and read by the
+    // segment-loop self-heal to stop at window end.
+    private var startedBySchedule = false
+    private var scheduleWindowEndMillis = 0L
 
     /**
      * Phase 1.6 (ROADMAP_v6 §1.6 / ADR 0003). Frozen export tier for the
@@ -639,7 +666,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
          * pattern is API-safe on pre-31 runtimes: the class symbol is only
          * resolved when the SDK gate passes.
          */
-        fun start(context: Context, nSeconds: Float, mMinutes: Float, limitLoops: Int = -1, resolution: String = QualityPresets.DEFAULT): StartResult {
+        fun start(
+            context: Context,
+            nSeconds: Float,
+            mMinutes: Float,
+            limitLoops: Int = -1,
+            resolution: String = QualityPresets.DEFAULT,
+            startedBySchedule: Boolean = false,
+            scheduleWindowEndMillis: Long = 0L,
+        ): StartResult {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !isAppVisible(context)) {
                 RovaLog.w("start: refusing to launch camera recording while app is backgrounded")
                 return StartResult.Blocked(StartBlocked.APP_NOT_VISIBLE)
@@ -649,6 +684,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 putExtra("M_MINUTES", mMinutes)
                 putExtra("LIMIT_LOOPS", limitLoops)
                 putExtra("RESOLUTION", resolution)
+                putExtra("STARTED_BY_SCHEDULE", startedBySchedule)
+                putExtra("SCHEDULE_WINDOW_END_MS", scheduleWindowEndMillis)
             }
             return try {
                 ContextCompat.startForegroundService(context, intent)
@@ -995,6 +1032,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         mMinutes = intent.getFloatExtra("M_MINUTES", 10f).toLong()
         limitLoops = intent.getIntExtra("LIMIT_LOOPS", -1)
         resolutionStr = intent.getStringExtra("RESOLUTION") ?: QualityPresets.DEFAULT
+        startedBySchedule = intent.getBooleanExtra("STARTED_BY_SCHEDULE", false)
+        scheduleWindowEndMillis = intent.getLongExtra("SCHEDULE_WINDOW_END_MS", 0L)
         segmentCount = 0
         stopRequested = false
         userStopRequested = false
@@ -1005,7 +1044,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // update so the UI never sees a stale count from a prior
         // session.
         _serviceState.update {
-            it.copy(totalLoops = limitLoops, currentLoop = 0, segmentCount = 0)
+            it.copy(
+                totalLoops = limitLoops,
+                currentLoop = 0,
+                segmentCount = 0,
+                // Bug A — reset the saved-clip counters so the UI never sees a
+                // prior session's count during this session's merge / summary.
+                exportedClipCount = 0,
+                mergeClipCount = 0,
+                // Bug 3 — cleanliness: never carry a stale cold-acquire flag into
+                // a new session. The setup try/finally already guarantees clearing,
+                // this is belt-and-braces alongside the Bug A resets.
+                coldAcquireInProgress = false
+            )
         }
 
         // ============================================================
@@ -1207,7 +1258,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             config,
                             currentAudioMode,
                             safUsable,
-                            vaultIntentAtStart = settings.hideInVault
+                            vaultIntentAtStart = settings.hideInVault,
+                            startedBySchedule = startedBySchedule,
+                            scheduleWindowEndMillis = scheduleWindowEndMillis
                         )
                     }
                     currentSessionId = m.sessionId
@@ -1410,6 +1463,26 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // it onto the StateFlow.
                     _serviceState.update { it.copy(segmentCount = segmentCount) }
 
+                    // ADR-0027 self-heal: if a scheduled window has elapsed, stop
+                    // here even if the window-close alarm was throttled or missed
+                    // in Doze. Idempotent with the ScheduleStopReceiver path —
+                    // stopPeriodicRecordingAndMerge guards re-entry, and
+                    // currentStopReason is first-writer-wins so a reason already
+                    // latched by the receiver (or a gate) survives. Like every
+                    // user-stop, the captured segments are still merged; the
+                    // session is classified USER_STOPPED + SCHEDULE_WINDOW.
+                    if (startedBySchedule && scheduleWindowEndMillis > 0L &&
+                        System.currentTimeMillis() >= scheduleWindowEndMillis
+                    ) {
+                        RovaLog.d("startPeriodicRecording: schedule window elapsed — self-heal stop")
+                        userStopRequested = true
+                        if (currentStopReason == null) {
+                            currentStopReason = com.aritr.rova.data.StopReason.SCHEDULE_WINDOW
+                        }
+                        stopPeriodicRecordingAndMerge()
+                        break@outer
+                    }
+
                     if (limitLoops != -1 && segmentCount >= limitLoops) {
                         stopPeriodicRecordingAndMerge()
                         break@outer
@@ -1537,6 +1610,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
+            // Bug 3 — past the no-op guards: a real cold bind is now committed.
+            // Raise the cold-acquire flag and clear it on EVERY exit (success,
+            // bind-failure catch, or any throw) via finally so the overlay can't
+            // latch on. The early no-op returns above (already-active, recording
+            // guard, provider==null) intentionally never raised the flag.
+            markColdAcquire(true)
+            try {
             RovaLog.d { "setupCamera: Initializing UseCases (Preview + VideoCapture)" }
 
             // Strict match against QualityPresets canonical labels:
@@ -1632,6 +1712,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     _serviceState.update { it.copy(isFrontCamera = false) }
                     serviceScope.launch { forceReconfigureCamera() }
                 }
+            }
+            } finally {
+                // Bug 3 — single guaranteed clear for every exit of the bind body.
+                markColdAcquire(false)
             }
         }
     }
@@ -1748,6 +1832,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             val provider = cameraProvider ?: return@withLock
 
+            // Bug 3 — past the no-op guards: a real cold bind is now committed.
+            // Raise the cold-acquire flag; the finally below clears it on every
+            // exit (success or bind-failure catch) so the overlay can't latch.
+            markColdAcquire(true)
+            try {
             RovaLog.d { "setupDualCamera: Initializing UseCases (Preview + CameraEffect)" }
 
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
@@ -1893,6 +1982,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 boundToDummy = false
                 _serviceState.update { it.copy(isCameraActive = false) }
             }
+            } finally {
+                // Bug 3 — single guaranteed clear for every exit of the bind body.
+                markColdAcquire(false)
+            }
         }
     }
 
@@ -1914,6 +2007,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private fun markCameraUnbound() {
         (application as RovaApp).cameraStateSignal.onCameraUnbound()
         cameraStateObserver = null
+    }
+
+    // Bug 3 — publish the real cold-acquire signal that gates the
+    // "Initializing Camera" overlay. Raised at the start of the bind body in
+    // setupSingleCamera/setupDualCamera and cleared on EVERY exit path via a
+    // try/finally, so the overlay shows only during a genuine cold bind — never
+    // on a warm nav-return surface re-swap (ADR-0021).
+    private fun markColdAcquire(active: Boolean) {
+        _serviceState.update { it.copy(coldAcquireInProgress = active) }
     }
 
     // R1: Guard against flipping camera while a segment is actively recording.
@@ -3340,6 +3442,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                         getString(R.string.notification_stopped_low_storage)
                                     com.aritr.rova.data.StopReason.THERMAL ->
                                         getString(R.string.notification_stopped_thermal)
+                                    com.aritr.rova.data.StopReason.SCHEDULE_WINDOW ->
+                                        getString(R.string.notification_stopped_schedule_window)
                                     else -> getString(R.string.notification_stopping)
                                 }
                             )
@@ -3518,7 +3622,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private suspend fun performMerge(segments: List<File>) {
         var mergeSucceeded = false
         try {
-            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            // Bug A — publish the real merge total BEFORE isMerging flips so the
+            // in-merge band reads "Merging clip X of <segments.size>" even on an
+            // early stop where segmentCount is still 0.
+            _serviceState.update {
+                it.copy(
+                    isMerging = true,
+                    mergeProgress = 0f,
+                    mergeError = null,
+                    mergeClipCount = segments.size
+                )
+            }
             updateNotification(NotificationState.Merging(done = 0, total = segments.size, mergeProgressPercent = 0))
 
             // Phase 1.7 commit-7 — single live entry into the tier
@@ -3553,6 +3667,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             when (result) {
                 is ExportResult.Success -> {
+                    // Bug A — record the real saved-clip count so the post-merge
+                    // summary card surfaces it (segmentCount is 0 on an early stop).
+                    _serviceState.update { it.copy(exportedClipCount = segments.size) }
                     updateNotification(NotificationState.MergeComplete(
                         clipCount = segments.size,
                         totalDurationSeconds = null, // segments: List<File> — durationMs not available here
@@ -3713,8 +3830,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
     ) {
         var portraitOk = false
         var landscapeOk = false
+        // Bug A — one logical P+L session = one clip count (matches the dual
+        // MergeComplete notification, which uses max not sum). Computed up here
+        // so it can seed mergeClipCount BEFORE isMerging flips true.
+        val dualClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
         try {
-            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            _serviceState.update {
+                it.copy(
+                    isMerging = true,
+                    mergeProgress = 0f,
+                    mergeError = null,
+                    mergeClipCount = dualClipCount
+                )
+            }
             // Phase 6.1b smoke-fix #5 — notification clip count is the
             // user-facing per-side count (the loop count), NOT the sum of
             // both sides. Owner reported "Merging 4 clips" for a 2-loop
@@ -3726,7 +3854,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // (NotificationCopy "$clipCount clips saved to Library"):
             // X always means "clips within the saved content", not "raw
             // segments across all output streams."
-            val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
+            val userClipCount = dualClipCount
             updateNotification(NotificationState.Merging(done = 0, total = userClipCount, mergeProgressPercent = 0))
 
             val sid = currentSessionId
@@ -3823,6 +3951,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
                     }
                 }
+                // Bug A — record the real saved-clip count for the summary card.
+                _serviceState.update { it.copy(exportedClipCount = userClipCount) }
                 updateNotification(NotificationState.MergeComplete(
                     clipCount = userClipCount,
                     totalDurationSeconds = null, // portraitSegments/landscapeSegments: List<File> — durationMs not available here

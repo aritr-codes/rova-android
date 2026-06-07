@@ -23,6 +23,11 @@ class RecordFabStateTest {
         assertEquals(RecordFabState.Stop, recordFabState(RecordHudState.Waiting, sessionLocked = true, hardBlockActive = false))
     }
 
+    @Test fun starting_isStop() {
+        // Bug B — startup grace is an active session; the FAB stays Stop.
+        assertEquals(RecordFabState.Stop, recordFabState(RecordHudState.Starting, sessionLocked = true, hardBlockActive = false))
+    }
+
     @Test fun merging_isDisabled() {
         assertEquals(
             RecordFabState.Disabled,
