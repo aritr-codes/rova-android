@@ -17,7 +17,7 @@ class ScheduleBootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                RovaLog.d("ScheduleBootReceiver: ${intent.action} — re-arming window alarms")
+                RovaLog.d { "ScheduleBootReceiver: ${intent.action} — re-arming window alarms" }
                 ScheduleController.reschedule(context)
             }
         }

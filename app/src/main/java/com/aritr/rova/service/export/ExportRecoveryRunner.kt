@@ -169,11 +169,11 @@ class ExportRecoveryRunner(
         val referencedPendingUris: Set<String> = manifests
             .mapNotNull { it.pendingUri }
             .toSet()
-        RovaLog.d(
+        RovaLog.d {
             "$TAG: snapshot complete (manifests=${manifests.size}, " +
                 "referencedPendingUris=${referencedPendingUris.size}, " +
                 "incomplete=$snapshotIncomplete)"
-        )
+        }
 
         // Step 2 — per-session recovery dispatch.
         //
@@ -224,9 +224,9 @@ class ExportRecoveryRunner(
                     }
                     try {
                         resume(m, vaultAction)
-                        RovaLog.d(
+                        RovaLog.d {
                             "$TAG: ${m.sessionId} resumed in-flight move (${m.vaultState})"
-                        )
+                        }
                     } catch (t: Throwable) {
                         // Leave the manifest in its intermediate state; the next
                         // cold launch re-classifies VAULTING/UNVAULTING and retries.
@@ -269,7 +269,7 @@ class ExportRecoveryRunner(
                 }
             }
         }
-        RovaLog.d("$TAG: per-session recovery dispatched for ${perSession.size} session(s)")
+        RovaLog.d { "$TAG: per-session recovery dispatched for ${perSession.size} session(s)" }
 
         // Step 3 — late-terminal reconciliation. Re-read every session
         // because per-session recovery may have just transitioned a
@@ -297,10 +297,10 @@ class ExportRecoveryRunner(
                 false
             }
             if (!artifactOk) {
-                RovaLog.d(
+                RovaLog.d {
                     "$TAG: late-terminal: $sid artifact missing/invalid; " +
                         "leaving terminated=null for next-launch retry"
-                )
+                }
                 lateTerminals[sid] = LateTerminalAction.SkippedArtifactInvalid
                 continue
             }
@@ -317,7 +317,7 @@ class ExportRecoveryRunner(
             val r = sessionStore.markTerminated(sid, Terminated.COMPLETED, StopReason.NONE)
             lateTerminals[sid] = when (r) {
                 is MarkTerminatedResult.Wrote -> {
-                    RovaLog.d("$TAG: late-terminal: wrote COMPLETED for $sid (lost markTerminated recovery)")
+                    RovaLog.d { "$TAG: late-terminal: wrote COMPLETED for $sid (lost markTerminated recovery)" }
                     LateTerminalAction.WroteCompleted
                 }
                 is MarkTerminatedResult.AlreadyTerminal -> {
@@ -325,10 +325,10 @@ class ExportRecoveryRunner(
                     // in between our check and the write. AlreadyTerminal
                     // is acceptable — the existing terminal stays and we
                     // record the no-op.
-                    RovaLog.d(
+                    RovaLog.d {
                         "$TAG: late-terminal: $sid already terminal " +
                             "(${r.existingTerminated}/${r.existingStopReason}); no-op"
-                    )
+                    }
                     LateTerminalAction.AlreadyTerminal
                 }
                 is MarkTerminatedResult.Failed -> {
@@ -341,7 +341,7 @@ class ExportRecoveryRunner(
                 }
             }
         }
-        RovaLog.d("$TAG: late-terminal reconciliation complete (${lateTerminals.size} session(s) inspected)")
+        RovaLog.d { "$TAG: late-terminal reconciliation complete (${lateTerminals.size} session(s) inspected)" }
 
         // Step 4 — Tier 1 orphan sweep against the SNAPSHOT (never a
         // post-recovery recomputation). On snapshot-incomplete, skip the

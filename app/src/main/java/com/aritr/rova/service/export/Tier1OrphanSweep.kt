@@ -114,10 +114,10 @@ class Tier1OrphanSweep(
             }
         }
 
-        RovaLog.d(
+        RovaLog.d {
             "$TAG: sweep complete (deleted=$deleted, retainedReferenced=$retainedReferenced, " +
                 "retainedOtherPackage=$retainedOtherPackage, deleteFailures=$deleteFailures)"
-        )
+        }
         return OrphanSweepResult.Swept(
             deleted = deleted,
             retainedReferenced = retainedReferenced,

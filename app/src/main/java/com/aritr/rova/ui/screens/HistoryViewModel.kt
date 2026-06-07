@@ -341,10 +341,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             items = items
         )
         if (result.deleted > 0) {
-            RovaLog.d(
+            RovaLog.d {
                 "HistoryViewModel.retention: deleted ${result.deleted} surplus" +
                     " recording(s); ${result.failed} failure(s)"
-            )
+            }
         }
         // Slice 13B — surface a single concise snackbar when cleanup
         // did real work or failed. NoOp passes are silent so the

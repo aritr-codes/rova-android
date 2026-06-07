@@ -215,10 +215,10 @@ internal class EncoderRenderThread(
 
         if (!loggedOnce) {
             loggedOnce = true
-            RovaLog.d(
+            RovaLog.d {
                 "EglEncoder[$side] first frame: encoder=${surfaceWidth}x$surfaceHeight " +
                     "viewport=[$viewportX,$viewportY,$viewportW,$viewportH]"
-            )
+            }
         }
 
         vertexBuffer.position(0)

@@ -15,6 +15,7 @@ import android.opengl.Matrix
 import android.view.Surface
 import com.aritr.rova.service.dualrecord.LensFacing
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.BuildConfig
 import com.aritr.rova.utils.RovaLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -544,10 +545,18 @@ internal class EglRouter(
         }
     }
 
+    /**
+     * Per-frame perf clock. Returns 0L in release builds so the render loop
+     * pays no `System.nanoTime()` syscall cost — the timings only feed the
+     * debug-only [recordRenderPerf] summary, which is itself DEBUG-gated.
+     * (B-phase size/perf optimization, 2026-06-06.)
+     */
+    private inline fun perfNow(): Long = if (BuildConfig.DEBUG) System.nanoTime() else 0L
+
     fun renderFrame() {
         val tex = inputSurfaceTexture ?: return
         // Diagnostic — frame entry timestamp (see perf* fields).
-        val perfEntryNs = System.nanoTime()
+        val perfEntryNs = perfNow()
         // Snapshot the target list under the list lock, then draw OUTSIDE
         // it. renderFrame must NOT hold `targets` across the blocking
         // eglSwapBuffers calls: a stalled encoder swap (back-pressure)
@@ -565,14 +574,14 @@ internal class EglRouter(
         EGL14.eglMakeCurrent(eglDisplay!!, pbufferSurface, pbufferSurface, eglContext)
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
-        val perfTexEndNs = System.nanoTime()
+        val perfTexEndNs = perfNow()
 
         // DualShot FBO ring (B2, 2026-05-21) — snapshot this camera frame
         // into an off-screen FBO slot, then hand the slot's texture id to
         // the encoder threads. They sample the FBO copy on their own
         // clocks; the callback thread waits for NO encoder work. See the
         // 2026-05-21 FBO-ring design doc §3 / §6.
-        val perfBlitStartNs = System.nanoTime()
+        val perfBlitStartNs = perfNow()
         val liveEncoders = synchronized(encoderLock) {
             encoderThreads.values.filter { !it.failed }
         }
@@ -635,7 +644,7 @@ internal class EglRouter(
                 RovaLog.w("EglRouter: FBO blit failed — encoders skip this frame", t)
             }
         }
-        val perfBlitNs = System.nanoTime() - perfBlitStartNs
+        val perfBlitNs = perfNow() - perfBlitStartNs
 
         // Diagnostic — per-frame maxima across this frame's preview targets.
         var frameDrawMaxNs = 0L
@@ -653,7 +662,7 @@ internal class EglRouter(
             synchronized(target) {
                 if (!target.alive) return@synchronized
 
-                val perfDrawStartNs = System.nanoTime()
+                val perfDrawStartNs = perfNow()
                 EGL14.eglMakeCurrent(eglDisplay!!, target.eglSurface, target.eglSurface, eglContext)
                 // 1. Clear full surface with black — paints letterbox/pillar bars
                 //    for preview targets that letterbox; no visible effect on
@@ -682,7 +691,7 @@ internal class EglRouter(
                 // CameraX's SurfaceTexture transform — the suspected
                 // source of the deformation. Logged once per side.
                 if (target.side != null && diagLoggedSides.add(target.side)) {
-                    RovaLog.d(
+                    RovaLog.d {
                         "EglRouter diag side=${target.side} " +
                             "encoder=${target.width}x${target.height} " +
                             "viewport=[${target.viewportX},${target.viewportY}," +
@@ -690,7 +699,7 @@ internal class EglRouter(
                             "texMatrix=[${texMatrix.joinToString(",")}] " +
                             "uvTransform=[${target.uvTransform.joinToString(",")}] " +
                             "finalMatrix=[${finalMatrix.joinToString(",")}]"
-                    )
+                    }
                 }
 
                 vertexBuffer.position(0)
@@ -741,9 +750,9 @@ internal class EglRouter(
                 // eglSwapBuffers. A swap on a MediaCodec input surface
                 // blocks under encoder back-pressure; a swap on a preview
                 // surface blocks on vsync. Splitting them tells us which.
-                val perfSwapStartNs = System.nanoTime()
+                val perfSwapStartNs = perfNow()
                 EGL14.eglSwapBuffers(eglDisplay!!, target.eglSurface)
-                val perfTargetEndNs = System.nanoTime()
+                val perfTargetEndNs = perfNow()
                 val drawNs = perfSwapStartNs - perfDrawStartNs
                 val swapNs = perfTargetEndNs - perfSwapStartNs
                 if (drawNs > frameDrawMaxNs) frameDrawMaxNs = drawNs
@@ -757,7 +766,9 @@ internal class EglRouter(
         // updateTexImage is free; the encoders run fully async against
         // their FBO copies. renderFrame returns straight after the
         // previews (design §3 / §6).
-        recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBlitNs, framePrevSwapMaxNs)
+        if (BuildConfig.DEBUG) {
+            recordRenderPerf(perfEntryNs, perfTexEndNs, frameDrawMaxNs, perfBlitNs, framePrevSwapMaxNs)
+        }
     }
 
     /**
@@ -791,7 +802,7 @@ internal class EglRouter(
         if (prevSwapMaxNs > perfPrevSwapMaxNs) perfPrevSwapMaxNs = prevSwapMaxNs
         if (++perfFrames < PERF_WINDOW) return
         fun ms(ns: Long): String = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
-        RovaLog.d(
+        RovaLog.d {
             "EglRouter perf [${perfFrames}f]: " +
                 "interval avg=${ms(perfIntervalSumNs / perfFrames)} max=${ms(perfIntervalMaxNs)} | " +
                 "updateTex avg=${ms(perfTexSumNs / perfFrames)} max=${ms(perfTexMaxNs)} | " +
@@ -800,7 +811,7 @@ internal class EglRouter(
                 "blit avg=${ms(perfBlitSumNs / perfFrames)} max=${ms(perfBlitMaxNs)} " +
                 "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
                 "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
-        )
+        }
         perfFrames = 0
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
         perfTexSumNs = 0L; perfTexMaxNs = 0L

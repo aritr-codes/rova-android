@@ -447,12 +447,12 @@ class RovaApp : Application() {
             // recovery mutates manifests (a setExportFailed during recovery
             // would clear pendingUri and orphan the row to the sweep).
             val exportReport = buildExportRecoveryRunner().run()
-            RovaLog.d(
+            RovaLog.d {
                 "RovaApp.runRecoveryScan: export recovery complete " +
                     "(perSession=${exportReport.perSession.size}, " +
                     "lateTerminals=${exportReport.lateTerminals.size}, " +
                     "sweep=${exportReport.sweep.javaClass.simpleName})"
-            )
+            }
 
             val scanner = RecoveryScanner(sessionStore)
             val classifications = scanner.classifyAll(scanStart)
@@ -468,7 +468,7 @@ class RovaApp : Application() {
                 sessionStore, classifications, exportReport
             )
             if (deleted.isNotEmpty()) {
-                RovaLog.d("RovaApp.runRecoveryScan: cleanup pass discarded ${deleted.size} session(s)")
+                RovaLog.d { "RovaApp.runRecoveryScan: cleanup pass discarded ${deleted.size} session(s)" }
             }
 
             _recoveryReport.value = RecoveryReport(
@@ -477,7 +477,7 @@ class RovaApp : Application() {
                 scanCompletedMillis = System.currentTimeMillis(),
                 deferred = false
             )
-            RovaLog.d("RovaApp.runRecoveryScan: classified ${classifications.size} session(s)")
+            RovaLog.d { "RovaApp.runRecoveryScan: classified ${classifications.size} session(s)" }
         }
     }
 
@@ -850,14 +850,14 @@ class RovaApp : Application() {
             System.currentTimeMillis(), java.util.TimeZone.getDefault(), s.scheduleSnapshot(),
         )
         if (windowEnd == null) {
-            RovaLog.d("startScheduledRecording: tap outside an open window; ignoring")
+            RovaLog.d { "startScheduledRecording: tap outside an open window; ignoring" }
             return
         }
         // Don't clobber a session already recording (e.g. a manual start still
         // running). The service-side register-collision would otherwise abort
         // the new session anyway; bail cleanly here. [Finding 3]
         if (com.aritr.rova.service.ServiceController.current() != null) {
-            RovaLog.d("startScheduledRecording: a session is already live; ignoring")
+            RovaLog.d { "startScheduledRecording: a session is already live; ignoring" }
             return
         }
         com.aritr.rova.service.RovaRecordingService.start(
@@ -882,7 +882,7 @@ class RovaApp : Application() {
         if (controller != null) {
             controller.requestStop(com.aritr.rova.data.StopReason.SCHEDULE_WINDOW)
         } else {
-            RovaLog.d("requestScheduleWindowStop: no live controller; nothing to stop")
+            RovaLog.d { "requestScheduleWindowStop: no live controller; nothing to stop" }
         }
     }
 

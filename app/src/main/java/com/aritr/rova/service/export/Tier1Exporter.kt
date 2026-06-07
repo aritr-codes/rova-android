@@ -283,10 +283,10 @@ class Tier1Exporter(
             // publish whose manifest write was lost). Trust the artifact;
             // catch the manifest up to the on-disk reality.
             Tier1FinalizeResult.NoRowsUpdated -> {
-                RovaLog.d(
+                RovaLog.d {
                     "$TAG.recover: finalizePendingRow reported 0 rows for $sessionId — " +
                         "treating as already-finalized (lost manifest write); not deleting row"
-                )
+                }
                 writeFinalizedAfterValidatedRow(sessionId, uri, side)
             }
 

@@ -48,14 +48,14 @@ object ScheduleAlarmScheduler {
         if (canExact) {
             try {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
-                RovaLog.d("ScheduleAlarmScheduler.arm(${leg.path}, t=$triggerAtMillis) [exact]")
+                RovaLog.d { "ScheduleAlarmScheduler.arm(${leg.path}, t=$triggerAtMillis) [exact]" }
                 return
             } catch (se: SecurityException) {
                 RovaLog.w("ScheduleAlarmScheduler.arm(${leg.path}): exact denied at call site; inexact", se)
             }
         }
         am.setWindow(AlarmManager.RTC_WAKEUP, triggerAtMillis, INEXACT_WINDOW_MS, pi)
-        RovaLog.d("ScheduleAlarmScheduler.arm(${leg.path}, t=$triggerAtMillis) [inexact]")
+        RovaLog.d { "ScheduleAlarmScheduler.arm(${leg.path}, t=$triggerAtMillis) [inexact]" }
     }
 
     private fun cancel(context: Context, leg: Leg, cls: Class<*>, action: String) {
@@ -63,7 +63,7 @@ object ScheduleAlarmScheduler {
         val pi = pendingIntent(context, leg, cls, action, mutateExisting = false) ?: return
         am.cancel(pi)
         pi.cancel()
-        RovaLog.d("ScheduleAlarmScheduler.cancel(${leg.path}): cleared")
+        RovaLog.d { "ScheduleAlarmScheduler.cancel(${leg.path}): cleared" }
     }
 
     private fun pendingIntent(context: Context, leg: Leg, cls: Class<*>, action: String, mutateExisting: Boolean): PendingIntent? {

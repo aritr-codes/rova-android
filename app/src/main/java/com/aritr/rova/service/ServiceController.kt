@@ -35,7 +35,7 @@ object ServiceController {
                     "sessionId=${ref.get()?.sessionId}; refusing ${controller.sessionId}"
             )
         } else {
-            RovaLog.d("ServiceController.register: ${controller.sessionId}")
+            RovaLog.d { "ServiceController.register: ${controller.sessionId}" }
         }
         return ok
     }
@@ -48,7 +48,7 @@ object ServiceController {
     fun unregister(controller: RovaController) {
         val ok = ref.compareAndSet(controller, null)
         if (ok) {
-            RovaLog.d("ServiceController.unregister: ${controller.sessionId}")
+            RovaLog.d { "ServiceController.unregister: ${controller.sessionId}" }
         } else {
             RovaLog.w(
                 "ServiceController.unregister: ${controller.sessionId} not " +

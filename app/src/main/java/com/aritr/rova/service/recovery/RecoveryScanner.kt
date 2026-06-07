@@ -67,7 +67,7 @@ class RecoveryScanner(
         // Invariant 5 — per-session live re-check. The live service owns
         // its session; the scan never touches it.
         if (liveSessionId() == sessionId) {
-            RovaLog.d("RecoveryScanner: $sessionId is live-owned; skipping")
+            RovaLog.d { "RecoveryScanner: $sessionId is live-owned; skipping" }
             return skipped(sessionId)
         }
 
@@ -84,7 +84,7 @@ class RecoveryScanner(
         // released the mutex but whose receiver work is still in flight
         // could be reached here despite the drain; the 5 s window covers it.
         if (manifest.startedAt > scanStartMillis - AGE_FILTER_MILLIS) {
-            RovaLog.d("RecoveryScanner: $sessionId age-filtered (startedAt=${manifest.startedAt}, scanStart=$scanStartMillis); BLOCKED")
+            RovaLog.d { "RecoveryScanner: $sessionId age-filtered (startedAt=${manifest.startedAt}, scanStart=$scanStartMillis); BLOCKED" }
             return skipped(sessionId)
         }
 
@@ -97,10 +97,10 @@ class RecoveryScanner(
         // normal classification matrix.
         if (manifest.terminated == null &&
             manifest.exportState in EXPORT_IN_FLIGHT_OR_FINALIZED) {
-            RovaLog.d(
+            RovaLog.d {
                 "RecoveryScanner: $sessionId exportState=${manifest.exportState}" +
                     " && T==null; SKIPPED_EXPORT_PENDING (Phase 1.7 owns)"
-            )
+            }
             return SessionClassification(
                 sessionId = sessionId,
                 terminalAction = TerminalAction.SKIPPED_EXPORT_PENDING,
@@ -338,7 +338,7 @@ class RecoveryScanner(
                 )
                 sessionStore.appendSegment(sessionId, record)
                 appendedFilenames += ds.file.name
-                RovaLog.d("RecoveryScanner: appended orphan ${ds.file.name} to $sessionId")
+                RovaLog.d { "RecoveryScanner: appended orphan ${ds.file.name} to $sessionId" }
             }
         }
 

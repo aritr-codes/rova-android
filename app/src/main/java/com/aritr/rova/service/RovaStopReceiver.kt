@@ -109,10 +109,10 @@ class RovaStopReceiver : BroadcastReceiver() {
             return
         }
         if (manifest.terminated != null) {
-            RovaLog.d(
+            RovaLog.d {
                 "RovaStopReceiver: $sessionId already terminated=${manifest.terminated};" +
                     " dropping"
-            )
+            }
             return
         }
 
@@ -144,7 +144,7 @@ class RovaStopReceiver : BroadcastReceiver() {
         // Step 6 — registry-first delivery.
         val controller = ServiceController.current()
         if (controller != null && controller.sessionId == sessionId) {
-            RovaLog.d("RovaStopReceiver: forwarding stop to live controller for $sessionId")
+            RovaLog.d { "RovaStopReceiver: forwarding stop to live controller for $sessionId" }
             controller.requestStop()
             return
         }
@@ -169,13 +169,13 @@ class RovaStopReceiver : BroadcastReceiver() {
                 StopReason.USER
             )) {
                 is com.aritr.rova.data.MarkTerminatedResult.Wrote -> {
-                    RovaLog.d("RovaStopReceiver: markTerminated wrote USER_STOPPED for $sessionId")
+                    RovaLog.d { "RovaStopReceiver: markTerminated wrote USER_STOPPED for $sessionId" }
                 }
                 is com.aritr.rova.data.MarkTerminatedResult.AlreadyTerminal -> {
-                    RovaLog.d(
+                    RovaLog.d {
                         "RovaStopReceiver: $sessionId already" +
                             " ${result.existingTerminated}/${result.existingStopReason}; suppressed"
-                    )
+                    }
                 }
                 is com.aritr.rova.data.MarkTerminatedResult.Failed -> {
                     RovaLog.e(

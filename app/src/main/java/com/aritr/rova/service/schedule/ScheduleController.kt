@@ -22,7 +22,7 @@ object ScheduleController {
         val snapshot = RovaSettings(app).scheduleSnapshot()
         if (!snapshot.enabled) {
             ScheduleAlarmScheduler.cancelAll(app)
-            RovaLog.d("ScheduleController.reschedule: disabled — alarms cancelled")
+            RovaLog.d { "ScheduleController.reschedule: disabled — alarms cancelled" }
             return
         }
         val arming = ScheduleArmer.computeNext(System.currentTimeMillis(), TimeZone.getDefault(), snapshot)
@@ -32,7 +32,7 @@ object ScheduleController {
         }
         ScheduleAlarmScheduler.armStart(app, arming.startAtMillis)
         ScheduleAlarmScheduler.armStop(app, arming.stopAtMillis)
-        RovaLog.d("ScheduleController.reschedule: armed start=${arming.startAtMillis} stop=${arming.stopAtMillis}")
+        RovaLog.d { "ScheduleController.reschedule: armed start=${arming.startAtMillis} stop=${arming.stopAtMillis}" }
     }
 
     /**
@@ -58,7 +58,7 @@ object ScheduleController {
         if (currentEnd != null) {
             ScheduleAlarmScheduler.armStop(app, currentEnd) // keep THIS window's close
             if (next != null) ScheduleAlarmScheduler.armStart(app, next.startAtMillis)
-            RovaLog.d("ScheduleController.onWindowOpened: stop=$currentEnd nextStart=${next?.startAtMillis}")
+            RovaLog.d { "ScheduleController.onWindowOpened: stop=$currentEnd nextStart=${next?.startAtMillis}" }
         } else if (next != null) {
             // Window already closed (late alarm) — arm the next full window.
             ScheduleAlarmScheduler.armStart(app, next.startAtMillis)

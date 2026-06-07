@@ -8,10 +8,10 @@ import com.aritr.rova.BuildConfig
  * so release builds don't leak internal paths or state details to logcat.
  */
 object RovaLog {
-    private const val TAG = "Rova"
+    const val TAG = "Rova"
 
-    fun d(message: String) {
-        if (BuildConfig.DEBUG) Log.d(TAG, message)
+    inline fun d(message: () -> String) {
+        if (BuildConfig.DEBUG) Log.d(TAG, message())
     }
 
     fun w(message: String, throwable: Throwable? = null) {

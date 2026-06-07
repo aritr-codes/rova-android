@@ -96,16 +96,16 @@ class RovaTickReceiver : BroadcastReceiver() {
             return
         }
         if (manifest.terminated != null || manifest.stopRequested) {
-            RovaLog.d(
+            RovaLog.d {
                 "RovaTickReceiver: $sessionId/$kind already terminated=${manifest.terminated}" +
                     " stopRequested=${manifest.stopRequested}; dropping seq=$seq"
-            )
+            }
             return
         }
 
         val controller = ServiceController.current()
         if (controller != null && controller.sessionId == sessionId) {
-            RovaLog.d("RovaTickReceiver: forwarding seq=$seq kind=$kind to controller for $sessionId")
+            RovaLog.d { "RovaTickReceiver: forwarding seq=$seq kind=$kind to controller for $sessionId" }
             controller.postTick(seq, kind)
             return
         }

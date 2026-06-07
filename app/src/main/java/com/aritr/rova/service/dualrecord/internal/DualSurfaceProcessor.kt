@@ -98,14 +98,14 @@ internal class DualSurfaceProcessor(
         val rw = request.resolution.width
         val rh = request.resolution.height
         val matches4to3 = rw > 0 && rh > 0 && rw * 3 == rh * 4
-        RovaLog.d(
+        RovaLog.d {
             "DualSurfaceProcessor.onInputSurface: deliveredSourceSize=${rw}x${rh} " +
                 "aspect=${if (rh > 0) rw.toFloat() / rh.toFloat() else 0f} " +
                 "matches4:3=$matches4to3"
-        )
+        }
         val cameraSurface = router.inputSurface
         request.provideSurface(cameraSurface, /* executor */ Runnable::run, Consumer { result ->
-            RovaLog.d("DualSurfaceProcessor input surface released (result=${result.resultCode})")
+            RovaLog.d { "DualSurfaceProcessor input surface released (result=${result.resultCode})" }
         })
         router.setOnFrameAvailableListener { router.renderFrame() }
     }
@@ -117,7 +117,7 @@ internal class DualSurfaceProcessor(
             return
         }
         val previewSurface = output.getSurface(/* executor */ Runnable::run, Consumer { event ->
-            RovaLog.d("DualSurfaceProcessor.onOutputSurface event (code=${event.eventCode})")
+            RovaLog.d { "DualSurfaceProcessor.onOutputSurface event (code=${event.eventCode})" }
         })
         val size = output.size
         router.addTarget(side = null, kind = TargetKind.PREVIEW, surface = previewSurface, width = size.width, height = size.height)
