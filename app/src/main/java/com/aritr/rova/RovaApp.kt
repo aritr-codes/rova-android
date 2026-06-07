@@ -842,9 +842,24 @@ class RovaApp : Application() {
      */
     fun startScheduledRecording(activityContext: Context) {
         val s = RovaSettings(this)
+        // Only start if we are genuinely inside an open, enabled window. A late
+        // or stale tap (window already closed, schedule disabled/changed) yields
+        // null — ignore it, so we never start a session whose self-heal end is
+        // unknown (would record with no auto-stop backstop). [Finding 1/codex#3]
         val windowEnd = com.aritr.rova.service.scheduler.ScheduleArmer.currentWindowEnd(
             System.currentTimeMillis(), java.util.TimeZone.getDefault(), s.scheduleSnapshot(),
-        ) ?: 0L
+        )
+        if (windowEnd == null) {
+            RovaLog.d("startScheduledRecording: tap outside an open window; ignoring")
+            return
+        }
+        // Don't clobber a session already recording (e.g. a manual start still
+        // running). The service-side register-collision would otherwise abort
+        // the new session anyway; bail cleanly here. [Finding 3]
+        if (com.aritr.rova.service.ServiceController.current() != null) {
+            RovaLog.d("startScheduledRecording: a session is already live; ignoring")
+            return
+        }
         com.aritr.rova.service.RovaRecordingService.start(
             context = activityContext,
             nSeconds = s.durationSeconds.toFloat(),

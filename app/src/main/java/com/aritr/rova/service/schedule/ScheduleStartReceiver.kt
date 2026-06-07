@@ -26,16 +26,22 @@ class ScheduleStartReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_WINDOW_START) return
         postStartPrompt(context)
-        // Re-arm the next occurrence (alarms are one-shot).
-        ScheduleController.reschedule(context)
+        // Re-arm: advance the START to the next occurrence WITHOUT clobbering
+        // this window's STOP alarm (onWindowOpened, not reschedule).
+        ScheduleController.onWindowOpened(context)
     }
 
     private fun postStartPrompt(context: Context) {
         val app = context.applicationContext
         ensureChannel(app)
+        // Single-use nonce so the exported MainActivity only honours a tap that
+        // came from THIS notification (an external app can't forge it).
+        val nonce = java.util.UUID.randomUUID().toString()
+        com.aritr.rova.data.RovaSettings(app).scheduleStartNonce = nonce
         val tapIntent = Intent(app, MainActivity::class.java).apply {
             action = MainActivity.ACTION_SCHEDULE_AUTO_ARM
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(MainActivity.EXTRA_SCHEDULE_NONCE, nonce)
         }
         val pi = PendingIntent.getActivity(
             app, 0, tapIntent,

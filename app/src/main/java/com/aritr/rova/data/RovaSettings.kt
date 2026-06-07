@@ -207,6 +207,20 @@ class RovaSettings(context: Context) {
         get() = prefs.getInt("schedule_weekday_mask", 0)
         set(value) = prefs.edit { putInt("schedule_weekday_mask", value) }
 
+    /**
+     * ADR-0027 — single-use nonce binding the window-open notification's
+     * PendingIntent to a legitimate start. MainActivity is exported, so an
+     * external app could otherwise forge ACTION_SCHEDULE_AUTO_ARM and trigger
+     * camera recording. The receiver writes a fresh nonce when posting the
+     * prompt; MainActivity starts only if the tapped intent's nonce matches,
+     * then clears it (rotate-on-use). Runtime-backed so a reinstall resets it.
+     */
+    var scheduleStartNonce: String?
+        get() = runtimePrefs.getString("schedule_start_nonce", null)
+        set(value) = runtimePrefs.edit {
+            if (value == null) remove("schedule_start_nonce") else putString("schedule_start_nonce", value)
+        }
+
     fun scheduleSnapshot(): com.aritr.rova.service.scheduler.ScheduleSettingsSnapshot =
         com.aritr.rova.service.scheduler.ScheduleSettingsSnapshot(
             enabled = scheduleEnabled,

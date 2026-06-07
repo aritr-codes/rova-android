@@ -35,5 +35,38 @@ object ScheduleController {
         RovaLog.d("ScheduleController.reschedule: armed start=${arming.startAtMillis} stop=${arming.stopAtMillis}")
     }
 
+    /**
+     * Re-arm at window-OPEN (called by [ScheduleStartReceiver] only). CRITICAL:
+     * unlike [reschedule], this must NOT clobber the current window's STOP alarm
+     * with the next window's. It keeps the just-opened window's close armed
+     * (so the silent stop still fires) and advances only the START to the next
+     * occurrence. The next window's STOP is armed later when the current STOP
+     * fires (→ [reschedule]). If the open alarm fired so late the window already
+     * closed, fall back to arming the next full window.
+     */
+    fun onWindowOpened(context: Context) {
+        val app = context.applicationContext
+        val snapshot = RovaSettings(app).scheduleSnapshot()
+        if (!snapshot.enabled) {
+            ScheduleAlarmScheduler.cancelAll(app)
+            return
+        }
+        val now = System.currentTimeMillis()
+        val tz = TimeZone.getDefault()
+        val currentEnd = ScheduleArmer.currentWindowEnd(now, tz, snapshot)
+        val next = ScheduleArmer.computeNext(now, tz, snapshot)
+        if (currentEnd != null) {
+            ScheduleAlarmScheduler.armStop(app, currentEnd) // keep THIS window's close
+            if (next != null) ScheduleAlarmScheduler.armStart(app, next.startAtMillis)
+            RovaLog.d("ScheduleController.onWindowOpened: stop=$currentEnd nextStart=${next?.startAtMillis}")
+        } else if (next != null) {
+            // Window already closed (late alarm) — arm the next full window.
+            ScheduleAlarmScheduler.armStart(app, next.startAtMillis)
+            ScheduleAlarmScheduler.armStop(app, next.stopAtMillis)
+        } else {
+            ScheduleAlarmScheduler.cancelAll(app)
+        }
+    }
+
     fun cancel(context: Context) = ScheduleAlarmScheduler.cancelAll(context.applicationContext)
 }

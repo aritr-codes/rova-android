@@ -113,8 +113,9 @@ data class SessionManifest(
     val pendingMoveOutPath: String? = null,
     // ADR-0027 — daily recording window. Persisted so cold-launch recovery can
     // classify a killed scheduled session from evidence. [scheduleWindowExpired]
-    // is an informational latch (set by the stop receiver / segment-loop
-    // self-heal); recovery does NOT read it for terminal classification.
+    // is always false in v1 — a RESERVED latch for future use. The load-bearing
+    // signal that a window-driven stop occurred is StopReason.SCHEDULE_WINDOW on
+    // the terminal record; recovery does NOT read these fields for classification.
     val startedBySchedule: Boolean = false,
     val scheduleWindowStartMillis: Long = 0L,
     val scheduleWindowEndMillis: Long = 0L,
