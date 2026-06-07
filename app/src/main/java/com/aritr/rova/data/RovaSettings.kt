@@ -3,7 +3,9 @@ package com.aritr.rova.data
 import android.content.Context
 import androidx.core.content.edit
 import com.aritr.rova.ui.locale.AppLocale
+import com.aritr.rova.ui.theme.ThemeMigration
 import com.aritr.rova.ui.theme.ThemeMode
+import com.aritr.rova.ui.theme.ThemeSelection
 import com.aritr.rova.ui.theme.themeModeFromStorage
 
 class RovaSettings(context: Context) {
@@ -122,6 +124,20 @@ class RovaSettings(context: Context) {
     var themeMode: ThemeMode
         get() = themeModeFromStorage(prefs.getString("theme_mode", null))
         set(value) = prefs.edit { putString("theme_mode", value.name) }
+
+    /**
+     * Liquid-glass theme selection (ADR-0028 §1.2). Read path is migration-aware:
+     * a stored `theme_selection` wins; absent that, the legacy `theme_mode` is
+     * migrated (the old key is left intact for one-release rollback safety).
+     * Synchronous SharedPreferences — resolved before the theme StateFlow inits so
+     * the first frame never flashes the default.
+     */
+    var themeSelection: ThemeSelection
+        get() = ThemeMigration.resolve(
+            newRaw = prefs.getString("theme_selection", null),
+            oldRaw = prefs.getString("theme_mode", null),
+        )
+        set(value) = prefs.edit { putString("theme_selection", value.name) }
 
     // i18n Phase B (ADR-0023) — chosen app language as a BCP-47 tag; null =
     // follow system. Backed up (a genuine user preference, like themeMode).
