@@ -145,6 +145,48 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private val _clipAnchorMillis = MutableStateFlow<Long?>(null)
     val clipAnchorMillis: StateFlow<Long?> = _clipAnchorMillis.asStateFlow()
 
+    // --- Bug 3 freeze-frame seam ---
+    //
+    // The last captured preview frame, stashed by RecordScreen's PreviewView
+    // onDispose (a TextureView snapshot copy in COMPATIBLE mode) and shown by
+    // the single-mode AndroidView branch to bridge the warm-return surface
+    // re-swap gap: on tab-return the record destination survives in the
+    // backstack (like [pendingSurfaceProvider]), but its PreviewView is
+    // recreated, so CameraX must re-cycle a SurfaceRequest onto the fresh
+    // surface (~1 s black) even though the camera stays warm (ADR-0021).
+    // Covering that gap with the last frame removes the bare-black flash.
+    //
+    // Show/hide gating is the pure [FreezeFramePolicy]; consumption happens
+    // when the new surface starts STREAMING (RecordScreen previewStreamState
+    // observer) with a timeout backstop. Holds one ~8 MB FHD bitmap, and only
+    // during the brief gap — recycled on consume and in onCleared().
+    // P+L (DualPreviewZone) is out of scope: single-mode PreviewView only.
+    private val _lastPreviewFrame = MutableStateFlow<android.graphics.Bitmap?>(null)
+    val lastPreviewFrame: StateFlow<android.graphics.Bitmap?> = _lastPreviewFrame.asStateFlow()
+
+    /**
+     * Bug 3 — stash the last captured preview frame. Null is ignored (the
+     * getBitmap snapshot can fail). Recycles the previously held bitmap once
+     * replaced so at most one ~8 MB FHD bitmap is retained at a time.
+     */
+    fun stashPreviewFrame(bmp: android.graphics.Bitmap?) {
+        if (bmp == null) return
+        val old = _lastPreviewFrame.value
+        _lastPreviewFrame.value = bmp
+        if (old != null && old != bmp && !old.isRecycled) old.recycle()
+    }
+
+    /**
+     * Bug 3 — drop the freeze-frame (the new surface is streaming, or the
+     * timeout backstop fired). Recycles the bitmap so it does not leak past
+     * the brief re-swap gap.
+     */
+    fun consumePreviewFrame() {
+        val old = _lastPreviewFrame.value
+        _lastPreviewFrame.value = null
+        if (old != null && !old.isRecycled) old.recycle()
+    }
+
     init {
         // A2: Bind to the service. BIND_AUTO_CREATE starts the service process if needed
         // but does NOT call onStartCommand — recording only starts when start() is called.
@@ -223,6 +265,9 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         serviceStateJob?.cancel()
+        // Bug 3 — release the freeze-frame bitmap so it never outlives the VM.
+        _lastPreviewFrame.value?.let { if (!it.isRecycled) it.recycle() }
+        _lastPreviewFrame.value = null
         super.onCleared()
         try { context.unbindService(serviceConnection) } catch (e: Exception) {}
     }

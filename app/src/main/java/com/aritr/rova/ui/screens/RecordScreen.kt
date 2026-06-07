@@ -13,7 +13,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -50,6 +53,7 @@ import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -211,9 +215,24 @@ fun RecordScreen(
         }
     }
 
+    // Bug 3 freeze-frame — the last captured frame survives on the VM (the
+    // record destination stays in the backstack on tab-away). Collected here
+    // so the single-mode AndroidView branch can overlay it during the warm
+    // surface re-swap gap. consumePreviewFrame() (streaming observer / timeout
+    // backstop) nulls it → overlay disappears.
+    val lastFrame by viewModel.lastPreviewFrame.collectAsStateWithLifecycle()
+
     DisposableEffect(previewView) {
         viewModel.setSurfaceProvider(previewView.surfaceProvider)
         onDispose {
+            // Bug 3 freeze-frame — snapshot the current frame BEFORE the
+            // provider-null logic below, so a warm tab-return can paint the
+            // last frame over the ~1 s gap while CameraX re-cycles a
+            // SurfaceRequest onto the freshly-recreated PreviewView. getBitmap
+            // is a TextureView snapshot copy in COMPATIBLE mode (reliable);
+            // null-guard anyway (stashPreviewFrame ignores null).
+            val frame = try { previewView.bitmap } catch (_: Throwable) { null }
+            viewModel.stashPreviewFrame(frame)
             // Bug 3 — only null the provider when a periodic session is ACTIVE.
             // Then the service swaps to its DUMMY surface so background recording
             // keeps producing frames (the existing isPeriodicActive path).
@@ -227,6 +246,38 @@ fun RecordScreen(
             if (viewModel.serviceState.value.isPeriodicActive) {
                 viewModel.setSurfaceProvider(null)
             }
+        }
+    }
+
+    // Bug 3 freeze-frame — drop the stashed frame the instant the recreated
+    // surface starts STREAMING. previewStreamState is a LiveData<StreamState>;
+    // observing it (tied to this destination's lifecycleOwner) gives the exact
+    // moment the real preview is back, so the overlay hides with no visible
+    // seam. removeObserver in onDispose.
+    val streamObserverLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(previewView) {
+        val observer = androidx.lifecycle.Observer<PreviewView.StreamState> { st ->
+            if (st == PreviewView.StreamState.STREAMING) {
+                viewModel.consumePreviewFrame()
+            }
+        }
+        previewView.previewStreamState.observe(streamObserverLifecycleOwner, observer)
+        onDispose { previewView.previewStreamState.removeObserver(observer) }
+    }
+
+    // Bug 3 freeze-frame — timeout backstop. If the recreated surface never
+    // reaches STREAMING (e.g. the user leaves again before the re-swap, or a
+    // genuinely stuck bind), force-drop the frame after 1.5 s so a stale frame
+    // can't latch on screen. Keyed on lastFrame so it re-arms each time a fresh
+    // frame is stashed and cancels once the streaming observer clears it.
+    LaunchedEffect(lastFrame) {
+        if (lastFrame != null) {
+            withTimeoutOrNull(1500L) {
+                // The streaming observer clears lastFrame; if that happens this
+                // effect is cancelled (key change) before the timeout fires.
+                kotlinx.coroutines.awaitCancellation()
+            }
+            viewModel.consumePreviewFrame()
         }
     }
 
@@ -570,6 +621,33 @@ fun RecordScreen(
                                 factory = { _ -> previewView },
                                 modifier = Modifier.fillMaxSize()
                             )
+                            // Bug 3 freeze-frame — SINGLE-MODE ONLY. Painted
+                            // ABOVE the PreviewView (and below the cold-acquire
+                            // "Initializing" overlay further down in z-order) to
+                            // cover the ~1 s black gap while CameraX re-cycles a
+                            // SurfaceRequest onto the recreated surface on a warm
+                            // tab-return. Hidden the instant the surface streams
+                            // (consumePreviewFrame nulls lastFrame) or the 1.5 s
+                            // backstop fires. ContentScale.Crop matches the
+                            // PreviewView's FILL_CENTER scaleType. Hard swap — no
+                            // crossfade/animation (checkA11yAnimationGated).
+                            // Decorative: contentDescription = null.
+                            lastFrame?.let { fr ->
+                                if (FreezeFramePolicy.shouldShowFreezeFrame(
+                                        hasStashedFrame = true,
+                                        streaming = false,
+                                        isMerging = serviceState.isMerging,
+                                        coldAcquireInProgress = serviceState.coldAcquireInProgress,
+                                    )
+                                ) {
+                                    Image(
+                                        bitmap = fr.asImageBitmap(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
                             CameraGuides(
                                 visible = cameraGuidesEnabled,
                                 modifier = Modifier.fillMaxSize(),
