@@ -189,6 +189,9 @@
     <string name="record_hud_status_recording">Grabando</string>
     <string name="record_hud_status_on_break">En pausa</string>
     <string name="record_hud_status_merging">Combinando…</string>
+    <!-- Bug B — gracia de arranque antes del primer clip (distinta de la pausa entre clips) -->
+    <string name="record_hud_status_starting">Preparando…</string>
+    <string name="record_hud_starting_caption">· iniciando grabación</string>
     <string name="record_hud_time_left">· quedan %1$s</string>
     <string name="record_hud_time_next_in">· siguiente en %1$s</string>
     <string name="record_hud_time_percent">· %1$d%%</string>
@@ -236,11 +239,16 @@
     <string name="record_hud_announce_on_break">En pausa.</string>
     <string name="record_hud_announce_on_break_loop">En pausa. Ciclo %1$d.</string>
     <string name="record_hud_announce_on_break_loop_of">En pausa. Ciclo %1$d de %2$d.</string>
+    <!-- Bug B — anuncio de la gracia de arranque -->
+    <string name="record_hud_announce_starting">Preparando para grabar.</string>
 
     <!-- Status pill copy (idle/active) -->
     <string name="record_status_recording">Grabando</string>
     <string name="record_status_on_break">En pausa</string>
     <string name="record_status_merging">Combinando</string>
+    <!-- Bug B — gracia de arranque antes del primer clip -->
+    <string name="record_status_starting">Preparando…</string>
+    <string name="record_status_detail_preparing">iniciando grabación…</string>
     <string name="record_status_ready">Listo para grabar</string>
     <string name="record_status_detail_clip_of">%1$d s de %2$d s</string>
     <string name="record_status_detail_next_in">siguiente en %1$d s</string>

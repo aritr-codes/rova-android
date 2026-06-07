@@ -25,6 +25,16 @@ sealed class RecordHudState {
     /** Periodic session active and a clip is currently recording. */
     data object Recording : RecordHudState()
 
+    /**
+     * Periodic session active but the first clip has not started
+     * recording yet (startup grace). Distinct from [Waiting] (real
+     * inter-clip interval). Discriminated by `segmentCount == 0` —
+     * no segment has ever been finalized — so a first-segment retry
+     * also shows "Preparing…" rather than the inter-clip "On break".
+     * (Bug B — the ~2.6 s pre-record grace wrongly read as Waiting.)
+     */
+    data object Starting : RecordHudState()
+
     /** Periodic session active and waiting between clips. */
     data object Waiting : RecordHudState()
 
@@ -68,10 +78,18 @@ sealed class RecordHudState {
             isRecording: Boolean,
             isMerging: Boolean = false,
             mergeProgress: Float = 0f,
-            segmentCount: Int = 0
+            segmentCount: Int = 0,
+            // Bug A — the real saved-clip count to surface in the merge
+            // band. Defaults to 0 so [segmentCount] remains the fallback
+            // total for any caller not yet wired through performMerge.
+            mergeClipCount: Int = 0
         ): RecordHudState {
             if (isMerging) {
-                val total = segmentCount.coerceAtLeast(0)
+                // Bug A — on an early user-stop the loop never completed an
+                // iteration so segmentCount is still 0; performMerge publishes
+                // the real count via mergeClipCount so the band isn't "X of 0".
+                val total = (if (mergeClipCount > 0) mergeClipCount else segmentCount)
+                    .coerceAtLeast(0)
                 val safeProgress = mergeProgress.coerceIn(0f, 1f)
                 val current = if (total <= 0) {
                     0
@@ -87,6 +105,9 @@ sealed class RecordHudState {
             return when {
                 !isPeriodicActive -> Idle
                 isRecording -> Recording
+                // Bug B — before the first clip is ever finalized (startup
+                // grace OR a first-segment retry), show Starting, not Waiting.
+                segmentCount == 0 -> Starting
                 else -> Waiting
             }
         }

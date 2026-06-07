@@ -77,6 +77,18 @@ class RecordActiveHudFormattersTest {
         assertEquals(UiText.StrArgs(R.string.record_hud_time_next_in, listOf("00:42")), c.time)
     }
 
+    @Test fun status_starting_amber_with_static_caption() {
+        // Bug B — startup grace: reuses the WAITING (amber/slate) dot, static
+        // caption (no countdown), distinct copy from "On break".
+        val c = hudStatusPillContent(
+            state = RecordHudState.Starting,
+            clipSecondsLeft = 0, waitSecondsLeft = 0,
+        )
+        assertEquals(StatusDotColor.WAITING, c.dot)
+        assertEquals(UiText.Str(R.string.record_hud_status_starting), c.main)
+        assertEquals(UiText.Str(R.string.record_hud_starting_caption), c.time)
+    }
+
     @Test fun status_merging_blue_with_percent() {
         val c = hudStatusPillContent(
             state = RecordHudState.Merging(
@@ -146,6 +158,15 @@ class RecordActiveHudFormattersTest {
         assertEquals(
             UiText.StrArgs(R.string.record_hud_announce_recording_loop, listOf(3)),
             hudActiveAnnouncement(RecordHudState.Recording, loopIndex = 3, loopTotal = -1),
+        )
+    }
+
+    @Test fun announce_starting_isStaticPhrase_noLoopSuffix() {
+        // Bug B — startup grace has no loop position yet; a single static phrase,
+        // independent of loopIndex/loopTotal.
+        assertEquals(
+            UiText.Str(R.string.record_hud_announce_starting),
+            hudActiveAnnouncement(RecordHudState.Starting, loopIndex = 5, loopTotal = 9),
         )
     }
 
