@@ -109,6 +109,15 @@ data class RovaServiceState(
     val currentLoop: Int = 0,
     val isMerging: Boolean = false,
     val mergeProgress: Float = 0f,
+    // Bug A — the real saved-clip count, set in performMerge / performMergeDual
+    // on the export-success path. Feeds the post-merge summary card so an early
+    // user-stop (segmentCount still 0, but the partial clip IS saved) reads the
+    // true count instead of "0 clips saved to library".
+    val exportedClipCount: Int = 0,
+    // Bug A — published BEFORE isMerging flips true so the in-merge "Merging
+    // clip X of Y" band shows the real total even on an early stop (segmentCount
+    // is still 0 there because the loop never completed an iteration).
+    val mergeClipCount: Int = 0,
     val mergeError: String? = null,
     // B4c — true when the export failed because the custom SAF save folder is
     // gone/unwritable. Lets the record screen show an accurate "folder
@@ -1005,7 +1014,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // update so the UI never sees a stale count from a prior
         // session.
         _serviceState.update {
-            it.copy(totalLoops = limitLoops, currentLoop = 0, segmentCount = 0)
+            it.copy(
+                totalLoops = limitLoops,
+                currentLoop = 0,
+                segmentCount = 0,
+                // Bug A — reset the saved-clip counters so the UI never sees a
+                // prior session's count during this session's merge / summary.
+                exportedClipCount = 0,
+                mergeClipCount = 0
+            )
         }
 
         // ============================================================
@@ -3518,7 +3535,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private suspend fun performMerge(segments: List<File>) {
         var mergeSucceeded = false
         try {
-            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            // Bug A — publish the real merge total BEFORE isMerging flips so the
+            // in-merge band reads "Merging clip X of <segments.size>" even on an
+            // early stop where segmentCount is still 0.
+            _serviceState.update {
+                it.copy(
+                    isMerging = true,
+                    mergeProgress = 0f,
+                    mergeError = null,
+                    mergeClipCount = segments.size
+                )
+            }
             updateNotification(NotificationState.Merging(done = 0, total = segments.size, mergeProgressPercent = 0))
 
             // Phase 1.7 commit-7 — single live entry into the tier
@@ -3553,6 +3580,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
             when (result) {
                 is ExportResult.Success -> {
+                    // Bug A — record the real saved-clip count so the post-merge
+                    // summary card surfaces it (segmentCount is 0 on an early stop).
+                    _serviceState.update { it.copy(exportedClipCount = segments.size) }
                     updateNotification(NotificationState.MergeComplete(
                         clipCount = segments.size,
                         totalDurationSeconds = null, // segments: List<File> — durationMs not available here
@@ -3713,8 +3743,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
     ) {
         var portraitOk = false
         var landscapeOk = false
+        // Bug A — one logical P+L session = one clip count (matches the dual
+        // MergeComplete notification, which uses max not sum). Computed up here
+        // so it can seed mergeClipCount BEFORE isMerging flips true.
+        val dualClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
         try {
-            _serviceState.update { it.copy(isMerging = true, mergeProgress = 0f, mergeError = null) }
+            _serviceState.update {
+                it.copy(
+                    isMerging = true,
+                    mergeProgress = 0f,
+                    mergeError = null,
+                    mergeClipCount = dualClipCount
+                )
+            }
             // Phase 6.1b smoke-fix #5 — notification clip count is the
             // user-facing per-side count (the loop count), NOT the sum of
             // both sides. Owner reported "Merging 4 clips" for a 2-loop
@@ -3726,7 +3767,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // (NotificationCopy "$clipCount clips saved to Library"):
             // X always means "clips within the saved content", not "raw
             // segments across all output streams."
-            val userClipCount = maxOf(portraitSegments.size, landscapeSegments.size)
+            val userClipCount = dualClipCount
             updateNotification(NotificationState.Merging(done = 0, total = userClipCount, mergeProgressPercent = 0))
 
             val sid = currentSessionId
@@ -3823,6 +3864,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         RovaLog.e("performMergeDual: shared setExportFinalized threw for $sidForFinalize", e)
                     }
                 }
+                // Bug A — record the real saved-clip count for the summary card.
+                _serviceState.update { it.copy(exportedClipCount = userClipCount) }
                 updateNotification(NotificationState.MergeComplete(
                     clipCount = userClipCount,
                     totalDurationSeconds = null, // portraitSegments/landscapeSegments: List<File> — durationMs not available here

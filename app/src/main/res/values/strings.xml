@@ -188,6 +188,9 @@
     <string name="record_hud_status_recording">Recording</string>
     <string name="record_hud_status_on_break">On break</string>
     <string name="record_hud_status_merging">Merging…</string>
+    <!-- Bug B — startup grace before the first clip (distinct from the inter-clip "On break") -->
+    <string name="record_hud_status_starting">Preparing…</string>
+    <string name="record_hud_starting_caption">· starting recording</string>
     <string name="record_hud_time_left">· %1$s left</string>
     <string name="record_hud_time_next_in">· next in %1$s</string>
     <string name="record_hud_time_percent">· %1$d%%</string>
@@ -235,11 +238,16 @@
     <string name="record_hud_announce_on_break">On break.</string>
     <string name="record_hud_announce_on_break_loop">On break. Loop %1$d.</string>
     <string name="record_hud_announce_on_break_loop_of">On break. Loop %1$d of %2$d.</string>
+    <!-- Bug B — startup grace announcement -->
+    <string name="record_hud_announce_starting">Preparing to record.</string>
 
     <!-- Status pill copy (idle/active) -->
     <string name="record_status_recording">Recording</string>
     <string name="record_status_on_break">On break</string>
     <string name="record_status_merging">Merging</string>
+    <!-- Bug B — startup grace before the first clip -->
+    <string name="record_status_starting">Preparing…</string>
+    <string name="record_status_detail_preparing">starting recording…</string>
     <string name="record_status_ready">Ready to record</string>
     <string name="record_status_detail_clip_of">%1$ds of %2$ds</string>
     <string name="record_status_detail_next_in">next in %1$ds</string>

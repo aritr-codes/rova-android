@@ -33,8 +33,30 @@ class RecordHudStateTest {
     }
 
     @Test
-    fun `from waiting when periodic active and not recording`() {
-        assertEquals(RecordHudState.Waiting, RecordHudState.from(true, false))
+    fun `from starting when periodic active not recording and no segment yet`() {
+        // Bug B — the startup grace before the first clip is finalized.
+        // Default segmentCount is 0, so the 2-arg shape resolves to Starting.
+        assertEquals(RecordHudState.Starting, RecordHudState.from(true, false))
+    }
+
+    @Test
+    fun `from starting on first-segment retry`() {
+        // Bug B — a first-segment retry also has segmentCount 0 (nothing
+        // finalized yet), so it shows Starting, not the inter-clip Waiting.
+        assertEquals(
+            RecordHudState.Starting,
+            RecordHudState.from(isPeriodicActive = true, isRecording = false, segmentCount = 0),
+        )
+    }
+
+    @Test
+    fun `from waiting once a segment is finalized`() {
+        // Bug B — after the first clip lands (segmentCount >= 1) the inter-clip
+        // gap is the real "On break" state.
+        assertEquals(
+            RecordHudState.Waiting,
+            RecordHudState.from(isPeriodicActive = true, isRecording = false, segmentCount = 1),
+        )
     }
 
     @Test
@@ -147,6 +169,55 @@ class RecordHudStateTest {
         ) as RecordHudState.Merging
         assertEquals(0, state.totalSegments)
         assertEquals(0, state.currentSegment)
+    }
+
+    @Test
+    fun `from merging beats starting when isMerging and no segment yet`() {
+        // Bug A + B — an early user-stop in the startup grace: segmentCount 0
+        // AND isMerging true. The merge axis must win (not Starting/Idle).
+        val state = RecordHudState.from(
+            isPeriodicActive = false,
+            isRecording = false,
+            isMerging = true,
+            mergeProgress = 0.5f,
+            segmentCount = 0,
+            mergeClipCount = 1,
+        )
+        assertTrue(state is RecordHudState.Merging)
+    }
+
+    // ─── Bug A — mergeClipCount feeds the merge band total ─────────
+
+    @Test
+    fun `from merging uses mergeClipCount when segmentCount is zero`() {
+        // Early user-stop: the loop never completed an iteration so segmentCount
+        // is 0, but the partial clip is being merged — performMerge publishes
+        // mergeClipCount=1 so the band reads "1" not "0".
+        val state = RecordHudState.from(
+            isPeriodicActive = false,
+            isRecording = false,
+            isMerging = true,
+            mergeProgress = 1f,
+            segmentCount = 0,
+            mergeClipCount = 1,
+        ) as RecordHudState.Merging
+        assertEquals(1, state.totalSegments)
+        assertEquals(1, state.currentSegment)
+    }
+
+    @Test
+    fun `from merging falls back to segmentCount when mergeClipCount is zero`() {
+        // Loop-exhaust path: mergeClipCount unset (0) → segmentCount is the total.
+        val state = RecordHudState.from(
+            isPeriodicActive = true,
+            isRecording = false,
+            isMerging = true,
+            mergeProgress = 1f,
+            segmentCount = 3,
+            mergeClipCount = 0,
+        ) as RecordHudState.Merging
+        assertEquals(3, state.totalSegments)
+        assertEquals(3, state.currentSegment)
     }
 
     @Test

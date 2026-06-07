@@ -155,7 +155,9 @@ fun recordFabState(
     hardBlockActive: Boolean,
 ): RecordFabState = when (hudState) {
     RecordHudState.Idle -> if (hardBlockActive) RecordFabState.Disabled else RecordFabState.Start
-    RecordHudState.Recording, RecordHudState.Waiting -> RecordFabState.Stop
+    // Bug B — Starting is an active-session state (the loop is running, just
+    // pre-first-clip), so the FAB stays Stop alongside Recording / Waiting.
+    RecordHudState.Recording, RecordHudState.Starting, RecordHudState.Waiting -> RecordFabState.Stop
     is RecordHudState.Merging -> RecordFabState.Disabled
 }
 
@@ -676,6 +678,14 @@ internal fun hudStatusPillContent(
             listOf(RecordHudFormatters.formatMmSs(clipSecondsLeft.toLong())),
         ),
     )
+    // Bug B — startup grace before the first clip. Reuses the amber/slate
+    // WAITING dot (no new color token); the caption is a static phrase, not a
+    // countdown, because nothing is timing down during the pre-record grace.
+    RecordHudState.Starting -> StatusPillContent(
+        dot = StatusDotColor.WAITING,
+        main = UiText.Str(R.string.record_hud_status_starting),
+        time = UiText.Str(R.string.record_hud_starting_caption),
+    )
     RecordHudState.Waiting -> StatusPillContent(
         dot = StatusDotColor.WAITING,
         main = UiText.Str(R.string.record_hud_status_on_break),
@@ -722,6 +732,10 @@ internal fun hudActiveAnnouncement(
         loopIndex = loopIndex,
         loopTotal = loopTotal,
     )
+    // Bug B — boundary-level announcement for the startup grace. A single
+    // static phrase (no loop suffix) — there is no loop position yet because
+    // the first clip has not started.
+    RecordHudState.Starting -> UiText.Str(R.string.record_hud_announce_starting)
     RecordHudState.Waiting -> announceForState(
         bare = R.string.record_hud_announce_on_break,
         loop = R.string.record_hud_announce_on_break_loop,

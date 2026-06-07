@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
+import com.aritr.rova.ui.components.MergeCompleteCount
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
 import com.aritr.rova.ui.warnings.ThermalTipsSheet
@@ -340,7 +341,10 @@ fun RecordScreen(
         isRecording = serviceState.isRecording,
         isMerging = serviceState.isMerging,
         mergeProgress = serviceState.mergeProgress,
-        segmentCount = serviceState.segmentCount
+        segmentCount = serviceState.segmentCount,
+        // Bug A — real merge total so the band reads "clip X of Y" on an
+        // early stop where segmentCount is still 0.
+        mergeClipCount = serviceState.mergeClipCount
     )
 
     // R2 — drive StorageLowMidRecSignal while in an active HUD state.
@@ -512,6 +516,8 @@ fun RecordScreen(
     val statusDetail: String?
     when (hudState) {
         RecordHudState.Recording -> { statusText = stringResource(R.string.record_status_recording); statusDetail = stringResource(R.string.record_status_detail_clip_of, clipElapsedSeconds, duration) }
+        // Bug B — startup grace before the first clip; static detail (no countdown).
+        RecordHudState.Starting  -> { statusText = stringResource(R.string.record_status_starting); statusDetail = stringResource(R.string.record_status_detail_preparing) }
         RecordHudState.Waiting   -> { statusText = stringResource(R.string.record_status_on_break); statusDetail = stringResource(R.string.record_status_detail_next_in, displayedCountdownSeconds) }
         is RecordHudState.Merging -> { statusText = stringResource(R.string.record_status_merging); statusDetail = null }
         RecordHudState.Idle -> { statusText = stringResource(R.string.record_status_ready); statusDetail = null }
@@ -698,6 +704,7 @@ fun RecordScreen(
                         // once for all states below the `when` (dimmed when active).
                     }
                     RecordHudState.Recording,
+                    RecordHudState.Starting,
                     RecordHudState.Waiting,
                     is RecordHudState.Merging -> {
                         // R2 active-state HUD: WarningCenter (mid-rec TopBanner) +
@@ -908,14 +915,20 @@ fun RecordScreen(
     LaunchedEffect(serviceState.isMerging, serviceState.mergeError) {
         if (serviceState.isMerging) {
             wasMerging = true
-            // Stash the running clip count so the post-merge card
-            // can still describe the session after the service has
-            // flipped its counters back to zero.
-            if (serviceState.segmentCount > 0) {
-                lastCompleteClipCount = serviceState.segmentCount
-            }
+            // Bug A — the count is resolved on the FALLING edge (below), not
+            // here. On the rising edge `exportedClipCount` is not yet published
+            // (performMerge sets it only on the success path), so stashing here
+            // captured 0 on an early user-stop ("0 clips saved to library").
         } else if (wasMerging) {
             wasMerging = false
+            // Bug A — resolve the real saved-clip count right before the
+            // MergeCompleteCard shows. exportedClipCount is success-owned (set
+            // in performMerge); segmentCount is the loop-exhaust fallback.
+            val real = MergeCompleteCount.resolve(
+                serviceState.exportedClipCount,
+                serviceState.segmentCount,
+            )
+            if (real > 0) lastCompleteClipCount = real
             // B4c — the save-folder flag can flip at SESSION START (a custom
             // folder gone at freeze → fell back to default) while the user never
             // leaves the record screen, so ON_RESUME never re-reads it. Refresh
