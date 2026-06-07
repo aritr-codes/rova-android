@@ -152,6 +152,22 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     val items: StateFlow<List<VideoItem>> = _items.asStateFlow()
 
     /**
+     * Nav-retention fix — distinguishes "first query has not returned yet"
+     * from "queried and genuinely empty". [items] starts as `emptyList()`
+     * and [refresh] is asynchronous, so without this the History screen
+     * would paint the "No Recordings Yet" empty CTA for the frames between
+     * first composition and the first load completing — a visible flash on
+     * a cold Library open. The screen shows a loading placeholder while this
+     * is false and only surfaces the empty CTA once it flips true on an
+     * empty result. Flipped on the first emit (partial first-paint or final)
+     * and stays true for the VM's lifetime; because the VM is now retained
+     * across nav (saveState/restoreState), a returning screen reads it as
+     * already-true and never re-flashes.
+     */
+    private val _hasLoaded = MutableStateFlow(false)
+    val hasLoaded: StateFlow<Boolean> = _hasLoaded.asStateFlow()
+
+    /**
      * Slice 13B — one-shot retention cleanup notices. Replay = 0 so a
      * screen recreated after the emit does not surface a stale
      * snackbar; `extraBufferCapacity = 1` + `DROP_OLDEST` collapses
@@ -186,19 +202,30 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            var newItems = loadItemsList(emitPartial = true)
-            // Apply the "keep latest N finalized recordings" retention
-            // policy at most once per refresh pass. The cleaner is
-            // idempotent on already-trimmed state — a subsequent
-            // refresh sees finalized.size <= keepLatest and no-ops —
-            // so we can safely re-run loadItemsList only when the
-            // cleaner actually deleted something. This avoids the
-            // self-triggering refresh loop.
-            val cleanupResult = applyRetentionCleanupIfEnabled(newItems)
-            if (cleanupResult.deleted > 0) {
-                newItems = loadItemsList(emitPartial = true)
+            try {
+                var newItems = loadItemsList(emitPartial = true)
+                // Apply the "keep latest N finalized recordings" retention
+                // policy at most once per refresh pass. The cleaner is
+                // idempotent on already-trimmed state — a subsequent
+                // refresh sees finalized.size <= keepLatest and no-ops —
+                // so we can safely re-run loadItemsList only when the
+                // cleaner actually deleted something. This avoids the
+                // self-triggering refresh loop.
+                val cleanupResult = applyRetentionCleanupIfEnabled(newItems)
+                if (cleanupResult.deleted > 0) {
+                    newItems = loadItemsList(emitPartial = true)
+                }
+                _items.value = newItems
+            } finally {
+                // Always clear the first-load latch, even if loadItemsList
+                // threw (filesystem / MediaMetadataRetriever failure) before
+                // the emit above — otherwise the screen's spinner would hang
+                // forever. A failed/empty load surfaces zero rows, which the
+                // screen then renders as the empty CTA: the correct degraded
+                // state. Idempotent with the partial first-paint flip inside
+                // loadItemsList (which clears it earlier when rows exist).
+                _hasLoaded.value = true
             }
-            _items.value = newItems
         }
     }
 
@@ -254,6 +281,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             // First-paint emit: rows show up with placeholder thumb +
             // "—" resolution while metadata loads in parallel.
             _items.value = initial
+            // The query has returned (with rows) — clear the loading latch
+            // so the partial first paint shows the list, not the empty CTA.
+            _hasLoaded.value = true
         }
 
         if (anyMissing) {

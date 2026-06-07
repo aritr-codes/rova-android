@@ -315,6 +315,9 @@
     <!-- Recovery card OEM auto-start help -->
     <string name="history_recovery_open_device_settings">Abrir ajustes del dispositivo</string>
 
+    <!-- Loading state (first cold load before the MediaStore query returns) -->
+    <string name="history_loading_cd">Cargando tu biblioteca</string>
+
     <!-- Empty state -->
     <string name="history_empty_title">Aún no hay grabaciones</string>
     <string name="history_empty_body">Tus grabaciones combinadas aparecerán aquí cuando completes una grabación.</string>

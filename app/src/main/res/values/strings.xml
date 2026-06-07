@@ -315,6 +315,9 @@
     <!-- Recovery card OEM auto-start help -->
     <string name="history_recovery_open_device_settings">Open device settings</string>
 
+    <!-- Loading state (first cold load before the MediaStore query returns) -->
+    <string name="history_loading_cd">Loading your library</string>
+
     <!-- Empty state -->
     <string name="history_empty_title">No Recordings Yet</string>
     <string name="history_empty_body">Your merged sessions will appear here once you complete a recording.</string>
