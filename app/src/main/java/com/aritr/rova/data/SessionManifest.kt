@@ -110,7 +110,16 @@ data class SessionManifest(
      *   committed after `allocateNonColliding` and before the first byte.
      */
     val pendingMoveOutUri: String? = null,
-    val pendingMoveOutPath: String? = null
+    val pendingMoveOutPath: String? = null,
+    // ADR-0027 — daily recording window. Persisted so cold-launch recovery can
+    // classify a killed scheduled session from evidence. [scheduleWindowExpired]
+    // is always false in v1 — a RESERVED latch for future use. The load-bearing
+    // signal that a window-driven stop occurred is StopReason.SCHEDULE_WINDOW on
+    // the terminal record; recovery does NOT read these fields for classification.
+    val startedBySchedule: Boolean = false,
+    val scheduleWindowStartMillis: Long = 0L,
+    val scheduleWindowEndMillis: Long = 0L,
+    val scheduleWindowExpired: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("schemaVersion", SCHEMA_VERSION)
@@ -157,6 +166,12 @@ data class SessionManifest(
         // in flight (schema-7 manifests keep their byte-shape otherwise).
         pendingMoveOutUri?.let { put("pendingMoveOutUri", it) }
         pendingMoveOutPath?.let { put("pendingMoveOutPath", it) }
+        // ADR-0027 — emit only when non-default so non-scheduled sessions keep
+        // their byte-shape (schema-8 manifests carry none of these keys).
+        if (startedBySchedule) put("startedBySchedule", true)
+        if (scheduleWindowStartMillis != 0L) put("scheduleWindowStartMillis", scheduleWindowStartMillis)
+        if (scheduleWindowEndMillis != 0L) put("scheduleWindowEndMillis", scheduleWindowEndMillis)
+        if (scheduleWindowExpired) put("scheduleWindowExpired", true)
     }
 
     companion object {
@@ -166,7 +181,8 @@ data class SessionManifest(
         // ("Portrait"). v3 (Phase 1.4 / ADR 0006): added audioMode,
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
         // 7->8: pendingMoveOut{Uri,Path} commit-before-finalize (B5 / ADR-0025).
-        const val SCHEMA_VERSION = 8   // 6->7: vault fields (B5 / ADR-0025)
+        // 8->9: daily-window schedule fields (ADR-0027).
+        const val SCHEMA_VERSION = 9   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -225,7 +241,12 @@ data class SessionManifest(
             // B5 / ADR-0025 commit-before-finalize — schema-7 manifests lack
             // these keys, so optString → "" → null (tolerant read).
             pendingMoveOutUri = json.optString("pendingMoveOutUri", "").ifEmpty { null },
-            pendingMoveOutPath = json.optString("pendingMoveOutPath", "").ifEmpty { null }
+            pendingMoveOutPath = json.optString("pendingMoveOutPath", "").ifEmpty { null },
+            // ADR-0027 — schema-8 manifests lack these keys (tolerant defaults).
+            startedBySchedule = json.optBoolean("startedBySchedule", false),
+            scheduleWindowStartMillis = json.optLong("scheduleWindowStartMillis", 0L),
+            scheduleWindowEndMillis = json.optLong("scheduleWindowEndMillis", 0L),
+            scheduleWindowExpired = json.optBoolean("scheduleWindowExpired", false)
         )
     }
 }
@@ -472,5 +493,12 @@ enum class StopReason {
      * See ADR-0016.
      */
     THERMAL,
+    /**
+     * ADR-0027 — the scheduled daily-window stop alarm fired (or the segment
+     * loop self-healed at window end). Written atomically with
+     * `Terminated.USER_STOPPED` like the other gate reasons. Distinct from
+     * [USER] so History/recovery can tell a scheduled stop from a manual one.
+     */
+    SCHEDULE_WINDOW,
     NONE
 }

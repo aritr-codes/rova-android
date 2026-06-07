@@ -81,7 +81,9 @@ class RecoveryScannerTest {
         exportState: ExportState = ExportState.NOT_STARTED,
         stopReason: StopReason = StopReason.NONE,
         audioMode: AudioMode = AudioMode.VIDEO_ONLY,
-        mode: String = "Portrait"
+        mode: String = "Portrait",
+        startedBySchedule: Boolean = false,
+        scheduleWindowEndMillis: Long = 0L
     ) {
         val sessionDir = File(rootDir, sessionId).also { it.mkdirs() }
         diskSegmentNames.forEach { name -> File(sessionDir, name).writeBytes(byteArrayOf(0x00)) }
@@ -99,7 +101,10 @@ class RecoveryScannerTest {
             terminatedAt = terminated?.let { 1L },
             stopRequested = stopRequested,
             stopReason = stopReason,
-            audioMode = audioMode
+            audioMode = audioMode,
+            startedBySchedule = startedBySchedule,
+            scheduleWindowStartMillis = if (startedBySchedule) startedAt else 0L,
+            scheduleWindowEndMillis = scheduleWindowEndMillis
         )
         File(sessionDir, "manifest.json").writeText(manifest.toJson().toString())
     }
@@ -230,6 +235,29 @@ class RecoveryScannerTest {
     fun `T null no stopRequested and empty session writes KILLED_FORCE_STOP`() = runBlocking {
         val sid = "force-stopped"
         seedSession(sessionId = sid)
+
+        val classification = newScanner().classify(sid, nowMillis)
+
+        assertEquals(TerminalAction.WROTE_KILLED_FORCE_STOP, classification.terminalAction)
+        assertEquals(Terminated.KILLED_FORCE_STOP, reloadManifest(sid).terminated)
+    }
+
+    /**
+     * ADR-0027 §6 — a schedule-started session killed mid-window (T=null, no
+     * stopRequested, window already elapsed) MUST classify by the normal
+     * killed-vs-completed matrix, NOT be silently treated as a clean
+     * window-end completion. The scanner ignores the schedule fields for
+     * terminal classification; the load-bearing signal is StopReason on the
+     * terminal record, written only by the live stop/self-heal paths.
+     */
+    @Test
+    fun `T null scheduled session killed mid-window still writes KILLED_FORCE_STOP`() = runBlocking {
+        val sid = "scheduled-force-stopped"
+        seedSession(
+            sessionId = sid,
+            startedBySchedule = true,
+            scheduleWindowEndMillis = SESSION_STARTED_AT + 1_000L // already elapsed by nowMillis
+        )
 
         val classification = newScanner().classify(sid, nowMillis)
 

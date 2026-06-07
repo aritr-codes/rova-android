@@ -218,6 +218,48 @@ val checkStopNoGetService = tasks.register("checkStopNoGetService") {
     }
 }
 
+// ADR-0027 — the daily-window receivers must NEVER start the camera FGS.
+// Android 14+ forbids starting a while-in-use FGS from the background; the
+// only legal camera-start site is MainActivity on the user's notification tap.
+// Forbid getService / startForegroundService / startService under service/schedule/.
+val checkScheduleReceiverNoFgsStart = tasks.register("checkScheduleReceiverNoFgsStart") {
+    group = "verification"
+    description = "Schedule receivers (service/schedule/) must never start the camera FGS (ADR-0027)."
+    val srcDir = file("src/main/java/com/aritr/rova/service/schedule")
+    inputs.dir(srcDir).withPropertyName("scheduleSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("Schedule source dir missing: $srcDir")
+        }
+        val pattern = Regex("""PendingIntent\s*\.\s*getService\b|\bstartForegroundService\s*\(|\bstartService\s*\(""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val hits = f.readLines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        val trimmed = line.trimStart()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                        else pattern.containsMatchIn(line)
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "Schedule receivers must not start a foreground service (ADR-0027): the " +
+                    "camera FGS is started only from MainActivity on the user's notification " +
+                    "tap. Offenders:\n$report"
+            )
+        }
+    }
+}
+
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #1:
 // Phase 1.5 sources MUST NOT call any deletion API. Phase 1.5 emits
 // DiscardEligibility flags only; physical deletion is owned by Phase 1.7
@@ -1884,6 +1926,7 @@ val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPubl
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
+        dependsOn(checkScheduleReceiverNoFgsStart)
         dependsOn(checkStopNoGetService)
         dependsOn(checkRecoveryNoDeletion)
         dependsOn(checkRecoverySegmentRegex)
