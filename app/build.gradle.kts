@@ -1938,6 +1938,14 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.biometric)
+    // Force modern stable fragment: biometric:1.1.0 transitively pulls
+    // fragment:1.2.5, whose FragmentActivity.checkForValidRequestCode enforces
+    // the legacy 16-bit requestCode limit. activity:1.11.0's ActivityResultRegistry
+    // emits request codes >= 0x10000, so the SAF OpenDocumentTree picker crashed
+    // ("Can only use lower 16 bits for requestCode") since B5 made MainActivity a
+    // FragmentActivity. fragment >= 1.3.0 removed that check. First-order dep wins
+    // conflict resolution over biometric's transitive 1.2.5. No code change needed.
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.concurrent.futures.ktx)
     // Phase 2.5 — In-app player. media3-exoplayer drives playback over
     // the merged MP4; media3-ui provides PlayerView (the Compose wrapper
