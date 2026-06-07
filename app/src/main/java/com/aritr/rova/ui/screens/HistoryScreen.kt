@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -120,6 +121,11 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val items by viewModel.items.collectAsStateWithLifecycle()
+    // Nav-retention fix — gate the empty CTA on a completed first load so a
+    // cold Library open shows a spinner (not "No Recordings Yet") until the
+    // MediaStore query returns. Stays true once loaded; with the VM retained
+    // across nav, a returning Library reads it already-true and never flashes.
+    val hasLoaded by viewModel.hasLoaded.collectAsStateWithLifecycle()
 
     // Phase 2 Slice 2.1b — recovery cards above the library list. Pulls
     // from RovaApp.recoveryReport (single source of truth) and routes
@@ -453,7 +459,12 @@ fun HistoryScreen(
                 }
             }
         ) { innerPadding ->
-            if (items.isEmpty()) {
+            if (!hasLoaded) {
+                // Nav-retention fix — first load in flight. Show a spinner
+                // instead of the empty CTA so a cold open never flashes
+                // "No Recordings Yet" before the query returns.
+                LibraryLoadingState(modifier = Modifier.padding(innerPadding))
+            } else if (items.isEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -938,6 +949,28 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * Nav-retention fix — first-load placeholder for the Library. Renders while
+ * [HistoryViewModel.hasLoaded] is false (the MediaStore query for the first
+ * cold open has not returned yet). Showing a spinner here instead of the
+ * empty CTA stops the "No Recordings Yet" flash that appeared for the frames
+ * between first composition and the first load completing. The indicator
+ * carries a content description so TalkBack announces the loading state
+ * rather than an unlabeled progress widget.
+ */
+@Composable
+private fun LibraryLoadingState(modifier: Modifier = Modifier) {
+    val loadingCd = stringResource(R.string.history_loading_cd)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .semantics { contentDescription = loadingCd },
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
     }
 }
 

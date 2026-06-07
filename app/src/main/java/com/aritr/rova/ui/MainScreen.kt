@@ -103,9 +103,19 @@ fun MainScreen(
             }
             composable("record") {
                 val toHistory: () -> Unit = {
+                    // Nav-retention fix — saveState/restoreState retains the
+                    // History destination's NavBackStackEntry state (its
+                    // ViewModelStore, so HistoryViewModel keeps its loaded
+                    // list + warm metadata cache) across a tab switch. Without
+                    // it each return to Library rebuilt a fresh VM and
+                    // re-queried MediaStore, flashing the empty state for a
+                    // beat before the list repainted. `record` is the start
+                    // destination so it stays on the stack and never needs
+                    // restoring; `history` is the popped/restored tab.
                     navController.navigate("history") {
-                        popUpTo(navController.graph.startDestinationId)
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
+                        restoreState = true
                     }
                 }
                 RovaDarkSurface {
@@ -144,9 +154,15 @@ fun MainScreen(
                 }
                 HistoryScreen(
                     onNavigateToRecord = {
+                        // Nav-retention fix — symmetric save/restore so the
+                        // History tab's state is saved on the way back to
+                        // Record and restored next time Library opens. Keeps
+                        // the loaded list + scroll position instead of cold
+                        // re-querying. See toHistory above.
                         navController.navigate("record") {
-                            popUpTo(navController.graph.startDestinationId)
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     },
                     onOpenVault = onOpenVault,
