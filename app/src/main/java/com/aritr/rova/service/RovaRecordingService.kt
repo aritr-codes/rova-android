@@ -1474,7 +1474,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     if (startedBySchedule && scheduleWindowEndMillis > 0L &&
                         System.currentTimeMillis() >= scheduleWindowEndMillis
                     ) {
-                        RovaLog.d("startPeriodicRecording: schedule window elapsed — self-heal stop")
+                        RovaLog.d { "startPeriodicRecording: schedule window elapsed — self-heal stop" }
                         userStopRequested = true
                         if (currentStopReason == null) {
                             currentStopReason = com.aritr.rova.data.StopReason.SCHEDULE_WINDOW

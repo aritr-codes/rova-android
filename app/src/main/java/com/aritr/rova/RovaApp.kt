@@ -850,14 +850,14 @@ class RovaApp : Application() {
             System.currentTimeMillis(), java.util.TimeZone.getDefault(), s.scheduleSnapshot(),
         )
         if (windowEnd == null) {
-            RovaLog.d("startScheduledRecording: tap outside an open window; ignoring")
+            RovaLog.d { "startScheduledRecording: tap outside an open window; ignoring" }
             return
         }
         // Don't clobber a session already recording (e.g. a manual start still
         // running). The service-side register-collision would otherwise abort
         // the new session anyway; bail cleanly here. [Finding 3]
         if (com.aritr.rova.service.ServiceController.current() != null) {
-            RovaLog.d("startScheduledRecording: a session is already live; ignoring")
+            RovaLog.d { "startScheduledRecording: a session is already live; ignoring" }
             return
         }
         com.aritr.rova.service.RovaRecordingService.start(
@@ -882,7 +882,7 @@ class RovaApp : Application() {
         if (controller != null) {
             controller.requestStop(com.aritr.rova.data.StopReason.SCHEDULE_WINDOW)
         } else {
-            RovaLog.d("requestScheduleWindowStop: no live controller; nothing to stop")
+            RovaLog.d { "requestScheduleWindowStop: no live controller; nothing to stop" }
         }
     }
 

@@ -18,7 +18,7 @@ class ScheduleStopReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_WINDOW_STOP) return
-        RovaLog.d("ScheduleStopReceiver: window close — requesting scheduled stop")
+        RovaLog.d { "ScheduleStopReceiver: window close — requesting scheduled stop" }
         (context.applicationContext as RovaApp).requestScheduleWindowStop()
         // Re-arm the next occurrence's start/stop alongside.
         ScheduleController.reschedule(context)
