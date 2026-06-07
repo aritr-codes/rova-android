@@ -40,10 +40,29 @@ class RecordHudMutualExclusionTest {
     }
 
     @Test
-    fun `periodic active and not recording yields Waiting`() {
+    fun `periodic active, not recording, before first clip yields Starting`() {
+        // Bug B — the pre-record startup grace (no segment finalized yet)
+        // reads as Starting ("Preparing…"), not the inter-clip Waiting.
+        assertEquals(
+            RecordHudState.Starting,
+            RecordHudState.from(
+                isPeriodicActive = true,
+                isRecording = false,
+                segmentCount = 0
+            )
+        )
+    }
+
+    @Test
+    fun `periodic active and not recording after a clip yields Waiting`() {
+        // Real inter-clip interval (>= 1 segment finalized) stays Waiting.
         assertEquals(
             RecordHudState.Waiting,
-            RecordHudState.from(isPeriodicActive = true, isRecording = false)
+            RecordHudState.from(
+                isPeriodicActive = true,
+                isRecording = false,
+                segmentCount = 1
+            )
         )
     }
 
