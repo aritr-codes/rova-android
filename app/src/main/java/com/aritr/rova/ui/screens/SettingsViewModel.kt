@@ -68,6 +68,38 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // state so it always reflects the persisted value.
     val hideInVault = MutableStateFlow(settings.hideInVault)
 
+    // ADR-0027 — daily recording window. Explicit setters (not write-back
+    // collectors) because every change must re-arm the exact alarms via
+    // [com.aritr.rova.service.schedule.ScheduleController.reschedule].
+    val scheduleEnabled = MutableStateFlow(settings.scheduleEnabled)
+    val scheduleStartMinute = MutableStateFlow(settings.scheduleStartMinuteOfDay)
+    val scheduleStopMinute = MutableStateFlow(settings.scheduleStopMinuteOfDay)
+    val scheduleWeekdayMask = MutableStateFlow(settings.scheduleWeekdayMask)
+
+    fun setScheduleEnabled(value: Boolean) {
+        settings.scheduleEnabled = value
+        scheduleEnabled.value = value
+        com.aritr.rova.service.schedule.ScheduleController.reschedule(context)
+    }
+
+    fun setScheduleStartMinute(value: Int) {
+        settings.scheduleStartMinuteOfDay = value
+        scheduleStartMinute.value = value
+        com.aritr.rova.service.schedule.ScheduleController.reschedule(context)
+    }
+
+    fun setScheduleStopMinute(value: Int) {
+        settings.scheduleStopMinuteOfDay = value
+        scheduleStopMinute.value = value
+        com.aritr.rova.service.schedule.ScheduleController.reschedule(context)
+    }
+
+    fun setScheduleWeekdayMask(value: Int) {
+        settings.scheduleWeekdayMask = value
+        scheduleWeekdayMask.value = value
+        com.aritr.rova.service.schedule.ScheduleController.reschedule(context)
+    }
+
     init {
         viewModelScope.launch { enableBeeps.collect { settings.enableBeeps = it } }
         viewModelScope.launch { vibrateAlerts.collect { settings.vibrateAlerts = it } }
