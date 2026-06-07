@@ -22,7 +22,10 @@ class GlassResolverTest {
     fun `api30 forces zero blur and a heavier fill`() {
         val m = GlassResolver.resolve(env(30, false), GlassRole.BottomSheet)
         assertEquals(0f, m.blurRadius.value, 0f)
-        assertTrue("fallback fill must be >= 0.82 alpha", m.fill.alpha >= 0.82f)
+        // Pins FALLBACK_ALPHA = 0.86; threshold 0.855 tolerates Compose Color's
+        // 8-bit alpha quantization (0.86 round-trips to ~0.8588) while still
+        // catching any real lowering of the constant (e.g. 0.82 -> ~0.8196).
+        assertTrue("fallback fill must be ~0.86 alpha", m.fill.alpha >= 0.855f)
     }
 
     @Test
@@ -33,7 +36,9 @@ class GlassResolverTest {
         assertEquals(0f, lo.blurRadius.value, 0f)
         assertNotNull(hi.scrim)
         assertNotNull(lo.scrim)
-        assertTrue("record fill must be heavy", hi.fill.alpha >= 0.82f)
+        // Pins RECORD_ALPHA = 0.88; threshold 0.875 tolerates 8-bit alpha
+        // quantization (0.88 round-trips to ~0.8784).
+        assertTrue("record fill must be ~0.88 alpha", hi.fill.alpha >= 0.875f)
     }
 
     @Test

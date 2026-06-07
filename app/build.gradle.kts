@@ -1990,7 +1990,11 @@ val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
         val allowlist = setOf(
             "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheetV3.kt", "RecoveryCard.kt",
         )
-        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b""")
+        // Aligned with checkRecordSurfaceNoBlur: also catch RenderEffect/backdrop
+        // blur so the "all glass through GlassSurface" invariant stays airtight as
+        // later PRs migrate surfaces (the only current RenderEffect site is the
+        // allowlisted DualPreviewZone carve-out).
+        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
         val offenders = srcDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.name !in allowlist }
             .mapNotNull { f ->
