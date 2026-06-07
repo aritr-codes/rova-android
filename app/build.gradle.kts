@@ -1933,6 +1933,90 @@ val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPubl
     }
 }
 
+val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
+    group = "verification"
+    description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkRecordSurfaceNoBlur: Rova source dir missing: $srcDir")
+        }
+        // Record-chrome rendering files (confirmed real). DualPreviewZone is
+        // deliberately EXCLUDED — it's the camera preview/carve-out, not chrome.
+        val recordChromeNames = setOf(
+            "RecordScreen.kt", "RecordChrome.kt", "RecordChromeIcons.kt",
+        )
+        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.name in recordChromeNames }
+            .mapNotNull { f ->
+                val hits = f.readLines().withIndex().filter { (_, line) ->
+                    val t = line.trimStart()
+                    if (t.startsWith("//") || t.startsWith("*")) false
+                    else blurPattern.containsMatchIn(line)
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
+            }
+            throw GradleException(
+                "ADR-0028 §2.3 violation: record-chrome files must not blur. Record glass " +
+                    "renders through GlassRole.RecordChrome, whose resolver returns " +
+                    "blurRadius=0 (fill + scrim + edge + opaque text capsule instead). " +
+                    "DualPreviewZone's RenderEffect on non-recorded margins is the only " +
+                    "documented carve-out and is not record chrome.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
+val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
+    group = "verification"
+    description = "Modifier.blur is permitted only in GlassSurface.kt (resolver-driven glass), the DualPreviewZone carve-out, and pre-existing glow-bloom (WarningSheetV3/RecoveryCall). All new glass goes through GlassSurface(role=…) (ADR-0028 §2.1/§5)."
+    val srcDir = file("src/main/java/com/aritr/rova/ui")
+    inputs.dir(srcDir).withPropertyName("rovaUiSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkGlassSurfaceRoleUsage: Rova ui source dir missing: $srcDir")
+        }
+        // GlassSurface = sanctioned glass blur. DualPreviewZone = ADR carve-out
+        // (RenderEffect on non-recorded margins). WarningSheetV3 + RecoveryCard =
+        // pre-existing decorative icon-glow bloom; TODO(PR6/PR9): revisit when
+        // those surfaces migrate to GlassSurface.
+        val allowlist = setOf(
+            "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheetV3.kt", "RecoveryCard.kt",
+        )
+        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.name !in allowlist }
+            .mapNotNull { f ->
+                val hits = f.readLines().withIndex().filter { (_, line) ->
+                    val t = line.trimStart()
+                    if (t.startsWith("//") || t.startsWith("*")) false
+                    else blurPattern.containsMatchIn(line)
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
+            }
+            throw GradleException(
+                "ADR-0028 §2.1/§5 violation: Modifier.blur outside the sanctioned glass " +
+                    "wrapper. All translucent glass must render through " +
+                    "GlassSurface(role=…) so the GlassResolver owns the blur/fallback " +
+                    "decision. Permitted only in GlassSurface.kt, the DualPreviewZone.kt " +
+                    "carve-out, and the pre-existing glow-bloom sites.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -1968,6 +2052,8 @@ afterEvaluate {
         dependsOn(checkA11yAnimationGated)
         dependsOn(checkPresetNoOrientation)
         dependsOn(checkVaultExporterNoPublicPublish)
+        dependsOn(checkRecordSurfaceNoBlur)
+        dependsOn(checkGlassSurfaceRoleUsage)
     }
 }
 
