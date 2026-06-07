@@ -23,7 +23,7 @@ import com.aritr.rova.ui.isPinnedDarkRoute
 import com.aritr.rova.ui.locale.LocaleApplier
 import com.aritr.rova.ui.screens.SettingsViewModel
 import com.aritr.rova.ui.theme.RovaTheme
-import com.aritr.rova.ui.theme.resolveDarkTheme
+import com.aritr.rova.ui.theme.resolvePalette
 
 class MainActivity : FragmentActivity() {
 
@@ -49,8 +49,14 @@ class MainActivity : FragmentActivity() {
             // picker change recomposes here and re-themes the whole tree with
             // no Activity recreate. The same instance is passed into MainScreen.
             val settingsViewModel: SettingsViewModel = viewModel()
-            val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
-            val dark = resolveDarkTheme(themeMode, isSystemInDarkTheme())
+            // ADR-0028 — theme is now driven by ThemeSelection (flat-12 + Follow-
+            // System). Resolve to a concrete palette, then derive dark/light from
+            // it (Aurora & all dark palettes → dark scheme; Daylight → light;
+            // Follow-System → Aurora/Daylight by the OS flag). This reproduces the
+            // prior dark/light behavior exactly — no rendered color change in PR1.
+            val themeSelection by settingsViewModel.themeSelection.collectAsStateWithLifecycle()
+            val palette = resolvePalette(themeSelection, isSystemInDarkTheme())
+            val dark = !palette.isLight
             // navController is hoisted here so the current route can drive
             // system-bar icon polarity: pinned-dark screens (viewfinder/player/
             // onboarding) always need light icons; chrome follows the theme.
@@ -69,7 +75,7 @@ class MainActivity : FragmentActivity() {
                     onLastRelease = { window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) },
                 )
             }
-            RovaTheme(darkTheme = dark, lightStatusBarIcons = lightBars) {
+            RovaTheme(darkTheme = dark, lightStatusBarIcons = lightBars, palette = palette) {
                 CompositionLocalProvider(LocalSecureFlagController provides secureController) {
                     MainScreen(
                         initialTab = initialTab,

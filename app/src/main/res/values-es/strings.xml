@@ -374,6 +374,15 @@
     <string name="settings_theme_mode_system">Seguir el sistema</string>
     <string name="settings_theme_mode_dark">Oscuro</string>
     <string name="settings_theme_mode_light">Claro</string>
+    <!-- ADR-0028 — selección de tema liquid-glass (Seguir el sistema + paletas de la Ola 1). Los nombres de paleta son nombres propios. -->
+    <string name="settings_theme_selection_follow_system">Seguir el sistema</string>
+    <string name="settings_theme_selection_follow_system_sub">Daylight / Aurora</string>
+    <string name="settings_theme_selection_aurora">Aurora</string>
+    <string name="settings_theme_selection_tide">Tide</string>
+    <string name="settings_theme_selection_jade">Jade</string>
+    <string name="settings_theme_selection_dusk">Dusk</string>
+    <string name="settings_theme_selection_eclipse">Eclipse</string>
+    <string name="settings_theme_selection_daylight">Daylight</string>
     <string name="settings_language_label">Idioma</string>
     <string name="settings_language_supporting">Elige el idioma de la app</string>
     <string name="settings_language_system">Predeterminado del sistema</string>
