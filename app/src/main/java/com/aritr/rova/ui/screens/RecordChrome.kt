@@ -368,16 +368,24 @@ private fun ModeCycleChip(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val accent = LocalGlassEnvironment.current.palette.accentOnDark
-    val glyphAlpha = if (enabled) RecordChromeTokens.modeChipGlyphAlphaEnabled
-                     else RecordChromeTokens.modeChipGlyphAlphaDisabled
+    // PR2 §d (mockup-exact, owner-signed 2026-06-08): the selected-mode chip is
+    // the record home's theme anchor — a solid `accent → accent2` gradient (the
+    // mockup `.lpill span.on`), restoring per-palette distinctness (Aurora's
+    // blue→violet vs Eclipse's blue→periwinkle; Tide's teal→cyan vs Jade's
+    // emerald→deep-green — a flat single accent collapsed those). White bold
+    // label, pixel-faithful to the mockup. The white-on-bright-accent contrast
+    // sits below WCAG AA (~1.5–3.5:1); this is the one explicit, owner-approved
+    // exception to ADR-0020 "AA by default", scoped to this decorative selected
+    // state (mode also legible from position + the dual-preview zone tags).
+    val palette = LocalGlassEnvironment.current.palette
+    val selectedBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
+    val glyphAlpha = if (enabled) 0.85f else 0.45f
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(chipShape)
-            .background(accent.copy(alpha = 0.22f), chipShape)
-            .border(1.5.dp, accent, chipShape)
+            .background(selectedBrush, chipShape)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
@@ -397,14 +405,14 @@ private fun ModeCycleChip(
             Text(
                 mode,
                 style = RovaTokens.cellValue,
-                color = RecordChromeTokens.cellValueText,
+                color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 stringResource(R.string.record_cell_mode),
                 style = RovaTokens.cellKey,
-                color = RecordChromeTokens.cellKeyText,
+                color = Color.White.copy(alpha = 0.80f),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )

@@ -1,61 +1,50 @@
 package com.aritr.rova.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.math.roundToInt
 
 /**
- * Per-palette legibility of the RESTRAINED record selected-state accent
- * (ADR-0028 §2.4, codex-reconciled 2026-06-08). The selected mode segment is a
- * dark `accentContainerOnDark` (accent@22%) tint, NOT a solid bright fill — a
- * solid accentOnDark fill behind white text fails 3:1 for 10/12 themes. Three
- * bars match the three real relationships; if any palette fails, fix that
- * palette's accent in RovaPalette.kt, never the threshold.
+ * Per-palette guards for the record-home selected-mode chip (ADR-0028 PR2 §d,
+ * owner-signed 2026-06-08). The chip is a solid `accent -> accent2` gradient
+ * (mockup `.lpill span.on`), so theme personality on the pinned-dark Record home
+ * comes from BOTH gradient stops. This test guards the regression the owner
+ * reported: a flat single `accentOnDark` collapsed Aurora==Eclipse and
+ * Tide~=Jade. White-on-bright-accent contrast is intentionally below WCAG AA
+ * here (the one owner-approved ADR-0020 exception, scoped to this decorative
+ * selected state) — so it is deliberately NOT asserted.
  */
 class RecordAccentContrastTest {
 
-    private val recordSurface = Color(0xFF0B0E14)
+    private val concrete = ThemeSelection.entries.filter { it != ThemeSelection.FOLLOW_SYSTEM }
 
-    private fun rgb(c: Color) = Triple(
-        (c.red * 255).roundToInt(),
-        (c.green * 255).roundToInt(),
-        (c.blue * 255).roundToInt(),
-    )
+    private fun gradientPair(sel: ThemeSelection): Pair<Color, Color> =
+        rovaPalettes.getValue(sel).let { it.accent to it.accent2 }
 
-    private fun lum(c: Color): Double { val (r, g, b) = rgb(c); return ContrastMath.relativeLuminance(r, g, b) }
-    private fun ratio(a: Color, b: Color): Double = ContrastMath.contrastRatio(lum(a), lum(b))
-
-    private fun selectedFill(accent: Color): IntArray {
-        val (ar, ag, ab) = rgb(accent)
-        val (br, bg, bb) = rgb(recordSurface)
-        return ContrastMath.compositeAlphaOver(ar, ag, ab, 0.22, br, bg, bb)
-    }
-
-    private fun ratioToFill(c: Color, fill: IntArray): Double {
-        val (r, g, b) = rgb(c)
-        return ContrastMath.contrastRatio(
-            ContrastMath.relativeLuminance(r, g, b),
-            ContrastMath.relativeLuminance(fill[0], fill[1], fill[2]),
-        )
+    @Test
+    fun `every palette's selected-mode chip is a real two-stop gradient`() {
+        concrete.forEach { sel ->
+            val (a, b) = gradientPair(sel)
+            assertNotEquals("$sel: accent == accent2 — chip would render as a flat fill", a, b)
+        }
     }
 
     @Test
-    fun `selected mode segment accent is legible in every theme`() {
-        ThemeSelection.entries
-            .filter { it != ThemeSelection.FOLLOW_SYSTEM }
-            .forEach { sel ->
-                val p = rovaPalettes.getValue(sel)
-                val fill = selectedFill(p.accentOnDark)
-
-                val accOnSurface = ratio(p.accentOnDark, recordSurface)
-                assertTrue("$sel: accentOnDark-on-surface = $accOnSurface (< 3.0)", accOnSurface >= 3.0)
-
-                val whiteOnFill = ratioToFill(Color.White, fill)
-                assertTrue("$sel: white-on-selectedFill = $whiteOnFill (< 4.5)", whiteOnFill >= 4.5)
-
-                val accOnFill = ratioToFill(p.accentOnDark, fill)
-                assertTrue("$sel: accentOnDark-on-selectedFill = $accOnFill (< 3.0)", accOnFill >= 3.0)
+    fun `accent gradients are distinct across all themes (user-reported collision guard)`() {
+        // Each concrete theme must own a unique (accent, accent2) pair, so no two
+        // selected-mode chips look identical — the exact Aurora/Eclipse and
+        // Tide/Jade flatness the owner flagged.
+        val pairs = concrete.map { it to gradientPair(it) }
+        pairs.forEach { (selA, pairA) ->
+            pairs.forEach { (selB, pairB) ->
+                if (selA != selB) {
+                    assertTrue(
+                        "$selA and $selB share an identical accent gradient $pairA",
+                        pairA != pairB,
+                    )
+                }
             }
+        }
     }
 }

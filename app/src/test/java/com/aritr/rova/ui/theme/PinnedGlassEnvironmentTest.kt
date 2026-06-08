@@ -30,6 +30,17 @@ class PinnedGlassEnvironmentTest {
     }
 
     @Test
+    fun `pinned env carries the active palette accent gradient stops`() {
+        // PR2 §d: the selected-mode chip is an accent->accent2 gradient, so BOTH
+        // stops must reach the pinned route (a flat single accent collapsed
+        // Aurora==Eclipse / Tide~=Jade — the user-reported flatness).
+        val active = envFor(ThemeSelection.JADE)
+        val pinned = PinnedGlassEnvironment.forPinnedRoute(active)
+        assertEquals(active.palette.accent, pinned.palette.accent)
+        assertEquals(active.palette.accent2, pinned.palette.accent2)
+    }
+
+    @Test
     fun `pinned env preserves apiLevel and reduceTransparency`() {
         val active = GlassEnvironment(rovaPalettes.getValue(ThemeSelection.TIDE), apiLevel = 26, reduceTransparency = true)
         val pinned = PinnedGlassEnvironment.forPinnedRoute(active)
