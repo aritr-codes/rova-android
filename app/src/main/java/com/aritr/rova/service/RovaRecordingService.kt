@@ -142,7 +142,17 @@ data class RovaServiceState(
     // can no longer flash a spinner despite the camera staying warm (ADR-0021).
     // MUST be cleared on every setup exit path or the overlay latches on — see
     // the try/finally in setupSingleCamera/setupDualCamera.
-    val coldAcquireInProgress: Boolean = false
+    val coldAcquireInProgress: Boolean = false,
+    // Camera-flip regression (device-confirmed 2026-06-08) — MONOTONIC counter,
+    // incremented on every successful camera (re)bind (setupSingleCamera /
+    // setupDualCamera success path). The record screen clears its front/back
+    // "Switching…" overlay latch by observing this advance, NOT an isCameraActive
+    // edge: a flip pulses isCameraActive true→false→true and the ~54 ms `false`
+    // is dropped by StateFlow conflation, so an edge-keyed clear never re-fires
+    // and the overlay latches on forever. A monotonic value cannot be hidden by
+    // conflation — the END value the collector lands on is always greater than
+    // the one captured at the flip tap. See FlipLatchPolicy.
+    val cameraConfigGeneration: Long = 0L
 )
 
 /**
@@ -1668,7 +1678,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 camera?.let { observeCameraState(it) }
                 configuredResolution = resolutionStr
                 boundToDummy = useDummy
-                _serviceState.update { it.copy(isCameraActive = true) }
+                // Bump the monotonic generation so the record screen can clear
+                // its front/back "Switching…" latch without depending on the
+                // conflation-prone isCameraActive edge (see cameraConfigGeneration).
+                _serviceState.update { it.copy(isCameraActive = true, cameraConfigGeneration = it.cameraConfigGeneration + 1) }
                 RovaLog.d { "setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr, boundToDummy=$boundToDummy" }
                 applyFlashState()
             } catch (e: Exception) {
@@ -1957,7 +1970,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 camera?.let { observeCameraState(it) }
                 configuredResolution = "FHD"
                 boundToDummy = useDummy
-                _serviceState.update { it.copy(isCameraActive = true) }
+                // Bump the monotonic generation (see cameraConfigGeneration) so a
+                // single→P+L→single sequence keeps the flip latch conflation-proof.
+                _serviceState.update { it.copy(isCameraActive = true, cameraConfigGeneration = it.cameraConfigGeneration + 1) }
                 RovaLog.d { "setupDualCamera: Camera binding COMPLETED. boundToDummy=$boundToDummy" }
                 applyFlashState()
             } catch (e: Exception) {
