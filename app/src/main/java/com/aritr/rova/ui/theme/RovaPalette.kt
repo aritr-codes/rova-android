@@ -76,20 +76,25 @@ private val Tide = darkPalette(ThemeSelection.TIDE, 0xFF16323A, 0xFF0E1A1F, Colo
 private val Jade = darkPalette(ThemeSelection.JADE, 0xFF13322A, 0xFF0C1C18, Color(0xFF34D399), Color(0xFF059E6B))
 private val Dusk = darkPalette(ThemeSelection.DUSK, 0xFF3A241C, 0xFF1F1310, Color(0xFFFF8A4C), Color(0xFFFF5FA2))
 
-/** Eclipse — pure-black OLED. #000 hides elevation, so its edges carry the depth (§1.3). */
+/**
+ * Eclipse — pure-black OLED. #000 hides elevation, so its edges carry the depth (§1.3).
+ * Accent = deep-twilight royal violet (#8B7CFF→#B56CFF): the lavender sky of totality
+ * (web + codex, 2026-06-08). Distinct from Aurora's blue-start gradient — the round2
+ * mockup shared Aurora's blue here, which collapsed the two on the themed mode chip.
+ */
 private val Eclipse = RovaPalette(
     id = ThemeSelection.ECLIPSE,
     background = Brush.verticalGradient(listOf(Color(0xFF050608), Color(0xFF000000))),
     glassTint = Color(0xD608090C),
     edge = Color(0x14FFFFFF),
     edgeTop = Color(0x1FFFFFFF),
-    accent = Color(0xFF5B9DFF),
-    accent2 = Color(0xFF6F8CFF),
+    accent = Color(0xFF8B7CFF),
+    accent2 = Color(0xFFB56CFF),
     textHigh = DarkTextHigh,
     textDim = DarkTextDim,
     textFaint = DarkTextFaint,
-    accentOnDark = Color(0xFF5B9DFF),
-    accentContainerOnDark = Color(0xFF5B9DFF).copy(alpha = 0.22f),
+    accentOnDark = Color(0xFF8B7CFF),
+    accentContainerOnDark = Color(0xFF8B7CFF).copy(alpha = 0.22f),
     isLight = false,
 )
 
