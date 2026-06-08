@@ -755,6 +755,9 @@ fun RecordScreen(
                                 loopTotal = serviceState.totalLoops,
                                 clipSecondsLeft = (duration - clipElapsedSeconds).coerceAtLeast(0),
                                 waitSecondsLeft = displayedCountdownSeconds.toInt().coerceAtLeast(0),
+                                // PR-α (ADR-0029 §Decision 3) — the device rotated but the
+                                // current clip stays frozen; flag the next-clip rotation.
+                                rotatingNextClip = serviceState.pendingNextRotation != serviceState.currentSegmentRotation,
                             )
                         }
                     }

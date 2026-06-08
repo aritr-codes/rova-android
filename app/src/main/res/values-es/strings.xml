@@ -197,6 +197,9 @@
     <string name="record_loops_done_caption">CICLOS HECHOS</string>
     <string name="record_status_detail_prefix">· %1$s</string>
 
+    <!-- PR-α (ADR-0029 §Decision 3) — see the en strings.xml comment. -->
+    <string name="record_orientation_rotating_next">El siguiente clip girará</string>
+
     <!-- Active-HUD loop pill (B3 i18n task 2) -->
     <string name="record_hud_loops_done_indefinite">%1$d ciclos hechos</string>
     <string name="record_hud_loops_done">%1$d/%2$d ciclos hechos</string>

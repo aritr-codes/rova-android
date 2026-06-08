@@ -161,7 +161,8 @@ open class SessionStore internal constructor(rootDirArg: File) {
         sessionId: String,
         segmentFile: File,
         filename: String,
-        durationMs: Long
+        durationMs: Long,
+        effectiveTargetRotation: Int? = null
     ): Deferred<SegmentRecord> = persistScope.async {
         val sha1 = try {
             sha1Of(segmentFile)
@@ -173,7 +174,8 @@ open class SessionStore internal constructor(rootDirArg: File) {
             filename = filename,
             durationMs = durationMs,
             sizeBytes = segmentFile.length(),
-            sha1 = sha1
+            sha1 = sha1,
+            effectiveTargetRotation = effectiveTargetRotation
         )
         val dir = sessionDir(sessionId)
         val current = loadManifest(sessionId)

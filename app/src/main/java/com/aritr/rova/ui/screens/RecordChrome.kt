@@ -985,6 +985,7 @@ internal fun RecordActiveHud(
     loopTotal: Int,
     clipSecondsLeft: Int,
     waitSecondsLeft: Int,
+    rotatingNextClip: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
@@ -1004,6 +1005,16 @@ internal fun RecordActiveHud(
     ) {
         LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
         StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        // PR-α (ADR-0029 §Decision 3) — the current clip keeps its frozen rotation;
+        // the next clip adopts the device's new orientation at the segment boundary.
+        // Quiet caption reusing the adjacent status-pill's time text style/token.
+        if (rotatingNextClip) {
+            Text(
+                text = stringResource(R.string.record_orientation_rotating_next),
+                style = RovaTokens.statusTime,
+                color = RecordChromeTokens.statusTimeText,
+            )
+        }
         // mockup `.m-seg` — segments fill left→right as clips complete. Self-hides
         // (loopSegments null gate) for single-clip / indefinite sessions, so no
         // call-site conditional is needed; order is LoopPill → StatusPill → bar.
