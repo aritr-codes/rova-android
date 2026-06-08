@@ -196,6 +196,11 @@
     <string name="record_loops_done_caption">LOOPS DONE</string>
     <string name="record_status_detail_prefix">· %1$s</string>
 
+    <!-- PR-α (ADR-0029 §Decision 3) — shown in the active HUD when the device has
+         rotated but the current clip keeps its orientation; the next clip adopts
+         the new one at the segment boundary. -->
+    <string name="record_orientation_rotating_next">Next clip will rotate</string>
+
     <!-- Active-HUD loop pill (B3 i18n task 2) -->
     <string name="record_hud_loops_done_indefinite">%1$d loops done</string>
     <string name="record_hud_loops_done">%1$d/%2$d loops done</string>
