@@ -374,6 +374,15 @@
     <string name="settings_theme_mode_system">Follow system</string>
     <string name="settings_theme_mode_dark">Dark</string>
     <string name="settings_theme_mode_light">Light</string>
+    <!-- ADR-0028 liquid-glass theme selection (Follow-System + Wave-1 palettes). Palette names are proper nouns. -->
+    <string name="settings_theme_selection_follow_system">Follow system</string>
+    <string name="settings_theme_selection_follow_system_sub">Daylight / Aurora</string>
+    <string name="settings_theme_selection_aurora">Aurora</string>
+    <string name="settings_theme_selection_tide">Tide</string>
+    <string name="settings_theme_selection_jade">Jade</string>
+    <string name="settings_theme_selection_dusk">Dusk</string>
+    <string name="settings_theme_selection_eclipse">Eclipse</string>
+    <string name="settings_theme_selection_daylight">Daylight</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_language_supporting">Choose the app language</string>
     <string name="settings_language_system">System default</string>

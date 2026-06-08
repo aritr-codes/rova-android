@@ -1,15 +1,19 @@
 package com.aritr.rova.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.aritr.rova.ui.components.ReducedMotion
 
 // Phase 2.1A — dark scheme aligned with docs/UI_DESIGN_TOKENS.md §2.1.
 // `primary` flips Harbor90 → InfraBlue (#5B7FFF) and `error` flips
@@ -95,6 +99,12 @@ fun RovaTheme(
     // touch the window bars.
     lightStatusBarIcons: Boolean = !darkTheme,
     dynamicColor: Boolean = false,
+    // ADR-0028 — the active liquid-glass palette, seeded into LocalGlassEnvironment
+    // for any descendant GlassSurface. Defaults to Aurora so existing call sites
+    // (and previews) stay valid. The MaterialTheme color scheme is still driven by
+    // [darkTheme] in PR1 (Aurora→dark, Daylight→light) — palette-driven MaterialTheme
+    // colors migrate per surface in later PRs, so PR1 has no visual regression.
+    palette: RovaPalette = rovaPalettes.getValue(ThemeSelection.AURORA),
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
@@ -110,11 +120,23 @@ fun RovaTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+    val context = LocalContext.current
+    val glassEnv = GlassEnvironment(
+        palette = palette,
+        apiLevel = Build.VERSION.SDK_INT,
+        // ADR-0028 — reuse the available pure a11y seam as the transparency-
+        // degradation proxy. A dedicated "reduce transparency" system read can
+        // replace this later without touching GlassResolver.
+        reduceTransparency = ReducedMotion.isReduced(context),
     )
+
+    CompositionLocalProvider(LocalGlassEnvironment provides glassEnv) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content,
+        )
+    }
 }
 
 /**

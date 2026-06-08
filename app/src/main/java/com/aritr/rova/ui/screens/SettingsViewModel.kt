@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.ui.locale.LocaleApplier
 import com.aritr.rova.ui.theme.ThemeMode
+import com.aritr.rova.ui.theme.ThemeSelection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // collector mirrors changes to RovaSettings. The theme root in MainActivity
     // collects this flow above RovaTheme so a change re-themes the whole tree live.
     val themeMode = MutableStateFlow(settings.themeMode)
+
+    // ADR-0028 — liquid-glass theme selection (flat-12 + Follow-System). Single
+    // owner; the write-back collector mirrors to RovaSettings. MainActivity
+    // collects this above RovaTheme so a change re-themes the tree live. Replaces
+    // themeMode as the picker's backing model; themeMode is kept one release for
+    // rollback (RovaSettings.themeSelection migrates from it on read).
+    val themeSelection = MutableStateFlow(settings.themeSelection)
 
     // i18n Phase B (ADR-0023) — chosen language tag, null = system. UNLIKE
     // themeMode (which write-backs via a collector), localeTag is persisted
@@ -112,6 +120,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { intervalMinutes.collect { settings.intervalMinutes = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
         viewModelScope.launch { themeMode.collect { settings.themeMode = it } }
+        viewModelScope.launch { themeSelection.collect { settings.themeSelection = it } }
     }
 
     /**
