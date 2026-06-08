@@ -8,9 +8,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsets as LayoutWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +70,8 @@ import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.screens.chrome.SlotAnchor
+import com.aritr.rova.ui.screens.chrome.SlotPlacement
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 
@@ -978,6 +983,30 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
  * Layout: vertical Column at the top safe-area, centered, with 8 dp spacing between the
  * loop-pill and the status-pill. Both pills are glass-on-camera (R1 token set).
  */
+/**
+ * PR-β — maps a pure [SlotPlacement] to a Compose Modifier inside a Box: align +
+ * (optional) window inset + edge padding + (optional) width cap, in that order
+ * (matches today's `align().windowInsetsPadding().padding()` order, so portrait
+ * is byte-identical). [insets] is the region's existing inset (statusBars for
+ * top regions, navigationBars for bottom/side regions); pass null for none.
+ */
+@Composable
+fun BoxScope.slotModifier(p: SlotPlacement, insets: LayoutWindowInsets? = null): Modifier {
+    val alignment = when (p.anchor) {
+        SlotAnchor.TOP_START     -> Alignment.TopStart
+        SlotAnchor.TOP_END       -> Alignment.TopEnd
+        SlotAnchor.TOP_CENTER    -> Alignment.TopCenter
+        SlotAnchor.BOTTOM_CENTER -> Alignment.BottomCenter
+        SlotAnchor.CENTER_START  -> Alignment.CenterStart
+        SlotAnchor.CENTER_END    -> Alignment.CenterEnd
+    }
+    var m = Modifier.align(alignment)
+    if (insets != null) m = m.windowInsetsPadding(insets)
+    m = m.padding(start = p.startDp.dp, top = p.topDp.dp, end = p.endDp.dp, bottom = p.bottomDp.dp)
+    if (p.maxWidthDp != null) m = m.widthIn(max = p.maxWidthDp.dp)
+    return m
+}
+
 @Composable
 internal fun RecordActiveHud(
     state: RecordHudState,

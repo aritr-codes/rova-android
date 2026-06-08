@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.screens
 
 import android.Manifest
+import android.content.res.Configuration
 import android.os.Build
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
@@ -14,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -28,6 +30,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.ui.screens.chrome.ChromeOrientation
+import com.aritr.rova.ui.screens.chrome.ChromeSlot
+import com.aritr.rova.ui.screens.chrome.placementFor
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
@@ -540,6 +545,9 @@ fun RecordScreen(
     // panel + the two SwitchRows) is removed; Keep-Screen-On / Sounds now live
     // in the Settings screen. settingsViewModel is still consumed for the
     // keepScreenOn DisposableEffect above.
+    val chromeOrientation =
+        if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+            ChromeOrientation.LANDSCAPE else ChromeOrientation.PORTRAIT
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
