@@ -742,11 +742,10 @@ fun RecordScreen(
                         // clipSecondsLeft / waitSecondsLeft / Merging-progress per state;
                         // the helper dispatches on `state`. Stop is the bottom-nav FAB.
                         Column(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .windowInsetsPadding(WindowInsets.statusBars)
-                                .padding(top = 16.dp)
-                                .fillMaxWidth(),
+                            modifier = slotModifier(
+                                placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                WindowInsets.statusBars,
+                            ).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -778,19 +777,14 @@ fun RecordScreen(
                 // the brief post-merge MergeCompleteCard grace window.
                 if (!showCompleteCard) {
                     Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(
-                                // Slice B — bottomNavClearance clears above the dock;
-                                // settingsCardLift adds the 30 dp the gradient's
-                                // transparent top zone needs. See
-                                // RecordChromeMetrics.settingsCardLift KDoc.
-                                bottom = RecordChromeMetrics.bottomNavClearance + RecordChromeMetrics.settingsCardLift,
-                                start = 16.dp,
-                                end = 16.dp,
-                            )
-                            .fillMaxWidth(),
+                        // PR-β — portrait placement equals the prior
+                        // bottomNavClearance(90)+settingsCardLift(30)=120 bottom +
+                        // 16 dp side margins (pinned by ChromeSlotPlacementTest);
+                        // landscape caps to 360 dp centered.
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
+                            WindowInsets.navigationBars,
+                        ).fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         // ADR-0026 — presets now live inside the settings sheet
