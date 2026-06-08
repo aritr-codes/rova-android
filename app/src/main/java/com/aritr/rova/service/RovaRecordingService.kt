@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.IBinder
 import android.view.Display
 import android.graphics.Color
+import android.view.OrientationEventListener
 import android.view.View
 import android.widget.RemoteViews
 import android.os.PowerManager
@@ -54,6 +55,10 @@ import com.aritr.rova.service.notification.NotificationProgress
 import com.aritr.rova.service.notification.NotificationState
 import com.aritr.rova.service.notification.toActionSpecs
 import com.aritr.rova.service.notification.toBindPlan
+import com.aritr.rova.service.orientation.DEFAULT_ORIENTATION_POLICY_IS_AUTO
+import com.aritr.rova.service.orientation.OrientationSnapState
+import com.aritr.rova.service.orientation.firstSampleFallback
+import com.aritr.rova.service.orientation.snapOrientation
 import com.aritr.rova.service.notification.toChannelId
 import com.aritr.rova.service.notification.isDismissible
 import com.aritr.rova.service.scheduler.AlarmScheduler
@@ -152,7 +157,12 @@ data class RovaServiceState(
     // and the overlay latches on forever. A monotonic value cannot be hidden by
     // conflation — the END value the collector lands on is always greater than
     // the one captured at the flip tap. See FlipLatchPolicy.
-    val cameraConfigGeneration: Long = 0L
+    val cameraConfigGeneration: Long = 0L,
+    // PR-α (ADR-0029 §Decision 3) — orientation HUD. currentSegmentRotation is
+    // frozen at the active segment's start; pendingNextRotation is the latest stable
+    // snapped rotation. When they differ the HUD shows "next clip will rotate".
+    val currentSegmentRotation: Int = android.view.Surface.ROTATION_0,
+    val pendingNextRotation: Int = android.view.Surface.ROTATION_0,
 )
 
 /**
@@ -250,6 +260,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     private var preview: Preview? = null
     private var videoCapture: VideoCapture<Recorder>? = null
+    // PR-α (ADR-0029 §Decision 2,3) — device-orientation seam. Listener feeds
+    // snapOrientation; orientationSnapState holds opaque hysteresis state. Enabled
+    // only for the Single path on bind success; disabled on every unbind/teardown.
+    // DualShot (P+L) owns its own rotation (ADR-0009) and never enables this.
+    private var orientationListener: OrientationEventListener? = null
+    private var orientationSnapState: OrientationSnapState =
+        OrientationSnapState(stable = android.view.Surface.ROTATION_0, candidate = null, candidateSinceMs = null)
+    // hasStableSnap flips true once the listener delivers a non-UNKNOWN sample, so
+    // segment start can tell a real snap from the seed and fall back deterministically.
+    // lastEffectiveTargetRotation carries the PRIOR segment's persisted rotation forward.
+    private var hasStableSnap: Boolean = false
+    private var lastEffectiveTargetRotation: Int? = null
     // Phase 6.1b — dual recorder + dual recording handle for P+L mode.
     // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
     // path. Released on service teardown.
@@ -549,6 +571,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentDualRecorder?.release()
         currentDualRecorder = null
         markCameraUnbound()  // Phase 3.5
+        // PR-α (ADR-0029 §Decision 2,3) — Single use cases unbound for background;
+        // stop tracking. Re-enabled on the next Single bind success.
+        disableOrientationTracking()
         releaseDummySurface()
         preview = null
         videoCapture = null
@@ -1571,6 +1596,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
             currentDualRecorder?.release()
             currentDualRecorder = null
             markCameraUnbound()  // Phase 3.5
+            // PR-α (ADR-0029 §Decision 2,3) — Single use cases are being unbound for
+            // a fresh setup; stop tracking. setupCamera() re-enables on Single rebind.
+            disableOrientationTracking()
             preview = null
             videoCapture = null
             camera = null
@@ -1610,6 +1638,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 RovaLog.d { "setupCamera: Unbinding existing provider for clean setup" }
                 try { cameraProvider?.unbindAll() } catch (e: Exception) {}
                 markCameraUnbound()  // Phase 3.5
+                // PR-α (ADR-0029 §Decision 2,3) — existing use cases unbound before
+                // rebind; stop tracking. Re-enabled on this setup's bind success.
+                disableOrientationTracking()
                 _serviceState.update { it.copy(isCameraActive = false) }
             } else {
                 val provider = withContext(Dispatchers.IO) {
@@ -1684,6 +1715,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 _serviceState.update { it.copy(isCameraActive = true, cameraConfigGeneration = it.cameraConfigGeneration + 1) }
                 RovaLog.d { "setupCamera: Camera binding COMPLETED. Active: true, resolution: $resolutionStr, boundToDummy=$boundToDummy" }
                 applyFlashState()
+                // PR-α (ADR-0029 §Decision 2,3) — Single path only: begin tracking
+                // physical device rotation, seeded from the SAME bind-time rotation
+                // the use cases were built with so HUD/persist agree pre-sensor.
+                enableOrientationTracking(targetRot)
             } catch (e: Exception) {
                 e.printStackTrace()
                 RovaLog.e("setupCamera: Binding failed", e)
@@ -1704,6 +1739,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 // launches a fresh setupCamera.
                 try { provider.unbindAll() } catch (_: Exception) {}
                 markCameraUnbound()
+                // PR-α (ADR-0029 §Decision 2,3) — Single bind failed; stop tracking.
+                disableOrientationTracking()
                 preview = null
                 videoCapture = null
                 camera = null
@@ -1731,6 +1768,67 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 markColdAcquire(false)
             }
         }
+    }
+
+    /**
+     * PR-α (ADR-0029 §Decision 2,3) — start tracking physical device rotation for
+     * the SINGLE camera path. Idempotent. No-op when the default policy is not Auto
+     * (seam for a future PortraitLock default). Seeds the snapper from the bind-time
+     * rotation so HUD/persist agree before any sensor event arrives.
+     */
+    private fun enableOrientationTracking(seedRotation: Int) {
+        disableOrientationTracking()
+        orientationSnapState = OrientationSnapState(stable = seedRotation, candidate = null, candidateSinceMs = null)
+        hasStableSnap = false
+        _serviceState.update { it.copy(currentSegmentRotation = seedRotation, pendingNextRotation = seedRotation) }
+        if (!DEFAULT_ORIENTATION_POLICY_IS_AUTO) return
+
+        val listener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                val prevStable = orientationSnapState.stable
+                orientationSnapState = snapOrientation(
+                    degrees = orientation,
+                    current = orientationSnapState,
+                    nowMs = android.os.SystemClock.elapsedRealtime(),
+                )
+                if (orientation != android.view.OrientationEventListener.ORIENTATION_UNKNOWN) {
+                    hasStableSnap = true
+                }
+                val newStable = orientationSnapState.stable
+                if (newStable != prevStable) {
+                    // Live apply: Preview rotates immediately; VideoCapture/Recorder
+                    // ignores it mid-clip and adopts it at the NEXT segment start.
+                    try { videoCapture?.targetRotation = newStable } catch (_: Exception) {}
+                    try { preview?.targetRotation = newStable } catch (_: Exception) {}
+                    refreshResolutionConsumers()
+                    _serviceState.update { it.copy(pendingNextRotation = newStable) }
+                }
+            }
+        }
+        if (listener.canDetectOrientation()) {
+            listener.enable()
+            orientationListener = listener
+            RovaLog.d { "enableOrientationTracking: listener enabled (seed=$seedRotation)" }
+        } else {
+            RovaLog.w("enableOrientationTracking: device cannot detect orientation — staying at seed $seedRotation")
+        }
+    }
+
+    /** PR-α — stop tracking; called on every unbind/teardown. Idempotent. */
+    private fun disableOrientationTracking() {
+        orientationListener?.let { try { it.disable() } catch (_: Exception) {} }
+        orientationListener = null
+        hasStableSnap = false
+    }
+
+    /**
+     * PR-α (ADR-0029 §Decision 3) — after a live setTargetRotation the bound
+     * VideoCapture's ResolutionInfo can shift aspect. The Single path has no live
+     * crop/resolution consumer to re-pull today (PreviewView owns its transform,
+     * DualShot owns its EGL crop), so this is a documented guard seam.
+     */
+    private fun refreshResolutionConsumers() {
+        // Guard seam — no live Single-path ResolutionInfo consumer exists in PR-α.
     }
 
     /**
@@ -2477,6 +2575,24 @@ class RovaRecordingService : Service(), LifecycleOwner {
             videoFile = File(sessionDir, segmentFilename)
             RovaLog.d { "recordSegment: Preparing file: ${videoFile?.absolutePath}" }
 
+            // PR-α (ADR-0029 §Decision 2,3) — freeze THIS segment's rotation at its
+            // start. Under Auto the device may have snapped since the last clip. If a
+            // real stable snap exists use it; else fall back deterministically
+            // (last persisted -> current snapped/seed -> portrait) and log the source.
+            val segmentRotation: Int = if (hasStableSnap) {
+                orientationSnapState.stable
+            } else {
+                val fb = firstSampleFallback(
+                    lastEffective = lastEffectiveTargetRotation,
+                    snappedDisplayRotation = orientationSnapState.stable,
+                )
+                RovaLog.d { "recordSegment: orientation first-sample fallback -> ${fb.rotation} (${fb.source})" }
+                fb.rotation
+            }
+            _serviceState.update {
+                it.copy(currentSegmentRotation = segmentRotation, pendingNextRotation = segmentRotation)
+            }
+
             val outputOptions = FileOutputOptions.Builder(requireNotNull(videoFile)).build()
 
             var pendingRecording = videoCap.output.prepareRecording(this, outputOptions)
@@ -2562,9 +2678,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                     sessionId = capturedSessionId,
                                     segmentFile = capturedFile,
                                     filename = capturedFilename,
-                                    durationMs = capturedDurationMs
+                                    durationMs = capturedDurationMs,
+                                    effectiveTargetRotation = segmentRotation,
                                 )
                                 pendingPersistJobs.add(deferred)
+                                // PR-α (ADR-0029 §Decision 2) — carry this clip's
+                                // rotation forward; next segment's fallback prefers it.
+                                lastEffectiveTargetRotation = segmentRotation
                             }
                         } else {
                             // A stop in flight aborts the in-flight segment mid-capture; CameraX
@@ -3367,6 +3487,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentDualRecorder = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
         markCameraUnbound()  // Phase 3.5 — service teardown
+        // PR-α (ADR-0029 §Decision 2,3) — service teardown; stop orientation tracking.
+        disableOrientationTracking()
         releaseDummySurface()
         releaseWakeLock()
         // Phase 1.2: belt-and-braces. Stop paths already call this; here it
