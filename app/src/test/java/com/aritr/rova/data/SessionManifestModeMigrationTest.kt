@@ -120,11 +120,11 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 9`() {
-        // Bumped 8 -> 9 for the ADR-0027 daily-window schedule fields
-        // (startedBySchedule, scheduleWindowStart/End/Expired).
-        // Previously: 7 -> 8 commit-before-finalize move-out pointers;
+    fun `SCHEMA_VERSION is 10`() {
+        // Bumped 9 -> 10 for ADR-0029 PR-α per-segment effectiveTargetRotation.
+        // Previously: 8 -> 9 ADR-0027 daily-window schedule fields;
+        // 7 -> 8 commit-before-finalize move-out pointers;
         // 6 -> 7 vault fields; 5 -> 6 ADR-0024 SAF target fields.
-        assertEquals(9, SessionManifest.SCHEMA_VERSION)
+        assertEquals(10, SessionManifest.SCHEMA_VERSION)
     }
 }

@@ -182,7 +182,9 @@ data class SessionManifest(
         // stopReason. v1/v2 manifests read with safe defaults (VIDEO_ONLY, NONE).
         // 7->8: pendingMoveOut{Uri,Path} commit-before-finalize (B5 / ADR-0025).
         // 8->9: daily-window schedule fields (ADR-0027).
-        const val SCHEMA_VERSION = 9   // 6->7: vault fields (B5 / ADR-0025)
+        // 9->10: SegmentRecord.effectiveTargetRotation per-clip device-driven
+        //        orientation (ADR-0029 PR-α). Schema-<10 segments read null.
+        const val SCHEMA_VERSION = 10   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -304,7 +306,15 @@ data class SegmentRecord(
     val durationMs: Long,
     val sizeBytes: Long,
     val sha1: String,
-    val side: com.aritr.rova.service.dualrecord.VideoSide? = null
+    val side: com.aritr.rova.service.dualrecord.VideoSide? = null,
+    /**
+     * PR-α (ADR-0029 §Decision 3, 6) — the Surface.ROTATION_* this clip was
+     * encoded with, sampled at SEGMENT START from the device-orientation
+     * snapper. `null` for legacy (schema < 10) records and for sessions where
+     * the rotation was never sampled; under `Auto` it may differ clip-to-clip.
+     * Recovery treats it as informational only (never a deletion input).
+     */
+    val effectiveTargetRotation: Int? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("filename", filename)
@@ -312,6 +322,8 @@ data class SegmentRecord(
         put("sizeBytes", sizeBytes)
         put("sha1", sha1)
         side?.let { put("side", it.name) }
+        // PR-α — emit only when set so schema-9 single-rotation records keep byte-shape.
+        effectiveTargetRotation?.let { put("effectiveTargetRotation", it) }
     }
 
     companion object {
@@ -322,7 +334,13 @@ data class SegmentRecord(
             sha1 = json.getString("sha1"),
             side = json.optString("side", "").ifEmpty { null }?.let {
                 runCatching { com.aritr.rova.service.dualrecord.VideoSide.valueOf(it) }.getOrNull()
-            }
+            },
+            // schema-9 records lack this key -> null (never fabricated).
+            effectiveTargetRotation = if (json.has("effectiveTargetRotation")) {
+                json.getInt("effectiveTargetRotation")
+            } else {
+                null
+            },
         )
     }
 }
