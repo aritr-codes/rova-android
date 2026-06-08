@@ -658,10 +658,10 @@ fun RecordScreen(
                     RecordRecoveryChip(
                         count = interruptedSessionCount,
                         onReview = onNavigateToHistory,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 70.dp),   // sits just below the status pill (~16 + pill height)
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.RECOVERY_CHIP, chromeOrientation),
+                            WindowInsets.statusBars,
+                        ),
                     )
                 }
                 // ADR 0007 — idle WarningCenter mount: renders the warning sheet
@@ -672,10 +672,10 @@ fun RecordScreen(
                 // Column below.
                 if (hudState is RecordHudState.Idle) {
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 110.dp)
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.WARNING_CENTER, chromeOrientation),
+                            WindowInsets.statusBars,
+                        )
                     ) {
                         WarningCenter(
                             hudState = RecordHudState.Idle,
@@ -821,10 +821,10 @@ fun RecordScreen(
                         statusDetail = statusDetail,
                         currentLoop = serviceState.currentLoop,
                         totalLoops = serviceState.totalLoops,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 16.dp),
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.STATUS_OVERLAY, chromeOrientation),
+                            WindowInsets.statusBars,
+                        ),
                     )
                     // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
                     // mode (rear-only by design — DualShot from one full-FOV
@@ -855,12 +855,10 @@ fun RecordScreen(
                         enabled = !isUiLocked,
                         flipEnabled = flipAllowed,
                         isFrontCamera = serviceState.isFrontCamera,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            // 7.dp + the 9.dp the 30.dp glass circle is inset within its
-                            // 48.dp touch box ≈ the mockup's 16.dp from the safe-area edge.
-                            .padding(end = 7.dp, top = 7.dp),
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.CAMERA_CONTROLS, chromeOrientation),
+                            WindowInsets.statusBars,
+                        ),
                     )
                 }
                 RecordBottomNav(
