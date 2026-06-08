@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -56,6 +57,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.theme.GlassRole
+import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
@@ -93,26 +97,24 @@ fun RecordTopOverlay(
     // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
     // (Recording/Waiting) block was removed — unreachable since T9.
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.topOverlayGap)) {
-        Row(
-            modifier = Modifier
-                .clip(StatusPillShape)
-                .background(RecordChromeTokens.glassFill)
-                .border(1.dp, RecordChromeTokens.glassStroke, StatusPillShape)
-                .padding(
+        GlassSurface(role = GlassRole.RecordChrome, shape = StatusPillShape) {
+            Row(
+                modifier = Modifier.padding(
                     horizontal = RecordChromeTokens.statusPillPaddingH,
                     vertical = RecordChromeTokens.statusPillPaddingV,
                 ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
-        ) {
-            StatusDot(hudState)
-            Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
-            if (statusDetail != null) {
-                Text(
-                    stringResource(R.string.record_status_detail_prefix, statusDetail),
-                    style = RovaTokens.statusTime,
-                    color = RecordChromeTokens.statusTimeText,
-                )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
+            ) {
+                StatusDot(hudState)
+                Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
+                if (statusDetail != null) {
+                    Text(
+                        stringResource(R.string.record_status_detail_prefix, statusDetail),
+                        style = RovaTokens.statusTime,
+                        color = RecordChromeTokens.statusTimeText,
+                    )
+                }
             }
         }
     }
@@ -241,14 +243,13 @@ private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @C
     // (the incoming fixed constraint defeats IconButton's minimumInteractiveComponentSize)
     // — a regression vs the pre-R1 48 dp flash/flip IconButtons.
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(ControlBtnTouchSize)) {
-        Box(
-            modifier = Modifier
-                .size(RecordChromeTokens.camControlSize)
-                .clip(CircleShape)
-                .background(RecordChromeTokens.camControlFill)
-                .border(1.dp, RecordChromeTokens.camControlStroke, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) { content() }
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.size(RecordChromeTokens.camControlSize),
+            shape = CircleShape,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+        }
     }
 }
 
@@ -289,52 +290,55 @@ fun RecordSettingsCard(
             )
             Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)              // a11y minimum touch target
-                .clip(SettingsCardShape)
-                .background(RecordChromeTokens.settingsCardFill)
-                .border(1.dp, RecordChromeTokens.settingsCardStroke, SettingsCardShape)
-                .then(
-                    if (dimmed) {
-                        Modifier
-                    } else {
-                        Modifier
-                            .clickable { onOpenSheet() }
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures { _, dragAmount ->
-                                    if (dragAmount < -8f) onOpenSheet()
-                                }
-                            }
-                    },
-                )
-                .padding(
-                    horizontal = RecordChromeTokens.settingsCardPaddingH,
-                    vertical = RecordChromeTokens.settingsCardPaddingV,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.fillMaxWidth(),
+            shape = SettingsCardShape,
         ) {
-            SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
-            ModeCycleChip(
-                mode = mode,
-                onCycleMode = onCycleMode,
-                onLongPress = onOpenSheet,
-                enabled = !dimmed,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                RecordChromeIcons.chevronUp,
-                contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                tint = RecordChromeTokens.settingsArrow,
-                modifier = Modifier.padding(start = 8.dp).size(13.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)              // a11y minimum touch target
+                    .then(
+                        if (dimmed) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clickable { onOpenSheet() }
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures { _, dragAmount ->
+                                        if (dragAmount < -8f) onOpenSheet()
+                                    }
+                                }
+                        },
+                    )
+                    .padding(
+                        horizontal = RecordChromeTokens.settingsCardPaddingH,
+                        vertical = RecordChromeTokens.settingsCardPaddingV,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                ModeCycleChip(
+                    mode = mode,
+                    onCycleMode = onCycleMode,
+                    onLongPress = onOpenSheet,
+                    enabled = !dimmed,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    RecordChromeIcons.chevronUp,
+                    contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                    tint = RecordChromeTokens.settingsArrow,
+                    modifier = Modifier.padding(start = 8.dp).size(13.dp),
+                )
+            }
         }
     }
 }
@@ -364,6 +368,7 @@ private fun ModeCycleChip(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val accent = LocalGlassEnvironment.current.palette.accentOnDark
     val glyphAlpha = if (enabled) RecordChromeTokens.modeChipGlyphAlphaEnabled
                      else RecordChromeTokens.modeChipGlyphAlphaDisabled
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
@@ -371,8 +376,8 @@ private fun ModeCycleChip(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(chipShape)
-            .background(RecordChromeTokens.modeChipFill)
-            .border(1.dp, RecordChromeTokens.modeChipStroke, chipShape)
+            .background(accent.copy(alpha = 0.22f), chipShape)
+            .border(1.5.dp, accent, chipShape)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
