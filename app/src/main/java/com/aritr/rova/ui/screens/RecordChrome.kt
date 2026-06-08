@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -664,6 +665,25 @@ internal fun loopPillContent(loopIndex: Int, loopTotal: Int): UiText? = when {
     )
 }
 
+/**
+ * R2/PR2 follow-up — segmented loop-progress model for [LoopSegmentBar] (mockup
+ * `.m-seg`). Pure / JVM-testable. Mirrors [loopPillContent]'s hide gate: single-
+ * clip, zero-clip, and indefinite sessions show no bar. Small finite totals get
+ * discrete dots; large totals collapse to a continuous fraction so the bar never
+ * renders dozens of slivers.
+ */
+internal sealed interface LoopSegments {
+    data class Discrete(val total: Int, val filled: Int) : LoopSegments
+    data class Continuous(val fraction: Float) : LoopSegments
+}
+
+internal fun loopSegments(loopIndex: Int, loopTotal: Int, maxDiscrete: Int = 8): LoopSegments? = when {
+    loopTotal < 0 -> null                 // indefinite — no fixed total to segment
+    loopTotal <= 1 -> null                // single/zero clip — hide (matches loopPillContent)
+    loopTotal <= maxDiscrete -> LoopSegments.Discrete(loopTotal, loopIndex.coerceIn(0, loopTotal))
+    else -> LoopSegments.Continuous((loopIndex.toFloat() / loopTotal).coerceIn(0f, 1f))
+}
+
 internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
 
 internal data class StatusPillContent(
@@ -874,6 +894,53 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
     }
 }
 
+/**
+ * R2/PR2 follow-up — the recording-progress segment bar (mockup `.m-seg`,
+ * `rova_design_system_round3.html`: "Progress dots fill left-to-right as clips
+ * complete"). A thin ~200 dp bar whose segments fill left→right with the theme
+ * `accent → accent2` gradient as loops/clips complete. Reads the live palette via
+ * [LocalGlassEnvironment] so it tracks the selected theme (same anchor the
+ * selected-mode chip uses). Self-hides for single/zero-clip and indefinite
+ * sessions via [loopSegments]'s null gate (mirrors [LoopPill]). No blur effect —
+ * the fill is a solid gradient over a 12%-white track, matching `.m-seg i`.
+ */
+@Composable
+private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+    val segments = loopSegments(loopIndex, loopTotal) ?: return
+    val palette = LocalGlassEnvironment.current.palette
+    val fillBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
+    val track = Color.White.copy(alpha = 0.12f)   // mockup .m-seg i background
+    val segShape = RoundedCornerShape(3.dp)
+    val barHeight = 5.dp
+    when (segments) {
+        is LoopSegments.Discrete -> Row(
+            modifier = modifier.width(200.dp).height(barHeight),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            repeat(segments.total) { i ->
+                val cell = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(segShape)
+                // Two .background overloads (Brush vs Color) keep the cell a single
+                // node — filled segments paint the accent gradient, the rest the track.
+                Box(if (i < segments.filled) cell.background(fillBrush) else cell.background(track))
+            }
+        }
+        is LoopSegments.Continuous -> Box(
+            modifier = modifier.width(200.dp).height(barHeight).clip(segShape).background(track),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(segments.fraction)
+                    .clip(segShape)
+                    .background(fillBrush),
+            )
+        }
+    }
+}
+
 @Composable
 private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
     Surface(
@@ -937,5 +1004,9 @@ internal fun RecordActiveHud(
     ) {
         LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
         StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        // mockup `.m-seg` — segments fill left→right as clips complete. Self-hides
+        // (loopSegments null gate) for single-clip / indefinite sessions, so no
+        // call-site conditional is needed; order is LoopPill → StatusPill → bar.
+        LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal)
     }
 }

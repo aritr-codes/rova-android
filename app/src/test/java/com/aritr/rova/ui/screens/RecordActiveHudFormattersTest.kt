@@ -5,6 +5,7 @@ import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -53,6 +54,56 @@ class RecordActiveHudFormattersTest {
             UiText.StrArgs(R.string.record_hud_loops_done, listOf(10, 10)),
             loopPillContent(loopIndex = 12, loopTotal = 10),
         )
+    }
+
+    // ── loopSegments (mockup .m-seg) ────────────────────────────────
+    // Same hide gate as loopPillContent; small totals → discrete dots,
+    // large totals → continuous fraction.
+
+    @Test fun segments_zeroClip_isHidden() {
+        assertNull(loopSegments(loopIndex = 0, loopTotal = 0))
+    }
+
+    @Test fun segments_singleClip_isHidden() {
+        assertNull(loopSegments(loopIndex = 0, loopTotal = 1))
+    }
+
+    @Test fun segments_indefinite_isHidden() {
+        assertNull(loopSegments(loopIndex = 3, loopTotal = -1))
+    }
+
+    @Test fun segments_smallTotal_isDiscrete() {
+        assertEquals(LoopSegments.Discrete(total = 2, filled = 1), loopSegments(loopIndex = 1, loopTotal = 2))
+    }
+
+    @Test fun segments_atMaxDiscrete_fullyFilled() {
+        assertEquals(LoopSegments.Discrete(total = 8, filled = 8), loopSegments(loopIndex = 8, loopTotal = 8))
+    }
+
+    @Test fun segments_discrete_clampsOverflowIndex() {
+        assertEquals(LoopSegments.Discrete(total = 4, filled = 4), loopSegments(loopIndex = 9, loopTotal = 4))
+    }
+
+    @Test fun segments_discrete_clampsNegativeIndex() {
+        assertEquals(LoopSegments.Discrete(total = 4, filled = 0), loopSegments(loopIndex = -3, loopTotal = 4))
+    }
+
+    @Test fun segments_largeTotal_isContinuousFraction() {
+        val s = loopSegments(loopIndex = 5, loopTotal = 20)
+        assertTrue(s is LoopSegments.Continuous)
+        assertEquals(0.25f, (s as LoopSegments.Continuous).fraction, 0.001f)
+    }
+
+    @Test fun segments_continuous_zeroIndex_isZeroFraction() {
+        val s = loopSegments(loopIndex = 0, loopTotal = 20)
+        assertTrue(s is LoopSegments.Continuous)
+        assertEquals(0f, (s as LoopSegments.Continuous).fraction, 0.001f)
+    }
+
+    @Test fun segments_continuous_clampsOverflowToOne() {
+        val s = loopSegments(loopIndex = 99, loopTotal = 20)
+        assertTrue(s is LoopSegments.Continuous)
+        assertEquals(1f, (s as LoopSegments.Continuous).fraction, 0.001f)
     }
 
     // ── hudStatusPillContent ────────────────────────────────────────
