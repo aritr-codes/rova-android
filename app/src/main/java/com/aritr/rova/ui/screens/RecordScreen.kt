@@ -429,14 +429,35 @@ fun RecordScreen(
 
     // B6 — a lens flip kicks off a ~2s unbind/rebind during which the camera
     // is inactive (black). `flipInFlight` is raised by the flip taps below and
-    // cleared once the camera comes back active, so the loading overlay can read
+    // cleared once the rebind reports completion, so the loading overlay can read
     // "Switching…" (intentional) instead of the generic "Initializing Camera…".
     // No animation here beyond the existing indeterminate spinner, so no
     // reduced-motion gate applies (checkA11yAnimationGated only triggers on
     // rememberInfiniteTransition / infiniteRepeatable).
+    //
+    // Camera-flip regression (device-confirmed 2026-06-08): the latch was cleared
+    // by `LaunchedEffect(isCameraActive) { if (isCameraActive) flipInFlight = false }`.
+    // A flip pulses isCameraActive true→false→true; on a warm rebind the `false`
+    // window is ~54 ms and `serviceState` is a conflated StateFlow, so the Compose
+    // collector misses the `false` — isCameraActive never changes from composition's
+    // view, the keyed effect never re-fires, and the opaque overlay latched on
+    // forever over a working preview. Gate the clear on the service's MONOTONIC
+    // `cameraConfigGeneration` instead (FlipLatchPolicy): the captured-at-tap value
+    // vs the latest value always differ after a (re)bind, which conflation cannot
+    // hide. The 4 s backstop guarantees the overlay can never latch even if a bind
+    // never reports success.
     var flipInFlight by remember { mutableStateOf(false) }
-    LaunchedEffect(isCameraActive) {
-        if (isCameraActive) flipInFlight = false
+    var flipStartGeneration by remember { mutableStateOf(0L) }
+    LaunchedEffect(serviceState.cameraConfigGeneration) {
+        if (FlipLatchPolicy.shouldClear(flipInFlight, flipStartGeneration, serviceState.cameraConfigGeneration)) {
+            flipInFlight = false
+        }
+    }
+    LaunchedEffect(flipInFlight) {
+        if (flipInFlight) {
+            delay(4000)
+            flipInFlight = false
+        }
     }
 
     // Camera Disconnected Alert
@@ -809,7 +830,17 @@ fun RecordScreen(
                     RecordCameraControls(
                         flashMode = flashMode,
                         onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
-                        onFlip = { if (flipAllowed) { flipInFlight = true; viewModel.flipCamera() } },
+                        // Capture the current generation BEFORE launching the flip
+                        // so the clear (FlipLatchPolicy) fires on the next bind. Block
+                        // re-taps while a flip is in flight so the 4 s backstop timer
+                        // (keyed on flipInFlight) is never stranded by a second flip.
+                        onFlip = {
+                            if (flipAllowed && !flipInFlight) {
+                                flipStartGeneration = serviceState.cameraConfigGeneration
+                                flipInFlight = true
+                                viewModel.flipCamera()
+                            }
+                        },
                         enabled = !isUiLocked,
                         flipEnabled = flipAllowed,
                         isFrontCamera = serviceState.isFrontCamera,
