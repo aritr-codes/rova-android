@@ -26,7 +26,7 @@
 - `app/src/main/java/com/aritr/rova/ui/theme/RovaPalette.kt` — add the `NeutralDarkRecordPalette` constant (encodes today's record-chrome panel/edge values as a `RovaPalette`).
 - `app/src/main/java/com/aritr/rova/ui/theme/GlassResolver.kt` — tune `RecordChrome` fill alpha 0.88→`RECORD_ALPHA` (~0.40); set RecordChrome `scrim = null` (dock owns the gradient — no double-stack).
 - `app/src/test/java/com/aritr/rova/ui/theme/GlassResolverTest.kt` — update RecordChrome assertions to the new contract.
-- `app/src/main/java/com/aritr/rova/ui/screens/MainScreen.kt` — for `isPinnedDarkRoute`, wrap content in `CompositionLocalProvider(LocalGlassEnvironment provides pinnedEnv)` built from the active env.
+- `app/src/main/java/com/aritr/rova/ui/MainScreen.kt` — (NOTE: path is `ui/MainScreen.kt`, NOT `ui/screens/`) for `isPinnedDarkRoute` routes (record/onboarding/player), each already wrapped in `RovaDarkSurface { … }`; wrap the inner content in `CompositionLocalProvider(LocalGlassEnvironment provides pinnedEnv)` built from the active env.
 - `app/src/main/java/com/aritr/rova/ui/theme/Theme.kt` — expose the active `GlassEnvironment` so `MainScreen` can derive the pinned env (e.g. read `LocalGlassEnvironment.current` inside the pinned wrapper and transform it).
 - `app/src/main/java/com/aritr/rova/ui/screens/RecordChrome.kt` — migrate panel backings (status pill, settings card, camera-control buttons, mode chip) to `GlassSurface(role = GlassRole.RecordChrome)`; recolor the **selected** mode segment to `accentOnDark`; recolor active-recording progress/loop-pulse accent to `accentOnDark`. Dock keeps `bottomNavBrush`. Stop/recording stays `rec`.
 - `app/src/main/java/com/aritr/rova/ui/screens/DualPreviewZone.kt` — verify the P+L selected-mode accent + neutral-dark env compose correctly; no blur change (carve-out preserved).
@@ -240,35 +240,74 @@ git commit -m "feat(theme): tune RecordChrome resolver to airy no-blur fill, doc
 
 - [ ] **Step 1: Write the test**
 
-Assert, for all 12 palettes, that the selected-state accent is legible on the neutral-dark record base. Use the existing `ContrastMath`. Two checks: white text on `accentOnDark` (selected mode segment fill, bold UI text → ≥ 3:1) and `accentOnDark` as a marker on the neutral-dark surface (≥ 3:1).
+Assert, for all 12 palettes, the THREE contrast relationships the selected-segment treatment actually uses (codex-reconciled 2026-06-08; verified passing for all 12 with margin). **`ContrastMath` has NO `ratio(Color, Color)`** — mirror the `ThemeContrastTest` idiom: `rgb(Color)` → `ContrastMath.relativeLuminance(r,g,b)` → `ContrastMath.contrastRatio(lumA, lumB)`; for the tinted fill use `ContrastMath.compositeAlphaOver(accent@0.22 over #0B0E14)`.
+
+**Why three bars, not "white on solid accent":** a solid `accentOnDark` fill behind white text FAILS 3:1 for 10/12 themes (the accents are bright: white/acc ranges 1.46–3.54). So the selected segment is NOT a solid accent fill. It is `accentContainerOnDark` (accent@22%) tint over neutral-dark + an `accentOnDark` indicator + a WHITE label. The three real relationships all pass (white/comp ≥11.40, acc/surf ≥5.45, acc/comp ≥4.13):
 
 ```kotlin
 package com.aritr.rova.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
+/**
+ * Per-palette legibility of the RESTRAINED record selected-state accent
+ * (ADR-0028 §2.4, codex-reconciled 2026-06-08). The selected mode segment is a
+ * dark `accentContainerOnDark` (accent@22%) tint, NOT a solid bright fill — a
+ * solid accentOnDark fill behind white text fails 3:1 for 10/12 themes. Three
+ * bars match the three real relationships; if any palette fails, fix that
+ * palette's accent in RovaPalette.kt, never the threshold.
+ */
 class RecordAccentContrastTest {
 
-    // Neutral-dark record surface = base glassTint composited over black camera surround.
+    // Neutral-dark record surface = NeutralDarkRecordPalette glassTint over the black camera surround.
     private val recordSurface = Color(0xFF0B0E14)
 
+    private fun rgb(c: Color) = Triple(
+        (c.red * 255).roundToInt(),
+        (c.green * 255).roundToInt(),
+        (c.blue * 255).roundToInt(),
+    )
+
+    private fun lum(c: Color): Double { val (r, g, b) = rgb(c); return ContrastMath.relativeLuminance(r, g, b) }
+    private fun ratio(a: Color, b: Color): Double = ContrastMath.contrastRatio(lum(a), lum(b))
+
+    /** accent@22% composited over the neutral-dark record surface → the selected-segment fill. */
+    private fun selectedFill(accent: Color): IntArray {
+        val (ar, ag, ab) = rgb(accent)
+        val (br, bg, bb) = rgb(recordSurface)
+        return ContrastMath.compositeAlphaOver(ar, ag, ab, 0.22, br, bg, bb)
+    }
+
+    private fun ratioToFill(c: Color, fill: IntArray): Double {
+        val (r, g, b) = rgb(c)
+        return ContrastMath.contrastRatio(
+            ContrastMath.relativeLuminance(r, g, b),
+            ContrastMath.relativeLuminance(fill[0], fill[1], fill[2]),
+        )
+    }
+
     @Test
-    fun `selected-state accent is legible on the neutral-dark record surface in every theme`() {
+    fun `selected mode segment accent is legible in every theme`() {
         ThemeSelection.entries
             .filter { it != ThemeSelection.FOLLOW_SYSTEM }
             .forEach { sel ->
                 val p = rovaPalettes.getValue(sel)
-                // White bold label on the selected mode-segment fill (accentOnDark).
-                val whiteOnAccent = ContrastMath.ratio(Color.White, p.accentOnDark)
-                assert(whiteOnAccent >= 3.0) {
-                    "$sel: white-on-accentOnDark = $whiteOnAccent (< 3.0) — selected mode label illegible"
-                }
-                // accentOnDark as a stroke/marker on the neutral-dark surface.
-                val accentOnSurface = ContrastMath.ratio(p.accentOnDark, recordSurface)
-                assert(accentOnSurface >= 3.0) {
-                    "$sel: accentOnDark-on-neutral-dark = $accentOnSurface (< 3.0) — marker illegible"
-                }
+                val fill = selectedFill(p.accentOnDark)
+
+                // 1) accentOnDark indicator/marker on the neutral-dark surface (SC 1.4.11, ≥3:1).
+                val accOnSurface = ratio(p.accentOnDark, recordSurface)
+                assertTrue("$sel: accentOnDark-on-surface = $accOnSurface (< 3.0)", accOnSurface >= 3.0)
+
+                // 2) white label on the tinted selected fill (normal text, ≥4.5:1).
+                val whiteOnFill = ratioToFill(Color.White, fill)
+                assertTrue("$sel: white-on-selectedFill = $whiteOnFill (< 4.5)", whiteOnFill >= 4.5)
+
+                // 3) accentOnDark indicator drawn ON the tinted selected fill (SC 1.4.11, ≥3:1).
+                val accOnFill = ratioToFill(p.accentOnDark, fill)
+                assertTrue("$sel: accentOnDark-on-selectedFill = $accOnFill (< 3.0)", accOnFill >= 3.0)
             }
     }
 }
@@ -291,7 +330,7 @@ git commit -m "test(theme): per-palette record selected-accent legibility on neu
 ## Task 5: Seed the pinned env on pinned-dark routes
 
 **Files:**
-- Modify: `app/src/main/java/com/aritr/rova/ui/screens/MainScreen.kt`
+- Modify: `app/src/main/java/com/aritr/rova/ui/MainScreen.kt` (NOTE: `ui/`, not `ui/screens/`)
 - Modify (if needed): `app/src/main/java/com/aritr/rova/ui/theme/Theme.kt`
 
 - [ ] **Step 1: Provide the pinned env inside the pinned-dark wrapper**
@@ -337,13 +376,16 @@ git commit -m "feat(record): seed neutral-dark pinned GlassEnvironment on camera
 
 - [ ] **Step 1: Replace panel backings with GlassSurface**
 
-For each panel currently drawn as `.background(RecordChromeTokens.<fill>).border(…, RecordChromeTokens.<stroke>)`, wrap its content in `GlassSurface(role = GlassRole.RecordChrome, shape = <existing shape>)` and drop the manual fill/border. Targets:
-- `RecordTopOverlay` status pill (was `glassFill`/`glassStroke`).
-- `RecordSettingsCard` backing (was `settingsCardFill`/`settingsCardStroke`).
-- `GlassCircleButton` camera-control backing (was `camControlFill`/`camControlStroke`).
-- `ModeCycleChip` backing (was `modeChipFill`/`modeChipStroke`).
+For each panel currently drawn as `.background(RecordChromeTokens.<fill>).border(…, RecordChromeTokens.<stroke>)`, wrap its content in `GlassSurface(role = GlassRole.RecordChrome, shape = <existing shape>)` and drop the manual fill/border. Targets (these three are black-glass panels @ ~0.40, so a single RecordChrome fill reproduces them):
+- `RecordTopOverlay` status pill (was `glassFill` = Black@0.40 / `glassStroke`).
+- `RecordSettingsCard` backing (was `settingsCardFill` = Black@0.40 / `settingsCardStroke`).
+- `GlassCircleButton` camera-control backing (was `camControlFill` = Black@0.38 / `camControlStroke` — within quant tolerance of 0.40).
 
-Because the pinned env's `NeutralDarkRecordPalette` encodes the same values, the rendered result matches today. The dock (`RecordBottomNav`) keeps `RecordChromeTokens.bottomNavBrush` — do NOT wrap it in GlassSurface (it IS the record scrim; avoids double-stack per codex). Leave the `rec`-family Stop/recording colors and all text-alpha tokens untouched.
+**EXCLUDE `ModeCycleChip` from this migration.** Its `modeChipFill` is **White@0.07** — a light inset control chip, NOT a black glass panel. Wrapping it in `GlassSurface(RecordChrome)` would flip it to a Black@0.40 fill → visible regression. The ModeCycleChip backing is owned by Task 7 (accent tint + indicator). Leave its `modeChipFill`/`modeChipStroke` as-is in this task.
+
+(Optional, only if trivially clean: the R2 active-HUD `StatusPill`/`LoopPill` use `Surface(color = glassFill = Black@0.40)` — they already match the RecordChrome fill, so migrating them is allowed but NOT required; if it adds risk, leave them. Note the choice in the commit.)
+
+Because the pinned env's `NeutralDarkRecordPalette` encodes the same values (glassTint = Black@0.40, edge = White@0.09), the rendered result matches today. The dock (`RecordBottomNav`) keeps `RecordChromeTokens.bottomNavBrush` — do NOT wrap it in GlassSurface (it IS the record scrim; avoids double-stack per codex). Leave the `rec`-family Stop/recording colors and all text-alpha tokens untouched.
 
 - [ ] **Step 2: Verify no blur was introduced**
 
@@ -369,13 +411,21 @@ git commit -m "feat(record): route record panels through GlassSurface(role=Recor
 **Files:**
 - Modify: `app/src/main/java/com/aritr/rova/ui/screens/RecordChrome.kt`
 
-- [ ] **Step 1: Selected mode segment → accentOnDark**
+- [ ] **Step 1: ModeCycleChip selected/active-mode → restrained accent (tint + indicator, NOT solid fill)**
 
-Where the current mode is indicated as *selected* (the active segment of the Portrait/Landscape/P+L control / the `ModeCycleChip`'s current value), render the selected indicator as a solid `LocalGlassEnvironment.current.palette.accentOnDark` fill with the existing white bold label on top (flat fill, not gradient — keeps the per-palette contrast guarantee from Task 4; the mockup gradient is simplified to a single tested token on pinned-dark). Unselected segments stay neutral (`modeChipFill`-equivalent). Read the accent via the CompositionLocal so it reflects the active theme.
+The record home's mode affordance is `ModeCycleChip` (one chip showing the current mode; the 3-segment Portrait/Landscape/P+L picker lives in the settings sheet, out of scope). Give the chip the theme's restrained accent — read `val acc = LocalGlassEnvironment.current.palette.accentOnDark`:
+- Replace the chip's `modeChipFill` (White@0.07) backing with `acc.copy(alpha = 0.22f)` (= `accentContainerOnDark`-equivalent composited over the neutral-dark surface — the AA-verified tinted fill from Task 4). Keep the existing white-ish label (`cellValueText`) — Task 4 proves white-on-tinted-fill ≥ 4.5:1 for all 12.
+- Replace the chip's `modeChipStroke` border with a `1.5.dp` `acc` (accentOnDark) border as the selection **indicator** (marker-on-fill ≥ 3:1 for all 12, Task 4 bar 3).
+- This is **flat tint + accent border**, NOT a solid bright accent fill (a solid fill behind white text fails 3:1 for 10/12 — see Task 4). The mockup's saturated `.lpill span.on` gradient is the settings-sheet picker; the record-home chip is the restrained single token.
 
-- [ ] **Step 2: Active-recording progress / loop-pulse → accentOnDark**
+Do NOT accent unselected/neutral cells, the swipe hint, separators, or any passive text — D1 restraint.
 
-In `RecordActiveHud` / `LoopPill`, recolor the *progress/pulse* accent (the non-semantic "advancement" cue) to `accentOnDark`. Do NOT touch the recording **dot** (`dotRecording` = red) or any `rec`-family color — those are the locked recording semantic. If a loop element currently uses a neutral or hardcoded blue (e.g. `MergingDotColor`), leave merging as-is unless it reads as a progress accent — note the choice in the commit.
+- [ ] **Step 2: Active-recording progress accent — survey, do not invent**
+
+Survey `RecordActiveHud` / `LoopPill` / `StatusPill` for a NON-semantic "advancement/progress" element that today uses a neutral or hardcoded accent. The current active HUD is: red recording **dot** (`dotRecording`, locked), slate WAITING dot, blue `MergingDotColor`, and white-on-glass pills — there is **no themed progress bar**. So:
+- Do NOT add a new accent surface to the active HUD (avoids regression + keeps recording chrome neutral so the red dot is the sole active signal).
+- Leave `MergingDotColor`, `dotBreak`, and the `LoopPill` numeral as-is.
+- Note in the commit that no non-semantic progress accent existed, so the active-HUD accent is intentionally a no-op (personality reaches Record via the ModeCycleChip only).
 
 - [ ] **Step 3: Confirm rec-red is untouched**
 
