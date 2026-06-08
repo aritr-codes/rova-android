@@ -264,6 +264,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // snapOrientation; orientationSnapState holds opaque hysteresis state. Enabled
     // only for the Single path on bind success; disabled on every unbind/teardown.
     // DualShot (P+L) owns its own rotation (ADR-0009) and never enables this.
+    // THREADING (codex review): OrientationEventListener.enable() registers with no
+    // Handler, so onOrientationChanged is delivered on the MAIN Looper — the same
+    // thread as the segment loop and CameraX finalize callbacks. The three vars below
+    // are therefore main-Looper-confined (no @Volatile/lock). Do NOT move the segment
+    // loop off Dispatchers.Main or pass a background Handler to enable() without
+    // revisiting this — both would turn these plain vars into a data race.
     private var orientationListener: OrientationEventListener? = null
     private var orientationSnapState: OrientationSnapState =
         OrientationSnapState(stable = android.view.Surface.ROTATION_0, candidate = null, candidateSinceMs = null)
@@ -1785,6 +1791,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
         val listener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(orientation: Int) {
+                // PR-α (codex review) — unregisterListener() stops only FUTURE delivery;
+                // a sensor event already queued on the main looper can still run AFTER
+                // disableOrientationTracking(). Identity guard: only the currently-
+                // registered listener acts, so a superseded/disabled instance no-ops
+                // instead of corrupting freshly re-seeded state or rotating a newly
+                // bound use case with a stale value.
+                if (orientationListener !== this) return
                 val prevStable = orientationSnapState.stable
                 orientationSnapState = snapOrientation(
                     degrees = orientation,
