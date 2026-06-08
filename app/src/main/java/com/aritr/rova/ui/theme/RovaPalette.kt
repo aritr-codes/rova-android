@@ -137,3 +137,29 @@ val rovaPalettes: Map<ThemeSelection, RovaPalette> = mapOf(
 /** Resolve a selection (Follow-System included) to a concrete palette. */
 fun resolvePalette(selection: ThemeSelection, systemDark: Boolean): RovaPalette =
     rovaPalettes.getValue(selection.resolveConcrete(systemDark))
+
+/**
+ * Shared cinematic neutral-dark base for pinned camera/media routes
+ * (Record/Player/Onboarding). ADR-0028 §2.4: pinned routes never adopt the
+ * active palette's surface colors — only its dark-safe accents (see
+ * [PinnedGlassEnvironment]). Glass tint/edges encode the shipped record-chrome
+ * panel values (RecordChromeTokens: Black@0.40 fills, White@0.09 strokes) so
+ * GlassSurface(role=RecordChrome) over this base reproduces today's airy look.
+ * The accent fields are placeholders — ALWAYS overwritten per-route with the
+ * active palette's dark-safe accents by [PinnedGlassEnvironment.forPinnedRoute].
+ */
+internal val NeutralDarkRecordPalette = RovaPalette(
+    id = ThemeSelection.AURORA, // identity slot only; never theme-derived on pinned routes
+    background = Brush.verticalGradient(listOf(Color(0xFF0B0E14), Color(0xFF05070B))),
+    glassTint = Color(0x66000000),          // black @ 0.40 — matches RecordChromeTokens panels
+    edge = Color.White.copy(alpha = 0.09f),
+    edgeTop = Color.White.copy(alpha = 0.12f),
+    accent = Color(0xFF5B9DFF),             // overwritten per-route
+    accent2 = Color(0xFF7C5BFF),            // overwritten per-route
+    textHigh = Color.White.copy(alpha = 0.93f),
+    textDim = Color.White.copy(alpha = 0.65f),
+    textFaint = Color.White.copy(alpha = 0.50f),
+    accentOnDark = Color(0xFF5B9DFF),       // overwritten per-route
+    accentContainerOnDark = Color(0xFF5B9DFF).copy(alpha = 0.22f), // overwritten per-route
+    isLight = false,
+)
