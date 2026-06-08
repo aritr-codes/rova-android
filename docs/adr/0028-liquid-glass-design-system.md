@@ -94,3 +94,60 @@ behind it; and `RenderEffect` blur requires API 31+ (minSdk is 24).
 - Wave-2 themes are a one-line picker change later (no enum work).
 - The honest limit "no backdrop blur over the camera" is a permanent platform
   constraint encoded in the resolver and gates, not a temporary shortcut.
+
+## PR2 amendment (2026-06-08) — Record home
+
+Migrating the first pinned-dark surface (Record) refined four points of §2.2 / §2.4:
+
+a. **`GlassRole.RecordChrome` fill is airy (~0.40), not a 0.88 slab.** The
+   original `RECORD_ALPHA = 0.88` was tuned for an opaque-ish panel and fought
+   the live camera underneath; record chrome reads better as a light translucent
+   fill matching the shipped `RecordChromeTokens` panels (Black@0.40). The 0.88
+   constant is dropped. `GlassResolverTest` asserts the RecordChrome fill alpha
+   over the pinned base lands in `0.36..0.45` and stays opaque under
+   Reduce-Transparency.
+
+b. **The RecordChrome resolver scrim is `null`.** The record scrim is owned by
+   the dock's `bottomNavBrush` (the edge-to-edge gradient, ADR-0011). A resolver
+   scrim would double-stack over it. `GlassSurface(role=RecordChrome)` therefore
+   contributes fill + edge only; the dock keeps its brush.
+
+c. **Pinned routes render on a dedicated `NeutralDarkRecordPalette` base.** A
+   light active theme (Daylight) must never leak a light `glassTint`/`edge`/
+   `isLight` into a route painted over the camera. The pure
+   `PinnedGlassEnvironment.forPinnedRoute(env)` swaps the env palette to the
+   shared neutral-dark base and copies ONLY the active palette's
+   `accentOnDark` / `accentContainerOnDark`. It is seeded via
+   `CompositionLocalProvider(LocalGlassEnvironment)` inside `RovaDarkSurface` on
+   the record / player / onboarding routes.
+
+d. **Record personality = accent on the selected mode only; record/stop locked
+   `rec`.** Theme accent reaches the Record home solely through the
+   `ModeCycleChip` (the selected-mode affordance), rendered exactly as the mockup
+   `.lpill span.on`: a **solid `accent → accent2` gradient** fill + **white bold
+   label**. Using the two-stop gradient (not a flat single accent) is what keeps
+   the themes distinct on this chip — Aurora's blue→violet vs Eclipse's
+   blue→periwinkle, Tide's teal→cyan vs Jade's emerald→deep-green; a flat
+   `accentOnDark` collapsed those to look identical. Because both stops are
+   needed, `PinnedGlassEnvironment.forPinnedRoute` carries `accent`/`accent2`
+   through to the pinned route (alongside `accentOnDark`/`accentContainerOnDark`).
+
+   **WCAG exception (owner-signed 2026-06-08):** white-on-bright-accent on this
+   chip measures ~1.5–3.5:1 — below the ADR-0020 "AA by default" bar. This is the
+   single explicit, owner-approved exception, scoped to this one decorative
+   selected-state control (the mode is also conveyed by position and by the
+   dual-preview zone tags, so the color is not the sole information channel). All
+   other text on the Record home remains AA. `RecordAccentContrastTest` therefore
+   does NOT assert the (waived) white-on-accent ratio; it instead guards the
+   reported regression — every palette is a real two-stop gradient and no two
+   themes share an identical `(accent, accent2)` pair.
+
+   The active HUD has no non-semantic progress element, so it carries no accent
+   (the mockup's `.m-seg` accent-gradient clip-progress dots are a candidate
+   follow-up, not built in PR2). The Start/Stop FAB and recording dot stay the
+   locked `rec #ff4d4d` in every theme. `checkRecordSurfaceNoBlur` +
+   `checkGlassSurfaceRoleUsage` stay green (RecordChrome resolves blurRadius=0).
+
+   The mockup's edge-hugging landscape *re-layout* and the segmented in-sheet
+   mode picker are NOT part of PR2 (candidate PR2b); PR2 themes the existing
+   portrait/landscape/P+L layouts.

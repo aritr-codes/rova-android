@@ -5,12 +5,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.RovaApp
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
+import com.aritr.rova.ui.theme.PinnedGlassEnvironment
 import com.aritr.rova.ui.theme.RovaDarkSurface
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -91,14 +94,18 @@ fun MainScreen(
             // hard-block, must be prompted. UI_NAV_GRAPH §5 back-stack table.
             composable("onboarding") {
                 RovaDarkSurface {
-                    OnboardingScreen(
-                        onCompleted = {
-                            navController.navigate("record") {
-                                popUpTo("onboarding") { inclusive = true }
-                                launchSingleTop = true
+                    CompositionLocalProvider(
+                        LocalGlassEnvironment provides PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current),
+                    ) {
+                        OnboardingScreen(
+                            onCompleted = {
+                                navController.navigate("record") {
+                                    popUpTo("onboarding") { inclusive = true }
+                                    launchSingleTop = true
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
             composable("record") {
@@ -119,14 +126,18 @@ fun MainScreen(
                     }
                 }
                 RovaDarkSurface {
-                    RecordScreen(
-                        onMergeFinished = toHistory,
-                        onNavigateToHistory = toHistory,
-                        onNavigateToSettings = {
-                            navController.navigate("settings") { launchSingleTop = true }
-                        },
-                        settingsViewModel = settingsViewModel
-                    )
+                    CompositionLocalProvider(
+                        LocalGlassEnvironment provides PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current),
+                    ) {
+                        RecordScreen(
+                            onMergeFinished = toHistory,
+                            onNavigateToHistory = toHistory,
+                            onNavigateToSettings = {
+                                navController.navigate("settings") { launchSingleTop = true }
+                            },
+                            settingsViewModel = settingsViewModel
+                        )
+                    }
                 }
             }
             composable("history") {
@@ -227,12 +238,16 @@ fun MainScreen(
                 // to zero and steady-state playback was screenshottable.
                 val secure = backStackEntry.arguments?.getBoolean("secure") ?: false
                 RovaDarkSurface {
-                    PlayerScreen(
-                        sessionId = sessionId,
-                        side = side,
-                        secure = secure,
-                        onBack = { navController.popBackStack() }
-                    )
+                    CompositionLocalProvider(
+                        LocalGlassEnvironment provides PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current),
+                    ) {
+                        PlayerScreen(
+                            sessionId = sessionId,
+                            side = side,
+                            secure = secure,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
             }
             composable("vault") {

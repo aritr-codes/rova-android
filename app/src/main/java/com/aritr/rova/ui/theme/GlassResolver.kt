@@ -1,6 +1,5 @@
 package com.aritr.rova.ui.theme
 
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -14,7 +13,7 @@ object GlassResolver {
 
     private val DefaultBlur = 24.dp
     private const val FALLBACK_ALPHA = 0.86f
-    private const val RECORD_ALPHA = 0.88f
+    private const val RECORD_ALPHA = 0.40f
 
     fun resolve(env: GlassEnvironment, role: GlassRole): GlassMaterial {
         val p = env.palette
@@ -32,15 +31,16 @@ object GlassResolver {
             )
         }
 
-        // RecordChrome (transparency allowed): heavy fill + gradient scrim + edge,
-        // never blur (§2.2/§2.3) — depth via scrim, not backdrop blur.
+        // RecordChrome (PR2, ADR-0028 §2.2): airy no-blur fill (~0.40) appropriate over
+        // a LIVE camera — the 0.88 slab fought the preview. NO resolver scrim: the record
+        // dock's bottomNavBrush owns the gradient; a resolver scrim would double-stack.
         if (role == GlassRole.RecordChrome) {
             return GlassMaterial(
                 fill = p.glassTint.atLeastAlpha(RECORD_ALPHA),
                 blurRadius = 0.dp,
                 edge = p.edge,
                 edgeTop = p.edgeTop,
-                scrim = recordScrim(),
+                scrim = null,
             )
         }
 
@@ -64,15 +64,6 @@ object GlassResolver {
             )
         }
     }
-
-    /** Bottom-anchored darkening scrim used behind record chrome. */
-    private fun recordScrim(): Brush = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.0f to Color.Transparent,
-            0.55f to Color.Black.copy(alpha = 0.22f),
-            1.0f to Color.Black.copy(alpha = 0.55f),
-        ),
-    )
 
     /** Raise this color's alpha to at least [min], leaving heavier tints untouched. */
     private fun Color.atLeastAlpha(min: Float): Color =

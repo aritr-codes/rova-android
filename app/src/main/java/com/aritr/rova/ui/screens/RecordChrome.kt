@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -56,6 +58,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.theme.GlassRole
+import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.components.RecordHudFormatters
@@ -93,26 +98,24 @@ fun RecordTopOverlay(
     // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
     // (Recording/Waiting) block was removed — unreachable since T9.
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.topOverlayGap)) {
-        Row(
-            modifier = Modifier
-                .clip(StatusPillShape)
-                .background(RecordChromeTokens.glassFill)
-                .border(1.dp, RecordChromeTokens.glassStroke, StatusPillShape)
-                .padding(
+        GlassSurface(role = GlassRole.RecordChrome, shape = StatusPillShape) {
+            Row(
+                modifier = Modifier.padding(
                     horizontal = RecordChromeTokens.statusPillPaddingH,
                     vertical = RecordChromeTokens.statusPillPaddingV,
                 ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
-        ) {
-            StatusDot(hudState)
-            Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
-            if (statusDetail != null) {
-                Text(
-                    stringResource(R.string.record_status_detail_prefix, statusDetail),
-                    style = RovaTokens.statusTime,
-                    color = RecordChromeTokens.statusTimeText,
-                )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
+            ) {
+                StatusDot(hudState)
+                Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
+                if (statusDetail != null) {
+                    Text(
+                        stringResource(R.string.record_status_detail_prefix, statusDetail),
+                        style = RovaTokens.statusTime,
+                        color = RecordChromeTokens.statusTimeText,
+                    )
+                }
             }
         }
     }
@@ -241,14 +244,13 @@ private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @C
     // (the incoming fixed constraint defeats IconButton's minimumInteractiveComponentSize)
     // — a regression vs the pre-R1 48 dp flash/flip IconButtons.
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(ControlBtnTouchSize)) {
-        Box(
-            modifier = Modifier
-                .size(RecordChromeTokens.camControlSize)
-                .clip(CircleShape)
-                .background(RecordChromeTokens.camControlFill)
-                .border(1.dp, RecordChromeTokens.camControlStroke, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) { content() }
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.size(RecordChromeTokens.camControlSize),
+            shape = CircleShape,
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+        }
     }
 }
 
@@ -289,52 +291,55 @@ fun RecordSettingsCard(
             )
             Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)              // a11y minimum touch target
-                .clip(SettingsCardShape)
-                .background(RecordChromeTokens.settingsCardFill)
-                .border(1.dp, RecordChromeTokens.settingsCardStroke, SettingsCardShape)
-                .then(
-                    if (dimmed) {
-                        Modifier
-                    } else {
-                        Modifier
-                            .clickable { onOpenSheet() }
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures { _, dragAmount ->
-                                    if (dragAmount < -8f) onOpenSheet()
-                                }
-                            }
-                    },
-                )
-                .padding(
-                    horizontal = RecordChromeTokens.settingsCardPaddingH,
-                    vertical = RecordChromeTokens.settingsCardPaddingV,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.fillMaxWidth(),
+            shape = SettingsCardShape,
         ) {
-            SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
-            CellSep()
-            SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
-            ModeCycleChip(
-                mode = mode,
-                onCycleMode = onCycleMode,
-                onLongPress = onOpenSheet,
-                enabled = !dimmed,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(
-                RecordChromeIcons.chevronUp,
-                contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                tint = RecordChromeTokens.settingsArrow,
-                modifier = Modifier.padding(start = 8.dp).size(13.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)              // a11y minimum touch target
+                    .then(
+                        if (dimmed) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clickable { onOpenSheet() }
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures { _, dragAmount ->
+                                        if (dragAmount < -8f) onOpenSheet()
+                                    }
+                                }
+                        },
+                    )
+                    .padding(
+                        horizontal = RecordChromeTokens.settingsCardPaddingH,
+                        vertical = RecordChromeTokens.settingsCardPaddingV,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                CellSep()
+                SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                ModeCycleChip(
+                    mode = mode,
+                    onCycleMode = onCycleMode,
+                    onLongPress = onOpenSheet,
+                    enabled = !dimmed,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    RecordChromeIcons.chevronUp,
+                    contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                    tint = RecordChromeTokens.settingsArrow,
+                    modifier = Modifier.padding(start = 8.dp).size(13.dp),
+                )
+            }
         }
     }
 }
@@ -364,15 +369,24 @@ private fun ModeCycleChip(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val glyphAlpha = if (enabled) RecordChromeTokens.modeChipGlyphAlphaEnabled
-                     else RecordChromeTokens.modeChipGlyphAlphaDisabled
+    // PR2 §d (mockup-exact, owner-signed 2026-06-08): the selected-mode chip is
+    // the record home's theme anchor — a solid `accent → accent2` gradient (the
+    // mockup `.lpill span.on`), restoring per-palette distinctness (Aurora's
+    // blue→violet vs Eclipse's blue→periwinkle; Tide's teal→cyan vs Jade's
+    // emerald→deep-green — a flat single accent collapsed those). White bold
+    // label, pixel-faithful to the mockup. The white-on-bright-accent contrast
+    // sits below WCAG AA (~1.5–3.5:1); this is the one explicit, owner-approved
+    // exception to ADR-0020 "AA by default", scoped to this decorative selected
+    // state (mode also legible from position + the dual-preview zone tags).
+    val palette = LocalGlassEnvironment.current.palette
+    val selectedBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
+    val glyphAlpha = if (enabled) 0.85f else 0.45f
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(chipShape)
-            .background(RecordChromeTokens.modeChipFill)
-            .border(1.dp, RecordChromeTokens.modeChipStroke, chipShape)
+            .background(selectedBrush, chipShape)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
@@ -392,14 +406,14 @@ private fun ModeCycleChip(
             Text(
                 mode,
                 style = RovaTokens.cellValue,
-                color = RecordChromeTokens.cellValueText,
+                color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 stringResource(R.string.record_cell_mode),
                 style = RovaTokens.cellKey,
-                color = RecordChromeTokens.cellKeyText,
+                color = Color.White.copy(alpha = 0.80f),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
@@ -651,6 +665,25 @@ internal fun loopPillContent(loopIndex: Int, loopTotal: Int): UiText? = when {
     )
 }
 
+/**
+ * R2/PR2 follow-up — segmented loop-progress model for [LoopSegmentBar] (mockup
+ * `.m-seg`). Pure / JVM-testable. Mirrors [loopPillContent]'s hide gate: single-
+ * clip, zero-clip, and indefinite sessions show no bar. Small finite totals get
+ * discrete dots; large totals collapse to a continuous fraction so the bar never
+ * renders dozens of slivers.
+ */
+internal sealed interface LoopSegments {
+    data class Discrete(val total: Int, val filled: Int) : LoopSegments
+    data class Continuous(val fraction: Float) : LoopSegments
+}
+
+internal fun loopSegments(loopIndex: Int, loopTotal: Int, maxDiscrete: Int = 8): LoopSegments? = when {
+    loopTotal < 0 -> null                 // indefinite — no fixed total to segment
+    loopTotal <= 1 -> null                // single/zero clip — hide (matches loopPillContent)
+    loopTotal <= maxDiscrete -> LoopSegments.Discrete(loopTotal, loopIndex.coerceIn(0, loopTotal))
+    else -> LoopSegments.Continuous((loopIndex.toFloat() / loopTotal).coerceIn(0f, 1f))
+}
+
 internal enum class StatusDotColor { RECORDING, WAITING, MERGING }
 
 internal data class StatusPillContent(
@@ -861,6 +894,53 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
     }
 }
 
+/**
+ * R2/PR2 follow-up — the recording-progress segment bar (mockup `.m-seg`,
+ * `rova_design_system_round3.html`: "Progress dots fill left-to-right as clips
+ * complete"). A thin ~200 dp bar whose segments fill left→right with the theme
+ * `accent → accent2` gradient as loops/clips complete. Reads the live palette via
+ * [LocalGlassEnvironment] so it tracks the selected theme (same anchor the
+ * selected-mode chip uses). Self-hides for single/zero-clip and indefinite
+ * sessions via [loopSegments]'s null gate (mirrors [LoopPill]). No blur effect —
+ * the fill is a solid gradient over a 12%-white track, matching `.m-seg i`.
+ */
+@Composable
+private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+    val segments = loopSegments(loopIndex, loopTotal) ?: return
+    val palette = LocalGlassEnvironment.current.palette
+    val fillBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
+    val track = Color.White.copy(alpha = 0.12f)   // mockup .m-seg i background
+    val segShape = RoundedCornerShape(3.dp)
+    val barHeight = 5.dp
+    when (segments) {
+        is LoopSegments.Discrete -> Row(
+            modifier = modifier.width(200.dp).height(barHeight),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            repeat(segments.total) { i ->
+                val cell = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(segShape)
+                // Two .background overloads (Brush vs Color) keep the cell a single
+                // node — filled segments paint the accent gradient, the rest the track.
+                Box(if (i < segments.filled) cell.background(fillBrush) else cell.background(track))
+            }
+        }
+        is LoopSegments.Continuous -> Box(
+            modifier = modifier.width(200.dp).height(barHeight).clip(segShape).background(track),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(segments.fraction)
+                    .clip(segShape)
+                    .background(fillBrush),
+            )
+        }
+    }
+}
+
 @Composable
 private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
     Surface(
@@ -924,5 +1004,9 @@ internal fun RecordActiveHud(
     ) {
         LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
         StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        // mockup `.m-seg` — segments fill left→right as clips complete. Self-hides
+        // (loopSegments null gate) for single-clip / indefinite sessions, so no
+        // call-site conditional is needed; order is LoopPill → StatusPill → bar.
+        LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal)
     }
 }

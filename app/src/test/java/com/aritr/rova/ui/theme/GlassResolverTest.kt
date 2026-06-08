@@ -1,7 +1,7 @@
 package com.aritr.rova.ui.theme
 
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,16 +29,26 @@ class GlassResolverTest {
     }
 
     @Test
-    fun `record chrome never blurs and always gets a scrim at any api`() {
-        val hi = GlassResolver.resolve(env(34, false), GlassRole.RecordChrome)
-        val lo = GlassResolver.resolve(env(24, false), GlassRole.RecordChrome)
-        assertEquals(0f, hi.blurRadius.value, 0f)
-        assertEquals(0f, lo.blurRadius.value, 0f)
-        assertNotNull(hi.scrim)
-        assertNotNull(lo.scrim)
-        // Pins RECORD_ALPHA = 0.88; threshold 0.875 tolerates 8-bit alpha
-        // quantization (0.88 round-trips to ~0.8784).
-        assertTrue("record fill must be ~0.88 alpha", hi.fill.alpha >= 0.875f)
+    fun `recordChrome fill is airy and never blurs`() {
+        // RecordChrome only ever renders over the pinned NeutralDarkRecordPalette
+        // (ADR-0028 §2.4), whose glassTint is the ~0.40 record-panel value. A
+        // heavier palette tint (e.g. AURORA @ ~0.58) would float ABOVE the 0.40
+        // floor via atLeastAlpha — so the airy-band contract is exercised on the
+        // surface RecordChrome is actually composed over.
+        val env = GlassEnvironment(NeutralDarkRecordPalette, apiLevel = 34, reduceTransparency = false)
+        val m = GlassResolver.resolve(env, GlassRole.RecordChrome)
+        assertEquals(0.dp, m.blurRadius)
+        assertTrue("fill alpha ${m.fill.alpha} should be ~0.40", m.fill.alpha in 0.36f..0.45f)
+        assertNull("RecordChrome scrim is owned by the dock brush, not the resolver", m.scrim)
+    }
+
+    @Test
+    fun `recordChrome under reduce-transparency is opaque and unblurred`() {
+        val env = GlassEnvironment(NeutralDarkRecordPalette, apiLevel = 34, reduceTransparency = true)
+        val m = GlassResolver.resolve(env, GlassRole.RecordChrome)
+        assertEquals(0.dp, m.blurRadius)
+        assertTrue(m.fill.alpha >= 0.99f)
+        assertNull(m.scrim)
     }
 
     @Test

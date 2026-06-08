@@ -76,20 +76,25 @@ private val Tide = darkPalette(ThemeSelection.TIDE, 0xFF16323A, 0xFF0E1A1F, Colo
 private val Jade = darkPalette(ThemeSelection.JADE, 0xFF13322A, 0xFF0C1C18, Color(0xFF34D399), Color(0xFF059E6B))
 private val Dusk = darkPalette(ThemeSelection.DUSK, 0xFF3A241C, 0xFF1F1310, Color(0xFFFF8A4C), Color(0xFFFF5FA2))
 
-/** Eclipse — pure-black OLED. #000 hides elevation, so its edges carry the depth (§1.3). */
+/**
+ * Eclipse — pure-black OLED. #000 hides elevation, so its edges carry the depth (§1.3).
+ * Accent = deep-twilight royal violet (#8B7CFF→#B56CFF): the lavender sky of totality
+ * (web + codex, 2026-06-08). Distinct from Aurora's blue-start gradient — the round2
+ * mockup shared Aurora's blue here, which collapsed the two on the themed mode chip.
+ */
 private val Eclipse = RovaPalette(
     id = ThemeSelection.ECLIPSE,
     background = Brush.verticalGradient(listOf(Color(0xFF050608), Color(0xFF000000))),
     glassTint = Color(0xD608090C),
     edge = Color(0x14FFFFFF),
     edgeTop = Color(0x1FFFFFFF),
-    accent = Color(0xFF5B9DFF),
-    accent2 = Color(0xFF6F8CFF),
+    accent = Color(0xFF8B7CFF),
+    accent2 = Color(0xFFB56CFF),
     textHigh = DarkTextHigh,
     textDim = DarkTextDim,
     textFaint = DarkTextFaint,
-    accentOnDark = Color(0xFF5B9DFF),
-    accentContainerOnDark = Color(0xFF5B9DFF).copy(alpha = 0.22f),
+    accentOnDark = Color(0xFF8B7CFF),
+    accentContainerOnDark = Color(0xFF8B7CFF).copy(alpha = 0.22f),
     isLight = false,
 )
 
@@ -137,3 +142,29 @@ val rovaPalettes: Map<ThemeSelection, RovaPalette> = mapOf(
 /** Resolve a selection (Follow-System included) to a concrete palette. */
 fun resolvePalette(selection: ThemeSelection, systemDark: Boolean): RovaPalette =
     rovaPalettes.getValue(selection.resolveConcrete(systemDark))
+
+/**
+ * Shared cinematic neutral-dark base for pinned camera/media routes
+ * (Record/Player/Onboarding). ADR-0028 §2.4: pinned routes never adopt the
+ * active palette's surface colors — only its dark-safe accents (see
+ * [PinnedGlassEnvironment]). Glass tint/edges encode the shipped record-chrome
+ * panel values (RecordChromeTokens: Black@0.40 fills, White@0.09 strokes) so
+ * GlassSurface(role=RecordChrome) over this base reproduces today's airy look.
+ * The accent fields are placeholders — ALWAYS overwritten per-route with the
+ * active palette's dark-safe accents by [PinnedGlassEnvironment.forPinnedRoute].
+ */
+internal val NeutralDarkRecordPalette = RovaPalette(
+    id = ThemeSelection.AURORA, // identity slot only; never theme-derived on pinned routes
+    background = Brush.verticalGradient(listOf(Color(0xFF0B0E14), Color(0xFF05070B))),
+    glassTint = Color(0x66000000),          // black @ 0.40 — matches RecordChromeTokens panels
+    edge = Color.White.copy(alpha = 0.09f),
+    edgeTop = Color.White.copy(alpha = 0.12f),
+    accent = Color(0xFF5B9DFF),             // overwritten per-route
+    accent2 = Color(0xFF7C5BFF),            // overwritten per-route
+    textHigh = Color.White.copy(alpha = 0.93f),
+    textDim = Color.White.copy(alpha = 0.65f),
+    textFaint = Color.White.copy(alpha = 0.50f),
+    accentOnDark = Color(0xFF5B9DFF),       // overwritten per-route
+    accentContainerOnDark = Color(0xFF5B9DFF).copy(alpha = 0.22f), // overwritten per-route
+    isLight = false,
+)
