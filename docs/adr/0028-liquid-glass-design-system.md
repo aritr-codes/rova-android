@@ -94,3 +94,46 @@ behind it; and `RenderEffect` blur requires API 31+ (minSdk is 24).
 - Wave-2 themes are a one-line picker change later (no enum work).
 - The honest limit "no backdrop blur over the camera" is a permanent platform
   constraint encoded in the resolver and gates, not a temporary shortcut.
+
+## PR2 amendment (2026-06-08) — Record home
+
+Migrating the first pinned-dark surface (Record) refined four points of §2.2 / §2.4:
+
+a. **`GlassRole.RecordChrome` fill is airy (~0.40), not a 0.88 slab.** The
+   original `RECORD_ALPHA = 0.88` was tuned for an opaque-ish panel and fought
+   the live camera underneath; record chrome reads better as a light translucent
+   fill matching the shipped `RecordChromeTokens` panels (Black@0.40). The 0.88
+   constant is dropped. `GlassResolverTest` asserts the RecordChrome fill alpha
+   over the pinned base lands in `0.36..0.45` and stays opaque under
+   Reduce-Transparency.
+
+b. **The RecordChrome resolver scrim is `null`.** The record scrim is owned by
+   the dock's `bottomNavBrush` (the edge-to-edge gradient, ADR-0011). A resolver
+   scrim would double-stack over it. `GlassSurface(role=RecordChrome)` therefore
+   contributes fill + edge only; the dock keeps its brush.
+
+c. **Pinned routes render on a dedicated `NeutralDarkRecordPalette` base.** A
+   light active theme (Daylight) must never leak a light `glassTint`/`edge`/
+   `isLight` into a route painted over the camera. The pure
+   `PinnedGlassEnvironment.forPinnedRoute(env)` swaps the env palette to the
+   shared neutral-dark base and copies ONLY the active palette's
+   `accentOnDark` / `accentContainerOnDark`. It is seeded via
+   `CompositionLocalProvider(LocalGlassEnvironment)` inside `RovaDarkSurface` on
+   the record / player / onboarding routes.
+
+d. **Record personality = accent on the selected mode only; record/stop locked
+   `rec`.** Theme accent reaches the Record home solely through the
+   `ModeCycleChip` (the selected-mode affordance): a dark `accentOnDark`@22% tint
+   fill + a `1.5dp accentOnDark` indicator border, with the existing white label.
+   A SOLID `accentOnDark` fill behind white text was rejected — it fails WCAG
+   3:1 for 10/12 themes (the accents are bright). The active HUD has no
+   non-semantic progress element, so it carries no accent. The Start/Stop FAB and
+   recording dot stay the locked `rec #ff4d4d` in every theme. `checkRecordSurface
+   NoBlur` + `checkGlassSurfaceRoleUsage` stay green (RecordChrome resolves
+   blurRadius=0); `RecordAccentContrastTest` adds per-palette legibility for the
+   three real relationships (accent-on-dark ≥3:1, white-on-tinted-fill ≥4.5:1,
+   accent-on-tinted-fill ≥3:1), all passing for 12/12 with margin.
+
+   The mockup's edge-hugging landscape *re-layout* and the saturated segmented
+   mode-picker gradient are NOT part of PR2 (candidate PR2b); PR2 themes the
+   existing portrait/landscape/P+L layouts.
