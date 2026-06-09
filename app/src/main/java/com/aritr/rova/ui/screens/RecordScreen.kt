@@ -765,6 +765,7 @@ fun RecordScreen(
                                 // PR-α (ADR-0029 §Decision 3) — the device rotated but the
                                 // current clip stays frozen; flag the next-clip rotation.
                                 rotatingNextClip = serviceState.pendingNextRotation != serviceState.currentSegmentRotation,
+                                orientation = chromeOrientation,
                             )
                         }
                     }
@@ -849,6 +850,7 @@ fun RecordScreen(
                         enabled = !isUiLocked,
                         flipEnabled = flipAllowed,
                         isFrontCamera = serviceState.isFrontCamera,
+                        orientation = chromeOrientation,
                         modifier = slotModifier(
                             placementFor(ChromeSlot.CAMERA_CONTROLS, chromeOrientation),
                             WindowInsets.statusBars,

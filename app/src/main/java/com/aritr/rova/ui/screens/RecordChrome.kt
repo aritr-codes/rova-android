@@ -70,6 +70,7 @@ import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.screens.chrome.ChromeOrientation
 import com.aritr.rova.ui.screens.chrome.SlotAnchor
 import com.aritr.rova.ui.screens.chrome.SlotPlacement
 import com.aritr.rova.ui.text.UiText
@@ -185,59 +186,78 @@ fun RecordCameraControls(
     // B6 — true when the FRONT lens is currently bound. Swaps the flip glyph +
     // contentDescription so the affordance names the lens the tap will switch TO.
     isFrontCamera: Boolean = false,
+    // PR-β — landscape lays the two controls in a Row (a vertical stack in the
+    // top-right would reach down toward the center-right record FAB). Same leaves.
+    orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
-        GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
-            val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
-                flashMode != RovaRecordingService.FLASH_MODE_AUTO
-            val contentTint = when {
-                flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
-                else -> tint
-            }
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    RecordChromeIcons.flashBolt,
-                    contentDescription = stringResource(R.string.record_flash_cd),
-                    tint = contentTint,
-                    modifier = Modifier.size(15.dp),
-                )
-                if (isOff) {
-                    // OFF state — diagonal slash across the bolt (mockup shows
-                    // only the bolt; the slash is the app's tri-state affordance).
-                    Box(
-                        Modifier
-                            .size(width = 20.dp, height = 1.5.dp)
-                            .rotate(-45f)
-                            .background(contentTint),
-                    )
-                }
-            }
+    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint) }
+    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint) }
+    if (orientation == ChromeOrientation.LANDSCAPE) {
+        Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
+            flash(); flip()
         }
-        // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from
-        // [enabled] so P+L mode can disable JUST this button while
-        // flash stays usable. P+L is rear-only by design (DualShot needs
-        // a single full-FOV sensor frame, software-cropped to portrait
-        // AND landscape; the front camera path is not productionised
-        // and entry-level Samsung devices like the A17 don't support
-        // concurrent rear+front camera streams either).
-        GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
-            // B6 — name the lens the tap switches TO (front active → "rear"
-            // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
-            // requirement; strings are localized resources (checkNoHardcodedUiStrings).
-            val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
-            val flipCd = stringResource(
-                if (isFrontCamera) R.string.record_switch_to_rear_cd
-                else R.string.record_switch_to_front_cd,
-            )
+    } else {
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
+            flash(); flip()
+        }
+    }
+}
+
+@Composable
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color) {
+    GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
+        val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
+            flashMode != RovaRecordingService.FLASH_MODE_AUTO
+        val contentTint = when {
+            flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
+            else -> tint
+        }
+        Box(contentAlignment = Alignment.Center) {
             Icon(
-                flipIcon,
-                contentDescription = flipCd,
-                tint = flipTint,
-                modifier = Modifier.size(16.dp),
+                RecordChromeIcons.flashBolt,
+                contentDescription = stringResource(R.string.record_flash_cd),
+                tint = contentTint,
+                modifier = Modifier.size(15.dp),
             )
+            if (isOff) {
+                // OFF state — diagonal slash across the bolt (mockup shows
+                // only the bolt; the slash is the app's tri-state affordance).
+                Box(
+                    Modifier
+                        .size(width = 20.dp, height = 1.5.dp)
+                        .rotate(-45f)
+                        .background(contentTint),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color) {
+    // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
+    // P+L mode can disable JUST this button while flash stays usable. P+L is
+    // rear-only by design (DualShot needs a single full-FOV sensor frame,
+    // software-cropped to portrait AND landscape; the front camera path is not
+    // productionised and entry-level Samsung devices like the A17 don't support
+    // concurrent rear+front camera streams either).
+    GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
+        // B6 — name the lens the tap switches TO (front active → "rear"
+        // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
+        // requirement; strings are localized resources (checkNoHardcodedUiStrings).
+        val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
+        val flipCd = stringResource(
+            if (isFrontCamera) R.string.record_switch_to_rear_cd
+            else R.string.record_switch_to_front_cd,
+        )
+        Icon(
+            flipIcon,
+            contentDescription = flipCd,
+            tint = flipTint,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -1015,6 +1035,7 @@ internal fun RecordActiveHud(
     clipSecondsLeft: Int,
     waitSecondsLeft: Int,
     rotatingNextClip: Boolean = false,
+    orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
     modifier: Modifier = Modifier,
 ) {
     // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
@@ -1032,8 +1053,21 @@ internal fun RecordActiveHud(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
-        StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        // PR-β — landscape places the loop pill beside the status pill (a vertical
+        // stack reads badly in the short landscape top band). Same composables; the
+        // outer Column keeps the live-region semantics either way (ADR-0020).
+        if (orientation == ChromeOrientation.LANDSCAPE) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+                StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+            }
+        } else {
+            LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+            StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        }
         // PR-α (ADR-0029 §Decision 3) — the current clip keeps its frozen rotation;
         // the next clip adopts the device's new orientation at the segment boundary.
         // Quiet caption reusing the adjacent status-pill's time text style/token.
