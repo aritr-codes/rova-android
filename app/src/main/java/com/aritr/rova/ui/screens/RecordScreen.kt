@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
+import android.view.WindowManager
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -230,6 +231,28 @@ fun RecordScreen(
         onDispose {
             if (activity != null && previousOrientation != null) {
                 activity.requestedOrientation = previousOrientation
+            }
+        }
+    }
+
+    // ADR-0029 (force-rotate) — seamless rotation, like a native camera app. The
+    // default ROTATION_ANIMATION_ROTATE screenshots the old orientation and rotates
+    // the screenshot, so the viewfinder visibly flips before CameraX re-applies the
+    // corrected transform on a later frame. ROTATION_ANIMATION_SEAMLESS skips that
+    // screenshot-rotate and lets the app render directly in the new orientation (the
+    // system falls back automatically when it can't render in time). Applied for the
+    // whole Record screen and restored on leave so other screens keep the default.
+    DisposableEffect(Unit) {
+        val window = (localView.context as? Activity)?.window
+        val previousAnim = window?.attributes?.rotationAnimation
+        if (window != null) {
+            window.attributes = window.attributes.apply {
+                rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS
+            }
+        }
+        onDispose {
+            if (window != null && previousAnim != null) {
+                window.attributes = window.attributes.apply { rotationAnimation = previousAnim }
             }
         }
     }
