@@ -1691,9 +1691,24 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
                 ?: android.view.Surface.ROTATION_0
-            val targetRot = computeTargetRotation(displayRotation, currentMode)
+            // ADR-0029 (force-rotate) — under the Auto orientation policy the
+            // OrientationEventListener owns capture rotation from the physical sensor,
+            // and MainActivity force-follows the sensor (FULL_SENSOR) so displayRotation
+            // is already the real device rotation. Applying the legacy Mode "+90°
+            // Landscape" offset (computeTargetRotation) on top would double-rotate the
+            // first segment until the first sensor event corrected it, so bind to the
+            // raw (normalized) display rotation and let the listener take over. The Mode
+            // offset path is retained ONLY for a future non-Auto lock policy.
+            val targetRot = if (DEFAULT_ORIENTATION_POLICY_IS_AUTO) {
+                computeTargetRotation(displayRotation, "Portrait") // identity-normalize; no Mode offset
+            } else {
+                computeTargetRotation(displayRotation, currentMode)
+            }
             videoCapture = VideoCapture.Builder(recorder).setTargetRotation(targetRot).build()
 
+            // Preview rotation is owned by PreviewView/display, not the sensor listener
+            // (see enableOrientationTracking). Seed with the bind-time display rotation;
+            // PreviewView corrects the on-screen transform as the Activity rotates.
             preview = Preview.Builder().setTargetRotation(targetRot).build()
             // Samsung devices require Preview to have an active surface for VideoCapture
             // to produce frames. Use a dummy surface as fallback when UI hasn't connected yet.
@@ -1809,10 +1824,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 }
                 val newStable = orientationSnapState.stable
                 if (newStable != prevStable) {
-                    // Live apply: Preview rotates immediately; VideoCapture/Recorder
-                    // ignores it mid-clip and adopts it at the NEXT segment start.
+                    // ADR-0029 (force-rotate) — drive ONLY VideoCapture from the sensor.
+                    // VideoCapture/Recorder ignores the change mid-clip and adopts it at
+                    // the NEXT segment start (segment-boundary contract). Preview is NOT
+                    // written here: with MainActivity force-following the sensor, PreviewView
+                    // owns the on-screen rotation from the display; a second listener-driven
+                    // preview rotation could diverge from the display and mis-rotate preview.
                     try { videoCapture?.targetRotation = newStable } catch (_: Exception) {}
-                    try { preview?.targetRotation = newStable } catch (_: Exception) {}
                     refreshResolutionConsumers()
                     _serviceState.update { it.copy(pendingNextRotation = newStable) }
                 }

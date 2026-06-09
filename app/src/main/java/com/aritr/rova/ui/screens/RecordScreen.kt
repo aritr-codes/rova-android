@@ -1,6 +1,8 @@
 package com.aritr.rova.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.view.ViewGroup
@@ -203,6 +205,33 @@ fun RecordScreen(
     DisposableEffect(keepScreenOn) {
         localView.keepScreenOn = keepScreenOn
         onDispose { localView.keepScreenOn = false }
+    }
+
+    // ADR-0029 (force-rotate) — the Single-camera Record viewfinder follows the
+    // physical sensor like a camera app, even when the system auto-rotate lock is
+    // ON, so the landscape chrome (PR-β) and device-driven capture rotation (PR-α)
+    // actually engage on locked devices. FULL_SENSOR ignores the lock and allows
+    // all four orientations; the service's OrientationEventListener already snaps
+    // capture to the same physical value.
+    //
+    // Gated to Single (mode != "PortraitLandscape"): DualShot/P+L pins its own
+    // rotation in the EGL path (ADR-0009) and does NOT participate in orientation
+    // tracking, so forcing the Activity to rotate there would mismatch the UI
+    // against the pinned capture/output (codex review). DualShot keeps the host's
+    // policy. The original requestedOrientation is captured and restored on leave
+    // so this never leaks a policy change to other screens.
+    val forceSensorRotation = mode != "PortraitLandscape"
+    DisposableEffect(forceSensorRotation) {
+        val activity = localView.context as? Activity
+        val previousOrientation = activity?.requestedOrientation
+        if (activity != null && forceSensorRotation) {
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        }
+        onDispose {
+            if (activity != null && previousOrientation != null) {
+                activity.requestedOrientation = previousOrientation
+            }
+        }
     }
 
     // Preview Management (Retain instance to prevent black screen)
