@@ -552,8 +552,31 @@ fun RecordBottomNav(
     }
 }
 
+/**
+ * PR-β — landscape nav rail: the Library + Settings destinations as a quiet
+ * vertical stack on the leading edge. The record FAB is placed separately
+ * (RECORD_ACTION slot) on the trailing edge, so this rail is navigation-only.
+ * Reuses [NavItem] — the same leaves as the portrait [RecordBottomNav] bar.
+ */
 @Composable
-private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+fun RecordNavRail(
+    navItemsLocked: Boolean,
+    onLibrary: () -> Unit,
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.bottomNavPaddingH),
+    ) {
+        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+    }
+}
+
+@Composable
+internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -588,7 +611,7 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
 }
 
 @Composable
-private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
+internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
     val (fill, stroke, semanticsLabel) = when (state) {
         RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
         RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))

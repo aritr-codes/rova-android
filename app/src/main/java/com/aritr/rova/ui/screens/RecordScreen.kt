@@ -857,14 +857,36 @@ fun RecordScreen(
                         ),
                     )
                 }
-                RecordBottomNav(
-                    fabState = fabState,
-                    navItemsLocked = isUiLocked,
-                    onLibrary = onNavigateToHistory,
-                    onSettings = onNavigateToSettings,
-                    onFabClick = onFabClick,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
+                if (chromeOrientation == ChromeOrientation.LANDSCAPE) {
+                    // PR-β — landscape decomposes the bar: quiet nav rail (left) +
+                    // record FAB (right-center). Same leaves as the portrait bar.
+                    RecordNavRail(
+                        navItemsLocked = isUiLocked,
+                        onLibrary = onNavigateToHistory,
+                        onSettings = onNavigateToSettings,
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.NAV_RAIL, chromeOrientation),
+                            WindowInsets.navigationBars,
+                        ),
+                    )
+                    Box(
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.RECORD_ACTION, chromeOrientation),
+                            WindowInsets.navigationBars,
+                        ),
+                    ) {
+                        RecordFab(state = fabState, onClick = onFabClick)
+                    }
+                } else {
+                    RecordBottomNav(
+                        fabState = fabState,
+                        navItemsLocked = isUiLocked,
+                        onLibrary = onNavigateToHistory,
+                        onSettings = onNavigateToSettings,
+                        onFabClick = onFabClick,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
                 }   // close if (!combinedOpen) — chrome suppressed behind the sheet
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
