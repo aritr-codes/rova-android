@@ -271,6 +271,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // loop off Dispatchers.Main or pass a background Handler to enable() without
     // revisiting this — both would turn these plain vars into a data race.
     private var orientationListener: OrientationEventListener? = null
+    // ADR-0029 (force-rotate) — viewfinder rotation is DISPLAY-driven, separate
+    // from the recording sensor snap above. Because MainActivity handles
+    // configChanges (no Activity recreate) and the camera is not rebound on
+    // rotation, PreviewView never learns the new orientation unless we push
+    // preview.targetRotation = display.rotation on each display change. Single
+    // path only; lifecycle tied 1:1 to enable/disableOrientationTracking.
+    private var previewDisplayManager: DisplayManager? = null
+    private var previewDisplayListener: DisplayManager.DisplayListener? = null
     private var orientationSnapState: OrientationSnapState =
         OrientationSnapState(stable = android.view.Surface.ROTATION_0, candidate = null, candidateSinceMs = null)
     // hasStableSnap flips true once the listener delivers a non-UNKNOWN sample, so
@@ -1802,6 +1810,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
         orientationSnapState = OrientationSnapState(stable = seedRotation, candidate = null, candidateSinceMs = null)
         hasStableSnap = false
         _serviceState.update { it.copy(currentSegmentRotation = seedRotation, pendingNextRotation = seedRotation) }
+        // Display-driven PREVIEW rotation (codex review). Registered regardless of
+        // the orientation policy: the Record screen force-follows the sensor for
+        // Single capture, so the Activity rotates and the viewfinder must track the
+        // actual display — independent of, and crisper than, the recording-hysteresis
+        // sensor snap that drives videoCapture below.
+        registerPreviewDisplayListener()
         if (!DEFAULT_ORIENTATION_POLICY_IS_AUTO) return
 
         val listener = object : OrientationEventListener(this) {
@@ -1849,7 +1863,52 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private fun disableOrientationTracking() {
         orientationListener?.let { try { it.disable() } catch (_: Exception) {} }
         orientationListener = null
+        unregisterPreviewDisplayListener()
         hasStableSnap = false
+    }
+
+    /**
+     * ADR-0029 (force-rotate) — keep the Single-camera viewfinder upright as the
+     * device rotates. PreviewView orients the buffer relative to
+     * Preview.targetRotation (delivered via SurfaceRequest TransformationInfo), NOT
+     * the live view; with configChanges-handled rotation and no rebind, the only
+     * update path is to push the new display rotation onto the use case. Display-
+     * driven (immediate, matches the view) — distinct from the recording sensor
+     * snap that owns videoCapture. Idempotent; main-Looper delivery for CameraX.
+     */
+    private fun registerPreviewDisplayListener() {
+        unregisterPreviewDisplayListener()
+        val dm = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager) ?: return
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId != Display.DEFAULT_DISPLAY) return
+                val rot = dm.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: return
+                // Live update; no rebind. videoCapture/Recorder untouched.
+                try { preview?.targetRotation = rot } catch (_: Exception) {}
+            }
+            override fun onDisplayAdded(displayId: Int) {}
+            override fun onDisplayRemoved(displayId: Int) {}
+        }
+        try {
+            dm.registerDisplayListener(
+                listener,
+                android.os.Handler(android.os.Looper.getMainLooper()),
+            )
+            previewDisplayManager = dm
+            previewDisplayListener = listener
+        } catch (_: Exception) {
+            previewDisplayManager = null
+            previewDisplayListener = null
+        }
+    }
+
+    /** ADR-0029 (force-rotate) — paired teardown for [registerPreviewDisplayListener]. */
+    private fun unregisterPreviewDisplayListener() {
+        previewDisplayListener?.let { l ->
+            try { previewDisplayManager?.unregisterDisplayListener(l) } catch (_: Exception) {}
+        }
+        previewDisplayListener = null
+        previewDisplayManager = null
     }
 
     /**
