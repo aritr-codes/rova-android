@@ -876,42 +876,65 @@ fun RecordScreen(
                 // states show the card at 75% opacity). Suppressed only during
                 // the brief post-merge MergeCompleteCard grace window.
                 if (!showCompleteCard) {
-                    Column(
-                        // PR-β — portrait placement equals the prior
-                        // bottomNavClearance(90)+settingsCardLift(30)=120 bottom +
-                        // 16 dp side margins (pinned by ChromeSlotPlacementTest);
-                        // landscape caps to 360 dp centered.
-                        modifier = slotModifier(
-                            placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
-                            WindowInsets.navigationBars,
-                        ).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        // ADR-0026 — presets now live inside the settings sheet
-                        // (between RECORDING MODE and SETTINGS), not as a loose
-                        // idle chip row. See the SettingsSheet call below.
-                        RecordSettingsCard(
-                            durationSeconds = duration,
-                            loopCount = loopCount,
-                            intervalMinutes = interval,
-                            quality = resolution,
-                            mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
-                            onOpenSheet = { viewModel.openSettingsSheet() },
-                            onCycleMode = {
-                                // ADR-0029 — ignore re-taps while a deferred switch is
-                                // in flight; otherwise route a landscape→P+L cycle
-                                // through the portrait gate (see [DualShotPortraitGate]).
-                                if (pendingMode == null) {
-                                    val next = cycleModeNext(mode)
-                                    if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
-                                        pendingMode = next
-                                    } else {
-                                        viewModel.cycleMode()
-                                    }
-                                }
-                            },
-                            dimmed = hudState != RecordHudState.Idle,
-                        )
+                    // ADR-0029 — ignore re-taps while a deferred switch is in flight;
+                    // otherwise route a landscape→P+L cycle through the portrait gate
+                    // (see [DualShotPortraitGate]). Shared by both card layouts.
+                    val onCycleModeGated: () -> Unit = {
+                        if (pendingMode == null) {
+                            val next = cycleModeNext(mode)
+                            if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
+                                pendingMode = next
+                            } else {
+                                viewModel.cycleMode()
+                            }
+                        }
+                    }
+                    val modeLabel = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode
+                    if (chromeOrientation == ChromeOrientation.LANDSCAPE) {
+                        // PR-β (ADR-0029 §B4) — compact config card docked to the rail
+                        // inboard edge beside the FAB (landscape thumb-zone; not
+                        // bottom-center). Hidden while the side panel owns that band
+                        // (clean mutual exclusion). Scrim-backed for WCAG contrast.
+                        if (!combinedOpen) {
+                            RecordConfigCardLandscape(
+                                durationSeconds = duration,
+                                loopCount = loopCount,
+                                quality = resolution,
+                                mode = modeLabel,
+                                onOpenSheet = { viewModel.openSettingsSheet() },
+                                onCycleMode = onCycleModeGated,
+                                dimmed = hudState != RecordHudState.Idle,
+                                modifier = slotModifier(
+                                    placementFor(ChromeSlot.CONFIG_SUMMARY, chromeOrientation, navEdge),
+                                    WindowInsets.navigationBars,
+                                ),
+                            )
+                        }
+                    } else {
+                        Column(
+                            // PR-β — portrait placement equals the prior
+                            // bottomNavClearance(90)+settingsCardLift(30)=120 bottom +
+                            // 16 dp side margins (pinned by ChromeSlotPlacementTest).
+                            modifier = slotModifier(
+                                placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
+                                WindowInsets.navigationBars,
+                            ).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // ADR-0026 — presets now live inside the settings sheet
+                            // (between RECORDING MODE and SETTINGS), not as a loose
+                            // idle chip row. See the SettingsSheet call below.
+                            RecordSettingsCard(
+                                durationSeconds = duration,
+                                loopCount = loopCount,
+                                intervalMinutes = interval,
+                                quality = resolution,
+                                mode = modeLabel,
+                                onOpenSheet = { viewModel.openSettingsSheet() },
+                                onCycleMode = onCycleModeGated,
+                                dimmed = hudState != RecordHudState.Idle,
+                            )
+                        }
                     }
                 }
 

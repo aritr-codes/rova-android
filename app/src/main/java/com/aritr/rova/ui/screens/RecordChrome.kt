@@ -370,6 +370,56 @@ fun RecordSettingsCard(
 }
 
 /**
+ * PR-β (ADR-0029 §B4) — compact landscape config-summary card, docked to the
+ * rail's inboard edge beside the Record FAB (the landscape thumb-zone; not
+ * bottom-center). A vertical stack of Clip · Repeats · Quality value cells plus
+ * the mode-cycle chip, over the dark [GlassSurface] scrim (WCAG contrast vs the
+ * live frame — SC 1.4.3 / 1.4.11). The whole card taps to open the settings side
+ * panel; the mode chip cycles capture topology (long-press also opens). The
+ * caller hides this card while the side panel occupies that inboard band.
+ */
+@Composable
+fun RecordConfigCardLandscape(
+    durationSeconds: Int,
+    loopCount: Int,
+    quality: String,
+    mode: String,
+    onOpenSheet: () -> Unit,
+    onCycleMode: () -> Unit,
+    modifier: Modifier = Modifier,
+    dimmed: Boolean = false,
+) {
+    GlassSurface(
+        role = GlassRole.RecordChrome,
+        modifier = modifier.alpha(if (dimmed) 0.75f else 1f),
+        shape = SettingsCardShape,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 88.dp)
+                .then(
+                    if (dimmed) {
+                        Modifier
+                    } else {
+                        Modifier.clickable(
+                            onClickLabel = stringResource(R.string.record_edit_session_settings_cd),
+                            role = Role.Button,
+                        ) { onOpenSheet() }
+                    },
+                )
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false)
+            SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false)
+            ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed)
+        }
+    }
+}
+
+/**
  * Slice B — Mode tap-cycle chip. Replaces the read-only Mode `SettingsCell`
  * in [RecordSettingsCard]. Tap advances the mode one step (Portrait →
  * Landscape → P+L → Portrait) via [onCycleMode]; long-press opens the
