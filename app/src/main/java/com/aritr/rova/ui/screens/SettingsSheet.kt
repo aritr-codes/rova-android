@@ -394,6 +394,22 @@ private fun SettingsSidePanel(
                     .clip(panelShape)
                     .background(SettingsSheetTokens.sheetFill)
                     .border(1.dp, SettingsSheetTokens.sheetTopStroke, panelShape)
+                    // ADR-0029 §B6 (codex thread 019eb18d) — the panel surface must be
+                    // a touch BARRIER: an opaque background does NOT consume pointer
+                    // events, so a tap on a blank panel area would fall through to the
+                    // landscape chrome that now stays composed beneath it. Consume every
+                    // unhandled pointer change within the panel bounds (inner steppers /
+                    // chips / scroll get the Main pass first and consume their own; only
+                    // the leftover empty-area events reach this). The OUTER fillMaxSize
+                    // wrapper stays transparent so the rail/FAB outside the panel band
+                    // remain tappable.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent().changes.forEach { if (!it.isConsumed) it.consume() }
+                            }
+                        }
+                    }
                     .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
                     .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
             ) {
