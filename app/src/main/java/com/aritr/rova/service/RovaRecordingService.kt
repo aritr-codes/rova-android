@@ -2040,9 +2040,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
             try {
             RovaLog.d { "setupDualCamera: Initializing UseCases (Preview + CameraEffect)" }
 
-            val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
-                ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
-                ?: android.view.Surface.ROTATION_0
+            // ADR-0029 (P+L portrait-lock) — DualShot is a portrait-HELD mode: its
+            // 4:3 source + 27/64 side-crops (ADR-0009) are computed for ROTATION_0,
+            // and the Record screen now forces the window to portrait whenever P+L is
+            // active (RecordScreen per-mode requestedOrientation). Do NOT read the live
+            // display rotation here — switching to P+L from a landscape Single window
+            // captures ROTATION_90 before the forced portrait rotation completes, which
+            // corrupts the EGL crop transform (torn preview, device-confirmed). Portrait
+            // is the mode's only valid orientation, so pin it; this also restores the
+            // pre-force-rotate behavior (display was always ROTATION_0 here historically).
+            val displayRotation = android.view.Surface.ROTATION_0
 
             val lensFacing = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
                 com.aritr.rova.service.dualrecord.LensFacing.FRONT

@@ -79,6 +79,30 @@ fun RecordScreen(
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
+
+    // ADR-0029 (P+L portrait-lock · codex review 2026-06-10) — DualShot is portrait-
+    // only and its EGL preview surfaces (ADR-0009) must not be bound while the window
+    // is rotating. Selecting P+L from a LANDSCAPE Single window otherwise commits the
+    // camera rebind concurrently with the landscape→portrait rotation, churning the
+    // preview TextureViews mid-bind → EGL_BAD_SURFACE (device-confirmed, only one P+L
+    // pane renders). Fix: keep Single bound through the rotation and commit P+L (the
+    // rebind) only once the window has settled to portrait. `pendingMode` holds the
+    // requested-but-not-yet-committed mode; the orientation request below is driven
+    // off `desiredMode` so the window starts rotating immediately, while
+    // `viewModel.setMode` fires only after `isPortrait` flips true. See
+    // [DualShotPortraitGate].
+    val configuration = LocalConfiguration.current
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    var pendingMode by remember { mutableStateOf<String?>(null) }
+    val desiredMode = pendingMode ?: mode
+    LaunchedEffect(pendingMode, isPortrait) {
+        val pm = pendingMode
+        if (pm != null && isPortrait) {
+            viewModel.setMode(pm)
+            pendingMode = null
+        }
+    }
+
     val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
     val allPresets by viewModel.allPresets.collectAsStateWithLifecycle()
     val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
@@ -217,16 +241,26 @@ fun RecordScreen(
     //
     // Gated to Single (mode != "PortraitLandscape"): DualShot/P+L pins its own
     // rotation in the EGL path (ADR-0009) and does NOT participate in orientation
-    // tracking, so forcing the Activity to rotate there would mismatch the UI
-    // against the pinned capture/output (codex review). DualShot keeps the host's
-    // policy. The original requestedOrientation is captured and restored on leave
-    // so this never leaks a policy change to other screens.
-    val forceSensorRotation = mode != "PortraitLandscape"
-    DisposableEffect(forceSensorRotation) {
+    // tracking, so a landscape window mismatches its pinned capture/output and the
+    // preview tears (codex review). DualShot is therefore LOCKED to portrait —
+    // explicitly SCREEN_ORIENTATION_PORTRAIT, not USER: with the system auto-rotate
+    // lock off, USER would keep whatever orientation Single last forced (e.g. the
+    // landscape that breaks the EGL render). Keying the effect on the resolved
+    // target re-applies on a mid-screen mode switch, snapping the window back to
+    // portrait on entering P+L. The original requestedOrientation is captured and
+    // restored on leave so this never leaks a policy change to other screens.
+    // Driven off `desiredMode` (pending ?: committed) so a landscape→P+L pick starts
+    // the window rotating to portrait BEFORE the deferred camera rebind commits.
+    val targetOrientation = if (desiredMode == "PortraitLandscape") {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
+    DisposableEffect(targetOrientation) {
         val activity = localView.context as? Activity
         val previousOrientation = activity?.requestedOrientation
-        if (activity != null && forceSensorRotation) {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        if (activity != null) {
+            activity.requestedOrientation = targetOrientation
         }
         onDispose {
             if (activity != null && previousOrientation != null) {
@@ -850,7 +884,19 @@ fun RecordScreen(
                             quality = resolution,
                             mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
                             onOpenSheet = { viewModel.openSettingsSheet() },
-                            onCycleMode = { viewModel.cycleMode() },
+                            onCycleMode = {
+                                // ADR-0029 — ignore re-taps while a deferred switch is
+                                // in flight; otherwise route a landscape→P+L cycle
+                                // through the portrait gate (see [DualShotPortraitGate]).
+                                if (pendingMode == null) {
+                                    val next = cycleModeNext(mode)
+                                    if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
+                                        pendingMode = next
+                                    } else {
+                                        viewModel.cycleMode()
+                                    }
+                                }
+                            },
                             dimmed = hudState != RecordHudState.Idle,
                         )
                     }
@@ -999,7 +1045,16 @@ fun RecordScreen(
                     onLoopCountChange = { viewModel.loopCount.value = it },
                     onIntervalChange = { viewModel.interval.value = it },
                     onQualityChange = { viewModel.resolution.value = it },
-                    onModePick = { viewModel.setMode(it) },
+                    onModePick = { picked ->
+                        // ADR-0029 — defer a landscape→P+L pick until portrait; any
+                        // other pick commits now and clears a pending switch.
+                        if (DualShotPortraitGate.shouldDefer(picked, isPortrait)) {
+                            pendingMode = picked
+                        } else {
+                            pendingMode = null
+                            viewModel.setMode(picked)
+                        }
+                    },
                     snoozedCount = snoozedSet.size,
                     onResetSnoozes = if (snoozedSet.isNotEmpty()) {
                         { warningVm.clearSnoozes() }
