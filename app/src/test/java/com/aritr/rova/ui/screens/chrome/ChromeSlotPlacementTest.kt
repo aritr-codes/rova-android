@@ -77,4 +77,32 @@ class ChromeSlotPlacementTest {
         listOf(ChromeSlot.STATUS_OVERLAY, ChromeSlot.RECOVERY_CHIP, ChromeSlot.WARNING_CENTER, ChromeSlot.CAMERA_CONTROLS)
             .forEach { assertNull(placementFor(it, ChromeOrientation.PORTRAIT).maxWidthDp) }
     }
+
+    // ── PR-β edge-aware 3-arg overload ───────────────────────────────────────
+    private fun p3(slot: ChromeSlot, o: ChromeOrientation, e: NavEdge) = placementFor(slot, o, e)
+
+    @Test fun navRail_landscape_trailing_hugs_end() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_END, endDp = 12), p3(ChromeSlot.NAV_RAIL, ChromeOrientation.LANDSCAPE, NavEdge.Trailing))
+    @Test fun navRail_landscape_leading_hugs_start() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_START, startDp = 12), p3(ChromeSlot.NAV_RAIL, ChromeOrientation.LANDSCAPE, NavEdge.Leading))
+
+    @Test fun recordAction_landscape_trailing_hugs_end() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_END, endDp = 14), p3(ChromeSlot.RECORD_ACTION, ChromeOrientation.LANDSCAPE, NavEdge.Trailing))
+    @Test fun recordAction_landscape_leading_hugs_start() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_START, startDp = 14), p3(ChromeSlot.RECORD_ACTION, ChromeOrientation.LANDSCAPE, NavEdge.Leading))
+
+    @Test fun configSummary_landscape_trailing_inboard_end() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_END, endDp = 96, maxWidthDp = 200), p3(ChromeSlot.CONFIG_SUMMARY, ChromeOrientation.LANDSCAPE, NavEdge.Trailing))
+    @Test fun configSummary_landscape_leading_inboard_start() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_START, startDp = 96, maxWidthDp = 200), p3(ChromeSlot.CONFIG_SUMMARY, ChromeOrientation.LANDSCAPE, NavEdge.Leading))
+
+    @Test fun settingsSheet_landscape_trailing_inboard_end() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_END, endDp = 96, maxWidthDp = 380), p3(ChromeSlot.SETTINGS_SHEET, ChromeOrientation.LANDSCAPE, NavEdge.Trailing))
+    @Test fun settingsSheet_landscape_leading_inboard_start() =
+        assertEquals(SlotPlacement(SlotAnchor.CENTER_START, startDp = 96, maxWidthDp = 380), p3(ChromeSlot.SETTINGS_SHEET, ChromeOrientation.LANDSCAPE, NavEdge.Leading))
+
+    @Test fun nonEdgeSlot_3arg_delegates_to_2arg() =
+        assertEquals(p(ChromeSlot.CAMERA_CONTROLS, ChromeOrientation.LANDSCAPE), p3(ChromeSlot.CAMERA_CONTROLS, ChromeOrientation.LANDSCAPE, NavEdge.Trailing))
+    @Test fun portrait_3arg_ignores_edge_and_delegates() =
+        assertEquals(p(ChromeSlot.NAV_RAIL, ChromeOrientation.PORTRAIT), p3(ChromeSlot.NAV_RAIL, ChromeOrientation.PORTRAIT, NavEdge.Leading))
 }

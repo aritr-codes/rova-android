@@ -22,6 +22,8 @@ enum class ChromeSlot {
     PARAMS_CARD,      // settings/params card (holds the mode chip; PR-γ's picker slot)
     NAV_RAIL,         // Library + Settings destinations (landscape only)
     RECORD_ACTION,    // Start/Stop FAB (landscape standalone placement)
+    CONFIG_SUMMARY,   // landscape config card docked inboard of the rail (PR-β)
+    SETTINGS_SHEET,   // landscape standard (non-modal) settings side panel band (PR-β)
 }
 
 /** Semantic anchor; mapped to a Compose Alignment at the call site. */
@@ -58,6 +60,9 @@ private const val CARD_BOTTOM_L = 12
 private const val LAND_MAX_WIDTH = 360   // landscape cap for HUD + params card
 private const val NAV_RAIL_INSET = 12
 private const val RECORD_ACTION_INSET = 14
+private const val RAIL_BAND_INSET = 96   // NAV_RAIL_INSET + rail width + gap; inboard offset for the config card / side sheet
+private const val CONFIG_MAX_WIDTH = 200 // landscape config-summary card width cap
+private const val SIDE_SHEET_WIDTH = 380 // landscape settings side-panel width cap
 
 /** Pure. The single placement decision per (slot, orientation). */
 fun placementFor(slot: ChromeSlot, orientation: ChromeOrientation): SlotPlacement {
@@ -85,5 +90,36 @@ fun placementFor(slot: ChromeSlot, orientation: ChromeOrientation): SlotPlacemen
         ChromeSlot.RECORD_ACTION ->
             // Advisory in portrait (portrait renders the FAB inside the bottom-bar dock, not this slot).
             SlotPlacement(SlotAnchor.CENTER_END, endDp = RECORD_ACTION_INSET)
+        ChromeSlot.CONFIG_SUMMARY ->
+            // Advisory default (Trailing). Real landscape placement comes from the navEdge overload.
+            SlotPlacement(SlotAnchor.CENTER_END, endDp = RAIL_BAND_INSET, maxWidthDp = CONFIG_MAX_WIDTH)
+        ChromeSlot.SETTINGS_SHEET ->
+            SlotPlacement(SlotAnchor.CENTER_END, endDp = RAIL_BAND_INSET, maxWidthDp = SIDE_SHEET_WIDTH)
+    }
+}
+
+/**
+ * PR-β edge-aware overload. [navEdge] resolves which horizontal edge the
+ * landscape rail / config card / side sheet hug (system-nav-bar edge). Portrait
+ * is edge-agnostic and delegates to the 2-arg form (byte-identical, pinned).
+ * Non-edge landscape slots also delegate to the 2-arg form unchanged.
+ */
+fun placementFor(slot: ChromeSlot, orientation: ChromeOrientation, navEdge: NavEdge): SlotPlacement {
+    if (orientation != ChromeOrientation.LANDSCAPE) return placementFor(slot, orientation)
+    val trailing = navEdge == NavEdge.Trailing
+    return when (slot) {
+        ChromeSlot.NAV_RAIL ->
+            if (trailing) SlotPlacement(SlotAnchor.CENTER_END, endDp = NAV_RAIL_INSET)
+            else SlotPlacement(SlotAnchor.CENTER_START, startDp = NAV_RAIL_INSET)
+        ChromeSlot.RECORD_ACTION ->
+            if (trailing) SlotPlacement(SlotAnchor.CENTER_END, endDp = RECORD_ACTION_INSET)
+            else SlotPlacement(SlotAnchor.CENTER_START, startDp = RECORD_ACTION_INSET)
+        ChromeSlot.CONFIG_SUMMARY ->
+            if (trailing) SlotPlacement(SlotAnchor.CENTER_END, endDp = RAIL_BAND_INSET, maxWidthDp = CONFIG_MAX_WIDTH)
+            else SlotPlacement(SlotAnchor.CENTER_START, startDp = RAIL_BAND_INSET, maxWidthDp = CONFIG_MAX_WIDTH)
+        ChromeSlot.SETTINGS_SHEET ->
+            if (trailing) SlotPlacement(SlotAnchor.CENTER_END, endDp = RAIL_BAND_INSET, maxWidthDp = SIDE_SHEET_WIDTH)
+            else SlotPlacement(SlotAnchor.CENTER_START, startDp = RAIL_BAND_INSET, maxWidthDp = SIDE_SHEET_WIDTH)
+        else -> placementFor(slot, orientation)
     }
 }
