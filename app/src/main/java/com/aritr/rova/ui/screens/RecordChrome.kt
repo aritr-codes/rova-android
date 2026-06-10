@@ -553,16 +553,20 @@ fun RecordBottomNav(
 }
 
 /**
- * PR-β — landscape nav rail: the Library + Settings destinations as a quiet
- * vertical stack on the leading edge. The record FAB is placed separately
- * (RECORD_ACTION slot) on the trailing edge, so this rail is navigation-only.
- * Reuses [NavItem] — the same leaves as the portrait [RecordBottomNav] bar.
+ * PR-β (ADR-0029 §B2) — landscape grouped nav rail: ONE vertical stack of
+ * Library · Record FAB · Settings hugging the system-nav edge, preserving the
+ * portrait bottom-bar adjacency ([RecordBottomNav]). The standalone landscape
+ * FAB placement (RECORD_ACTION slot) is folded in here. Settings toggles the
+ * settings side panel (§B3). Reuses [NavItem] + [RecordFab] — same leaves as
+ * the portrait bar.
  */
 @Composable
 fun RecordNavRail(
+    fabState: RecordFabState,
     navItemsLocked: Boolean,
     onLibrary: () -> Unit,
     onSettings: () -> Unit,
+    onFabClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -571,6 +575,7 @@ fun RecordNavRail(
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.bottomNavPaddingH),
     ) {
         NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+        RecordFab(state = fabState, onClick = onFabClick)
         NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
     }
 }

@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -35,7 +37,9 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.ui.screens.chrome.ChromeOrientation
 import com.aritr.rova.ui.screens.chrome.ChromeSlot
+import com.aritr.rova.ui.screens.chrome.NavBarInsetsPx
 import com.aritr.rova.ui.screens.chrome.placementFor
+import com.aritr.rova.ui.screens.chrome.systemNavEdge
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
@@ -634,6 +638,15 @@ fun RecordScreen(
     val chromeOrientation =
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
             ChromeOrientation.LANDSCAPE else ChromeOrientation.PORTRAIT
+    // PR-β (ADR-0029 §B1) — which horizontal edge the landscape chrome hugs,
+    // derived from the live nav-bar inset side (layout truth). Gesture nav (no
+    // side inset) → Trailing.
+    val density = LocalDensity.current
+    val layoutDir = LocalLayoutDirection.current
+    val navEdge = run {
+        val nb = WindowInsets.navigationBars
+        systemNavEdge(NavBarInsetsPx(nb.getLeft(density, layoutDir), nb.getRight(density, layoutDir)))
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
@@ -956,25 +969,21 @@ fun RecordScreen(
                     )
                 }
                 if (chromeOrientation == ChromeOrientation.LANDSCAPE) {
-                    // PR-β — landscape decomposes the bar: quiet nav rail (left) +
-                    // record FAB (right-center). Same leaves as the portrait bar.
+                    // PR-β (ADR-0029 §B2) — ONE grouped rail on the system-nav edge:
+                    // Library · Record FAB · Settings (portrait bottom-bar adjacency).
+                    // Settings toggles the settings side panel (§B3); the standalone
+                    // RECORD_ACTION placement is folded in (slot kept advisory).
                     RecordNavRail(
+                        fabState = fabState,
                         navItemsLocked = isUiLocked,
                         onLibrary = onNavigateToHistory,
-                        onSettings = onNavigateToSettings,
+                        onSettings = { if (combinedOpen) viewModel.closeSettingsSheet() else viewModel.openSettingsSheet() },
+                        onFabClick = onFabClick,
                         modifier = slotModifier(
-                            placementFor(ChromeSlot.NAV_RAIL, chromeOrientation),
+                            placementFor(ChromeSlot.NAV_RAIL, chromeOrientation, navEdge),
                             WindowInsets.navigationBars,
                         ),
                     )
-                    Box(
-                        modifier = slotModifier(
-                            placementFor(ChromeSlot.RECORD_ACTION, chromeOrientation),
-                            WindowInsets.navigationBars,
-                        ),
-                    ) {
-                        RecordFab(state = fabState, onClick = onFabClick)
-                    }
                 } else {
                     RecordBottomNav(
                         fabState = fabState,
