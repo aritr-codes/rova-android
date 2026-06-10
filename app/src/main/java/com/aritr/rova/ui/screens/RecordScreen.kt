@@ -746,10 +746,15 @@ fun RecordScreen(
 
                 // Chrome (recovery chip, idle WarningCenter, active HUD, settings
                 // card, top overlay / cam-controls, bottom nav) is suppressed while
-                // the SettingsSheet is open — the sheet is a camera-peek panel, so
-                // only the camera preview shows behind it. The MergeCompleteCard and
-                // loading overlay stay outside this gate.
-                if (!combinedOpen) {
+                // the SettingsSheet is open — but ONLY in PORTRAIT, where the sheet is
+                // a camera-peek panel so only the camera preview shows behind it.
+                // ADR-0029 §B6: in LANDSCAPE the settings side panel is a standard
+                // (non-modal) sheet inboard of the rail, so the grouped rail (Library +
+                // Record FAB), the config card, and the idle overlays must stay
+                // rendered AND interactive while it's open — leaving them suppressed
+                // would make the rail/FAB dead under a transparent gap (the hit-test
+                // trap). The MergeCompleteCard and loading overlay stay outside the gate.
+                if (chromeOrientation == ChromeOrientation.LANDSCAPE || !combinedOpen) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
