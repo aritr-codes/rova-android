@@ -43,6 +43,24 @@ object SettingsSheetTokens {
     val sheetCornerRadius = 24.dp
     val sheetPaddingH = 18.dp
     val sheetPaddingBottom = 26.dp
+    /**
+     * Max width for the whole sheet (peek + panel), centered horizontally. On a
+     * LANDSCAPE/wide window, filling the full width makes the sheet look stretched
+     * and inconsistent with portrait (owner feedback 2026-06-10). Capping to roughly
+     * a phone-portrait width keeps the silhouette consistent across orientations; the
+     * side gutters show the live camera behind, matching the peek aesthetic. Sits
+     * above typical phone portrait widths (~411 dp) so portrait never caps.
+     */
+    val sheetMaxWidth = 440.dp
+
+    // ── Landscape side panel (ADR-0029 §B3) ─────────────────────────────
+    /** Standard (non-modal) side-sheet width cap in landscape. */
+    val sideSheetWidth = 380.dp
+    /** Inboard offset past the system-nav-bar inset so the panel clears the
+     *  grouped rail (NAV_RAIL_INSET 12 + rail ~72 + 12 gap). */
+    val sideSheetRailInset = 96.dp
+    /** Top/bottom margin for the side panel within the safe-draw area. */
+    val sidePanelPaddingV = 10.dp
 
     // ── Sheet-top handle ────────────────────────────────────────────────
     val handleWidth = 32.dp

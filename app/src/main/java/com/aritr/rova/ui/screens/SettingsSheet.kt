@@ -1,8 +1,11 @@
 package com.aritr.rova.ui.screens
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -10,6 +13,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
@@ -56,6 +62,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -75,21 +84,29 @@ import com.aritr.rova.data.PresetSaveValidator
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.ui.components.focusHighlight
+import com.aritr.rova.ui.screens.chrome.NavBarInsetsPx
+import com.aritr.rova.ui.screens.chrome.NavEdge
+import com.aritr.rova.ui.screens.chrome.systemNavEdge
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SettingsSheetTokens
 
 /**
- * Settings sheet — re-skin of `mockups/new_uiux/02-settings-sheet.html`.
+ * Settings surface — orientation-adaptive (ADR-0029 §B3).
  *
- * A custom bottom-anchored panel (NOT a Material `ModalBottomSheet`): the live
- * camera "peeks" through the translucent top [SettingsSheetTokens.peekHeight]
- * behind a scrim; the opaque panel below holds inline mode tabs, `−`/value/`+`
- * steppers, quality chips, and a Save CTA. Edits write through immediately;
- * "Save", the handle drag-down, and system-back all just dismiss.
+ * Portrait → [SettingsBottomSheet]: the camera-peek modal panel (re-skin of
+ * `mockups/new_uiux/02-settings-sheet.html`) sliding up from the bottom, with a
+ * live-camera peek, drag-to-dismiss, and a Save CTA.
  *
- * The caller emits this composable unconditionally and toggles [visible] — the
- * slide animation owns its own mount lifetime. The caller suppresses the record
- * chrome while [visible] so only the camera shows through the peek.
+ * Landscape → [SettingsSidePanel]: a STANDARD (non-modal) side sheet hugging the
+ * system-nav edge, inboard of the grouped rail, with NO scrim, so the rail
+ * (Library + Record FAB) stays visible and tappable while settings are open
+ * (§B6). No peek (the visible preview is the context), a compact Done header
+ * instead of the oversized Save, horizontal slide from the nav edge, system-back
+ * collapses.
+ *
+ * Both share [SettingsContent] (mode tabs · presets · steppers · quality ·
+ * reset). Edits write through immediately; Save / Done / back / drag dismiss.
+ * The caller emits this unconditionally and toggles [visible].
  */
 @Composable
 fun SettingsSheet(
@@ -100,9 +117,6 @@ fun SettingsSheet(
     quality: String,
     currentMode: String,
     editable: Boolean,
-    // ADR-0026 — presets relocated into the sheet (between RECORDING MODE and
-    // SETTINGS). One tap applies the whole config bundle; the selected chip
-    // reflects [activePresetId] (null = current values match no preset).
     presets: List<RovaPreset>,
     activePresetId: String?,
     onApplyPreset: (RovaPreset) -> Unit,
@@ -111,8 +125,6 @@ fun SettingsSheet(
     statusText: String,
     flashMode: Int,
     flipEnabled: Boolean,
-    // B6 — bound-lens state for the flip-button icon/CD swap in the peek's
-    // RecordCameraControls.
     isFrontCamera: Boolean,
     onCycleFlash: () -> Unit,
     onFlip: () -> Unit,
@@ -121,9 +133,98 @@ fun SettingsSheet(
     onIntervalChange: (Int) -> Unit,
     onQualityChange: (String) -> Unit,
     onModePick: (String) -> Unit,
-    // Phase 4.1c — "Reset snoozed warnings" affordance. `onResetSnoozes` is
-    // null when the persisted set is empty; the row is suppressed entirely
-    // in that state so there is no dead-end "Reset (0)" affordance.
+    snoozedCount: Int,
+    onResetSnoozes: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    if (landscape) {
+        val density = LocalDensity.current
+        val layoutDir = LocalLayoutDirection.current
+        val navEdge = run {
+            val nb = WindowInsets.navigationBars
+            systemNavEdge(NavBarInsetsPx(nb.getLeft(density, layoutDir), nb.getRight(density, layoutDir)))
+        }
+        SettingsSidePanel(
+            navEdge = navEdge,
+            visible = visible,
+            durationSeconds = durationSeconds,
+            loopCount = loopCount,
+            intervalMinutes = intervalMinutes,
+            quality = quality,
+            currentMode = currentMode,
+            editable = editable,
+            presets = presets,
+            activePresetId = activePresetId,
+            onApplyPreset = onApplyPreset,
+            onSavePreset = onSavePreset,
+            onDeletePreset = onDeletePreset,
+            onDurationChange = onDurationChange,
+            onLoopCountChange = onLoopCountChange,
+            onIntervalChange = onIntervalChange,
+            onQualityChange = onQualityChange,
+            onModePick = onModePick,
+            snoozedCount = snoozedCount,
+            onResetSnoozes = onResetSnoozes,
+            onDismiss = onDismiss,
+        )
+    } else {
+        SettingsBottomSheet(
+            visible = visible,
+            durationSeconds = durationSeconds,
+            loopCount = loopCount,
+            intervalMinutes = intervalMinutes,
+            quality = quality,
+            currentMode = currentMode,
+            editable = editable,
+            presets = presets,
+            activePresetId = activePresetId,
+            onApplyPreset = onApplyPreset,
+            onSavePreset = onSavePreset,
+            onDeletePreset = onDeletePreset,
+            statusText = statusText,
+            flashMode = flashMode,
+            flipEnabled = flipEnabled,
+            isFrontCamera = isFrontCamera,
+            onCycleFlash = onCycleFlash,
+            onFlip = onFlip,
+            onDurationChange = onDurationChange,
+            onLoopCountChange = onLoopCountChange,
+            onIntervalChange = onIntervalChange,
+            onQualityChange = onQualityChange,
+            onModePick = onModePick,
+            snoozedCount = snoozedCount,
+            onResetSnoozes = onResetSnoozes,
+            onDismiss = onDismiss,
+        )
+    }
+}
+
+@Composable
+private fun SettingsBottomSheet(
+    visible: Boolean,
+    durationSeconds: Int,
+    loopCount: Int,
+    intervalMinutes: Int,
+    quality: String,
+    currentMode: String,
+    editable: Boolean,
+    presets: List<RovaPreset>,
+    activePresetId: String?,
+    onApplyPreset: (RovaPreset) -> Unit,
+    onSavePreset: (String) -> Unit,
+    onDeletePreset: (RovaPreset) -> Unit,
+    statusText: String,
+    flashMode: Int,
+    flipEnabled: Boolean,
+    isFrontCamera: Boolean,
+    onCycleFlash: () -> Unit,
+    onFlip: () -> Unit,
+    onDurationChange: (Int) -> Unit,
+    onLoopCountChange: (Int) -> Unit,
+    onIntervalChange: (Int) -> Unit,
+    onQualityChange: (String) -> Unit,
+    onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
     onDismiss: () -> Unit,
@@ -144,36 +245,215 @@ fun SettingsSheet(
                 onCycleFlash = onCycleFlash,
                 onFlip = onFlip,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
                     .fillMaxWidth()
                     .height(SettingsSheetTokens.peekHeight),
             )
-            SettingsPanel(
-                durationSeconds = durationSeconds,
-                loopCount = loopCount,
-                intervalMinutes = intervalMinutes,
-                quality = quality,
-                currentMode = currentMode,
-                editable = editable,
-                presets = presets,
-                activePresetId = activePresetId,
-                onApplyPreset = onApplyPreset,
-                onSavePreset = onSavePreset,
-                onDeletePreset = onDeletePreset,
-                onDurationChange = onDurationChange,
-                onLoopCountChange = onLoopCountChange,
-                onIntervalChange = onIntervalChange,
-                onQualityChange = onQualityChange,
-                onModePick = onModePick,
-                snoozedCount = snoozedCount,
-                onResetSnoozes = onResetSnoozes,
-                onDismiss = onDismiss,
+            val panelShape = remember {
+                RoundedCornerShape(
+                    topStart = SettingsSheetTokens.sheetCornerRadius,
+                    topEnd = SettingsSheetTokens.sheetCornerRadius,
+                )
+            }
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.BottomCenter)
+                    .fillMaxSize()
+                    .padding(top = SettingsSheetTokens.peekHeight)
+                    .clip(panelShape)
+                    .background(SettingsSheetTokens.sheetFill)
+                    .border(1.dp, SettingsSheetTokens.sheetTopStroke, panelShape)
+                    .pointerInput(Unit) {
+                        var dragTotal = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onDragEnd = { if (dragTotal > 40f) onDismiss() },
+                        ) { _, dragAmount ->
+                            dragTotal += dragAmount
+                        }
+                    }
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
+                    .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            top = SettingsSheetTokens.sheetTopPaddingTop,
+                            bottom = SettingsSheetTokens.sheetTopPaddingBottom,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(
+                                width = SettingsSheetTokens.handleWidth,
+                                height = SettingsSheetTokens.handleHeight,
+                            )
+                            .clip(RoundedCornerShape(SettingsSheetTokens.handleRadius))
+                            .background(SettingsSheetTokens.handleColor),
+                    )
+                }
+                SettingsContent(
+                    durationSeconds = durationSeconds,
+                    loopCount = loopCount,
+                    intervalMinutes = intervalMinutes,
+                    quality = quality,
+                    currentMode = currentMode,
+                    editable = editable,
+                    presets = presets,
+                    activePresetId = activePresetId,
+                    onApplyPreset = onApplyPreset,
+                    onSavePreset = onSavePreset,
+                    onDeletePreset = onDeletePreset,
+                    onDurationChange = onDurationChange,
+                    onLoopCountChange = onLoopCountChange,
+                    onIntervalChange = onIntervalChange,
+                    onQualityChange = onQualityChange,
+                    onModePick = onModePick,
+                    snoozedCount = snoozedCount,
+                    onResetSnoozes = onResetSnoozes,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+                Spacer(Modifier.height(SettingsSheetTokens.ctaTopMargin))
+                val ctaShape = remember { RoundedCornerShape(SettingsSheetTokens.ctaRadius) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(ctaShape)
+                        .background(SettingsSheetTokens.ctaFill)
+                        .border(1.dp, SettingsSheetTokens.ctaStroke, ctaShape)
+                        .focusHighlight(ctaShape)
+                        .clickable { onDismiss() }
+                        .padding(vertical = SettingsSheetTokens.ctaPaddingV),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        stringResource(R.string.settings_sheet_save),
+                        style = RovaTokens.sheetCta,
+                        color = SettingsSheetTokens.ctaText,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSidePanel(
+    navEdge: NavEdge,
+    visible: Boolean,
+    durationSeconds: Int,
+    loopCount: Int,
+    intervalMinutes: Int,
+    quality: String,
+    currentMode: String,
+    editable: Boolean,
+    presets: List<RovaPreset>,
+    activePresetId: String?,
+    onApplyPreset: (RovaPreset) -> Unit,
+    onSavePreset: (String) -> Unit,
+    onDeletePreset: (RovaPreset) -> Unit,
+    onDurationChange: (Int) -> Unit,
+    onLoopCountChange: (Int) -> Unit,
+    onIntervalChange: (Int) -> Unit,
+    onQualityChange: (String) -> Unit,
+    onModePick: (String) -> Unit,
+    snoozedCount: Int,
+    onResetSnoozes: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val trailing = navEdge == NavEdge.Trailing
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInHorizontally(initialOffsetX = { if (trailing) it else -it }),
+        exit = slideOutHorizontally(targetOffsetX = { if (trailing) it else -it }),
+    ) {
+        BackHandler(enabled = visible, onBack = onDismiss)
+        // Transparent, non-modal container: NO background / NO scrim / NO pointer
+        // handler, so taps outside the panel band fall through to the rail beneath
+        // (ADR-0029 §B6 — rail + FAB stay live). Only the panel Column captures
+        // touches, and it sits inboard of the rail (no overlap).
+        Box(Modifier.fillMaxSize()) {
+            val panelShape = remember { RoundedCornerShape(SettingsSheetTokens.sheetCornerRadius) }
+            Column(
+                modifier = Modifier
+                    .align(if (trailing) Alignment.CenterEnd else Alignment.CenterStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(
+                        start = if (trailing) 0.dp else SettingsSheetTokens.sideSheetRailInset,
+                        end = if (trailing) SettingsSheetTokens.sideSheetRailInset else 0.dp,
+                        top = SettingsSheetTokens.sidePanelPaddingV,
+                        bottom = SettingsSheetTokens.sidePanelPaddingV,
+                    )
+                    .widthIn(max = SettingsSheetTokens.sideSheetWidth)
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .padding(top = SettingsSheetTokens.peekHeight),
-            )
+                    .clip(panelShape)
+                    .background(SettingsSheetTokens.sheetFill)
+                    .border(1.dp, SettingsSheetTokens.sheetTopStroke, panelShape)
+                    .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
+                    .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            top = SettingsSheetTokens.sheetTopPaddingTop,
+                            bottom = SettingsSheetTokens.sheetTopPaddingBottom,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.record_nav_settings),
+                        style = RovaTokens.sheetCta,
+                        color = SettingsSheetTokens.ctaText,
+                        modifier = Modifier.weight(1f),
+                    )
+                    val doneShape = remember { RoundedCornerShape(SettingsSheetTokens.ctaRadius) }
+                    Box(
+                        modifier = Modifier
+                            .clip(doneShape)
+                            .background(SettingsSheetTokens.ctaFill)
+                            .border(1.dp, SettingsSheetTokens.ctaStroke, doneShape)
+                            .focusHighlight(doneShape)
+                            .clickable(role = Role.Button) { onDismiss() }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            stringResource(R.string.settings_edit_sheet_done),
+                            style = RovaTokens.sheetCta,
+                            color = SettingsSheetTokens.ctaText,
+                        )
+                    }
+                }
+                SettingsContent(
+                    durationSeconds = durationSeconds,
+                    loopCount = loopCount,
+                    intervalMinutes = intervalMinutes,
+                    quality = quality,
+                    currentMode = currentMode,
+                    editable = editable,
+                    presets = presets,
+                    activePresetId = activePresetId,
+                    onApplyPreset = onApplyPreset,
+                    onSavePreset = onSavePreset,
+                    onDeletePreset = onDeletePreset,
+                    onDurationChange = onDurationChange,
+                    onLoopCountChange = onLoopCountChange,
+                    onIntervalChange = onIntervalChange,
+                    onQualityChange = onQualityChange,
+                    onModePick = onModePick,
+                    snoozedCount = snoozedCount,
+                    onResetSnoozes = onResetSnoozes,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -251,10 +531,18 @@ private fun SettingsPeek(
     }
 }
 
-/* ── Sheet panel ──────────────────────────────────────────────────────── */
+/* ── Shared settings body (ADR-0029 §B3) ──────────────────────────────── */
 
+/**
+ * The scrollable settings body shared by [SettingsBottomSheet] (portrait) and
+ * [SettingsSidePanel] (landscape): mode tabs · presets · steppers · quality ·
+ * reset-snoozes, plus the preset name / delete dialogs. Owns its own scroll so
+ * either host can constrain it with a `weight(1f)` [modifier] and the body
+ * scrolls when the host's height is short (landscape). Edits write through
+ * immediately via the callbacks.
+ */
 @Composable
-private fun SettingsPanel(
+private fun SettingsContent(
     durationSeconds: Int,
     loopCount: Int,
     intervalMinutes: Int,
@@ -273,65 +561,13 @@ private fun SettingsPanel(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
-    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val panelShape = remember {
-        RoundedCornerShape(
-            topStart = SettingsSheetTokens.sheetCornerRadius,
-            topEnd = SettingsSheetTokens.sheetCornerRadius,
-        )
-    }
-    // Custom preset save/delete dialog state (sheet-scoped). The naming dialog
-    // opens from the conditional "+ Save" chip; pendingDelete from a chip long-press.
     var namingVisible by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<RovaPreset?>(null) }
     val customNames = presets.filter { !it.isBuiltIn }
-    Column(
-        modifier = modifier
-            .clip(panelShape)
-            .background(SettingsSheetTokens.sheetFill)
-            .border(1.dp, SettingsSheetTokens.sheetTopStroke, panelShape)
-            // Drag down anywhere on the panel to dismiss (native bottom-sheet
-            // feel). Detector lives on the whole Column — not the tiny handle
-            // bar — so the gesture target is the full panel, not a 4 dp strip.
-            // Vertical drags don't steal taps from the steppers/chips: a
-            // `clickable` consumes the tap, the drag detector only engages
-            // past touch-slop.
-            .pointerInput(Unit) {
-                var dragTotal = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { dragTotal = 0f },
-                    onDragEnd = { if (dragTotal > 40f) onDismiss() },
-                ) { _, dragAmount ->
-                    dragTotal += dragAmount
-                }
-            }
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
-            .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
-    ) {
-        // Handle — visual affordance only; the whole panel is drag-to-dismiss.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    top = SettingsSheetTokens.sheetTopPaddingTop,
-                    bottom = SettingsSheetTokens.sheetTopPaddingBottom,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .size(
-                        width = SettingsSheetTokens.handleWidth,
-                        height = SettingsSheetTokens.handleHeight,
-                    )
-                    .clip(RoundedCornerShape(SettingsSheetTokens.handleRadius))
-                    .background(SettingsSheetTokens.handleColor),
-            )
-        }
-
+    val bodyScroll = rememberScrollState()
+    Column(modifier = modifier.verticalScroll(bodyScroll)) {
         SheetSectionLabel(stringResource(R.string.settings_sheet_section_recording_mode))
         Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
         ModeTabs(currentMode = currentMode, enabled = editable, onPick = onModePick)
@@ -384,28 +620,6 @@ private fun SettingsPanel(
         if (onResetSnoozes != null) {
             SheetRowDivider()
             ResetSnoozesRow(count = snoozedCount, onClick = onResetSnoozes)
-        }
-
-        // Push the CTA to the bottom of the panel.
-        Spacer(Modifier.weight(1f))
-        Spacer(Modifier.height(SettingsSheetTokens.ctaTopMargin))
-        val ctaShape = remember { RoundedCornerShape(SettingsSheetTokens.ctaRadius) }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(ctaShape)
-                .background(SettingsSheetTokens.ctaFill)
-                .border(1.dp, SettingsSheetTokens.ctaStroke, ctaShape)
-                .focusHighlight(ctaShape)
-                .clickable { onDismiss() }
-                .padding(vertical = SettingsSheetTokens.ctaPaddingV),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                stringResource(R.string.settings_sheet_save),
-                style = RovaTokens.sheetCta,
-                color = SettingsSheetTokens.ctaText,
-            )
         }
     }
     if (namingVisible) {
