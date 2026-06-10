@@ -71,6 +71,8 @@ import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.screens.chrome.ChromeOrientation
+import com.aritr.rova.ui.screens.chrome.DeviceLandscape
+import com.aritr.rova.ui.screens.chrome.railOrder
 import com.aritr.rova.ui.screens.chrome.SlotAnchor
 import com.aritr.rova.ui.screens.chrome.SlotPlacement
 import com.aritr.rova.ui.text.UiText
@@ -295,12 +297,13 @@ fun RecordSettingsCard(
     mode: String,
     onOpenSheet: () -> Unit,
     onCycleMode: () -> Unit,
+    sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
+            .then(if (sense == null) Modifier.fillMaxWidth() else Modifier)
             .alpha(if (dimmed) 0.75f else 1f),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap),
@@ -318,52 +321,75 @@ fun RecordSettingsCard(
         }
         GlassSurface(
             role = GlassRole.RecordChrome,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = if (sense == null) Modifier.fillMaxWidth() else Modifier,
             shape = SettingsCardShape,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)              // a11y minimum touch target
-                    .then(
-                        if (dimmed) {
-                            Modifier
-                        } else {
-                            Modifier
-                                .clickable { onOpenSheet() }
-                                .pointerInput(Unit) {
-                                    detectVerticalDragGestures { _, dragAmount ->
-                                        if (dragAmount < -8f) onOpenSheet()
-                                    }
+            // Shared interaction surface: tap (or swipe) opens the settings sheet.
+            // Same gesture contract in both orientations (acceptance — interaction flow).
+            val interaction = Modifier
+                .heightIn(min = 48.dp)              // a11y minimum touch target
+                .then(
+                    if (dimmed) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clickable { onOpenSheet() }
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (dragAmount < -8f) onOpenSheet()
                                 }
-                        },
+                            }
+                    },
+                )
+                .padding(
+                    horizontal = RecordChromeTokens.settingsCardPaddingH,
+                    vertical = RecordChromeTokens.settingsCardPaddingV,
+                )
+            if (sense == null) {
+                // PORTRAIT — horizontal pill: Clip · Repeats · Wait · Quality · Mode.
+                Row(
+                    modifier = Modifier.fillMaxWidth().then(interaction),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                    ModeCycleChip(
+                        mode = mode,
+                        onCycleMode = onCycleMode,
+                        onLongPress = onOpenSheet,
+                        enabled = !dimmed,
+                        modifier = Modifier.weight(1f),
                     )
-                    .padding(
-                        horizontal = RecordChromeTokens.settingsCardPaddingH,
-                        vertical = RecordChromeTokens.settingsCardPaddingV,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
-                ModeCycleChip(
-                    mode = mode,
-                    onCycleMode = onCycleMode,
-                    onLongPress = onOpenSheet,
-                    enabled = !dimmed,
-                    modifier = Modifier.weight(1f),
+                    Icon(
+                        RecordChromeIcons.chevronUp,
+                        contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                        tint = RecordChromeTokens.settingsArrow,
+                        modifier = Modifier.padding(start = 8.dp).size(13.dp),
+                    )
+                }
+            } else {
+                // LANDSCAPE — the SAME pill rotated to a vertical column on the cluster
+                // edge: identical 5 cells in rotation-mapped order, same SettingsCell /
+                // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
+                val cells = listOf<@Composable () -> Unit>(
+                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false) },
+                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false) },
+                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed) },
                 )
-                Icon(
-                    RecordChromeIcons.chevronUp,
-                    contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                    tint = RecordChromeTokens.settingsArrow,
-                    modifier = Modifier.padding(start = 8.dp).size(13.dp),
-                )
+                Column(
+                    modifier = interaction,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    railOrder(cells, sense).forEach { it() }
+                }
             }
         }
     }
@@ -566,38 +592,60 @@ fun RecordBottomNav(
     onLibrary: () -> Unit,
     onSettings: () -> Unit,
     onFabClick: () -> Unit,
+    sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
 ) {
-    // Slice B — gradient brush replaces the flat `bottomNavFill`. The
-    // outer Box paints the brush across the Box's full intrinsic height,
-    // INCLUDING the navigation-bar inset zone that the inner Row consumes
-    // via `windowInsetsPadding`. This is what makes the gradient dissolve
-    // into the OS-transparent gesture-nav region (Slice A — see ADR-0011)
-    // with no band edge. Painting the brush on the Row directly would
-    // bound it to the inset-padded layout, breaking the seamless blend.
-    // The 1 dp top stroke is deleted — a gradient has no top, so a stroke
-    // would re-introduce the edge we're killing.
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(RecordChromeTokens.bottomNavBrush)
-    ) {
-        Row(
-            modifier = Modifier
+    // Same three leaves in both orientations (identical widgets/sizes) — only the
+    // axis + order change. [railOrder] maps the portrait left→right adjacency to the
+    // landscape top→bottom rail so Library/FAB/Settings keep their spatial relation
+    // (acceptance — muscle memory).
+    val library: @Composable () -> Unit = {
+        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+    }
+    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick) }
+    val settings: @Composable () -> Unit = {
+        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+    }
+    if (sense == null) {
+        // PORTRAIT — Slice B gradient brush bottom bar. The outer Box paints the brush
+        // across its full intrinsic height INCLUDING the nav-bar inset zone the Row
+        // consumes via `windowInsetsPadding`, so the gradient dissolves into the
+        // OS-transparent gesture-nav region (Slice A — ADR-0011) with no band edge.
+        Box(
+            modifier = modifier
                 .fillMaxWidth()
+                .background(RecordChromeTokens.bottomNavBrush)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(
+                        start = RecordChromeTokens.bottomNavPaddingH,
+                        end = RecordChromeTokens.bottomNavPaddingH,
+                        top = 14.dp,
+                        bottom = RecordChromeTokens.bottomNavPaddingBottom,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                library(); fab(); settings()
+            }
+        }
+    } else {
+        // LANDSCAPE — the SAME bar rotated to a vertical rail on the cluster edge:
+        // identical leaves, same inter-item spacing token, rotation-mapped order.
+        Column(
+            modifier = modifier
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(
-                    start = RecordChromeTokens.bottomNavPaddingH,
-                    end = RecordChromeTokens.bottomNavPaddingH,
-                    top = 14.dp,
-                    bottom = RecordChromeTokens.bottomNavPaddingBottom,
+                    horizontal = RecordChromeTokens.bottomNavPaddingH,
+                    vertical = RecordChromeTokens.bottomNavPaddingH,
                 ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.bottomNavPaddingH),
         ) {
-            NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
-            RecordFab(state = fabState, onClick = onFabClick)
-            NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+            railOrder(listOf(library, fab, settings), sense).forEach { it() }
         }
     }
 }

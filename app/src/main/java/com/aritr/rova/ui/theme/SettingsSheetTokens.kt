@@ -53,7 +53,16 @@ object SettingsSheetTokens {
      */
     val sheetMaxWidth = 440.dp
 
-    // ── Landscape side panel (ADR-0029 §B3) ─────────────────────────────
+    // ── Landscape side-anchored sheet (PR-β′ — rotate, don't redesign) ──
+    /**
+     * Floor for the landscape sheet width. The width is DERIVED from portrait —
+     * `availableWidth − peekHeight` (the rotated mirror of portrait's "peek strip +
+     * sheet fills the rest"), so the sheet keeps portrait's visual weight without a
+     * magic %. This min only guards a pathologically narrow window.
+     */
+    val sideSheetMinWidth = 360.dp
+
+    // ── (Phase-B removal) legacy §B side-panel tokens ────────────────────
     /** Standard (non-modal) side-sheet width cap in landscape. */
     val sideSheetWidth = 380.dp
     /** Inboard offset past the system-nav-bar inset so the panel clears the
@@ -122,6 +131,22 @@ object SettingsSheetTokens {
     val chipOffStroke = Color.White.copy(alpha = 0.09f)
     /** Unselected chip label — mockup 0.28 → 0.55 for AA (SC 1.4.3). */
     val chipOffText = Color.White.copy(alpha = 0.55f)
+
+    // ── Resolved-config summary line (PR-β5b) ───────────────────────────
+    /** `.summary` muted body — value vocabulary echoing the active config. */
+    val summaryText = Color.White.copy(alpha = 0.60f)
+    /** Leading preset-name segment — brighter than the rest of the summary. */
+    val summaryStrong = Color.White.copy(alpha = 0.84f)
+    val summaryTopGap = 10.dp
+    val summaryBottomGap = 4.dp
+
+    // ── Landscape compact 3-up stepper group (PR-β5b) ───────────────────
+    /** Horizontal gap between the 3 stacked stepper cells in landscape. */
+    val compactCellGap = 10.dp
+    /** Gap between a compact cell's label and its stepper. */
+    val compactCellLabelGap = 6.dp
+    /** Max content height for the height-fit side panel before it scrolls. */
+    val sidePanelContentMaxHeight = 560.dp
 
     // ── Save CTA ────────────────────────────────────────────────────────
     val ctaTopMargin = 18.dp

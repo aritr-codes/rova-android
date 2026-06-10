@@ -35,11 +35,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import android.view.Surface
 import com.aritr.rova.ui.screens.chrome.ChromeOrientation
 import com.aritr.rova.ui.screens.chrome.ChromeSlot
-import com.aritr.rova.ui.screens.chrome.NavBarInsetsPx
+import com.aritr.rova.ui.screens.chrome.DeviceLandscape
+import com.aritr.rova.ui.screens.chrome.NavEdge
+import com.aritr.rova.ui.screens.chrome.clusterEdge
+import com.aritr.rova.ui.screens.chrome.landscapeSense
 import com.aritr.rova.ui.screens.chrome.placementFor
-import com.aritr.rova.ui.screens.chrome.systemNavEdge
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
@@ -638,15 +641,16 @@ fun RecordScreen(
     val chromeOrientation =
         if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
             ChromeOrientation.LANDSCAPE else ChromeOrientation.PORTRAIT
-    // PR-β (ADR-0029 §B1) — which horizontal edge the landscape chrome hugs,
-    // derived from the live nav-bar inset side (layout truth). Gesture nav (no
-    // side inset) → Trailing.
-    val density = LocalDensity.current
-    val layoutDir = LocalLayoutDirection.current
-    val navEdge = run {
-        val nb = WindowInsets.navigationBars
-        systemNavEdge(NavBarInsetsPx(nb.getLeft(density, layoutDir), nb.getRight(density, layoutDir)))
+    // PR-β′ (spec 2026-06-10 §4) — "rotate, don't redesign": the landscape chrome
+    // edge + rail order derive from the DISPLAY ROTATION sense (to match the stock
+    // camera), not the nav-bar inset. Non-null exactly in landscape; configChanges
+    // recompose re-reads it on rotation.
+    val currentSense: DeviceLandscape? = run {
+        @Suppress("DEPRECATION")
+        val rot = LocalView.current.display?.rotation ?: Surface.ROTATION_0
+        landscapeSense(rot)
     }
+    val clusterAnchor: NavEdge? = currentSense?.let { clusterEdge(it) }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
@@ -748,13 +752,11 @@ fun RecordScreen(
                 // card, top overlay / cam-controls, bottom nav) is suppressed while
                 // the SettingsSheet is open — but ONLY in PORTRAIT, where the sheet is
                 // a camera-peek panel so only the camera preview shows behind it.
-                // ADR-0029 §B6: in LANDSCAPE the settings side panel is a standard
-                // (non-modal) sheet inboard of the rail, so the grouped rail (Library +
-                // Record FAB), the config card, and the idle overlays must stay
-                // rendered AND interactive while it's open — leaving them suppressed
-                // would make the rail/FAB dead under a transparent gap (the hit-test
-                // trap). The MergeCompleteCard and loading overlay stay outside the gate.
-                if (chromeOrientation == ChromeOrientation.LANDSCAPE || !combinedOpen) {
+                // PR-β′ (spec 2026-06-10) — "rotate, don't redesign": landscape now
+                // behaves like portrait. The settings sheet covers the rotated cluster
+                // (config strip + nav), so chrome is suppressed while it's open in BOTH
+                // orientations. MergeCompleteCard + loading overlay stay outside the gate.
+                if (!combinedOpen) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -895,52 +897,39 @@ fun RecordScreen(
                         }
                     }
                     val modeLabel = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode
-                    if (chromeOrientation == ChromeOrientation.LANDSCAPE) {
-                        // PR-β (ADR-0029 §B4) — compact config card docked to the rail
-                        // inboard edge beside the FAB (landscape thumb-zone; not
-                        // bottom-center). Hidden while the side panel owns that band
-                        // (clean mutual exclusion). Scrim-backed for WCAG contrast.
-                        if (!combinedOpen) {
-                            RecordConfigCardLandscape(
-                                durationSeconds = duration,
-                                loopCount = loopCount,
-                                quality = resolution,
-                                mode = modeLabel,
-                                onOpenSheet = { viewModel.openSettingsSheet() },
-                                onCycleMode = onCycleModeGated,
-                                dimmed = hudState != RecordHudState.Idle,
-                                modifier = slotModifier(
-                                    placementFor(ChromeSlot.CONFIG_SUMMARY, chromeOrientation, navEdge),
-                                    WindowInsets.navigationBars,
-                                ),
+                    // PR-β′ — ONE config strip in both orientations: the portrait
+                    // horizontal pill (PARAMS_CARD placement) rotated to a vertical
+                    // strip on the cluster edge, just inboard of the nav rail (spec §5).
+                    // Tap opens the settings sheet exactly like portrait. The sheet
+                    // covers it when open (no §B mutual-exclusion gate).
+                    val configEdgeModifier = if (currentSense != null) {
+                        Modifier
+                            .align(if (clusterAnchor == NavEdge.Trailing) Alignment.CenterEnd else Alignment.CenterStart)
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            // sit inboard of the ~rail band (FAB + padding); provisional
+                            // constant for the A6 checkpoint, refined in Phase B.
+                            .padding(
+                                end = if (clusterAnchor == NavEdge.Trailing) 96.dp else 0.dp,
+                                start = if (clusterAnchor == NavEdge.Trailing) 0.dp else 96.dp,
                             )
-                        }
                     } else {
-                        Column(
-                            // PR-β — portrait placement equals the prior
-                            // bottomNavClearance(90)+settingsCardLift(30)=120 bottom +
-                            // 16 dp side margins (pinned by ChromeSlotPlacementTest).
-                            modifier = slotModifier(
-                                placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
-                                WindowInsets.navigationBars,
-                            ).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            // ADR-0026 — presets now live inside the settings sheet
-                            // (between RECORDING MODE and SETTINGS), not as a loose
-                            // idle chip row. See the SettingsSheet call below.
-                            RecordSettingsCard(
-                                durationSeconds = duration,
-                                loopCount = loopCount,
-                                intervalMinutes = interval,
-                                quality = resolution,
-                                mode = modeLabel,
-                                onOpenSheet = { viewModel.openSettingsSheet() },
-                                onCycleMode = onCycleModeGated,
-                                dimmed = hudState != RecordHudState.Idle,
-                            )
-                        }
+                        slotModifier(
+                            placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
+                            WindowInsets.navigationBars,
+                        ).fillMaxWidth()
                     }
+                    RecordSettingsCard(
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        mode = modeLabel,
+                        onOpenSheet = { viewModel.openSettingsSheet() },
+                        onCycleMode = onCycleModeGated,
+                        sense = currentSense,
+                        dimmed = hudState != RecordHudState.Idle,
+                        modifier = configEdgeModifier,
+                    )
                 }
 
                 // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
@@ -996,32 +985,24 @@ fun RecordScreen(
                         ),
                     )
                 }
-                if (chromeOrientation == ChromeOrientation.LANDSCAPE) {
-                    // PR-β (ADR-0029 §B2) — ONE grouped rail on the system-nav edge:
-                    // Library · Record FAB · Settings (portrait bottom-bar adjacency).
-                    // Settings toggles the settings side panel (§B3); the standalone
-                    // RECORD_ACTION placement is folded in (slot kept advisory).
-                    RecordNavRail(
-                        fabState = fabState,
-                        navItemsLocked = isUiLocked,
-                        onLibrary = onNavigateToHistory,
-                        onSettings = { if (combinedOpen) viewModel.closeSettingsSheet() else viewModel.openSettingsSheet() },
-                        onFabClick = onFabClick,
-                        modifier = slotModifier(
-                            placementFor(ChromeSlot.NAV_RAIL, chromeOrientation, navEdge),
-                            WindowInsets.navigationBars,
-                        ),
-                    )
-                } else {
-                    RecordBottomNav(
-                        fabState = fabState,
-                        navItemsLocked = isUiLocked,
-                        onLibrary = onNavigateToHistory,
-                        onSettings = onNavigateToSettings,
-                        onFabClick = onFabClick,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
-                }
+                // PR-β′ — ONE nav in both orientations: the portrait bottom bar rotated
+                // to a vertical rail on the cluster edge (rotation-mapped order). Nav-
+                // Settings navigates to the Settings SCREEN in BOTH orientations (same as
+                // portrait — the config-strip tap opens the sheet); the §B rail-toggles-
+                // sheet repurposing is removed (acceptance — same muscle memory).
+                RecordBottomNav(
+                    fabState = fabState,
+                    navItemsLocked = isUiLocked,
+                    onLibrary = onNavigateToHistory,
+                    onSettings = onNavigateToSettings,
+                    onFabClick = onFabClick,
+                    sense = currentSense,
+                    modifier = if (currentSense != null) {
+                        Modifier.align(if (clusterAnchor == NavEdge.Trailing) Alignment.CenterEnd else Alignment.CenterStart)
+                    } else {
+                        Modifier.align(Alignment.BottomCenter)
+                    },
+                )
                 }   // close if (!combinedOpen) — chrome suppressed behind the sheet
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
