@@ -405,7 +405,7 @@ private fun SettingsSidePanel(
                     // Touch barrier: absorb stray taps on blank panel area; drags/scroll
                     // + child taps still reach children (detectTapGestures only).
                     .pointerInput(Unit) { detectTapGestures { } }
-                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(horizontal = SettingsSheetTokens.sheetPaddingH)
                     .padding(bottom = SettingsSheetTokens.sheetPaddingBottom),
             ) {

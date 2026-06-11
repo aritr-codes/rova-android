@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -53,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
+import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.components.MergeCompleteCount
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
@@ -651,6 +653,22 @@ fun RecordScreen(
         landscapeSense(rot)
     }
     val clusterAnchor: NavEdge? = currentSense?.let { clusterEdge(it) }
+                // §B′ polish P1 (2026-06-11, owner: "correctness fix, not visual tweak") —
+                // in landscape the system bars live on the SIDES and the punch-hole on a
+                // side edge, so single-bar insets (statusBars/navigationBars) under-pad and
+                // chrome collides with system UI. Landscape chrome therefore pads the full
+                // safeDrawing union (status + nav bars + display cutout). Portrait keeps
+                // the original per-bar insets — byte-identical.
+                val chromeTopInsets = if (currentSense != null) WindowInsets.safeDrawing else WindowInsets.statusBars
+                // §B′ polish P2 — generic transient-message rule: anything mounted in the
+                // top transient slots (WARNING_CENTER, RECOVERY_CHIP, ACTIVE_HUD) clears
+                // the device-anchored cluster band on its edge. New banner types inherit
+                // this automatically by mounting in the same slots.
+                val transientClusterClearance = when (clusterAnchor) {
+                    NavEdge.Leading -> Modifier.padding(start = RecordChromeTokens.clusterBandClearance)
+                    NavEdge.Trailing -> Modifier.padding(end = RecordChromeTokens.clusterBandClearance)
+                    null -> Modifier
+                }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
@@ -766,8 +784,8 @@ fun RecordScreen(
                         onReview = onNavigateToHistory,
                         modifier = slotModifier(
                             placementFor(ChromeSlot.RECOVERY_CHIP, chromeOrientation),
-                            WindowInsets.statusBars,
-                        ),
+                            chromeTopInsets,
+                        ).then(transientClusterClearance),
                     )
                 }
                 // ADR 0007 — idle WarningCenter mount: renders the warning sheet
@@ -780,8 +798,8 @@ fun RecordScreen(
                     Box(
                         modifier = slotModifier(
                             placementFor(ChromeSlot.WARNING_CENTER, chromeOrientation),
-                            WindowInsets.statusBars,
-                        )
+                            chromeTopInsets,
+                        ).then(transientClusterClearance)
                     ) {
                         WarningCenter(
                             hudState = RecordHudState.Idle,
@@ -850,8 +868,8 @@ fun RecordScreen(
                         Column(
                             modifier = slotModifier(
                                 placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
-                                WindowInsets.statusBars,
-                            ).fillMaxWidth(),
+                                chromeTopInsets,
+                            ).then(transientClusterClearance).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -905,12 +923,11 @@ fun RecordScreen(
                     val configEdgeModifier = if (currentSense != null) {
                         Modifier
                             .align(if (clusterAnchor == NavEdge.Trailing) Alignment.CenterEnd else Alignment.CenterStart)
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            // sit inboard of the ~rail band (FAB + padding); provisional
-                            // constant for the A6 checkpoint, refined in Phase B.
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            // §B′ polish P3 — single-source inboard offset clearing the rail band.
                             .padding(
-                                end = if (clusterAnchor == NavEdge.Trailing) 96.dp else 0.dp,
-                                start = if (clusterAnchor == NavEdge.Trailing) 0.dp else 96.dp,
+                                end = if (clusterAnchor == NavEdge.Trailing) RecordChromeTokens.railBandInboardOffset else 0.dp,
+                                start = if (clusterAnchor == NavEdge.Trailing) 0.dp else RecordChromeTokens.railBandInboardOffset,
                             )
                     } else {
                         slotModifier(
@@ -946,7 +963,7 @@ fun RecordScreen(
                         totalLoops = serviceState.totalLoops,
                         modifier = slotModifier(
                             placementFor(ChromeSlot.STATUS_OVERLAY, chromeOrientation),
-                            WindowInsets.statusBars,
+                            chromeTopInsets,
                         ),
                     )
                     // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
@@ -981,7 +998,7 @@ fun RecordScreen(
                         orientation = chromeOrientation,
                         modifier = slotModifier(
                             placementFor(ChromeSlot.CAMERA_CONTROLS, chromeOrientation),
-                            WindowInsets.statusBars,
+                            chromeTopInsets,
                         ),
                     )
                 }
