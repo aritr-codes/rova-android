@@ -4393,7 +4393,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val settings = com.aritr.rova.data.RovaSettings(this)
         val tree = settings.saveLocationTreeUri ?: return false
         // P+L SAF is deferred this slice — P+L sessions fall back to the SDK tier.
-        if (settings.mode == "PortraitLandscape") return false
+        if (settings.captureTopology == "DualShot") return false
         // B4c — probe write-usability, not just the grant: a folder deleted in a
         // file manager keeps its persisted grant, so a grant-only check would
         // freeze SAF and fail at export. isTargetWritable falls back to the SDK

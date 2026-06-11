@@ -453,7 +453,7 @@ internal class VaultAndroidOps(
     private fun hasUsableSafFolder(): Boolean {
         val settings = RovaSettings(context)
         val tree = settings.saveLocationTreeUri ?: return false
-        if (settings.mode == "PortraitLandscape") return false
+        if (settings.captureTopology == "DualShot") return false
         return SafAndroidOps.isTargetWritable(context, tree)
     }
 
