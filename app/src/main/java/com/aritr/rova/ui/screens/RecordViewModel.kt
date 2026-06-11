@@ -106,7 +106,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val loopCount = MutableStateFlow(settings.loopCount)
     val resolution = MutableStateFlow(settings.resolution)
     val flashMode = MutableStateFlow(RovaRecordingService.FLASH_MODE_OFF)
-    val mode = MutableStateFlow(settings.mode)
+    val mode = MutableStateFlow(settings.captureTopology)
 
     // --- Presets ---
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
@@ -278,7 +278,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setMode(mode: String) {
-        settings.mode = mode                                  // (1) prefs commit
+        settings.captureTopology = mode                        // (1) prefs commit
         this.mode.value = mode                                // (2) StateFlow update
         serviceBinder?.getService()?.setMode(mode)            // (3) service rebind
     }
