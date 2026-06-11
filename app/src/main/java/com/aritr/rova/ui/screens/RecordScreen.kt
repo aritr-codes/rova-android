@@ -906,7 +906,7 @@ fun RecordScreen(
                     // (see [DualShotPortraitGate]). Shared by both card layouts.
                     val onCycleModeGated: () -> Unit = {
                         if (pendingMode == null) {
-                            val next = cycleModeNext(mode)
+                            val next = CaptureMode.cycleNext(mode)
                             if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
                                 pendingMode = next
                             } else {

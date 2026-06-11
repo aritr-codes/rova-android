@@ -20,7 +20,7 @@ package com.aritr.rova.ui.screens
  * [RecordScreen] so the window starts rotating immediately.
  *
  * Tested by [com.aritr.rova.ui.screens.DualShotPortraitGateTest] (pure JVM).
- * Pure-helper test-seam precedent: [cycleModeNext], [loopPillContent].
+ * Pure-helper test-seam precedent: [CaptureMode.cycleNext], [loopPillContent].
  */
 internal object DualShotPortraitGate {
     const val P_L: String = "PortraitLandscape"
