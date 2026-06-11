@@ -409,7 +409,7 @@ fun RecordScreen(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
                         viewModel.resolution.value,
-                        viewModel.mode.value
+                        viewModel.topology.value
                     )
                 }
                 else -> {}
