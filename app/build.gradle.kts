@@ -1816,6 +1816,115 @@ val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
     }
 }
 
+// ADR-0029 PR-γ gate 1 — live capture paths must not branch on the legacy
+// orientation-carrying mode strings; read-compat sites are allowlisted (§6).
+// Comment/KDoc lines are skipped: documenting a legacy value is legal,
+// branching on one is not.
+val checkNoLegacyModeStrings = tasks.register("checkNoLegacyModeStrings") {
+    group = "verification"
+    description = "Forbid \"Portrait\"/\"Landscape\"/\"PortraitLandscape\" string literals outside legacy read-compat (ADR-0029 PR-γ §6)."
+    val allow = setOf(
+        "data/SessionManifest.kt",   // legacy "mode" JSON read-tolerance
+        "data/ModeMigration.kt",     // the migration mapper itself
+        "data/RovaSettings.kt",      // one-shot prefs migration
+    )
+    doLast {
+        val offenders = mutableListOf<String>()
+        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
+            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
+            if (allow.any { rel.endsWith(it) }) return@forEach
+            f.readLines().forEachIndexed { i, line ->
+                val t = line.trimStart()
+                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
+                if (Regex("\"(Portrait|Landscape|PortraitLandscape)\"").containsMatchIn(line)) {
+                    offenders += "$rel:${i + 1}: ${line.trim()}"
+                }
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "ADR-0029 PR-γ §6: legacy mode strings in live paths (use CaptureTopology):\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+}
+
+// ADR-0029 PR-γ gate 2 — rotation applies only at segment boundaries (§3):
+// setTargetRotation is reachable only from the allowlisted capture files.
+val checkSetTargetRotationBoundaryOnly = tasks.register("checkSetTargetRotationBoundaryOnly") {
+    group = "verification"
+    description = "setTargetRotation only in RovaRecordingService/dualrecord (ADR-0029 §3 segment-boundary rule)."
+    doLast {
+        val offenders = mutableListOf<String>()
+        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
+            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
+            val allowed = rel.endsWith("service/RovaRecordingService.kt") || rel.contains("service/dualrecord/")
+            if (allowed) return@forEach
+            f.readLines().forEachIndexed { i, line ->
+                if (line.contains("setTargetRotation(")) offenders += "$rel:${i + 1}"
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException("ADR-0029 §3: setTargetRotation outside boundary-owning files:\n" + offenders.joinToString("\n"))
+        }
+    }
+}
+
+// ADR-0029 PR-γ gate 3 — FrontBack construction is capability-gated (§5):
+// the topology may be referenced only by its declaration and the registry
+// that owns the capability gate. PR-δ extends the allowlist with the
+// concurrent-camera module it builds.
+val checkFrontBackCapabilityGated = tasks.register("checkFrontBackCapabilityGated") {
+    group = "verification"
+    description = "\"FrontBack\" referenced only in CaptureTopology/CaptureModes (capability gate site) (ADR-0029 §5)."
+    val allow = setOf("data/CaptureTopology.kt", "ui/screens/CaptureModes.kt")
+    doLast {
+        val offenders = mutableListOf<String>()
+        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
+            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
+            if (allow.any { rel.endsWith(it) }) return@forEach
+            f.readLines().forEachIndexed { i, line ->
+                val t = line.trimStart()
+                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
+                if (line.contains("FrontBack")) offenders += "$rel:${i + 1}"
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException("ADR-0029 §5: FrontBack outside the capability-gated registry:\n" + offenders.joinToString("\n"))
+        }
+    }
+}
+
+// ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).
+val checkUserCopyVocabulary = tasks.register("checkUserCopyVocabulary") {
+    group = "verification"
+    description = "No loop/repeat/segment vocabulary in user-visible string VALUES, en+es (ADR-0029 §C terminology)."
+    val banned = Regex("(?i)\\b(loops?|repeats?|segments?|ciclos?|segmentos?|repeticion(es)?|bucles?)\\b")
+    // Allowlist by resource NAME for justified exceptions (none expected at γ).
+    val allowNames = setOf<String>()
+    doLast {
+        val offenders = mutableListOf<String>()
+        listOf("src/main/res/values/strings.xml", "src/main/res/values-es/strings.xml").forEach { p ->
+            val text = file(p).readText()
+            val nameRe = Regex("""<string name="([^"]+)"[^>]*>(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
+            val matches = nameRe.findAll(text).toList()
+            val declared = Regex("<string ").findAll(text).count()
+            if (declared != matches.size) {
+                throw GradleException("checkUserCopyVocabulary: parser matched ${matches.size}/$declared strings in $p — fix the regex")
+            }
+            matches.forEach { m ->
+                val (name, value) = m.destructured
+                if (name in allowNames) return@forEach
+                if (banned.containsMatchIn(value)) offenders += "$p: $name = ${value.trim()}"
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException("ADR-0029 §C: banned vocabulary in user copy (use clip/session):\n" + offenders.joinToString("\n"))
+        }
+    }
+}
+
 // ADR-0020 §Decision-3 (WCAG 2.2 AA — SC 2.3.3 "Animation from Interactions" /
 // SC 2.2.2 "Pause, Stop, Hide"): every looping/auto-playing Compose animation
 // must be gated on the system reduced-motion preference and fall back to a
@@ -2058,6 +2167,10 @@ afterEvaluate {
         dependsOn(checkVaultExporterNoPublicPublish)
         dependsOn(checkRecordSurfaceNoBlur)
         dependsOn(checkGlassSurfaceRoleUsage)
+        dependsOn(checkNoLegacyModeStrings)
+        dependsOn(checkSetTargetRotationBoundaryOnly)
+        dependsOn(checkFrontBackCapabilityGated)
+        dependsOn(checkUserCopyVocabulary)
     }
 }
 
