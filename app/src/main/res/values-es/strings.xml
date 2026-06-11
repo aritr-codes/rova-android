@@ -80,8 +80,8 @@
     <string name="notification_preparing_camera">Preparando la cámara...</string>
     <string name="notification_camera_failed">La cámara no pudo iniciarse. Reinicia la grabación.</string>
     <string name="notification_recording_failed_stopping">La grabación falló. Deteniendo.</string>
-    <string name="notification_segment_saved">Segmento guardado: %1$d KB</string>
-    <string name="notification_empty_segment">La grabación produjo un segmento vacío</string>
+    <string name="notification_segment_saved">Clip guardado (%1$d KB)</string>
+    <string name="notification_empty_segment">La grabación produjo un clip vacío</string>
     <string name="notification_recording_failed_unexpected">La grabación falló de forma inesperada</string>
     <string name="notification_error_insufficient_storage">No hay suficiente espacio de almacenamiento</string>
     <string name="notification_error_source_inactive">La cámara se desconectó</string>
@@ -173,13 +173,29 @@
 
     <!-- Idle settings card -->
     <string name="record_swipe_to_edit">DESLIZA PARA EDITAR</string>
-    <string name="record_cell_clip">Clip</string>
-    <string name="record_cell_repeats">Repeticiones</string>
+    <string name="record_cell_clip">Duración</string>
+    <string name="record_cell_repeats">Clips</string>
     <string name="record_cell_wait">Espera</string>
     <string name="record_cell_quality">Calidad</string>
     <string name="record_cell_mode">MODO</string>
     <string name="record_edit_session_settings_cd">Editar ajustes de la grabación</string>
     <string name="record_mode_pl_label">V + H</string>
+    <!-- Capture modes (spec 2026-06-11 §3, ADR-0029 PR-γ). DualShot/DualSight are brand names, both locales. -->
+    <string name="capture_mode_auto">Auto</string>
+    <string name="capture_mode_dualshot" translatable="false">DualShot</string>
+    <string name="capture_mode_dualsight" translatable="false">DualSight</string>
+    <string name="capture_mode_auto_caption">Graba clips y rota con tu dispositivo</string>
+    <string name="capture_mode_dualshot_caption">Cada clip se guarda en vertical + horizontal (2× almacenamiento)</string>
+    <string name="capture_mode_dualsight_caption">Cámaras frontal y trasera en un solo video</string>
+    <!-- Orientation policy row (spec §4). "Auto" is reserved for the mode; the policy says Follow Device. -->
+    <string name="settings_sheet_orientation">Orientación</string>
+    <string name="orientation_follow_device">Seguir dispositivo</string>
+    <string name="orientation_lock_portrait">Bloquear vertical</string>
+    <string name="orientation_lock_landscape">Bloquear horizontal</string>
+    <!-- Locked-state config cell (spec §5) -->
+    <string name="record_cell_locked">Bloqueado</string>
+    <string name="record_locked_portrait">Vertical</string>
+    <string name="record_locked_landscape">Horizontal</string>
 
     <!-- Bottom nav -->
     <string name="record_nav_library">Biblioteca</string>
@@ -194,15 +210,15 @@
     <string name="record_recovery_review">Revisar</string>
 
     <!-- Active HUD -->
-    <string name="record_loops_done_caption">CICLOS HECHOS</string>
+    <string name="record_loops_done_caption">CLIPS HECHOS</string>
     <string name="record_status_detail_prefix">· %1$s</string>
 
     <!-- PR-α (ADR-0029 §Decision 3) — see the en strings.xml comment. -->
     <string name="record_orientation_rotating_next">El siguiente clip girará</string>
 
     <!-- Active-HUD loop pill (B3 i18n task 2) -->
-    <string name="record_hud_loops_done_indefinite">%1$d ciclos hechos</string>
-    <string name="record_hud_loops_done">%1$d/%2$d ciclos hechos</string>
+    <string name="record_hud_loops_done_indefinite">%1$d clips hechos</string>
+    <string name="record_hud_loops_done">%1$d/%2$d clips hechos</string>
 
     <!-- Active-HUD status pill copy + time captions (B3 i18n task 2) -->
     <string name="record_hud_status_recording">Grabando</string>
@@ -216,11 +232,11 @@
     <string name="record_hud_time_percent">· %1$d%%</string>
 
     <!-- RecordHudFormatters user-facing copy (B3 i18n task 2b) -->
-    <string name="record_hud_loop_position">Ciclo %1$d / %2$d</string>
-    <string name="record_hud_loop_position_continuous">Ciclo %1$d</string>
+    <string name="record_hud_loop_position">Clip %1$d / %2$d</string>
+    <string name="record_hud_loop_position_continuous">Clip %1$d</string>
     <string name="record_hud_loops_remaining_continuous">Graba hasta que lo detengas</string>
     <string name="record_hud_loops_remaining_last">Último clip en curso</string>
-    <string name="record_hud_loops_remaining">Quedan %1$d de %2$d ciclos</string>
+    <string name="record_hud_loops_remaining">Quedan %1$d de %2$d clips</string>
     <string name="record_hud_next_clip_momentary">El siguiente clip empezará enseguida</string>
     <string name="record_hud_next_clip_seconds">El siguiente clip durará %1$d s</string>
     <string name="record_hud_next_clip_one_minute">El siguiente clip durará 1 min</string>
@@ -244,20 +260,20 @@
     <string name="record_hud_merge_preparing">Preparando la combinación</string>
     <string name="record_hud_merge_preparing_clips">Preparando para combinar %1$d clips</string>
     <string name="record_hud_merge_clip_of">Combinando clip %1$d de %2$d</string>
-    <string name="record_hud_session_status_recording_of">Grabando, ciclo %1$d de %2$d.</string>
-    <string name="record_hud_session_status_recording">Grabando, ciclo %1$d.</string>
-    <string name="record_hud_session_status_queued_of">En cola, ciclo %1$d de %2$d.</string>
-    <string name="record_hud_session_status_queued">En cola, ciclo %1$d.</string>
+    <string name="record_hud_session_status_recording_of">Grabando, clip %1$d de %2$d.</string>
+    <string name="record_hud_session_status_recording">Grabando, clip %1$d.</string>
+    <string name="record_hud_session_status_queued_of">En cola, clip %1$d de %2$d.</string>
+    <string name="record_hud_session_status_queued">En cola, clip %1$d.</string>
     <string name="record_hud_merge_complete_summary_one">%1$d clip · guardado en la Biblioteca</string>
     <string name="record_hud_merge_complete_summary_other">%1$d clips · guardados en la Biblioteca</string>
 
     <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
     <string name="record_hud_announce_recording">Grabando.</string>
-    <string name="record_hud_announce_recording_loop">Grabando. Ciclo %1$d.</string>
-    <string name="record_hud_announce_recording_loop_of">Grabando. Ciclo %1$d de %2$d.</string>
+    <string name="record_hud_announce_recording_loop">Grabando. Clip %1$d.</string>
+    <string name="record_hud_announce_recording_loop_of">Grabando. Clip %1$d de %2$d.</string>
     <string name="record_hud_announce_on_break">En pausa.</string>
-    <string name="record_hud_announce_on_break_loop">En pausa. Ciclo %1$d.</string>
-    <string name="record_hud_announce_on_break_loop_of">En pausa. Ciclo %1$d de %2$d.</string>
+    <string name="record_hud_announce_on_break_loop">En pausa. Clip %1$d.</string>
+    <string name="record_hud_announce_on_break_loop_of">En pausa. Clip %1$d de %2$d.</string>
     <!-- Bug B — anuncio de la gracia de arranque -->
     <string name="record_hud_announce_starting">Preparando para grabar.</string>
 
@@ -329,7 +345,7 @@
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
     <string name="history_config_title">Ajustes de grabación</string>
     <string name="history_config_clip_length">Duración del clip</string>
-    <string name="history_config_repeats">Repeticiones</string>
+    <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Espera</string>
     <string name="history_config_quality">Calidad</string>
     <string name="history_config_close">Cerrar</string>
@@ -397,7 +413,7 @@
     <string name="settings_clip_duration_supporting">Cuánto graba cada clip.</string>
     <string name="settings_interval_label">Intervalo entre clips</string>
     <string name="settings_interval_supporting">Tiempo de espera antes del siguiente clip.</string>
-    <string name="settings_loops_label">Número de ciclos</string>
+    <string name="settings_loops_label">Número de clips</string>
     <string name="settings_loops_supporting">Cuántos clips antes de detenerse.</string>
 
     <!-- Recording-behavior rows -->
@@ -457,11 +473,9 @@
     <string name="settings_sheet_section_recording_mode">Modo de grabación</string>
     <string name="settings_sheet_section_presets">Preajustes</string>
     <string name="settings_sheet_section_settings">Ajustes</string>
-    <string name="settings_sheet_mode_portrait">Vertical</string>
-    <string name="settings_sheet_mode_landscape">Horizontal</string>
     <string name="settings_sheet_mode_pl">V + H</string>
     <string name="settings_sheet_clip_duration">Duración del clip</string>
-    <string name="settings_sheet_repeats">Repeticiones</string>
+    <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Espera entre clips</string>
     <string name="settings_sheet_quality">Calidad</string>
     <string name="settings_sheet_save">Guardar</string>
@@ -522,7 +536,7 @@
 
     <!-- EXACT_ALARM_DENIED -->
     <string name="warning_exact_alarm_title">Se requiere permiso de alarmas</string>
-    <string name="warning_exact_alarm_body">Rova usa alarmas exactas para cronometrar los segmentos de grabación. Sin ellas, los clips no empezarán ni se detendrán según lo programado.</string>
+    <string name="warning_exact_alarm_body">Rova usa alarmas exactas para cronometrar los clips de grabación. Sin ellas, los clips no empezarán ni se detendrán según lo programado.</string>
     <string name="warning_exact_alarm_primary">Permitir alarmas exactas</string>
 
     <!-- STORAGE_INSUFFICIENT -->
@@ -579,9 +593,9 @@
 
     <!-- CANT_MERGE -->
     <string name="warning_cant_merge_title">Aún no se puede combinar</string>
-    <string name="warning_cant_merge_body">Libera espacio y reintenta, o conserva los segmentos sin procesar para más tarde.</string>
+    <string name="warning_cant_merge_body">Libera espacio y reintenta, o conserva los clips sin procesar para más tarde.</string>
     <string name="warning_cant_merge_primary">Liberar espacio y reintentar</string>
-    <string name="warning_cant_merge_secondary">Guardar solo los segmentos</string>
+    <string name="warning_cant_merge_secondary">Guardar solo los clips</string>
     <string name="warning_cant_merge_tertiary">Descartar sesión</string>
 
     <!-- SAVE_FOLDER_UNAVAILABLE (B4b ADR-0024) -->
@@ -650,12 +664,12 @@
     <string name="recovery_title_killed_by_system">Tu dispositivo detuvo la grabación</string>
     <string name="recovery_title_force_stopped">La grabación se forzó a detenerse</string>
     <!-- Bodies per terminator kind -->
-    <string name="recovery_body_user_stopped">Tu última sesión terminó antes de que los segmentos pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
-    <string name="recovery_body_killed_by_system">La gestión de batería de tu dispositivo detuvo la grabación antes de que los segmentos pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
-    <string name="recovery_body_force_stopped">La app se forzó a detenerse antes de que los segmentos de la última sesión pudieran combinarse. Los segmentos recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_body_user_stopped">Tu última sesión terminó antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_body_killed_by_system">La gestión de batería de tu dispositivo detuvo la grabación antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_body_force_stopped">La app se forzó a detenerse antes de que los clips de la última sesión pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
     <!-- CTA labels -->
     <string name="recovery_discard_label">Descartar grabación</string>
-    <string name="recovery_merge_label">Combinar segmentos</string>
+    <string name="recovery_merge_label">Combinar clips</string>
     <string name="recovery_keep_raw_label">Conservar como clips sin procesar</string>
     <string name="recovery_retry_merge_label">Reintentar combinación</string>
     <!-- Discard CTA content description. %1$s = discard label -->
@@ -663,12 +677,12 @@
     <!-- Merge-failed inline error. %1$s = runtime failure reason -->
     <string name="recovery_merge_failed_prefix">Falló la combinación: %1$s</string>
     <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
-    <string name="recovery_artifact_recovered_segments">Se recuperaron %1$d segmento(s) del disco</string>
-    <string name="recovery_artifact_missing_segments">Falta(n) segmento(s) en los índices %1$s</string>
-    <string name="recovery_artifact_invalid_segments">Segmento(s) no válido(s) en los índices %1$s</string>
-    <string name="recovery_artifact_orphan_segments">Segmento(s) huérfano(s) en los índices %1$s</string>
+    <string name="recovery_artifact_recovered_segments">Se recuperaron %1$d clip(s) del disco</string>
+    <string name="recovery_artifact_missing_segments">Falta(n) clip(s) en los índices %1$s</string>
+    <string name="recovery_artifact_invalid_segments">Clip(s) no válido(s) en los índices %1$s</string>
+    <string name="recovery_artifact_orphan_segments">Clip(s) huérfano(s) en los índices %1$s</string>
     <string name="recovery_artifact_invalid_orphans">%1$d archivo(s) huérfano(s) ilegible(s)</string>
-    <string name="recovery_artifact_duplicate_segments">Segmento(s) duplicado(s) en los índices %1$s</string>
+    <string name="recovery_artifact_duplicate_segments">Clip(s) duplicado(s) en los índices %1$s</string>
     <string name="recovery_artifact_unknown_files">%1$d archivo(s) desconocido(s) en la carpeta de la sesión</string>
     <string name="recovery_artifact_malformed_records">%1$d registro(s) de manifiesto con formato incorrecto</string>
     <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
@@ -681,7 +695,7 @@
     <!-- Numeric chip. %1$d = filled, %2$d = total -->
     <string name="recovery_progress_chip">%1$d / %2$d</string>
     <!-- Progress strip "merging" content description. %1$d = filled, %2$d = total -->
-    <string name="recovery_progress_cd_merging">Combinando: %1$d de %2$d segmentos.</string>
+    <string name="recovery_progress_cd_merging">Combinando: %1$d de %2$d clips.</string>
     <!-- Footer for hidden older sessions. %1$d = count -->
     <string name="recovery_hidden_footer">+%1$d sesiones interrumpidas más antiguas</string>
 
@@ -707,10 +721,10 @@
     <string name="card_session_recording">Grabación en curso</string>
     <!-- %1$d = seconds until next capture -->
     <string name="card_session_next_capture">Próxima captura en %1$d s</string>
-    <!-- %1$d = current loop, %2$d = total loops -->
-    <string name="card_session_loop_of">Ciclo %1$d de %2$d</string>
-    <!-- %1$d = current loop -->
-    <string name="card_session_loop">Ciclo %1$d</string>
+    <!-- %1$d = current clip, %2$d = total clips -->
+    <string name="card_session_loop_of">Clip %1$d de %2$d</string>
+    <!-- %1$d = current clip -->
+    <string name="card_session_loop">Clip %1$d</string>
     <string name="card_session_live">EN DIRECTO</string>
     <string name="card_session_queued">EN COLA</string>
     <string name="card_last_recording_label">Última grabación</string>
