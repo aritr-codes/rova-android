@@ -10,7 +10,7 @@ class SessionManifestVaultTest {
     private fun baseManifest() = SessionManifest(
         sessionId = "s1",
         startedAt = 1000L,
-        config = SessionConfig(10, 1, "HD", 10, "Portrait"),
+        config = SessionConfig(10, 1, "HD", 10),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
     )

@@ -21,7 +21,7 @@ class HistoryArtifactMapperSegmentRowsTest {
         sessionId: String,
         terminated: Terminated,
         segmentCount: Int,
-        mode: String = "Portrait",
+        captureTopology: String = "Single",
     ): SessionManifest {
         val segs = (0 until segmentCount).map { i ->
             SegmentRecord(
@@ -39,7 +39,7 @@ class HistoryArtifactMapperSegmentRowsTest {
                 intervalMinutes = 1,
                 resolution = "FHD",
                 loopCount = 1,
-                mode = mode,
+                captureTopology = mode,
             ),
             segments = segs,
             exportTier = ExportTier.TIER1_API29_PLUS,

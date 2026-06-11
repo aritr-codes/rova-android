@@ -10,7 +10,7 @@ class SessionManifestScheduleFieldsTest {
     private fun base() = SessionManifest(
         sessionId = "s1",
         startedAt = 1L,
-        config = SessionConfig(10, 1, "1080p", 3, "Portrait"),
+        config = SessionConfig(10, 1, "1080p", 3),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS
     )

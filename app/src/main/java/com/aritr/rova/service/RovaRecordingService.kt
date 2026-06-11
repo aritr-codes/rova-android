@@ -1270,12 +1270,17 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
                 // C18: allocate a fresh session and persist its initial manifest
                 // before any segment is recorded. Manifest IO on Dispatchers.IO.
+                // ADR-0029 PR-γ: read topology/policy axes from settings at session
+                // start, matching the pattern used for audioMode + vault intent.
+                val startSettings = com.aritr.rova.data.RovaSettings(this@RovaRecordingService)
                 val config = SessionConfig(
                     durationSeconds = nSeconds.toInt(),
                     intervalMinutes = mMinutes.toInt(),
                     resolution = resolutionStr,
                     loopCount = limitLoops,
-                    mode = currentMode,
+                    captureTopology = startSettings.captureTopology,
+                    orientationPolicy = startSettings.orientationPolicy,
+                    orientationLockRotation = startSettings.orientationLockRotation,
                 )
                 // ADR 0005 §"Concurrency Invariants" item 1 — startupMutex.
                 // The recovery scan holds this mutex for its full duration;
@@ -1300,7 +1305,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         // location. The recording still succeeds either way.
                         val settings = com.aritr.rova.data.RovaSettings(this@RovaRecordingService)
                         if (!safUsable && settings.saveLocationTreeUri != null &&
-                            config.mode != "PortraitLandscape") {
+                            config.captureTopology != "DualShot") {
                             settings.saveFolderUnavailable = true
                         }
                         sessionStore.createSession(
@@ -3767,7 +3772,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
             } else null
 
-            if (manifest != null && sessionDir != null && manifest.config.mode == "PortraitLandscape") {
+            if (manifest != null && sessionDir != null && manifest.config.captureTopology == "DualShot") {
                 val portraitSegments = manifest.segments
                     .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT }
                     .map { File(sessionDir, it.filename) }
@@ -4380,7 +4385,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             loopCount = limitLoops,
             resolution = resolutionStr,
             tier = tier,
-            mode = currentMode
+            captureTopology = currentMode
         )
 
     /**

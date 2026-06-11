@@ -551,7 +551,7 @@ class RovaApp : Application() {
         }
 
         val recoverSession: suspend (SessionManifest) -> RecoveryResult = { m ->
-            if (m.config.mode == "PortraitLandscape") {
+            if (m.config.captureTopology == "DualShot") {
                 // Per-side dispatch. A side with no per-side pointers is
                 // treated as a no-op via the per-side abandon's
                 // shared-failed skip, surfaced here as Abandoned.

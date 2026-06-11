@@ -468,7 +468,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // sessions fan out to per-side rows (0/1/2 cards per
                 // manifest); single-mode keeps the pre-T16 single-card
                 // shape byte-identically.
-                if (m.config.mode == "PortraitLandscape") {
+                if (m.config.captureTopology == "DualShot") {
                     HistoryArtifactMapper.resolveArtifactsPerSide(m) { uri ->
                         resolveMediaStoreUriToFile(resolver, uri)
                     }.map { perSide ->
