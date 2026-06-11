@@ -75,7 +75,7 @@ class StorageSignal(
                     loopCount = loopCount,
                     resolution = resolution,
                     tier = currentExportTier(),
-                    mode = mode
+                    captureTopology = mode
                 )
                 available < peak + FINALIZE_HEADROOM_BYTES
             } catch (_: Exception) {

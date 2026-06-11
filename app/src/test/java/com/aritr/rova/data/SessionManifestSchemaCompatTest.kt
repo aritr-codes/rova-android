@@ -216,7 +216,7 @@ class SessionManifestSchemaCompatTest {
         val manifest = SessionManifest(
             sessionId = "sid",
             startedAt = 1000L,
-            config = SessionConfig(10, 1, "FHD", 5, "PortraitLandscape"),
+            config = SessionConfig(10, 1, "FHD", 5, captureTopology = "DualShot"),
             segments = emptyList(),
             exportTier = ExportTier.TIER1_API29_PLUS,
             portraitPendingUri = "content://media/portrait",

@@ -40,7 +40,7 @@ internal object VaultMoverBuilder {
      * single-mode sessions are movable through this path.
      */
     fun isSingleModeMovable(manifest: SessionManifest): Boolean =
-        manifest.config.mode != "PortraitLandscape"
+        manifest.config.captureTopology != "DualShot"
 
     /**
      * Strict bridge for a state-setter manifest write (codex review).

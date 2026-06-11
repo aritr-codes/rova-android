@@ -202,7 +202,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             .filter { isVaultVisible(it.vaultState) }
 
         return manifests.flatMap { m ->
-            if (m.config.mode == "PortraitLandscape") {
+            if (m.config.captureTopology == "DualShot") {
                 buildList {
                     m.portraitVaultFilePath?.let { path ->
                         add(VaultRecording(File(path), m.sessionId, VideoSide.PORTRAIT))

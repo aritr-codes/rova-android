@@ -239,7 +239,7 @@ class RecoveryScanner(
         val orphansAboveManifest: List<DiskSegment> = candidateOrphans
             .filter { it.index > idxMaxManifest }
             .sortedBy { it.index }
-        val isPortraitLandscape = manifest.config.mode == "PortraitLandscape"
+        val isPortraitLandscape = manifest.config.captureTopology == "DualShot"
         val appendablePrefix: List<DiskSegment> = run {
             val prefix = mutableListOf<DiskSegment>()
             var expected = idxMaxManifest + 1

@@ -35,7 +35,7 @@ class TierArtifactValidatorTest {
 
     private fun manifest(
         tier: ExportTier,
-        mode: String = "Portrait",
+        captureTopology: String = "Single",
         pendingUri: String? = null,
         publicTargetPath: String? = null,
         portraitPendingUri: String? = null,
@@ -45,7 +45,7 @@ class TierArtifactValidatorTest {
     ) = SessionManifest(
         sessionId = "sid",
         startedAt = 0L,
-        config = SessionConfig(30, 5, "FHD", 4, mode = mode),
+        config = SessionConfig(30, 5, "FHD", 4, captureTopology = captureTopology),
         segments = emptyList(),
         exportTier = tier,
         exportState = ExportState.FINALIZED,
@@ -66,7 +66,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 single-mode valid pendingUri returns true`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "Portrait",
+            captureTopology = "Single",
             pendingUri = "content://media/external/video/media/42"
         )
         val ok = TierArtifactValidator.isArtifactValid(m) { uri ->
@@ -77,7 +77,7 @@ class TierArtifactValidatorTest {
 
     @Test
     fun `Tier 1 single-mode null pendingUri returns false without invoking probe`() {
-        val m = manifest(ExportTier.TIER1_API29_PLUS, mode = "Portrait", pendingUri = null)
+        val m = manifest(ExportTier.TIER1_API29_PLUS, captureTopology = "Single", pendingUri = null)
         var probed = false
         val ok = TierArtifactValidator.isArtifactValid(m) {
             probed = true
@@ -91,7 +91,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 single-mode probe returns false yields invalid`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "Portrait",
+            captureTopology = "Single",
             pendingUri = "content://media/external/video/media/999"
         )
         val ok = TierArtifactValidator.isArtifactValid(m) { false }
@@ -103,7 +103,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_t2.mp4")
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = f.absolutePath
         )
         val ok = TierArtifactValidator.isArtifactValid(m) { error("tier1 probe must not fire for Tier 2") }
@@ -114,7 +114,7 @@ class TierArtifactValidatorTest {
     fun `Tier 2 single-mode missing file returns false`() {
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = "/does/not/exist.mp4"
         )
         assertFalse(TierArtifactValidator.isArtifactValid(m) { error("never") })
@@ -125,7 +125,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_t2_empty.mp4", bytes = ByteArray(0))
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = f.absolutePath
         )
         assertFalse(TierArtifactValidator.isArtifactValid(m) { error("never") })
@@ -133,7 +133,7 @@ class TierArtifactValidatorTest {
 
     @Test
     fun `Tier 2 single-mode null path returns false`() {
-        val m = manifest(ExportTier.TIER2_API26_28, mode = "Portrait", publicTargetPath = null)
+        val m = manifest(ExportTier.TIER2_API26_28, captureTopology = "Single", publicTargetPath = null)
         assertFalse(TierArtifactValidator.isArtifactValid(m) { error("never") })
     }
 
@@ -142,7 +142,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_t3.mp4")
         val m = manifest(
             ExportTier.TIER3_API24_25,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = f.absolutePath
         )
         assertTrue(TierArtifactValidator.isArtifactValid(m) { error("never") })
@@ -156,7 +156,7 @@ class TierArtifactValidatorTest {
         // pendingUri is null. Post-T19 must consult portraitPendingUri.
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             pendingUri = null,
             publicTargetPath = null,
             portraitPendingUri = "content://media/external/video/media/100",
@@ -175,7 +175,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 P+L landscape-only valid yields valid`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = null,
             landscapePendingUri = "content://media/external/video/media/200"
         )
@@ -189,7 +189,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 P+L both sides valid yields valid`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = "content://media/external/video/media/100",
             landscapePendingUri = "content://media/external/video/media/200"
         )
@@ -201,7 +201,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 P+L both sides invalid yields invalid`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = "content://media/external/video/media/100",
             landscapePendingUri = "content://media/external/video/media/200"
         )
@@ -213,7 +213,7 @@ class TierArtifactValidatorTest {
     fun `Tier 1 P+L both sides null yields invalid`() {
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = null,
             landscapePendingUri = null
         )
@@ -225,7 +225,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_pl_p.mp4")
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             publicTargetPath = null,
             portraitPublicTargetPath = f.absolutePath,
             landscapePublicTargetPath = null
@@ -238,7 +238,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_pl_l.mp4")
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = null,
             landscapePublicTargetPath = f.absolutePath
         )
@@ -249,7 +249,7 @@ class TierArtifactValidatorTest {
     fun `Tier 2 P+L both sides missing yields invalid`() {
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/does/not/exist_p.mp4",
             landscapePublicTargetPath = "/does/not/exist_l.mp4"
         )
@@ -260,7 +260,7 @@ class TierArtifactValidatorTest {
     fun `Tier 2 P+L both sides null yields invalid`() {
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = null,
             landscapePublicTargetPath = null
         )
@@ -272,7 +272,7 @@ class TierArtifactValidatorTest {
         val f = newFile("rova_pl_t3.mp4")
         val m = manifest(
             ExportTier.TIER3_API24_25,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = f.absolutePath,
             landscapePublicTargetPath = null
         )
@@ -286,7 +286,7 @@ class TierArtifactValidatorTest {
         // the shared pointer is ignored. Pins the routing invariant.
         val m = manifest(
             ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             pendingUri = "content://media/external/video/media/SHOULD_NOT_BE_USED",
             portraitPendingUri = "content://media/external/video/media/100",
             landscapePendingUri = null
@@ -310,7 +310,7 @@ class TierArtifactValidatorTest {
         val sharedFile = newFile("rova_ls_shared.mp4")
         val m = manifest(
             ExportTier.TIER2_API26_28,
-            mode = "Landscape",
+            captureTopology = "Single",
             publicTargetPath = sharedFile.absolutePath,
             landscapePublicTargetPath = "/should/not/be/consulted.mp4"
         )

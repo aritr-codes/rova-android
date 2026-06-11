@@ -27,7 +27,7 @@ class SessionStoreVaultTest {
     }
 
     private fun newSession(s: SessionStore): String =
-        s.createSession(SessionConfig(10, 1, "1080p", 3, "Portrait")).sessionId
+        s.createSession(SessionConfig(10, 1, "1080p", 3)).sessionId
 
     @Test
     fun setVaultFinalized_setsStateAndPathClearsPublic() = runBlocking {

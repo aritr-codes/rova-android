@@ -16,7 +16,7 @@ class SafExporterTest {
     private val tempDir = File(System.getProperty("java.io.tmpdir"))
 
     private fun wrote(): ExportMutationResult = ExportMutationResult.Wrote(
-        SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.TIER2_API26_28)
     )
 
@@ -85,7 +85,7 @@ class SafExporterTest {
     @Test fun recover_validatedDoc_deletes_lingering_local_temp() = runBlocking {
         val temp = File(tempDir, "saf_recov_${System.nanoTime()}.private")
         temp.writeBytes(ByteArray(16))
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = "content://tree/doc/good", exportState = ExportState.COPYING)
         var deletedFile: File? = null
@@ -145,7 +145,7 @@ class SafExporterTest {
 
     @Test fun recover_validatedDoc_finalizes_without_recopy() = runBlocking {
         var copied = false
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = "content://tree/doc/good", exportState = ExportState.COPYING)
         val r = exporter(validateDoc = { true }, copyToDoc = { _, _ -> copied = true })
@@ -156,7 +156,7 @@ class SafExporterTest {
 
     @Test fun recover_remuxes_from_segments_when_no_valid_doc() = runBlocking {
         var muxed = false
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = null, exportState = ExportState.MUXING)
         val r = exporter(mux = { _, out -> muxed = true; out.writeBytes(ByteArray(8)) })
@@ -208,7 +208,7 @@ class SafExporterTest {
     @Test fun recover_remux_reclaims_stale_invalid_doc_after_revalidated_republish() = runBlocking {
         val stale = "content://tree/doc/STALE"
         val deleted = mutableListOf<String>()
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = stale, exportState = ExportState.COPYING)
         val r = exporter(
@@ -229,7 +229,7 @@ class SafExporterTest {
     @Test fun recover_remux_keeps_stale_doc_when_republish_fails_validation() = runBlocking {
         val stale = "content://tree/doc/STALE"
         val deleted = mutableListOf<String>()
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = stale, exportState = ExportState.COPYING)
         exporter(
@@ -245,7 +245,7 @@ class SafExporterTest {
     // Fix C — recovery re-mux that fails with permission revoked must escalate to PERMANENT
     // (SafFolderUnavailable) via classify, not blindly RetryableFailure.
     @Test fun recover_remuxFails_permissionRevoked_escalates_permanent() = runBlocking {
-        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1, "Portrait"),
+        val m = SessionManifest("s", 0, SessionConfig(1, 1, "x", 1),
             emptyList(), ExportTier.SAF_DESTINATION,
             safTargetDocUri = null, exportState = ExportState.MUXING)
         val r = exporter(

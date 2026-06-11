@@ -34,7 +34,7 @@ class HistoryArtifactMapperTest {
         tier: ExportTier,
         pendingUri: String? = null,
         publicTargetPath: String? = null,
-        mode: String = "Portrait",
+        captureTopology: String = "Single",
         portraitPendingUri: String? = null,
         portraitPublicTargetPath: String? = null,
         landscapePendingUri: String? = null,
@@ -44,7 +44,7 @@ class HistoryArtifactMapperTest {
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = 0L,
-        config = SessionConfig(30, 5, "FHD", 4, mode = mode),
+        config = SessionConfig(30, 5, "FHD", 4, captureTopology = captureTopology),
         segments = emptyList(),
         exportTier = tier,
         exportState = exportState,
@@ -330,7 +330,7 @@ class HistoryArtifactMapperTest {
     fun `Tier 2 P+L both sides emits 2 PORTRAIT plus LANDSCAPE artifacts`() {
         val m = manifest(
             "pl", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/Rova_pl_portrait.mp4",
             landscapePublicTargetPath = "/storage/Movies/Rova/Rova_pl_landscape.mp4"
         )
@@ -355,7 +355,7 @@ class HistoryArtifactMapperTest {
     fun `Tier 1 P+L both sides emits 2 artifacts with per-side share URIs`() {
         val m = manifest(
             "pl1", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = "content://media/external/video/media/100",
             portraitPublicTargetPath = "content://media/external/video/media/100",
             landscapePendingUri = "content://media/external/video/media/200",
@@ -394,7 +394,7 @@ class HistoryArtifactMapperTest {
     fun `Tier 2 P+L one-sided success emits only the side that succeeded`() {
         val m = manifest(
             "pl1s", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/Rova_pl1s_portrait.mp4",
             landscapePublicTargetPath = null
         )
@@ -413,7 +413,7 @@ class HistoryArtifactMapperTest {
     fun `Tier 2 P+L both sides null emits empty`() {
         val m = manifest(
             "pl0", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = null,
             landscapePublicTargetPath = null
         )
@@ -427,7 +427,7 @@ class HistoryArtifactMapperTest {
     fun `Tier 1 P+L with unresolvable URI drops that side`() {
         val m = manifest(
             "pl1u", ExportState.FINALIZED, ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = "content://media/external/video/media/300",
             portraitPublicTargetPath = "content://media/external/video/media/300",
             landscapePendingUri = "content://media/external/video/media/9999",
@@ -459,7 +459,7 @@ class HistoryArtifactMapperTest {
             "pl-stuck-at-muxing",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/pl_p.mp4",
             terminated = Terminated.COMPLETED
         )
@@ -478,7 +478,7 @@ class HistoryArtifactMapperTest {
             "pl1-stuck",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER1_API29_PLUS,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPendingUri = "content://media/external/video/media/777",
             portraitPublicTargetPath = "content://media/external/video/media/777",
             terminated = Terminated.COMPLETED
@@ -495,7 +495,7 @@ class HistoryArtifactMapperTest {
             "pl-l-only",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             landscapePublicTargetPath = "/storage/Movies/Rova/pl_l.mp4",
             terminated = Terminated.COMPLETED
         )
@@ -512,7 +512,7 @@ class HistoryArtifactMapperTest {
             "pl-mid",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/pl_mid.mp4",
             terminated = null
         )
@@ -520,7 +520,7 @@ class HistoryArtifactMapperTest {
             "pl-us",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/pl_us.mp4",
             terminated = Terminated.USER_STOPPED
         )
@@ -537,7 +537,7 @@ class HistoryArtifactMapperTest {
             "pl-empty",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = null,
             landscapePublicTargetPath = null,
             terminated = Terminated.COMPLETED
@@ -556,7 +556,7 @@ class HistoryArtifactMapperTest {
             "sm-stuck",
             exportState = ExportState.MUXING,
             tier = ExportTier.TIER2_API26_28,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = "/storage/Movies/Rova/sm.mp4",
             terminated = Terminated.COMPLETED
         )
@@ -576,7 +576,7 @@ class HistoryArtifactMapperTest {
             "pl-happy",
             exportState = ExportState.FINALIZED,
             tier = ExportTier.TIER2_API26_28,
-            mode = "PortraitLandscape",
+            captureTopology = "DualShot",
             portraitPublicTargetPath = "/storage/Movies/Rova/pl_h.mp4"
         )
         val finalized = HistoryArtifactMapper.finalizedManifests(listOf(m))
@@ -593,7 +593,7 @@ class HistoryArtifactMapperTest {
         // resolveArtifactsPerSide; else call resolveArtifactFile."
         val portraitOnly = manifest(
             "p", ExportState.FINALIZED, ExportTier.TIER2_API26_28,
-            mode = "Portrait",
+            captureTopology = "Single",
             publicTargetPath = "/storage/Movies/Rova/Rova_p.mp4",
             // Even if a legacy/buggy build wrote per-side fields on a
             // single-mode session, the mapper does not fan them out.

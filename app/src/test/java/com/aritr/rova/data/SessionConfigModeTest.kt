@@ -2,69 +2,86 @@ package com.aritr.rova.data
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/**
- * Phase 6 — verifies the [SessionConfig.mode] field default, serialization,
- * and round-trip behavior. See spec §2 + §4.
- */
 class SessionConfigModeTest {
 
+    private fun base(topology: String = "Single") = SessionConfig(
+        durationSeconds = 5, intervalMinutes = 0, resolution = "FHD", loopCount = 2,
+        captureTopology = topology,
+    )
+
     @Test
-    fun defaultMode_isPortrait() {
-        val config = SessionConfig(
-            durationSeconds = 10,
-            intervalMinutes = 1,
-            resolution = "HD",
-            loopCount = 10
-        )
-        assertEquals("Portrait", config.mode)
+    fun defaults_areSingle_followDevice_noLock_noLegacy() {
+        val c = SessionConfig(durationSeconds = 5, intervalMinutes = 0, resolution = "FHD", loopCount = 2)
+        assertEquals("Single", c.captureTopology)
+        assertEquals("FollowDevice", c.orientationPolicy)
+        assertEquals(-1, c.orientationLockRotation)
+        assertEquals(null, c.legacyMode)
     }
 
     @Test
-    fun toJson_includesMode() {
-        val config = SessionConfig(
-            durationSeconds = 10,
-            intervalMinutes = 1,
-            resolution = "HD",
-            loopCount = 10,
-            mode = "Landscape"
-        )
-        assertEquals("Landscape", config.toJson().getString("mode"))
+    fun toJson_writesTopologyAndPolicy_omitsLockAndLegacyWhenUnset() {
+        val json = base().toJson()
+        assertEquals("Single", json.getString("captureTopology"))
+        assertEquals("FollowDevice", json.getString("orientationPolicy"))
+        assertFalse(json.has("orientationLockRotation"))
+        assertFalse(json.has("mode")) // new sessions never write the legacy key
     }
 
     @Test
-    fun fromJson_roundTripsMode() {
-        for (mode in listOf("Portrait", "Landscape")) {
-            val json = JSONObject().apply {
-                put("durationSeconds", 10)
-                put("intervalMinutes", 1)
-                put("resolution", "HD")
-                put("loopCount", 10)
-                put("mode", mode)
+    fun lockedConfig_roundTrips() {
+        val c = base().copy(orientationPolicy = "Lock", orientationLockRotation = 1)
+        val back = SessionConfig.fromJson(c.toJson())
+        assertEquals("Lock", back.orientationPolicy)
+        assertEquals(1, back.orientationLockRotation)
+    }
+
+    @Test
+    fun dualShot_roundTrips() {
+        val back = SessionConfig.fromJson(base("DualShot").toJson())
+        assertEquals("DualShot", back.captureTopology)
+    }
+
+    @Test
+    fun legacyManifest_portraitLandscape_derivesDualShot_andPreservesLegacyMode() {
+        // A schema<=10 manifest: has "mode", no "captureTopology" (ADR-0029 S6 read-compat).
+        val legacy = JSONObject().apply {
+            put("durationSeconds", 5); put("intervalMinutes", 0)
+            put("resolution", "FHD"); put("loopCount", 2)
+            put("mode", "PortraitLandscape")
+        }
+        val c = SessionConfig.fromJson(legacy)
+        assertEquals("DualShot", c.captureTopology)
+        assertEquals("PortraitLandscape", c.legacyMode)
+        // Round-trip must NOT lose the historical label (recovery rewrites manifests).
+        assertEquals("PortraitLandscape", c.toJson().getString("mode"))
+    }
+
+    @Test
+    fun legacyManifest_portraitAndLandscape_deriveSingle() {
+        for (legacyMode in listOf("Portrait", "Landscape")) {
+            val legacy = JSONObject().apply {
+                put("durationSeconds", 5); put("intervalMinutes", 0)
+                put("resolution", "FHD"); put("loopCount", 2)
+                put("mode", legacyMode)
             }
-            assertEquals(mode, SessionConfig.fromJson(json).mode)
+            val c = SessionConfig.fromJson(legacy)
+            assertEquals("Single", c.captureTopology)
+            assertEquals(legacyMode, c.legacyMode)
         }
     }
 
     @Test
-    fun `SessionConfig mode PortraitLandscape round-trips`() {
-        val cfg = SessionConfig(durationSeconds = 10, intervalMinutes = 1, resolution = "FHD", loopCount = 5, mode = "PortraitLandscape")
-        val json = cfg.toJson()
-        val back = SessionConfig.fromJson(json)
-        assertEquals("PortraitLandscape", back.mode)
+    fun garbageTopology_coercesToSingle() {
+        val json = base().toJson().put("captureTopology", "P + L")
+        assertEquals("Single", SessionConfig.fromJson(json).captureTopology)
     }
 
     @Test
-    fun `SessionConfig mode display string P + L coerces to Portrait`() {
-        val json = JSONObject().apply {
-            put("durationSeconds", 10)
-            put("intervalMinutes", 1)
-            put("resolution", "FHD")
-            put("loopCount", 5)
-            put("mode", "P + L")
-        }
-        val cfg = SessionConfig.fromJson(json)
-        assertEquals("Portrait", cfg.mode)
+    fun garbagePolicy_coercesToFollowDevice() {
+        val json = base().toJson().put("orientationPolicy", "Auto")
+        assertEquals("FollowDevice", SessionConfig.fromJson(json).orientationPolicy)
     }
 }
