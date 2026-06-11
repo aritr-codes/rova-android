@@ -127,53 +127,100 @@ class RovaSettingsTest {
         assertEquals(25, s.autoDeleteKeepLatest)
     }
 
-    // ─── Mode coercion ─────────────────────────────────────────────
+    // ─── CaptureTopology coercion ──────────────────────────────────
 
-    @Test fun `mode default is Portrait`() {
-        assertEquals("Portrait", settings().mode)
+    @Test fun `captureTopology default is Single`() {
+        assertEquals("Single", settings().captureTopology)
     }
 
-    @Test fun `mode persists PortraitLandscape`() {
-        val s = settings(); s.mode = "PortraitLandscape"
-        assertEquals("PortraitLandscape", s.mode)
+    @Test fun `captureTopology persists DualShot`() {
+        val s = settings(); s.captureTopology = "DualShot"
+        assertEquals("DualShot", s.captureTopology)
     }
 
-    @Test fun `mode coerces unknown value to Portrait`() {
-        val s = settingsWithRuntime(runtime = hashMapOf<String, Any?>("mode" to "P + L"))
-        assertEquals("Portrait", s.mode)
+    @Test fun `captureTopology coerces unknown stored value to Single`() {
+        val s = settingsWithRuntime(runtime = hashMapOf<String, Any?>("capture_topology" to "P + L"))
+        assertEquals("Single", s.captureTopology)
     }
 
-    // ─── Mode-split + legacy-key cleanup (Phase 4 fresh-install fix) ─
+    @Test fun `orientationPolicy default is FollowDevice and persists Lock`() {
+        val s = settings()
+        assertEquals("FollowDevice", s.orientationPolicy)
+        s.orientationPolicy = "Lock"; s.orientationLockRotation = 1
+        assertEquals("Lock", s.orientationPolicy)
+        assertEquals(1, s.orientationLockRotation)
+    }
 
-    @Test fun `mode setter writes to runtime prefs not main prefs`() {
+    // ─── Legacy-mode migration (ADR-0029 §6) ───────────────────────
+
+    @Test fun `legacy runtime Portrait migrates to Single plus PortraitLock once`() {
+        val runtime = hashMapOf<String, Any?>("mode" to "Portrait")
+        val s = settingsWithRuntime(runtime = runtime)
+        assertEquals("Single", s.captureTopology)
+        assertEquals("Lock", s.orientationPolicy)
+        assertEquals(0, s.orientationLockRotation)
+        assertEquals("legacy key left in place one release", "Portrait", runtime["mode"])
+    }
+
+    @Test fun `legacy runtime Landscape migrates to Single plus LandscapeLock`() {
+        val runtime = hashMapOf<String, Any?>("mode" to "Landscape")
+        val s = settingsWithRuntime(runtime = runtime)
+        assertEquals("Single", s.captureTopology)
+        assertEquals("Lock", s.orientationPolicy)
+        assertEquals(1, s.orientationLockRotation)
+    }
+
+    @Test fun `legacy runtime PortraitLandscape migrates to DualShot FollowDevice`() {
+        val runtime = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
+        val s = settingsWithRuntime(runtime = runtime)
+        assertEquals("DualShot", s.captureTopology)
+        assertEquals("FollowDevice", s.orientationPolicy)
+    }
+
+    @Test fun `migration does not rerun once capture_topology exists`() {
+        val runtime = hashMapOf<String, Any?>("mode" to "Portrait")
+        val s1 = settingsWithRuntime(runtime = runtime)
+        s1.captureTopology // trigger migration
+        s1.captureTopology = "DualShot"
+        val s2 = settingsWithRuntime(runtime = runtime)
+        assertEquals("user choice survives reconstruction", "DualShot", s2.captureTopology)
+    }
+
+    // ─── captureTopology setter writes to runtime prefs not main prefs ─
+
+    @Test fun `captureTopology setter writes to runtime prefs not main prefs`() {
         val runtime = HashMap<String, Any?>()
         val main = HashMap<String, Any?>()
         val s = settingsWithRuntime(main = main, runtime = runtime)
-        s.mode = "Landscape"
-        assertEquals("Landscape", runtime["mode"])
-        assertFalse("main prefs must not store mode after the split", main.containsKey("mode"))
+        s.captureTopology = "DualShot"
+        assertEquals("DualShot", runtime["capture_topology"])
+        assertFalse("main prefs must not store capture_topology", main.containsKey("capture_topology"))
     }
 
-    @Test fun `mode read uses runtime prefs only`() {
-        val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape") // legacy key (will be deleted)
-        val runtime = hashMapOf<String, Any?>("mode" to "Landscape")
-        val s = settingsWithRuntime(main = main, runtime = runtime)
-        assertEquals("Landscape", s.mode)
-    }
+    // ─── Main-prefs legacy-key cleanup (backup-restore defense) ─────
+    //
+    // Pre-mode-split installs stored `mode` in main prefs (rova_settings.xml),
+    // which IS backed up by Android Auto Backup. After a reinstall the restored
+    // backup brought back `mode=PortraitLandscape` and the app opened in
+    // DualShot — the bug this whole patch chain exists to kill. The init block
+    // deletes the legacy key from main prefs without copying it to runtime;
+    // runtime is backup-excluded so reinstall finds it empty and the getters
+    // fall through to documented defaults (Single / FollowDevice / -1).
+    //
+    // We DELIBERATELY do not migrate the legacy value here. Auto Backup
+    // snapshots run on a schedule (~24 h, idle + charging) so a user who
+    // installs this patch, sets a topology, and then reinstalls before the next
+    // snapshot would have their PRE-PATCH backup restored with a stale
+    // `mode=PortraitLandscape` in main prefs and no marker. Migrating would
+    // faithfully preserve that stale P+L value and defeat the fix.
 
     @Test fun `init deletes legacy mode key from main prefs and does NOT copy to runtime`() {
-        // Models the bug we're killing: a pre-split install (or its backup
-        // restore) has `mode=PortraitLandscape` in main prefs. The legacy
-        // value MUST NOT migrate forward, because Auto Backup snapshots run
-        // ~24h on a schedule and the restored main prefs is typically a
-        // pre-patch snapshot. Migrating would faithfully re-introduce the
-        // stale P+L preference on every reinstall — defeating the fix.
         val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
         val runtime = HashMap<String, Any?>()
         val s = settingsWithRuntime(main = main, runtime = runtime)
         assertFalse("legacy mode key must be removed from main prefs", main.containsKey("mode"))
         assertFalse("legacy value must NOT migrate into runtime prefs", runtime.containsKey("mode"))
-        assertEquals("mode must default to Portrait after cleanup", "Portrait", s.mode)
+        assertEquals("topology must default to Single after cleanup", "Single", s.captureTopology)
     }
 
     @Test fun `init is idempotent when no legacy mode key is present`() {
@@ -184,27 +231,26 @@ class RovaSettingsTest {
         assertFalse(runtime.containsKey("mode"))
     }
 
-    @Test fun `reinstall-after-backup defaults to Portrait`() {
+    @Test fun `reinstall-after-backup defaults to Single`() {
         // Reinstall path: Auto Backup restored main prefs (may still have a
         // stale `mode=PortraitLandscape` from a pre-patch snapshot). Runtime
         // prefs is empty because it's backup-excluded. Init must wipe the
-        // legacy key and leave runtime empty so the getter defaults Portrait.
+        // legacy key from main; runtime stays clean so the getter defaults Single.
         val main = hashMapOf<String, Any?>("mode" to "PortraitLandscape")
         val runtime = HashMap<String, Any?>()
         val s = settingsWithRuntime(main = main, runtime = runtime)
-        assertEquals("Portrait", s.mode)
+        assertEquals("Single", s.captureTopology)
         assertFalse(main.containsKey("mode"))
-        assertFalse(runtime.containsKey("mode"))
+        assertFalse("runtime must not gain a legacy mode key", runtime.containsKey("mode"))
     }
 
-    @Test fun `second construction does not clobber a user-set runtime mode`() {
+    @Test fun `second construction does not clobber a user-set topology`() {
         val main = HashMap<String, Any?>()
         val runtime = HashMap<String, Any?>()
         val s1 = settingsWithRuntime(main = main, runtime = runtime)
-        s1.mode = "Landscape"
+        s1.captureTopology = "DualShot"
         val s2 = settingsWithRuntime(main = main, runtime = runtime)
-        assertEquals("Landscape", s2.mode)
-        assertEquals("Landscape", runtime["mode"])
+        assertEquals("DualShot", s2.captureTopology)
     }
 
     // ─── Round-trip: 3 UI-pending keys ────────────────────────────
