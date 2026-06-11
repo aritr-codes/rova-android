@@ -43,7 +43,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -147,6 +146,11 @@ fun SettingsSheet(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
+    orientationPolicy: String,
+    orientationLockRotation: Int,
+    orientationEnabled: Boolean,
+    currentDeviceRotation: Int?,
+    onOrientationPick: (String, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -176,6 +180,11 @@ fun SettingsSheet(
             onModePick = onModePick,
             snoozedCount = snoozedCount,
             onResetSnoozes = onResetSnoozes,
+            orientationPolicy = orientationPolicy,
+            orientationLockRotation = orientationLockRotation,
+            orientationEnabled = orientationEnabled,
+            currentDeviceRotation = currentDeviceRotation,
+            onOrientationPick = onOrientationPick,
             onDismiss = onDismiss,
         )
     } else {
@@ -205,6 +214,11 @@ fun SettingsSheet(
             onModePick = onModePick,
             snoozedCount = snoozedCount,
             onResetSnoozes = onResetSnoozes,
+            orientationPolicy = orientationPolicy,
+            orientationLockRotation = orientationLockRotation,
+            orientationEnabled = orientationEnabled,
+            currentDeviceRotation = currentDeviceRotation,
+            onOrientationPick = onOrientationPick,
             onDismiss = onDismiss,
         )
     }
@@ -237,6 +251,11 @@ private fun SettingsBottomSheet(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
+    orientationPolicy: String,
+    orientationLockRotation: Int,
+    orientationEnabled: Boolean,
+    currentDeviceRotation: Int?,
+    onOrientationPick: (String, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AnimatedVisibility(
@@ -323,6 +342,11 @@ private fun SettingsBottomSheet(
                     onModePick = onModePick,
                     snoozedCount = snoozedCount,
                     onResetSnoozes = onResetSnoozes,
+                    orientationPolicy = orientationPolicy,
+                    orientationLockRotation = orientationLockRotation,
+                    orientationEnabled = orientationEnabled,
+                    currentDeviceRotation = currentDeviceRotation,
+                    onOrientationPick = onOrientationPick,
                     showTitle = true,
                     modifier = Modifier
                         .weight(1f)
@@ -374,6 +398,11 @@ private fun SettingsSidePanel(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
+    orientationPolicy: String,
+    orientationLockRotation: Int,
+    orientationEnabled: Boolean,
+    currentDeviceRotation: Int?,
+    onOrientationPick: (String, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val trailing = clusterEdge(sense) == NavEdge.Trailing
@@ -448,6 +477,11 @@ private fun SettingsSidePanel(
                     onModePick = onModePick,
                     snoozedCount = snoozedCount,
                     onResetSnoozes = onResetSnoozes,
+                    orientationPolicy = orientationPolicy,
+                    orientationLockRotation = orientationLockRotation,
+                    orientationEnabled = orientationEnabled,
+                    currentDeviceRotation = currentDeviceRotation,
+                    onOrientationPick = onOrientationPick,
                     showTitle = true,
                     modifier = Modifier
                         .weight(1f)
@@ -580,6 +614,11 @@ private fun SettingsContent(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
+    orientationPolicy: String = "FollowDevice",
+    orientationLockRotation: Int = 0,
+    orientationEnabled: Boolean = true,
+    currentDeviceRotation: Int? = null,
+    onOrientationPick: (String, Int) -> Unit = { _, _ -> },
     showTitle: Boolean = false,
     showSummary: Boolean = true,
     modifier: Modifier = Modifier,
@@ -599,7 +638,7 @@ private fun SettingsContent(
             )
             Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
         }
-        ModeTabs(currentMode = currentMode, enabled = editable, onPick = onModePick)
+        ModeTabs(currentTopology = currentMode, enabled = editable, onPick = onModePick)
         Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
 
         PresetGroups(
@@ -657,6 +696,16 @@ private fun SettingsContent(
         )
         SheetRowDivider()
         QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
+        SheetRowDivider()
+        SheetSectionLabel(stringResource(R.string.settings_sheet_orientation))
+        Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
+        OrientationRow(
+            policy = orientationPolicy,
+            lockRotation = orientationLockRotation,
+            enabled = orientationEnabled,
+            currentDeviceRotation = currentDeviceRotation,
+            onPick = onOrientationPick,
+        )
 
         if (onResetSnoozes != null) {
             SheetRowDivider()
@@ -719,52 +768,136 @@ private fun SheetRowDivider() {
     )
 }
 
-private enum class SheetModeTab(@StringRes val labelRes: Int, val value: String) {
-    Portrait(R.string.settings_sheet_mode_portrait, "Portrait"),
-    Landscape(R.string.settings_sheet_mode_landscape, "Landscape"),
-    PortraitLandscape(R.string.settings_sheet_mode_pl, "PortraitLandscape"),
-}
-
 @Composable
-private fun ModeTabs(currentMode: String, enabled: Boolean, onPick: (String) -> Unit) {
+private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String) -> Unit) {
     // Active tab paints the liquid-glass accent gradient (royal-violet in the
     // Eclipse theme), matching the record-home ModeCycleChip. White-on-gradient
     // is the documented record-chrome contrast exception (ADR-0020).
     val palette = LocalGlassEnvironment.current.palette
     val activeBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(SettingsSheetTokens.modeTabsRadius))
+                .background(SettingsSheetTokens.modeTabsTrackFill)
+                .padding(SettingsSheetTokens.modeTabsPadding),
+            horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.modeTabsGap),
+        ) {
+            CaptureMode.visible().forEach { mode ->
+                val isActive = CaptureMode.forTopology(currentTopology) == mode
+                val tabShape = RoundedCornerShape(SettingsSheetTokens.modeTabRadius)
+                val tabModifier = Modifier
+                    .weight(1f)
+                    .clip(tabShape)
+                    .let {
+                        if (isActive) {
+                            it.shadow(1.dp, tabShape).background(activeBrush)
+                        } else {
+                            it
+                        }
+                    }
+                    .let { if (enabled && !isActive) it.focusHighlight(tabShape).clickable { onPick(mode.topology) } else it }
+                    .padding(
+                        horizontal = SettingsSheetTokens.modeTabPaddingH,
+                        vertical = SettingsSheetTokens.modeTabPaddingV,
+                    )
+                val textColor = when {
+                    isActive -> Color.White
+                    !enabled -> SettingsSheetTokens.modeTabDisabledText
+                    else -> SettingsSheetTokens.modeTabIdleText
+                }
+                Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
+                    Text(stringResource(mode.labelRes), style = RovaTokens.sheetModeTab, color = textColor)
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(CaptureMode.forTopology(currentTopology).captionRes),
+            style = RovaTokens.sheetRowLabel,
+            color = SettingsSheetTokens.rowLabelText,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * Spec 2026-06-11 §4 — quiet by design; orientation is a setting, not a
+ * capture strategy. Inert under DualShot (ADR-0029 §4 — DualShot owns its
+ * rotation). Active fill is a neutral alpha rather than the accent gradient,
+ * so it reads as a preference control, not a mode selector.
+ */
+@Composable
+private fun OrientationRow(
+    policy: String,
+    lockRotation: Int,
+    enabled: Boolean,
+    currentDeviceRotation: Int?,
+    onPick: (String, Int) -> Unit,
+) {
+    val activeFill = Color.White.copy(alpha = 0.12f)
+    val options = listOf(
+        Triple(
+            stringResource(R.string.orientation_follow_device),
+            "FollowDevice",
+            -1,
+        ),
+        Triple(
+            stringResource(R.string.orientation_lock_portrait),
+            "Lock",
+            0,
+        ),
+        Triple(
+            stringResource(R.string.orientation_lock_landscape),
+            "Lock",
+            lockRotationForLandscapePick(currentDeviceRotation),
+        ),
+    )
+    val trackShape = RoundedCornerShape(SettingsSheetTokens.modeTabsRadius)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(SettingsSheetTokens.modeTabsRadius))
+            .clip(trackShape)
             .background(SettingsSheetTokens.modeTabsTrackFill)
-            .padding(SettingsSheetTokens.modeTabsPadding),
+            .padding(SettingsSheetTokens.modeTabsPadding)
+            .then(if (!enabled) Modifier.alpha(0.4f) else Modifier),
         horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.modeTabsGap),
     ) {
-        SheetModeTab.entries.forEach { tab ->
-            val isActive = currentMode == tab.value
+        options.forEach { (label, optPolicy, optLock) ->
+            val isActive = when {
+                optPolicy == "FollowDevice" -> policy == "FollowDevice"
+                optLock in listOf(0, 2) -> policy == "Lock" && lockRotation in listOf(0, 2)
+                else -> policy == "Lock" && lockRotation in listOf(1, 3)
+            }
             val tabShape = RoundedCornerShape(SettingsSheetTokens.modeTabRadius)
             val tabModifier = Modifier
                 .weight(1f)
                 .clip(tabShape)
+                .let { if (isActive) it.background(activeFill) else it }
                 .let {
-                    if (isActive) {
-                        it.shadow(1.dp, tabShape).background(activeBrush)
-                    } else {
-                        it
-                    }
+                    if (enabled && !isActive) {
+                        it.focusHighlight(tabShape).clickable(
+                            onClickLabel = label,
+                        ) { onPick(optPolicy, optLock) }
+                    } else it
                 }
-                .let { if (enabled && !isActive) it.focusHighlight(tabShape).clickable { onPick(tab.value) } else it }
                 .padding(
                     horizontal = SettingsSheetTokens.modeTabPaddingH,
                     vertical = SettingsSheetTokens.modeTabPaddingV,
                 )
+                .semantics {
+                    contentDescription = label
+                    selected = isActive
+                    if (!enabled) disabled()
+                }
             val textColor = when {
                 isActive -> Color.White
                 !enabled -> SettingsSheetTokens.modeTabDisabledText
                 else -> SettingsSheetTokens.modeTabIdleText
             }
             Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
-                Text(stringResource(tab.labelRes), style = RovaTokens.sheetModeTab, color = textColor)
+                Text(label, style = RovaTokens.sheetModeTab, color = textColor)
             }
         }
     }

@@ -179,7 +179,6 @@
     <string name="record_cell_quality">Calidad</string>
     <string name="record_cell_mode">MODO</string>
     <string name="record_edit_session_settings_cd">Editar ajustes de la grabación</string>
-    <string name="record_mode_pl_label">V + H</string>
     <!-- Capture modes (spec 2026-06-11 §3, ADR-0029 PR-γ). DualShot/DualSight are brand names, both locales. -->
     <string name="capture_mode_auto">Auto</string>
     <string name="capture_mode_dualshot" translatable="false">DualShot</string>
@@ -473,7 +472,6 @@
     <string name="settings_sheet_section_recording_mode">Modo de grabación</string>
     <string name="settings_sheet_section_presets">Preajustes</string>
     <string name="settings_sheet_section_settings">Ajustes</string>
-    <string name="settings_sheet_mode_pl">V + H</string>
     <string name="settings_sheet_clip_duration">Duración del clip</string>
     <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Espera entre clips</string>

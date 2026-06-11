@@ -297,7 +297,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * Slice B — Mode tap-cycle. Reads the current mode + session-lock
-     * state and writes the next mode via [setMode]. No-op during an
+     * state and writes the next mode via [setTopology]. No-op during an
      * active session (matches the existing sheet behaviour: Mode row
      * hidden / non-interactive when periodic active or merging).
      *
