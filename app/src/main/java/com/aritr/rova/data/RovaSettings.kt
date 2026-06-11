@@ -64,11 +64,49 @@ class RovaSettings(context: Context) {
         get() = prefs.getString("resolution", QualityPresets.DEFAULT) ?: QualityPresets.DEFAULT
         set(value) = prefs.edit { putString("resolution", value) }
 
-    /** Coerces unknown persisted values to the default — defends against stale/version-mismatched reads. */
-    var mode: String
-        get() = (runtimePrefs.getString("mode", "Portrait") ?: "Portrait")
-            .takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" } ?: "Portrait"
-        set(value) = runtimePrefs.edit { putString("mode", value) }
+    /**
+     * ADR-0029 PR-γ — capture-topology axis ("Single"/"DualShot"/"FrontBack").
+     * runtimePrefs (backup-excluded) for the same reason legacy `mode` was:
+     * reinstalls must default, not resurrect a backed-up special mode.
+     * The legacy "mode" key is migrated once and then left in place, read-only,
+     * for one release (ADR-0029 §6).
+     */
+    var captureTopology: String
+        get() {
+            migrateLegacyModeIfNeeded()
+            return (runtimePrefs.getString("capture_topology", "Single") ?: "Single")
+                .takeIf { CaptureTopology.isValidPersisted(it) } ?: "Single"
+        }
+        set(value) = runtimePrefs.edit { putString("capture_topology", value) }
+
+    /** ADR-0029 PR-γ — orientation-policy axis: "FollowDevice" (default) or "Lock". */
+    var orientationPolicy: String
+        get() {
+            migrateLegacyModeIfNeeded()
+            return (runtimePrefs.getString("orientation_policy", "FollowDevice") ?: "FollowDevice")
+                .takeIf { it == "FollowDevice" || it == "Lock" } ?: "FollowDevice"
+        }
+        set(value) = runtimePrefs.edit { putString("orientation_policy", value) }
+
+    /** Surface.ROTATION_* captured at lock time (Ratified-D); -1 when not locked. */
+    var orientationLockRotation: Int
+        get() {
+            migrateLegacyModeIfNeeded()
+            return runtimePrefs.getInt("orientation_lock_rotation", -1)
+        }
+        set(value) = runtimePrefs.edit { putInt("orientation_lock_rotation", value) }
+
+    private fun migrateLegacyModeIfNeeded() {
+        if (runtimePrefs.contains("capture_topology")) return
+        val legacy = runtimePrefs.getString("mode", null)
+        val m = ModeMigration.migrate(legacy)
+        runtimePrefs.edit {
+            putString("capture_topology", m.topology)
+            putString("orientation_policy", m.policy)
+            if (m.lockRotation in 0..3) putInt("orientation_lock_rotation", m.lockRotation)
+            // legacy "mode" key deliberately left in place for one release (ADR-0029 §6)
+        }
+    }
 
     /**
      * Phase 4.1c — persistent "Don't show again" set, keyed by [com.aritr.rova.ui.warnings.WarningId.name].
