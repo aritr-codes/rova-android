@@ -653,22 +653,22 @@ fun RecordScreen(
         landscapeSense(rot)
     }
     val clusterAnchor: NavEdge? = currentSense?.let { clusterEdge(it) }
-                // §B′ polish P1 (2026-06-11, owner: "correctness fix, not visual tweak") —
-                // in landscape the system bars live on the SIDES and the punch-hole on a
-                // side edge, so single-bar insets (statusBars/navigationBars) under-pad and
-                // chrome collides with system UI. Landscape chrome therefore pads the full
-                // safeDrawing union (status + nav bars + display cutout). Portrait keeps
-                // the original per-bar insets — byte-identical.
-                val chromeTopInsets = if (currentSense != null) WindowInsets.safeDrawing else WindowInsets.statusBars
-                // §B′ polish P2 — generic transient-message rule: anything mounted in the
-                // top transient slots (WARNING_CENTER, RECOVERY_CHIP, ACTIVE_HUD) clears
-                // the device-anchored cluster band on its edge. New banner types inherit
-                // this automatically by mounting in the same slots.
-                val transientClusterClearance = when (clusterAnchor) {
-                    NavEdge.Leading -> Modifier.padding(start = RecordChromeTokens.clusterBandClearance)
-                    NavEdge.Trailing -> Modifier.padding(end = RecordChromeTokens.clusterBandClearance)
-                    null -> Modifier
-                }
+    // §B′ polish P1 (2026-06-11, owner: "correctness fix, not visual tweak") —
+    // in landscape the system bars live on the SIDES and the punch-hole on a
+    // side edge, so single-bar insets (statusBars/navigationBars) under-pad and
+    // chrome collides with system UI. Landscape chrome therefore pads the full
+    // safeDrawing union (status + nav bars + display cutout). Portrait keeps
+    // the original per-bar insets — byte-identical.
+    val chromeTopInsets = if (currentSense != null) WindowInsets.safeDrawing else WindowInsets.statusBars
+    // §B′ polish P2 — generic transient-message rule: anything mounted in the
+    // top transient slots (WARNING_CENTER, RECOVERY_CHIP, ACTIVE_HUD) clears
+    // the device-anchored cluster band on its edge. New banner types inherit
+    // this automatically by mounting in the same slots.
+    val transientClusterClearance = when (clusterAnchor) {
+        NavEdge.Leading -> Modifier.padding(start = RecordChromeTokens.clusterBandClearance)
+        NavEdge.Trailing -> Modifier.padding(end = RecordChromeTokens.clusterBandClearance)
+        null -> Modifier
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
