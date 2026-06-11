@@ -180,6 +180,12 @@ object RecordChromeTokens {
     val settingsCellPaddingH = 3.dp
     /** `.settings-wrap` vertical gap. */
     val settingsWrapGap = 7.dp
+    /**
+     * Rotate-spec §11 D1 — vertical gap between compact landscape config cells.
+     * Tighter than the previous hardcoded 10.dp so the column reads as one slim
+     * chip stack, not a tower (portrait uses weights + dividers instead).
+     */
+    val landscapeCellGap = 6.dp
     /** `.settings-wrap` bottom offset. */
     val settingsCardBottomInset = 110.dp
     /** `.swipe-bar` dimensions. */

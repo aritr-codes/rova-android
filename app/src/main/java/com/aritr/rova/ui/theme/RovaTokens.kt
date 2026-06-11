@@ -70,6 +70,28 @@ object RovaTokens {
         letterSpacing = 0.8.sp
     )
 
+    /**
+     * Landscape compact config-cell pair (rotate-spec §11 D1, 2026-06-11). The
+     * landscape config column renders the SAME 5 cells at reduced density so the
+     * vertical strip doesn't visually dominate the nav rail (the Phase-A NO-GO).
+     * ~0.875 × the portrait cellValue/cellKey scale, per the approved
+     * landscape_record_mockup.html "Slim" weight.
+     */
+    val cellValueCompact: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.5.sp,
+        fontFeatureSettings = "tnum"
+    )
+
+    /** Compact sibling of [cellKey] — see [cellValueCompact]. */
+    val cellKeyCompact: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 7.sp,
+        letterSpacing = 0.7.sp
+    )
+
     // Phase 1 — mockup-exact record-chrome type scale (mockups/new_uiux/01-record-home.html).
     // 1 px → 1 sp. ALL-CAPS labels are .uppercase()'d at the call site.
 

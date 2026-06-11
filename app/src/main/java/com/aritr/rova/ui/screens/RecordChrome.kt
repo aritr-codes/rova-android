@@ -376,17 +376,19 @@ fun RecordSettingsCard(
                 // LANDSCAPE — the SAME pill rotated to a vertical column on the cluster
                 // edge: identical 5 cells in rotation-mapped order, same SettingsCell /
                 // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
+                // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
+                // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
                 val cells = listOf<@Composable () -> Unit>(
-                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false) },
-                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false) },
-                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false) },
-                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false) },
-                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed) },
+                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true) },
+                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true) },
                 )
                 Column(
                     modifier = interaction,
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.landscapeCellGap),
                 ) {
                     railOrder(cells, sense).forEach { it() }
                 }
@@ -468,6 +470,7 @@ private fun ModeCycleChip(
     onCycleMode: () -> Unit,
     onLongPress: () -> Unit,
     enabled: Boolean,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // PR2 §d (mockup-exact, owner-signed 2026-06-08): the selected-mode chip is
@@ -506,14 +509,14 @@ private fun ModeCycleChip(
         ) {
             Text(
                 mode,
-                style = RovaTokens.cellValue,
+                style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
                 color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 stringResource(R.string.record_cell_mode),
-                style = RovaTokens.cellKey,
+                style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
                 color = Color.White.copy(alpha = 0.80f),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
@@ -529,18 +532,18 @@ private fun ModeCycleChip(
 }
 
 @Composable
-private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean) {
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false) {
     Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             value,
-            style = RovaTokens.cellValue,
+            style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
             color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
         Text(
             key.uppercase(),
-            style = RovaTokens.cellKey,
+            style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
             color = RecordChromeTokens.cellKeyText,
             textAlign = TextAlign.Center,
             maxLines = 1,
