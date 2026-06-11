@@ -111,11 +111,10 @@ import com.aritr.rova.ui.theme.SettingsSheetTokens
  * live-camera peek, drag-to-dismiss, and a Save CTA.
  *
  * Landscape → [SettingsSidePanel]: a STANDARD (non-modal) side sheet hugging the
- * system-nav edge, inboard of the grouped rail, with NO scrim, so the rail
- * (Library + Record FAB) stays visible and tappable while settings are open
- * (§B6). No peek (the visible preview is the context), a compact Done header
- * instead of the oversized Save, horizontal slide from the nav edge, system-back
- * collapses.
+ * system-nav edge, with NO scrim so the live preview remains visible. The panel
+ * is a portrait sheet rotated: 380 dp silhouette cap, grip + title + stacked
+ * rows + slimmed Save CTA, scrolling body. Slides in from the cluster edge;
+ * system-back collapses.
  *
  * Both share [SettingsContent] (mode tabs · presets · steppers · quality ·
  * reset). Edits write through immediately; Save / Done / back / drag dismiss.
@@ -581,7 +580,6 @@ private fun SettingsContent(
     onModePick: (String) -> Unit,
     snoozedCount: Int,
     onResetSnoozes: (() -> Unit)?,
-    compact: Boolean = false,
     showTitle: Boolean = false,
     showSummary: Boolean = true,
     modifier: Modifier = Modifier,
@@ -631,48 +629,34 @@ private fun SettingsContent(
         SheetSectionLabel(stringResource(R.string.settings_sheet_section_settings))
         Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
 
-        if (compact) {
-            CompactSteppers(
-                durationSeconds = durationSeconds,
-                loopCount = loopCount,
-                intervalMinutes = intervalMinutes,
-                enabled = editable,
-                onDurationChange = onDurationChange,
-                onLoopCountChange = onLoopCountChange,
-                onIntervalChange = onIntervalChange,
-            )
-            SheetRowDivider()
-            QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
-        } else {
-            StepperRow(
-                label = stringResource(R.string.settings_sheet_clip_duration),
-                value = recordClipValue(durationSeconds),
-                enabled = editable,
-                atMin = RecordSettingBounds.clipAtMin(durationSeconds),
-                atMax = RecordSettingBounds.clipAtMax(durationSeconds),
-                onStep = { dir -> onDurationChange(RecordSettingBounds.stepClip(durationSeconds, dir)) },
-            )
-            SheetRowDivider()
-            StepperRow(
-                label = stringResource(R.string.settings_sheet_repeats),
-                value = recordRepeatsStepperValue(loopCount),
-                enabled = editable,
-                atMin = RecordSettingBounds.repeatsAtMin(loopCount),
-                atMax = RecordSettingBounds.repeatsAtMax(loopCount),
-                onStep = { dir -> onLoopCountChange(RecordSettingBounds.stepRepeats(loopCount, dir)) },
-            )
-            SheetRowDivider()
-            StepperRow(
-                label = stringResource(R.string.settings_sheet_wait_between),
-                value = recordWaitValue(intervalMinutes),
-                enabled = editable,
-                atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
-                atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
-                onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
-            )
-            SheetRowDivider()
-            QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
-        }
+        StepperRow(
+            label = stringResource(R.string.settings_sheet_clip_duration),
+            value = recordClipValue(durationSeconds),
+            enabled = editable,
+            atMin = RecordSettingBounds.clipAtMin(durationSeconds),
+            atMax = RecordSettingBounds.clipAtMax(durationSeconds),
+            onStep = { dir -> onDurationChange(RecordSettingBounds.stepClip(durationSeconds, dir)) },
+        )
+        SheetRowDivider()
+        StepperRow(
+            label = stringResource(R.string.settings_sheet_repeats),
+            value = recordRepeatsStepperValue(loopCount),
+            enabled = editable,
+            atMin = RecordSettingBounds.repeatsAtMin(loopCount),
+            atMax = RecordSettingBounds.repeatsAtMax(loopCount),
+            onStep = { dir -> onLoopCountChange(RecordSettingBounds.stepRepeats(loopCount, dir)) },
+        )
+        SheetRowDivider()
+        StepperRow(
+            label = stringResource(R.string.settings_sheet_wait_between),
+            value = recordWaitValue(intervalMinutes),
+            enabled = editable,
+            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
+            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
+            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
+        )
+        SheetRowDivider()
+        QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
 
         if (onResetSnoozes != null) {
             SheetRowDivider()
@@ -938,98 +922,6 @@ private fun SettingsSummary(
         withStyle(SpanStyle(color = SettingsSheetTokens.summaryText)) { append(tail) }
     }
     Text(text, style = RovaTokens.sheetRowLabel, modifier = Modifier.fillMaxWidth())
-}
-
-/**
- * Landscape height-fit variant of the three steppers: Clip · Repeats · Wait laid
- * out as three equal-weight columns (label over a −/value/+ stepper) on one row,
- * instead of three full-width rows. Same bounds/seam wiring as [StepperRow];
- * Quality stays a row below.
- */
-@Composable
-private fun CompactSteppers(
-    durationSeconds: Int,
-    loopCount: Int,
-    intervalMinutes: Int,
-    enabled: Boolean,
-    onDurationChange: (Int) -> Unit,
-    onLoopCountChange: (Int) -> Unit,
-    onIntervalChange: (Int) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = SettingsSheetTokens.rowPaddingV),
-        horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.compactCellGap),
-    ) {
-        CompactStepperCell(
-            label = stringResource(R.string.settings_sheet_clip_duration),
-            value = recordClipValue(durationSeconds),
-            enabled = enabled,
-            atMin = RecordSettingBounds.clipAtMin(durationSeconds),
-            atMax = RecordSettingBounds.clipAtMax(durationSeconds),
-            onStep = { dir -> onDurationChange(RecordSettingBounds.stepClip(durationSeconds, dir)) },
-            modifier = Modifier.weight(1f),
-        )
-        CompactStepperCell(
-            label = stringResource(R.string.settings_sheet_repeats),
-            value = recordRepeatsStepperValue(loopCount),
-            enabled = enabled,
-            atMin = RecordSettingBounds.repeatsAtMin(loopCount),
-            atMax = RecordSettingBounds.repeatsAtMax(loopCount),
-            onStep = { dir -> onLoopCountChange(RecordSettingBounds.stepRepeats(loopCount, dir)) },
-            modifier = Modifier.weight(1f),
-        )
-        CompactStepperCell(
-            label = stringResource(R.string.settings_sheet_wait_between),
-            value = recordWaitValue(intervalMinutes),
-            enabled = enabled,
-            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
-            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
-            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun CompactStepperCell(
-    label: String,
-    value: String,
-    enabled: Boolean,
-    atMin: Boolean,
-    atMax: Boolean,
-    onStep: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            label,
-            style = RovaTokens.sheetRowLabel,
-            color = SettingsSheetTokens.rowLabelText,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
-        Spacer(Modifier.height(SettingsSheetTokens.compactCellLabelGap))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.stepperGap),
-        ) {
-            StepButton("−", enabled = enabled && !atMin, onClick = { onStep(-1) })
-            Text(
-                value,
-                style = RovaTokens.sheetStepValue,
-                color = SettingsSheetTokens.stepValText,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier.widthIn(min = SettingsSheetTokens.stepValMinWidth),
-            )
-            StepButton("+", enabled = enabled && !atMax, onClick = { onStep(+1) })
-        }
-    }
 }
 
 /* ── Presets (ADR-0026) ───────────────────────────────────────────────── */

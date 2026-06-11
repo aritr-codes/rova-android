@@ -133,14 +133,6 @@ object SettingsSheetTokens {
     val summaryTopGap = 10.dp
     val summaryBottomGap = 4.dp
 
-    // ── Landscape compact 3-up stepper group (PR-β5b) ───────────────────
-    /** Horizontal gap between the 3 stacked stepper cells in landscape. */
-    val compactCellGap = 10.dp
-    /** Gap between a compact cell's label and its stepper. */
-    val compactCellLabelGap = 6.dp
-    /** Max content height for the height-fit side panel before it scrolls. */
-    val sidePanelContentMaxHeight = 560.dp
-
     // ── Save CTA ────────────────────────────────────────────────────────
     val ctaTopMargin = 18.dp
     val ctaPaddingV = 16.dp
