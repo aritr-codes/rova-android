@@ -468,6 +468,15 @@
     <string name="settings_sheet_quality">Quality</string>
     <string name="settings_sheet_save">Save</string>
     <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
+    <!-- PR-β5b — polished presets (built-in / my split) + resolved-config summary -->
+    <string name="settings_sheet_title">Recording settings</string>
+    <string name="settings_sheet_section_builtin">Built-in</string>
+    <string name="settings_sheet_section_my_presets">My presets</string>
+    <string name="settings_presets_edit">Edit</string>
+    <string name="settings_summary_clips">%1$s clips</string>
+    <string name="settings_summary_every">every %1$s</string>
+    <string name="settings_summary_repeats">×%1$d</string>
+    <string name="settings_summary_continuous">Continuous</string>
 
     <!-- Edit sheet shell button labels (EditSheetShell) -->
     <string name="settings_edit_sheet_done">Done</string>
