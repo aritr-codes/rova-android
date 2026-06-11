@@ -106,7 +106,19 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val loopCount = MutableStateFlow(settings.loopCount)
     val resolution = MutableStateFlow(settings.resolution)
     val flashMode = MutableStateFlow(RovaRecordingService.FLASH_MODE_OFF)
-    val mode = MutableStateFlow(settings.captureTopology)
+    /** Carries CaptureTopology persisted strings ("Single"/"DualShot"/"FrontBack") (PR-γ). */
+    val topology = MutableStateFlow(settings.captureTopology)
+
+    // --- Orientation axes (PR-γ ADR-0029 §B) ---
+    val orientationPolicy = MutableStateFlow(settings.orientationPolicy)
+    val orientationLockRotation = MutableStateFlow(settings.orientationLockRotation)
+
+    fun setOrientationPolicy(policy: String, lockRotation: Int) {
+        settings.orientationPolicy = policy
+        settings.orientationLockRotation = lockRotation
+        orientationPolicy.value = policy
+        orientationLockRotation.value = lockRotation
+    }
 
     // --- Presets ---
     private val _customPresets = MutableStateFlow(loadPresetsFromSettings())
@@ -206,7 +218,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
      * App Settings while the record screen was backgrounded is reflected, and
      * a later stepper nudge does not write back a stale value (clobber fix).
      *
-     * Excludes `mode` (it has its own setMode() persist path) and `flashMode`
+     * Excludes `topology` (it has its own setTopology() persist path) and `flashMode`
      * (session-volatile, not a RovaSettings pref).
      */
     fun reloadRecordingDefaults() {
@@ -277,10 +289,10 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         serviceBinder?.getService()?.detachDualPreview(side)
     }
 
-    fun setMode(mode: String) {
-        settings.captureTopology = mode                        // (1) prefs commit
-        this.mode.value = mode                                // (2) StateFlow update
-        serviceBinder?.getService()?.setTopology(mode)         // (3) service rebind
+    fun setTopology(topology: String) {
+        settings.captureTopology = topology                    // (1) prefs commit
+        this.topology.value = topology                         // (2) StateFlow update
+        serviceBinder?.getService()?.setTopology(topology)     // (3) service rebind
     }
 
     /**
@@ -289,7 +301,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
      * active session (matches the existing sheet behaviour: Mode row
      * hidden / non-interactive when periodic active or merging).
      *
-     * Cycle order is delegated to [cycleModeNext] (pure helper) so the
+     * Cycle order is delegated to [CaptureMode.cycleNext] (pure helper) so the
      * VM stays a thin shim around the existing persistence pipeline.
      *
      * Called from [RecordSettingsCard]'s ModeCycleChip via
@@ -298,7 +310,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     fun cycleMode() {
         val s = _serviceState.value
         if (s.isPeriodicActive || s.isMerging) return
-        setMode(cycleModeNext(mode.value))
+        setTopology(CaptureMode.cycleNext(topology.value))
     }
 
     fun setFlashMode(mode: Int) {

@@ -8,7 +8,7 @@ package com.aritr.rova.ui.screens
  *
  * Project precedent for pure-helper test seams:
  * [com.aritr.rova.service.dualrecord.internal.AspectFitMath],
- * [com.aritr.rova.ui.screens.cycleModeNext],
+ * [com.aritr.rova.ui.screens.CaptureMode.cycleNext],
  * [com.aritr.rova.ui.warnings.effectiveIdleTopBannerId].
  *
  * Tested by [com.aritr.rova.ui.screens.RecordingFrameLayoutTest] (JVM).

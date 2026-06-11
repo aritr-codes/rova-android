@@ -410,9 +410,9 @@ fun RecordSettingsCard(
  * absorbs tap events within its bounds, so taps inside the chip do NOT
  * bubble to the outer card's `clickable { onOpenSheet() }`.
  *
- * The cycle order itself lives in [cycleModeNext] (RecordModeCycle.kt) —
- * RecordViewModel.cycleMode() reads the current mode, calls the helper,
- * and writes via the existing setMode path.
+ * The cycle order itself lives in [CaptureMode.cycleNext] (CaptureModes.kt) —
+ * RecordViewModel.cycleMode() reads the current topology, calls the helper,
+ * and writes via the existing setTopology path.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
