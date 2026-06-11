@@ -786,10 +786,18 @@ private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String)
         ) {
             CaptureMode.visible().forEach { mode ->
                 val isActive = CaptureMode.forTopology(currentTopology) == mode
+                val label = stringResource(mode.labelRes)
                 val tabShape = RoundedCornerShape(SettingsSheetTokens.modeTabRadius)
                 val tabModifier = Modifier
                     .weight(1f)
                     .clip(tabShape)
+                    // ADR-0020 AA-by-default — selected/disabled state must be
+                    // programmatically determinable, matching OrientationRow.
+                    .semantics {
+                        contentDescription = label
+                        selected = isActive
+                        if (!enabled) disabled()
+                    }
                     .let {
                         if (isActive) {
                             it.shadow(1.dp, tabShape).background(activeBrush)
@@ -808,7 +816,7 @@ private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String)
                     else -> SettingsSheetTokens.modeTabIdleText
                 }
                 Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
-                    Text(stringResource(mode.labelRes), style = RovaTokens.sheetModeTab, color = textColor)
+                    Text(label, style = RovaTokens.sheetModeTab, color = textColor)
                 }
             }
         }
