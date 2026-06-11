@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — rotate-the-chrome mockup (portrait is source of truth)</title>
+<style>
+  :root{
+    --acc:#5b9dff;--acc2:#7c5bff;--accsoft:rgba(91,157,255,.22);
+    --suc:#34d399;--warn:#fbbf24;--err:#ef4444;--rec:#ff4d4d;
+    --txt:rgba(255,255,255,.93);--dim:rgba(255,255,255,.6);--faint:rgba(255,255,255,.4);
+    --glass:rgba(18,22,32,.58);--edge:rgba(255,255,255,.1);--edge-top:rgba(255,255,255,.18);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;color:var(--txt);
+    font-family:'Inter','SF Pro Display','Segoe UI',system-ui,sans-serif;
+    background:
+      radial-gradient(1200px 800px at 10% 3%,#1a2238 0,transparent 55%),
+      radial-gradient(1000px 700px at 94% 99%,#241733 0,transparent 50%),
+      linear-gradient(135deg,#070a10,#0a0e16 50%,#07090f);
+    padding:26px 22px 90px;
+  }
+  h1{font-size:18px;font-weight:600;letter-spacing:.2px;margin:0 0 2px}
+  .sub{font-size:12px;color:var(--faint);margin:0 0 18px}
+  .glass{
+    background:var(--glass);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
+    border:1px solid var(--edge);border-top-color:var(--edge-top);
+    box-shadow:0 8px 30px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.1);
+  }
+
+  /* ── control bar ───────────────────────────── */
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:22px}
+  .seg{display:inline-flex;gap:3px;padding:4px;border-radius:13px;border:1px solid var(--edge);background:rgba(255,255,255,.04)}
+  .seg button{
+    appearance:none;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;
+    color:var(--dim);background:transparent;padding:7px 13px;border-radius:10px;transition:.18s;
+  }
+  .seg button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;box-shadow:0 4px 14px var(--accsoft)}
+  .seg .lbl{font-size:10px;color:var(--faint);font-weight:600;padding:0 8px 0 4px;align-self:center}
+
+  /* ── phone stage ───────────────────────────── */
+  .stage{display:flex;justify-content:center;padding:10px 0 4px}
+  .phone{position:relative;background:#000;overflow:hidden;border-radius:38px;
+    box-shadow:0 26px 64px rgba(0,0,0,.6),inset 0 0 0 1.6px rgba(255,255,255,.07)}
+  .phone.portrait{width:360px;height:760px}
+  .phone.land{width:812px;height:380px}
+  .scene{position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 30% 24%,#6b86b8 0,transparent 42%),
+      radial-gradient(circle at 76% 72%,#b87a9a 0,transparent 46%),
+      linear-gradient(160deg,#3a4a6b,#2a3550 45%,#46324a);}
+  .guide{position:absolute;border:1.5px dashed rgba(255,255,255,.14);border-radius:14px}
+  .phone.portrait .guide{top:120px;bottom:230px;left:40px;right:40px}
+  .phone.land .guide{top:64px;bottom:60px;left:170px;right:170px}
+  .phone.land.senseB .guide{left:170px;right:170px}
+
+  /* hardware hints: gesture bar lives on the OLD-BOTTOM edge; punch-hole on old-top */
+  .gesture{position:absolute;border-radius:4px;background:rgba(255,255,255,.34);z-index:40}
+  .phone.portrait .gesture{bottom:9px;left:50%;transform:translateX(-50%);width:120px;height:4px}
+  .phone.land .gesture{top:50%;width:4px;height:96px;transform:translateY(-50%)}
+  .phone.land.senseA .gesture{right:9px}
+  .phone.land.senseB .gesture{left:9px}
+  .cutout{position:absolute;width:11px;height:11px;border-radius:50%;background:#000;border:1px solid rgba(255,255,255,.12);z-index:41}
+  .phone.portrait .cutout{top:11px;left:50%;transform:translateX(-50%)}
+  .phone.land.senseA .cutout{left:11px;top:50%;transform:translateY(-50%)}
+  .phone.land.senseB .cutout{right:11px;top:50%;transform:translateY(-50%)}
+
+  /* ── screen-anchored chrome (status / cam utils): top corners, both orientations ── */
+  .status{position:absolute;display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:20px;z-index:30;
+    background:rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.08)}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--suc);box-shadow:0 0 8px var(--suc)}
+  .status.rec .dot{background:var(--rec);box-shadow:0 0 9px var(--rec);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .status span{font-size:11px;color:var(--dim);font-weight:500}
+  .phone .status{top:14px;left:16px}
+
+  .cam{position:absolute;display:flex;gap:8px;z-index:30;top:13px;right:16px}
+  .cam .ic{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.09)}
+  .cam .ic svg{width:16px;height:16px;stroke:var(--txt);fill:none;stroke-width:1.9}
+
+  /* ── device-anchored cluster: config strip + nav, glued to old-bottom edge ── */
+  /* config strip */
+  .dock{position:absolute;z-index:30;display:flex;gap:5px;padding:5px;border-radius:15px}
+  .chip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:7px 10px;border-radius:10px;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);min-width:50px}
+  .chip b{font-size:12.5px;font-weight:700;color:var(--txt);line-height:1.1}
+  .chip small{font-size:8px;letter-spacing:.5px;color:var(--faint);text-transform:uppercase}
+  .chip.mode b{color:#aee9c8}
+  /* landscape compact density (weight fix #1) */
+  .phone.land .dock{flex-direction:column;gap:4px;padding:4px}
+  .phone.land .dock .chip{padding:5px 7px;min-width:44px}
+  .phone.land .dock .chip b{font-size:11px}
+  .phone.land .dock .chip small{font-size:7px}
+  /* phase-A weight (toggle, to compare against the rejected build) */
+  body.heavy .phone.land .dock .chip{padding:9px 12px;min-width:62px}
+  body.heavy .phone.land .dock .chip b{font-size:13px}
+  body.heavy .phone.land .dock .chip small{font-size:8.5px}
+
+  /* nav cluster: Library / FAB / Settings */
+  .nav{position:absolute;z-index:30;display:flex;align-items:center}
+  .nav .nb{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.07);border:1px solid var(--edge)}
+  .nav .nb svg{width:18px;height:18px;stroke:var(--txt);fill:none;stroke-width:1.9}
+  .nav .nb.thumb{overflow:hidden;border:1px solid rgba(255,255,255,.2)}
+  .nav .nb.thumb div{width:100%;height:100%;background:linear-gradient(135deg,#5a6f9e,#8d5f7e)}
+  .hero{width:62px;height:62px;border-radius:50%;flex:0 0 auto;
+    background:radial-gradient(circle at 50% 34%,#ff8a8a,var(--rec));
+    box-shadow:0 0 0 5px rgba(255,77,77,.16),0 8px 22px rgba(255,77,77,.34);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:31}
+  .hero .glyph{width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s}
+  .hero.rec .glyph{border-radius:6px;width:20px;height:20px}
+
+  /* PORTRAIT placement — cluster on bottom edge */
+  .phone.portrait .dock{left:50%;transform:translateX(-50%);bottom:122px;flex-direction:row}
+  .phone.portrait .nav{bottom:30px;left:0;width:100%;flex-direction:row;justify-content:space-between;padding:0 44px}
+
+  /* LANDSCAPE — cluster follows the physical old-bottom edge.
+     nav rail = edge-most (was closest to bottom edge); config = inboard (was above nav). */
+  .phone.land .nav{top:50%;transform:translateY(-50%);flex-direction:column;justify-content:space-between;height:62%}
+  .phone.land .dock{top:50%;transform:translateY(-50%)}
+  /* sense A (ROTATION_90): old bottom = RIGHT. order reversed (portrait-left ends up at bottom) */
+  .phone.land.senseA .nav{right:20px}
+  .phone.land.senseA .dock{right:84px}
+  .phone.land.senseA .nav{flex-direction:column-reverse}
+  .phone.land.senseA .dock{flex-direction:column-reverse}
+  /* sense B (ROTATION_270): old bottom = LEFT. identity order */
+  .phone.land.senseB .nav{left:20px}
+  .phone.land.senseB .dock{left:84px}
+
+  /* ── settings sheet: glued to its launch edge (old bottom) ── */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:50;opacity:0;pointer-events:none;transition:.2s}
+  body.settings .scrim{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;z-index:51;display:flex;flex-direction:column;overflow:hidden;
+    background:rgba(9,13,20,.97);border:1px solid rgba(255,255,255,.085);
+    transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+  .phone.portrait .sheet{left:0;right:0;bottom:0;max-height:74%;border-radius:24px 24px 0 0;transform:translateY(100%)}
+  body.settings .phone.portrait .sheet{transform:translateY(0)}
+  /* landscape: side sheet, portrait-silhouette width (weight fix #3) */
+  .phone.land .sheet{top:0;bottom:0;width:380px;max-width:47%}
+  .phone.land.senseA .sheet{right:0;border-radius:24px 0 0 24px;transform:translateX(100%)}
+  .phone.land.senseB .sheet{left:0;border-radius:0 24px 24px 0;transform:translateX(-100%)}
+  body.settings .phone.land .sheet{transform:translateX(0)}
+
+  .grip{flex:0 0 auto;display:flex;justify-content:center;padding:12px 0 10px}
+  .grip i{width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.16)}
+  .sheetBody{flex:1 1 auto;overflow-y:auto;padding:2px 18px 14px}
+  .sheetBody::-webkit-scrollbar{width:5px}.sheetBody::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+  .sTitle{font-size:15px;font-weight:600;margin:0 0 14px;text-align:center}
+  .tabs{display:flex;gap:2px;padding:3px;border-radius:13px;background:rgba(255,255,255,.05);margin-bottom:18px}
+  .tabs button{flex:1;appearance:none;border:0;cursor:pointer;font:inherit;font-size:11px;font-weight:600;color:var(--faint);
+    background:transparent;padding:8px;border-radius:10px}
+  .tabs button.on{background:rgba(255,255,255,.11);color:var(--txt)}
+  .slabel{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.55);margin:14px 0 8px}
+  .srow{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .srow .k{font-size:13px;color:rgba(255,255,255,.7)}
+  .stepper{display:flex;align-items:center;gap:10px}
+  .stepper .b{width:27px;height:27px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);cursor:pointer}
+  .stepper .v{min-width:34px;text-align:center;font-size:13px;color:rgba(255,255,255,.88)}
+  .chiprow{display:flex;gap:5px}
+  .qchip{padding:5px 12px;border-radius:20px;font-size:11px;border:1px solid rgba(255,255,255,.09);color:rgba(255,255,255,.55)}
+  .qchip.on{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.18);color:rgba(255,255,255,.9)}
+  .cta{flex:0 0 auto;margin:8px 18px 16px;padding:12px;text-align:center;border-radius:13px;font-size:13.5px;font-weight:600;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.82);cursor:pointer}
+
+  .legend{max-width:840px;margin:22px auto 0;font-size:11px;color:var(--faint);line-height:1.7}
+  .legend b{color:var(--dim)}
+</style>
+</head>
+<body>
+  <h1>Rova — rotate the chrome, don't redesign it</h1>
+  <p class="sub">portrait = source of truth · cluster glued to the physical old-bottom edge · all text upright · status/cam screen-anchored</p>
+
+  <div class="toolbar">
+    <div class="seg" id="orient">
+      <span class="lbl">ORIENT</span>
+      <button data-o="portrait">Portrait</button>
+      <button data-o="senseA" class="on">Landscape 90° (A)</button>
+      <button data-o="senseB">Landscape 270° (B)</button>
+    </div>
+    <div class="seg" id="state">
+      <span class="lbl">STATE</span>
+      <button data-s="idle" class="on">Idle</button>
+      <button data-s="rec">Recording</button>
+      <button data-s="settings">Settings</button>
+    </div>
+    <div class="seg" id="weight">
+      <span class="lbl">CONFIG WEIGHT</span>
+      <button data-w="slim" class="on">Slim (proposed)</button>
+      <button data-w="heavy">Phase-A (rejected)</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="phone land senseA" id="phone">
+      <div class="scene"></div>
+      <div class="guide"></div>
+      <div class="cutout"></div>
+      <div class="gesture"></div>
+
+      <!-- screen-anchored -->
+      <div class="status" id="statusPill"><i class="dot"></i><span id="statusTxt">Ready to record</span></div>
+      <div class="cam">
+        <div class="ic" title="flash"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></div>
+        <div class="ic" title="flip"><svg viewBox="0 0 24 24"><path d="M3 7h13l-2-2m2 2-2 2"/><path d="M21 17H8l2 2m-2-2 2-2"/></svg></div>
+      </div>
+
+      <!-- device-anchored: config strip (DOM order = portrait left→right) -->
+      <div class="dock glass" id="dock">
+        <div class="chip"><b>5s</b><small>Clip</small></div>
+        <div class="chip"><b>2×</b><small>Repeats</small></div>
+        <div class="chip"><b>None</b><small>Wait</small></div>
+        <div class="chip"><b>FHD</b><small>Quality</small></div>
+        <div class="chip mode"><b>Portrait</b><small>Mode</small></div>
+      </div>
+
+      <!-- device-anchored: nav (DOM order = portrait left→right: Library, REC, Settings) -->
+      <div class="nav" id="nav">
+        <div class="nb thumb" title="Library"><div></div></div>
+        <div class="hero" id="hero" onclick="toggleRec()"><div class="glyph"></div></div>
+        <div class="nb" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+      </div>
+
+      <!-- settings sheet (glued to old-bottom edge) -->
+      <div class="scrim" onclick="setState('idle')"></div>
+      <div class="sheet glass">
+        <div class="grip"><i></i></div>
+        <div class="sheetBody">
+          <p class="sTitle">Recording settings</p>
+          <div class="tabs"><button class="on">Portrait</button><button>Landscape</button><button>P+L</button></div>
+          <div class="slabel">Timing</div>
+          <div class="srow"><span class="k">Clip duration</span><div class="stepper"><span class="b">−</span><span class="v">5s</span><span class="b">+</span></div></div>
+          <div class="srow"><span class="k">Repeats</span><div class="stepper"><span class="b">−</span><span class="v">2×</span><span class="b">+</span></div></div>
+          <div class="srow"><span class="k">Wait between</span><div class="stepper"><span class="b">−</span><span class="v">None</span><span class="b">+</span></div></div>
+          <div class="slabel">Quality</div>
+          <div class="srow"><span class="k">Resolution</span><div class="chiprow"><span class="qchip">HD</span><span class="qchip on">FHD</span><span class="qchip">4K</span></div></div>
+          <div class="slabel">Output</div>
+          <div class="srow"><span class="k">Save location</span><span class="k" style="color:var(--dim)">Movies/Rova</span></div>
+          <div class="srow" style="border:0"><span class="k">Beep on segment</span><span class="k" style="color:var(--dim)">Off</span></div>
+        </div>
+        <div class="cta">Save</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend glass" style="padding:14px 18px;border-radius:14px">
+    <b>The rotate model:</b> the bottom cluster (config strip + Library/REC/Settings + sheet) is <b>glued to the physical old-bottom edge</b> —
+    right in 90°, left in 270° — with order following the rotation (reversed in A, identity in B), exactly like the native camera's icon column.
+    Nav stays edge-most, config stays inboard (same depth order as portrait). Status + cam utilities are screen-anchored to the top corners, as in native.
+    All text upright (WCAG — our one divergence from Samsung's sideways labels).
+    Use <b>CONFIG WEIGHT</b> to compare the proposed slim chips against the rejected Phase-A weight — geometry identical, only density changes.
+  </div>
+
+<script>
+  const body=document.body, phone=document.getElementById('phone');
+  function setOrient(o){
+    phone.className='phone '+(o==='portrait'?'portrait':'land '+o);
+    document.querySelectorAll('#orient button').forEach(b=>b.classList.toggle('on',b.dataset.o===o));
+  }
+  function setState(s){
+    body.classList.remove('settings');
+    const rec=s==='rec';
+    document.getElementById('hero').classList.toggle('rec',rec);
+    document.getElementById('statusPill').classList.toggle('rec',rec);
+    document.getElementById('statusTxt').textContent=rec?'Recording · clip 1 of 2':'Ready to record';
+    if(s==='settings') body.classList.add('settings');
+    document.querySelectorAll('#state button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  }
+  function toggleRec(){
+    setState(document.getElementById('hero').classList.contains('rec')?'idle':'rec');
+  }
+  document.getElementById('orient').addEventListener('click',e=>{if(e.target.dataset.o)setOrient(e.target.dataset.o)});
+  document.getElementById('state').addEventListener('click',e=>{if(e.target.dataset.s)setState(e.target.dataset.s)});
+  document.getElementById('weight').addEventListener('click',e=>{if(!e.target.dataset.w)return;
+    document.querySelectorAll('#weight button').forEach(b=>b.classList.toggle('on',b===e.target));
+    body.classList.toggle('heavy',e.target.dataset.w==='heavy');});
+  setOrient('senseA');
+</script>
+</body>
+</html>

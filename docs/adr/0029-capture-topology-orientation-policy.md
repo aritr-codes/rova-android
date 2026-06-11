@@ -166,6 +166,125 @@ This is a multi-PR program. The candidate sequence is:
    and export treat orientation as **per-clip** metadata (under `Auto`, rotation
    may legitimately differ clip-to-clip).
 
+## §B — PR-β amendment (2026-06-10): landscape Record-home chrome — **WITHDRAWN, superseded by §B′**
+
+> **WITHDRAWN 2026-06-11.** Shipped as Phase β-interim, then owner-rejected: it reads as a
+> *separate landscape layout*, not the portrait UI rotated. §B′ below replaces it. The §B code
+> (grouped `RecordNavRail`, docked `RecordConfigCardLandscape`, `CompactSteppers` 3-up,
+> `sideSheetRailInset`-band side panel) is deleted. B1–B6 are kept verbatim below for history
+> only — do not implement against them.
+
+PR-β ("landscape chrome re-layout") is specified here after a UX-research pass
+(camera-app + Material 3 + WCAG 2.2) and owner-approved mocks
+(`landscape_chrome_combined_mockup.html`). The shipped β-interim split (nav rail
+left / Record FAB right, `ChromeSlotPlacement` `NAV_RAIL=CENTER_START` /
+`RECORD_ACTION=CENTER_END`) is **revised**. Codex-reviewed
+(thread 019eb14d). Portrait Record-home is **unchanged** and its
+`ChromeSlotPlacement` values stay byte-identical (regression-pinned by
+`ChromeSlotPlacementTest`).
+
+**B1. Everything hugs the system-navigation-bar edge.** In landscape the grouped
+nav rail, the settings side sheet, and the config-summary card all anchor to the
+edge the system nav bar occupies — right for `ROTATION_90`, left for
+`ROTATION_270` — so controls never get thrown to the far end on rotation. The
+edge is derived by a **pure `systemNavEdge(navBarInsets)` helper** whose *primary*
+signal is the `WindowInsets.navigationBars` left-vs-right inset (the layout
+truth); display rotation is a fallback only. Gesture nav (no side inset) →
+default **Trailing**. New pure type `NavEdge { Leading, Trailing }`.
+
+**B2. Grouped nav rail.** Library · Record FAB · Settings become **one** vertical
+rail (portrait bottom-bar adjacency preserved) hugging the system-nav edge, inset
+past the system buttons. The split `RECORD_ACTION` standalone placement is folded
+into the rail; the `RECORD_ACTION` slot value is kept **advisory** (no longer
+rendered independently in landscape) to avoid churning the pinned test.
+
+**B3. Settings surface is orientation-adaptive — standard (non-modal) side sheet
+in landscape.** `SettingsSheet` splits into a dispatcher → `SettingsBottomSheet`
+(portrait, today's modal sheet + camera peek, moved ~verbatim) + `SettingsSidePanel`
+(landscape), sharing a `SettingsContent` (mode tabs / presets / steppers / quality
+/ reset rows). The landscape panel is a **standard, non-modal side sheet** (M3):
+**no scrim**, occupying a band **inboard of the rail** (never `fillMaxSize`), so
+the rail — including the Record FAB and Library — **stays visible and tappable
+while settings are open**. Camera preview stays `fillMaxSize` underneath (overlay-
+inboard-band; no flex-row reflow — avoids CameraX resize churn on a tuned camera
+path). The panel drops the peek (the visible preview *is* the context), demotes
+the oversized Save to a compact **Done**/collapse (settings already apply on
+change), scrolls its body, and enters/exits **horizontally** from the nav edge.
+The rail's Settings item **toggles** the pane; system-back **collapses** it (does
+not navigate); no vertical drag-dismiss. Because DualShot/P+L is portrait-locked
+(see the DualShot rotation contract §4 + `DualShotPortraitGate`), the landscape
+side sheet only ever applies to `Single`.
+
+**B4. Config-summary card placement (WCAG 2.2 + Android-researched).** The idle
+config card (duration / repeats / quality / mode; tap → open settings, mode chip
+cycles) **docks to the rail's inboard edge beside the Record FAB**, vertically
+centered — *not* bottom-center, which is the worst landscape thumb-reach zone. It
+**hides whenever the side sheet is open** (the sheet occupies that inboard band —
+clean mutual exclusion). Standing constraints, enforced for this card and the
+panel: semi-opaque **scrim behind text** so contrast is measured against the
+scrim, not the live frame (≥ 4.5:1 text / 3:1 chip border — SC 1.4.3 / 1.4.11);
+card-tap **and** mode chip each ≥ **24 dp** target (48 dp preferred) with 24 dp
+spacing (SC 2.5.8); honor `WindowInsets.safeDrawing` for the landscape cutout +
+gesture bar; no clip at 200 % font / reflow (SC 1.4.4 / 1.4.10); both orientations
+operable (SC 1.3.4) — consistent with the standing ADR-0020 "WCAG 2.2 AA by
+default" requirement.
+
+**B5. Slot model extension.** `placementFor` gains an `edge: NavEdge` parameter
+(`placementFor(slot, orientation, navEdge = Trailing)`, with a delegating two-arg
+overload so portrait call sites + pinned tests are untouched). Edge-aware logic is
+**landscape-only**; portrait ignores `navEdge` and asserts identical outputs. New
+slots `SETTINGS_SHEET` and `CONFIG_SUMMARY` (and the grouped rail) map to the
+correct edge + inboard offsets.
+
+**B6. The single biggest implementation risk (codex) is hit-test / state
+coexistence drift:** leaving a `fillMaxSize` settings overlay, or the existing
+`if (!combinedSettingsOpen)` chrome-suppression, in place in landscape — it would
+*look* right while making the rail/FAB dead. The landscape chrome-suppression
+becomes **portrait-only**; the side panel must occupy only its band. This is a
+named acceptance criterion: with the sheet open in landscape, tapping the Record
+FAB and Library must work.
+
+**Slice order (codex-revised — chrome first, sheet second):**
+β1 `NavEdge` + pure `systemNavEdge()` + JVM tests · β2 edge-aware `placementFor`
+(+ new slots), portrait pins preserved · β3 grouped rail on the correct edge
+(replaces the split) · β4 config card docked to the rail inboard edge, hidden when
+sheet open · β5 split `SettingsSheet` → bottom sheet + side panel sharing
+`SettingsContent` · β6 flip landscape chrome-suppression to portrait-only · β7
+device smoke matrix (ROTATION_90/270 × 3-button/gesture nav × sheet open × FAB-tap-
+while-open × Back-collapse × P+L gate). Reverts the interim landscape
+centered-cap; keeps the portrait scroll/sticky baseline.
+
+## §B′ — "Rotate, don't redesign" (2026-06-11, owner-ratified; supersedes §B)
+
+Authoritative spec: `docs/superpowers/specs/2026-06-10-landscape-rotate-not-redesign-design.md`
+(+ its §11 weight amendment). Approved mock: `landscape_record_mockup.html`. Native reference:
+the stock camera app (RZCYA1VBQ2H).
+
+**B′1. Principle.** Portrait is the source of truth. Landscape is the identical widget set —
+same hierarchy, grouping, order, and interaction model — re-anchored by the device rotation,
+every widget kept upright (rotation-aware placement; `graphicsLayer` rotation is forbidden on
+interactive chrome). There is no landscape information architecture.
+
+**B′2. Anchor classes.** The bottom cluster (config strip · Library/FAB/Settings nav · settings
+sheet) is **device-anchored**: glued to the physical portrait-bottom edge — right for
+`ROTATION_90` (sense A, rail order reversed), left for `ROTATION_270` (sense B, identity order),
+per the pure `LandscapeRotation` mapping (`landscapeSense` / `clusterEdge` / `railOrder`,
+JVM-pinned). The status chip and flash/lens controls are **screen-anchored**: top-start /
+top-end in BOTH senses, exactly like the native camera's indicators. Nav stays edge-most,
+config inboard — portrait's depth order, rotated.
+
+**B′3. Density, not relocation (the §11 weight amendment).** The landscape config column renders
+the same 5 cells (Clip · Repeats · Wait · Quality · Mode) at **compact density**
+(`cellValueCompact`/`cellKeyCompact`, `landscapeCellGap`); the settings side panel is the
+portrait sheet's **silhouette** (`sideSheetWidth` 380dp cap, full height, slimmed landscape Save
+via `ctaPaddingVCompact`, body scroll) sliding from the cluster edge with portrait scrim parity.
+A top-center config dock / three-zone landscape composition was explicitly rejected.
+
+**B′4. Correctness invariant.** `VideoCapture.targetRotation` keeps being driven by the PR-α
+`effectiveTargetRotation` + `OrientationEventListener` seam — chrome placement must never
+acquire responsibility for recorded-MP4 orientation. Device acceptance: rotate both senses;
+nav/cluster handedness matches the stock camera; recorded MP4 orientation correct in both.
+
 ## Enforcement
 
 Following the standing invariant→`check*`→`preBuild` convention. Logic lives in
