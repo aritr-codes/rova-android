@@ -280,7 +280,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     fun setMode(mode: String) {
         settings.captureTopology = mode                        // (1) prefs commit
         this.mode.value = mode                                // (2) StateFlow update
-        serviceBinder?.getService()?.setMode(mode)            // (3) service rebind
+        serviceBinder?.getService()?.setTopology(mode)         // (3) service rebind
     }
 
     /**
