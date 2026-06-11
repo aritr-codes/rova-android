@@ -39,7 +39,7 @@ class HistoryArtifactMapperSegmentRowsTest {
                 intervalMinutes = 1,
                 resolution = "FHD",
                 loopCount = 1,
-                captureTopology = mode,
+                captureTopology = captureTopology,
             ),
             segments = segs,
             exportTier = ExportTier.TIER1_API29_PLUS,
