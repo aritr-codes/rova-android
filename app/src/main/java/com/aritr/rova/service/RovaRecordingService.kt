@@ -55,7 +55,7 @@ import com.aritr.rova.service.notification.NotificationProgress
 import com.aritr.rova.service.notification.NotificationState
 import com.aritr.rova.service.notification.toActionSpecs
 import com.aritr.rova.service.notification.toBindPlan
-import com.aritr.rova.service.orientation.DEFAULT_ORIENTATION_POLICY_IS_AUTO
+import com.aritr.rova.service.orientation.OrientationPolicyResolver
 import com.aritr.rova.service.orientation.OrientationSnapState
 import com.aritr.rova.service.orientation.firstSampleFallback
 import com.aritr.rova.service.orientation.snapOrientation
@@ -133,7 +133,7 @@ data class RovaServiceState(
     val isCameraActive: Boolean = false,
     // B6 — true when the bound selector is the front camera. Drives the
     // record-screen flip-button icon/contentDescription swap. Updated after the
-    // onCreate lens load, every flipCamera, and the setMode P+L snap-to-rear.
+    // onCreate lens load, every flipCamera, and the setTopology DualShot snap-to-rear.
     val isFrontCamera: Boolean = false,
     // B6 (codex review) — whether the device exposes a front sensor. Gates the
     // flip button so a front-less device never shows a dead toggle (which would
@@ -475,7 +475,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     // Camera config
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-    private var currentMode: String = "Portrait"
+    private var currentTopology: String = "Single"
     private var flashMode = 0 // 0: OFF, 1: ON, 2: AUTO
 
     // Recording config
@@ -512,6 +512,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
      * [releaseResources].
      */
     private var currentVaultIntent: Boolean = false
+
+    /**
+     * ADR-0029 PR-γ — session-frozen orientation policy and lock rotation.
+     * Populated from [com.aritr.rova.data.RovaSettings] at session start
+     * (mirrors [currentExportTier]/[currentVaultIntent] pattern). Used by
+     * [recordSegment] to resolve [effectiveTargetRotation] via
+     * [OrientationPolicyResolver]. Cleared in [releaseResources].
+     */
+    private var currentOrientationPolicy: String = "FollowDevice"
+    private var currentOrientationLockRotation: Int = -1
 
     inner class LocalBinder : Binder() {
         fun getService(): RovaRecordingService = this@RovaRecordingService
@@ -834,9 +844,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
     override fun onCreate() {
         super.onCreate()
         val settings = RovaSettings(this)
-        currentMode = settings.mode
+        currentTopology = settings.captureTopology
         // B6 — restore the persisted lens choice. Backed-up pref (survives
-        // reinstall like resolution/themeMode), unlike `mode` which resets.
+        // reinstall like resolution/themeMode), unlike `captureTopology` which resets.
         // Resolve through availability so a stale "prefer front" pref on a
         // front-less device seeds rear (and self-heals the pref) instead of
         // stranding the preview black (codex review).
@@ -1325,6 +1335,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // B5 / ADR-0025: cache frozen vault intent for the export
                     // dispatch; runExportPipeline passes it to ExportPipeline.export.
                     currentVaultIntent = m.vaultIntentAtStart
+                    // ADR-0029 PR-γ: cache session-frozen orientation axes so
+                    // recordSegment can resolve effectiveTargetRotation via
+                    // OrientationPolicyResolver without re-reading prefs mid-session.
+                    currentOrientationPolicy = m.config.orientationPolicy
+                    currentOrientationLockRotation = m.config.orientationLockRotation
                     pendingPersistJobs.clear()
                     stopNeedsRecovery = false
                     // ADR 0006 B-fix-5: reset currentStopReason at session
@@ -1628,7 +1643,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     private suspend fun setupCamera() {
-        if (currentMode == "PortraitLandscape") {
+        if (currentTopology == "DualShot") {
             setupDualCamera()
         } else {
             setupSingleCamera()
@@ -1704,19 +1719,15 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
                 ?: android.view.Surface.ROTATION_0
-            // ADR-0029 (force-rotate) — under the Auto orientation policy the
-            // OrientationEventListener owns capture rotation from the physical sensor,
-            // and MainActivity force-follows the sensor (FULL_SENSOR) so displayRotation
-            // is already the real device rotation. Applying the legacy Mode "+90°
-            // Landscape" offset (computeTargetRotation) on top would double-rotate the
-            // first segment until the first sensor event corrected it, so bind to the
-            // raw (normalized) display rotation and let the listener take over. The Mode
-            // offset path is retained ONLY for a future non-Auto lock policy.
-            val targetRot = if (DEFAULT_ORIENTATION_POLICY_IS_AUTO) {
-                computeTargetRotation(displayRotation, "Portrait") // identity-normalize; no Mode offset
-            } else {
-                computeTargetRotation(displayRotation, currentMode)
-            }
+            // ADR-0029 (force-rotate, Ratified-D §3) — bind-time rotation is always the
+            // identity-normalised display rotation (no Mode offset). The legacy "+90°
+            // Landscape" offset in computeTargetRotation is bypassed here by passing
+            // "Portrait"; effectiveTargetRotation at each segment boundary is then
+            // resolved via OrientationPolicyResolver (FollowDevice passes snapped through;
+            // Lock pins the stored Surface.ROTATION_*). The OrientationEventListener
+            // runs always (Single path) so the HUD pending-orientation state is fed
+            // regardless of policy; the resolver pins the ENCODED output at segment start.
+            val targetRot = computeTargetRotation(displayRotation, "Portrait") // identity-normalize; resolver owns effective
             videoCapture = VideoCapture.Builder(recorder).setTargetRotation(targetRot).build()
 
             // Preview rotation is owned by PreviewView/display, not the sensor listener
@@ -1805,10 +1816,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
-     * PR-α (ADR-0029 §Decision 2,3) — start tracking physical device rotation for
-     * the SINGLE camera path. Idempotent. No-op when the default policy is not Auto
-     * (seam for a future PortraitLock default). Seeds the snapper from the bind-time
-     * rotation so HUD/persist agree before any sensor event arrives.
+     * PR-α / PR-γ (ADR-0029 §Decision 2,3, Ratified-D) — start tracking physical
+     * device rotation for the SINGLE camera path. Always-enabled for Single: the
+     * OrientationEventListener feeds the HUD pending-orientation state regardless
+     * of policy; [OrientationPolicyResolver] pins the encoded output at segment
+     * boundaries. Seeds the snapper from the bind-time rotation so HUD/persist
+     * agree before any sensor event arrives. Idempotent.
      */
     private fun enableOrientationTracking(seedRotation: Int) {
         disableOrientationTracking()
@@ -1821,8 +1834,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // actual display — independent of, and crisper than, the recording-hysteresis
         // sensor snap that drives videoCapture below.
         registerPreviewDisplayListener()
-        if (!DEFAULT_ORIENTATION_POLICY_IS_AUTO) return
-
+        // ADR-0029 PR-γ (Ratified-D): listener is always enabled for the Single path.
+        // OrientationPolicyResolver resolves the encoded rotation at segment boundaries;
+        // the sensor feed here drives the HUD pending-orientation state for all policies.
         val listener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(orientation: Int) {
                 // PR-α (codex review) — unregisterListener() stops only FUTURE delivery;
@@ -2280,7 +2294,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         // selector (UI convention ≠ service invariant). (codex review)
         val targetIsFront = currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA
         if (!LensFlipPolicy.shouldAllowFlip(
-                mode = currentMode,
+                mode = currentTopology,
                 isRecording = _serviceState.value.isRecording,
                 targetIsFront = targetIsFront,
                 hasFrontCamera = hasFrontCamera(),
@@ -2313,58 +2327,58 @@ class RovaRecordingService : Service(), LifecycleOwner {
         packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)
 
     /**
-     * Phase 6 — Mode picker.
+     * ADR-0029 PR-γ — Capture-topology picker (renamed from setMode).
      * Mirrors [flipCamera] 1:1. Guarded on `isRecording` (silent no-op
      * mid-rec; the UI's `enabled = !isUiLocked` is the user-facing
      * gate). Calls `forceReconfigureCamera()` to rebind Preview +
-     * VideoCapture with the new rotation.
+     * VideoCapture with the new topology.
      *
      * Future seamless-rebind slice: this guard and `flipCamera`'s
      * guard drop together; `forceReconfigureCamera` upgrades to
      * preserve the live Recording across rebind.
      */
-    fun setMode(mode: String) {
+    fun setTopology(topology: String) {
         if (_serviceState.value.isRecording) {
-            RovaLog.d { "setMode: Ignored — recording in progress" }
+            RovaLog.d { "setTopology: Ignored — recording in progress" }
             return
         }
-        // Skip a redundant unbind/rebind when the requested mode is already the
-        // bound config (a ~2s camera-ready gap otherwise). The UI mode state is
+        // Skip a redundant unbind/rebind when the requested topology is already the
+        // bound config (a ~2s camera-ready gap otherwise). The UI topology state is
         // ViewModel-owned and already updated before this call, so skipping the
         // camera reconfigure cannot desync it.
         if (ModeReconfigurePolicy.shouldSkipReconfigure(
-                requestedMode = mode,
-                currentMode = currentMode,
+                requestedMode = topology,
+                currentMode = currentTopology,
                 isCameraActive = _serviceState.value.isCameraActive,
                 isFrontCamera = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
             )
         ) {
-            RovaLog.d { "setMode: already in mode '$mode' with camera active — skipping redundant reconfigure" }
+            RovaLog.d { "setTopology: already in topology '$topology' with camera active — skipping redundant reconfigure" }
             return
         }
-        currentMode = mode
-        // Phase 6.1b smoke-fix #6 — P+L is rear-only. If the user was on
-        // the front camera and selects P+L, snap back to rear here so
+        currentTopology = topology
+        // Phase 6.1b smoke-fix #6 — DualShot is rear-only. If the user was on
+        // the front camera and selects DualShot, snap back to rear here so
         // forceReconfigureCamera below rebinds with the correct selector.
-        // The RecordScreen flip button is also disabled in P+L mode
+        // The RecordScreen flip button is also disabled in DualShot topology
         // (RecordCameraControls.flipEnabled) so the user can't re-enter
-        // the front-cam state until they leave P+L.
-        if (mode == "PortraitLandscape") {
+        // the front-cam state until they leave DualShot.
+        if (topology == "DualShot") {
             if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
-                RovaLog.d { "setMode: P+L selected on front camera — auto-snapping to rear" }
+                RovaLog.d { "setTopology: DualShot selected on front camera — auto-snapping to rear" }
                 currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 // B6 — reflect the in-memory snap into service state so the flip
-                // icon shows "rear" while in P+L. DELIBERATELY does NOT write the
-                // preferFrontCamera pref: the snap is transient/mode-driven, so
-                // leaving Portrait→P+L→Portrait restores the user's front choice
+                // icon shows "rear" while in DualShot. DELIBERATELY does NOT write the
+                // preferFrontCamera pref: the snap is transient/topology-driven, so
+                // leaving Single→DualShot→Single restores the user's front choice
                 // (re-seeded in the else branch below).
                 _serviceState.update { it.copy(isFrontCamera = false) }
             }
         } else {
-            // B6 (codex review) — entering a single mode (Portrait/Landscape):
+            // B6 (codex review) — entering a single topology (Single/…):
             // restore the persisted lens (front only if the device has one) so a
-            // P+L excursion never leaves the selector and the pref inconsistent.
-            // Idempotent for Portrait↔Landscape switches.
+            // DualShot excursion never leaves the selector and the pref inconsistent.
+            // Idempotent for Single topology switches.
             val front = LensFlipPolicy.resolveIsFront(
                 RovaSettings(this).preferFrontCamera, hasFrontCamera()
             )
@@ -2627,8 +2641,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
         }
 
-        // Phase 6.1b — dual dispatch: P+L mode uses DualVideoRecorder path.
-        if (currentMode == "PortraitLandscape") {
+        // Phase 6.1b — dual dispatch: DualShot topology uses DualVideoRecorder path.
+        if (currentTopology == "DualShot") {
             return recordSegmentDual()
         }
 
@@ -2677,11 +2691,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
             videoFile = File(sessionDir, segmentFilename)
             RovaLog.d { "recordSegment: Preparing file: ${videoFile?.absolutePath}" }
 
-            // PR-α (ADR-0029 §Decision 2,3) — freeze THIS segment's rotation at its
-            // start. Under Auto the device may have snapped since the last clip. If a
-            // real stable snap exists use it; else fall back deterministically
-            // (last persisted -> current snapped/seed -> portrait) and log the source.
-            val segmentRotation: Int = if (hasStableSnap) {
+            // ADR-0029 (Ratified-D §3, D2) — freeze THIS segment's effective rotation
+            // at its boundary. The snapped value is derived from the OrientationEventListener
+            // (always-enabled for Single; HUD-driven). The resolver then applies the
+            // session-frozen policy: FollowDevice passes the snap through; Lock pins the
+            // stored Surface.ROTATION_* regardless of device tilt. Rotation applies ONLY
+            // at segment boundaries — a mid-clip device rotation updates pendingNextRotation
+            // for the HUD but does NOT re-encode the current segment.
+            val snappedRotation: Int = if (hasStableSnap) {
                 orientationSnapState.stable
             } else {
                 val fb = firstSampleFallback(
@@ -2691,6 +2708,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 RovaLog.d { "recordSegment: orientation first-sample fallback -> ${fb.rotation} (${fb.source})" }
                 fb.rotation
             }
+            val segmentRotation: Int = OrientationPolicyResolver.resolve(
+                policy = currentOrientationPolicy,
+                lockRotation = currentOrientationLockRotation,
+                snappedRotation = snappedRotation,
+            )
             _serviceState.update {
                 it.copy(currentSegmentRotation = segmentRotation, pendingNextRotation = segmentRotation)
             }
@@ -2970,7 +2992,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     /**
      * Phase 6.1b — dual-recording path for [recordSegment] when
-     * `currentMode == "PortraitLandscape"`. Mirrors the single-mode path
+     * `currentTopology == "DualShot"`. Mirrors the single-topology path
      * structure 1:1 (watchdog, recordingFinalized deferred,
      * CancellationException / Exception catch blocks) so all existing
      * cancellation-safety and recovery invariants apply equally to dual.
@@ -3605,6 +3627,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentSessionDir = null
         currentExportTier = null
         currentVaultIntent = false
+        currentOrientationPolicy = "FollowDevice"
+        currentOrientationLockRotation = -1
         pendingPersistJobs.clear()
         stopNeedsRecovery = false
         // ADR 0006 B-fix-5: clear gate-fired stop reason on teardown so
@@ -3762,12 +3786,12 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val sessionId = currentSessionId
             val sessionDir = currentSessionDir
             // Phase 6.1b T13: load the manifest once and branch on the
-            // session mode. P+L (mode == "PortraitLandscape") goes through
+            // session topology. DualShot (captureTopology == "DualShot") goes through
             // performMergeDual, which runs ExportPipeline.export twice (once
-            // per side) with independent atomicity per D12. Single-mode
-            // (Portrait / Landscape) falls back to the pre-T13 single
-            // performMerge call — semantically byte-identical to the prior
-            // implementation (same `segments` filter, same call site).
+            // per side) with independent atomicity per D12. Single topology
+            // falls back to the pre-T13 single performMerge call — semantically
+            // byte-identical to the prior implementation (same `segments` filter,
+            // same call site).
             val manifest: com.aritr.rova.data.SessionManifest? = if (sessionId != null) {
                 withContext(Dispatchers.IO) { sessionStore.loadManifest(sessionId) }
             } else null
@@ -4385,7 +4409,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             loopCount = limitLoops,
             resolution = resolutionStr,
             tier = tier,
-            captureTopology = currentMode
+            captureTopology = currentTopology
         )
 
     /**
