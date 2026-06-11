@@ -53,23 +53,16 @@ object SettingsSheetTokens {
      */
     val sheetMaxWidth = 440.dp
 
-    // ── Landscape side-anchored sheet (PR-β′ — rotate, don't redesign) ──
+    // ── Landscape side-anchored sheet (rotate-spec §11 D2, 2026-06-11) ──
     /**
-     * Floor for the landscape sheet width. The width is DERIVED from portrait —
-     * `availableWidth − peekHeight` (the rotated mirror of portrait's "peek strip +
-     * sheet fills the rest"), so the sheet keeps portrait's visual weight without a
-     * magic %. This min only guards a pathologically narrow window.
+     * Landscape side-panel width CAP — the portrait sheet's silhouette. The Phase-A
+     * derived width (availableWidth − peekHeight ≈ 76% of a 2.16:1 window) was
+     * owner-rejected as "desktop panel"; what transfers across the aspect swap is
+     * portrait's SILHOUETTE, not its proportion. Floor below = split-screen guard.
      */
-    val sideSheetMinWidth = 360.dp
-
-    // ── (Phase-B removal) legacy §B side-panel tokens ────────────────────
-    /** Standard (non-modal) side-sheet width cap in landscape. */
     val sideSheetWidth = 380.dp
-    /** Inboard offset past the system-nav-bar inset so the panel clears the
-     *  grouped rail (NAV_RAIL_INSET 12 + rail ~72 + 12 gap). */
-    val sideSheetRailInset = 96.dp
-    /** Top/bottom margin for the side panel within the safe-draw area. */
-    val sidePanelPaddingV = 10.dp
+    /** Floor for pathologically narrow windows (split-screen); loses to no cap. */
+    val sideSheetMinWidth = 360.dp
 
     // ── Sheet-top handle ────────────────────────────────────────────────
     val handleWidth = 32.dp
@@ -151,6 +144,9 @@ object SettingsSheetTokens {
     // ── Save CTA ────────────────────────────────────────────────────────
     val ctaTopMargin = 18.dp
     val ctaPaddingV = 16.dp
+    /** Landscape Save CTA vertical padding (rotate-spec §11 D3) — slimmed to scale
+     *  with the 380dp panel; portrait keeps [ctaPaddingV]. */
+    val ctaPaddingVCompact = 12.dp
     val ctaFill = Color.White.copy(alpha = 0.07f)
     val ctaStroke = Color.White.copy(alpha = 0.10f)
     val ctaRadius = 16.dp

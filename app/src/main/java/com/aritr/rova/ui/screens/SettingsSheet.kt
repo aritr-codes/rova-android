@@ -384,14 +384,15 @@ private fun SettingsSidePanel(
         exit = slideOutHorizontally(targetOffsetX = { if (trailing) it else -it }),
     ) {
         BackHandler(enabled = visible, onBack = onDismiss)
-        // PR-β′ (spec 2026-06-10) — the portrait bottom sheet, ROTATED to the cluster
-        // edge: full height, portrait-DERIVED width (availableWidth − peek, mirroring
-        // portrait's "peek strip + sheet fills the rest"), so the same screen-
-        // proportion + visual weight as portrait. Live preview shows in the far-side
-        // gap — no added scrim (§6.6). Same composition as portrait: grip + title +
-        // stacked rows + Save CTA; SettingsContent scrolls when it exceeds the height.
+        // Rotate-spec §11 D2 (2026-06-11) — the portrait bottom sheet, ROTATED to the
+        // cluster edge: full height, width = the portrait SILHOUETTE (sideSheetWidth
+        // cap; the Phase-A availableWidth − peek derivation read as a desktop panel —
+        // owner NO-GO). Live preview fills the far side — no added scrim (§6.6). Same
+        // composition as portrait: grip + title + stacked rows + Save CTA;
+        // SettingsContent scrolls (Repeats/Wait/Quality/Save reachable below the fold).
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val panelWidth = (maxWidth - SettingsSheetTokens.peekHeight)
+                .coerceAtMost(SettingsSheetTokens.sideSheetWidth)
                 .coerceAtLeast(SettingsSheetTokens.sideSheetMinWidth)
             val panelShape = remember { RoundedCornerShape(SettingsSheetTokens.sheetCornerRadius) }
             Column(
@@ -463,7 +464,7 @@ private fun SettingsSidePanel(
                         .border(1.dp, SettingsSheetTokens.ctaStroke, ctaShape)
                         .focusHighlight(ctaShape)
                         .clickable { onDismiss() }
-                        .padding(vertical = SettingsSheetTokens.ctaPaddingV),
+                        .padding(vertical = SettingsSheetTokens.ctaPaddingVCompact),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
