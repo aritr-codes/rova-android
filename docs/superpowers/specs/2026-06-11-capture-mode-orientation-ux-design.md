@@ -1,7 +1,7 @@
 # Capture-Mode + Orientation UX — Design Spec
 
 **Date:** 2026-06-11
-**Status:** Approved direction (owner, 2026-06-11) — awaiting owner review of this written spec
+**Status:** **Approved** (owner, 2026-06-11) — including §5 mode-cell visibility: owner ratified Variant A (Auto always visible, quiet; accent only when mode ≠ Auto) after native-UX review (`config_strip_mode_mockup.html`, codex concur)
 **Relationship:** This is the **user-facing layer of ADR-0029 PR-γ** (capture-topology / orientation-policy enum collapse + migration). The internal two-axis model, rotation semantics, merge contract, and capability gating are specced in `docs/adr/0029-capture-topology-orientation-policy.md` and are NOT re-specced here. This document specs what users see: mode picker, config card, settings sheet, orientation controls, terminology, and migration UX.
 **Peer review:** codex-reviewed 2026-06-11 (endorsed Option-1 orientation demotion; naming + locked-state-visibility + caption guidance folded in). Owner overrode codex on one point: mode name is **Auto**, not "Standard".
 
