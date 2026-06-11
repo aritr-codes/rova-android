@@ -881,7 +881,7 @@ private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onCl
     }
 }
 
-/* ── Resolved-config summary + compact landscape steppers (PR-β5b) ─────── */
+/* ── Resolved-config summary (PR-β5b) ────────────────────────────────── */
 
 /**
  * One-line echo of the currently-resolved config, e.g. "**Standard** · 30 s
