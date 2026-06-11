@@ -301,6 +301,8 @@ fun RecordSettingsCard(
     sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
+    orientationPolicy: String = "FollowDevice",
+    orientationLockRotation: Int = 0,
 ) {
     Column(
         modifier = modifier
@@ -346,8 +348,14 @@ fun RecordSettingsCard(
                     horizontal = RecordChromeTokens.settingsCardPaddingH,
                     vertical = RecordChromeTokens.settingsCardPaddingV,
                 )
+            val showLocked = orientationPolicy == "Lock" && !CaptureMode.isAccented(mode)
+            val lockedValueStr = if (orientationLockRotation in listOf(1, 3)) {
+                stringResource(R.string.record_locked_landscape)
+            } else {
+                stringResource(R.string.record_locked_portrait)
+            }
             if (sense == null) {
-                // PORTRAIT — horizontal pill: Clip · Repeats · Wait · Quality · Mode.
+                // PORTRAIT — horizontal pill: Clip · Repeats · Wait · Quality · Mode [· Locked].
                 Row(
                     modifier = Modifier.fillMaxWidth().then(interaction),
                     verticalAlignment = Alignment.CenterVertically,
@@ -366,6 +374,15 @@ fun RecordSettingsCard(
                         enabled = !dimmed,
                         modifier = Modifier.weight(1f),
                     )
+                    if (showLocked) {
+                        CellSep()
+                        SettingsCell(
+                            stringResource(R.string.record_cell_locked),
+                            lockedValueStr,
+                            Modifier.weight(1f),
+                            readOnly = true,
+                        )
+                    }
                     Icon(
                         RecordChromeIcons.chevronUp,
                         contentDescription = stringResource(R.string.record_edit_session_settings_cd),
@@ -379,13 +396,20 @@ fun RecordSettingsCard(
                 // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
                 // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
                 // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
-                val cells = listOf<@Composable () -> Unit>(
+                val baseCells = listOf<@Composable () -> Unit>(
                     { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true) },
                     { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true) },
                     { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true) },
                     { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true) },
                     { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true) },
                 )
+                val cells = if (showLocked) {
+                    baseCells + listOf<@Composable () -> Unit>({
+                        SettingsCell(stringResource(R.string.record_cell_locked), lockedValueStr, Modifier, readOnly = true, compact = true)
+                    })
+                } else {
+                    baseCells
+                }
                 Column(
                     modifier = interaction,
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -399,18 +423,27 @@ fun RecordSettingsCard(
 }
 
 /**
+ * Spec 2026-06-11 §5 Variant A (owner-ratified): accent iff mode != Auto —
+ * accent = non-standard capture contract, not decoration.
+ *
  * Slice B — Mode tap-cycle chip. Replaces the read-only Mode `SettingsCell`
- * in [RecordSettingsCard]. Tap advances the mode one step (Portrait →
- * Landscape → P+L → Portrait) via [onCycleMode]; long-press opens the
- * settings sheet via [onLongPress] (gesture redundancy + discoverability
- * fallback for the inline cycle). Disabled while [enabled] is false (=
- * card-dimmed during an active session — the existing card behaviour).
+ * in [RecordSettingsCard]. Tap advances the mode one step via [onCycleMode];
+ * long-press opens the settings sheet via [onLongPress] (gesture redundancy +
+ * discoverability fallback for the inline cycle). Disabled while [enabled] is
+ * false (= card-dimmed during an active session — the existing card behaviour).
  *
- * Visual: outlined chip with a faint `↻` glyph top-right. The chip
- * absorbs tap events within its bounds, so taps inside the chip do NOT
- * bubble to the outer card's `clickable { onOpenSheet() }`.
+ * Visual (accented, mode != Auto): solid `accent → accent2` gradient background,
+ * white text and glyph. White-on-bright-accent is the one explicit owner-approved
+ * WCAG exception (ADR-0020), scoped to this decorative selected state.
  *
- * The cycle order itself lives in [CaptureMode.cycleNext] (CaptureModes.kt) —
+ * Visual (quiet, mode == Auto): no gradient — same background/text treatment as
+ * [SettingsCell] (transparent fill within card, [RecordChromeTokens.cellValueText]
+ * / [RecordChromeTokens.cellKeyText] colors) so it blends as a plain cell.
+ *
+ * The chip absorbs tap events within its bounds so taps do NOT bubble to the
+ * outer card's `clickable { onOpenSheet() }`.
+ *
+ * The cycle order lives in [CaptureMode.cycleNext] (CaptureModes.kt) —
  * RecordViewModel.cycleMode() reads the current topology, calls the helper,
  * and writes via the existing setTopology path.
  */
@@ -424,24 +457,17 @@ private fun ModeCycleChip(
     compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    // PR2 §d (mockup-exact, owner-signed 2026-06-08): the selected-mode chip is
-    // the record home's theme anchor — a solid `accent → accent2` gradient (the
-    // mockup `.lpill span.on`), restoring per-palette distinctness (Aurora's
-    // blue→violet vs Eclipse's blue→periwinkle; Tide's teal→cyan vs Jade's
-    // emerald→deep-green — a flat single accent collapsed those). White bold
-    // label, pixel-faithful to the mockup. The white-on-bright-accent contrast
-    // sits below WCAG AA (~1.5–3.5:1); this is the one explicit, owner-approved
-    // exception to ADR-0020 "AA by default", scoped to this decorative selected
-    // state (mode also legible from position + the dual-preview zone tags).
+    val accented = CaptureMode.isAccented(mode)
     val palette = LocalGlassEnvironment.current.palette
-    val selectedBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
+    val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
     val glyphAlpha = if (enabled) 0.85f else 0.45f
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
+    val label = stringResource(CaptureMode.forTopology(mode).labelRes)
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(chipShape)
-            .background(selectedBrush, chipShape)
+            .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
@@ -459,16 +485,16 @@ private fun ModeCycleChip(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                mode,
+                label,
                 style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-                color = Color.White,
+                color = if (accented) Color.White else RecordChromeTokens.cellValueText,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 stringResource(R.string.record_cell_mode),
                 style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-                color = Color.White.copy(alpha = 0.80f),
+                color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
@@ -476,7 +502,8 @@ private fun ModeCycleChip(
         Text(
             "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
             modifier = Modifier.align(Alignment.TopEnd),
-            color = Color.White.copy(alpha = glyphAlpha),
+            color = if (accented) Color.White.copy(alpha = glyphAlpha)
+                    else RecordChromeTokens.cellKeyText.copy(alpha = glyphAlpha),
             fontSize = RecordChromeTokens.modeChipGlyphSize,
         )
     }
