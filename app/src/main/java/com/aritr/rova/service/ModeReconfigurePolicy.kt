@@ -14,7 +14,8 @@ package com.aritr.rova.service
  * `CameraReleasePolicy`, `SegmentGateThermal`).
  */
 internal object ModeReconfigurePolicy {
-    const val MODE_PORTRAIT_LANDSCAPE = "PortraitLandscape"
+    /** ADR-0029 PR-γ — topology string for dual-lens single-device recording. */
+    const val MODE_DUALSHOT = "DualShot"
 
     /**
      * True when [requestedMode] is already the bound mode and no rebind is
@@ -22,8 +23,8 @@ internal object ModeReconfigurePolicy {
      *  - the mode actually changes (`requestedMode != currentMode`), or
      *  - the camera is not currently bound (`!isCameraActive`) — the
      *    reconfigure doubles as the (re)acquire, so it must run, or
-     *  - selecting P+L while on the front camera (`isFrontCamera`), which must
-     *    snap back to the rear selector and therefore rebind (mirrors the
+     *  - selecting DualShot while on the front camera (`isFrontCamera`), which
+     *    must snap back to the rear selector and therefore rebind (mirrors the
      *    selector-snap branch in `setMode`).
      */
     fun shouldSkipReconfigure(
@@ -32,7 +33,7 @@ internal object ModeReconfigurePolicy {
         isCameraActive: Boolean,
         isFrontCamera: Boolean
     ): Boolean {
-        val needsSelectorSnap = requestedMode == MODE_PORTRAIT_LANDSCAPE && isFrontCamera
+        val needsSelectorSnap = requestedMode == MODE_DUALSHOT && isFrontCamera
         return requestedMode == currentMode && isCameraActive && !needsSelectorSnap
     }
 }

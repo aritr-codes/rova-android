@@ -1720,14 +1720,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
                 ?: android.view.Surface.ROTATION_0
             // ADR-0029 (force-rotate, Ratified-D §3) — bind-time rotation is always the
-            // identity-normalised display rotation (no Mode offset). The legacy "+90°
-            // Landscape" offset in computeTargetRotation is bypassed here by passing
-            // "Portrait"; effectiveTargetRotation at each segment boundary is then
-            // resolved via OrientationPolicyResolver (FollowDevice passes snapped through;
-            // Lock pins the stored Surface.ROTATION_*). The OrientationEventListener
-            // runs always (Single path) so the HUD pending-orientation state is fed
-            // regardless of policy; the resolver pins the ENCODED output at segment start.
-            val targetRot = computeTargetRotation(displayRotation, "Portrait") // identity-normalize; resolver owns effective
+            // Identity-normalised display rotation (no mode offset). The legacy
+            // orientation offset has been removed from computeTargetRotation (ADR-0029
+            // PR-γ); effectiveTargetRotation at each segment boundary is resolved via
+            // OrientationPolicyResolver (FollowDevice passes snapped through; Lock pins
+            // the stored Surface.ROTATION_*). The OrientationEventListener runs always
+            // (Single path) so the HUD pending-orientation state is fed regardless of
+            // policy; the resolver pins the ENCODED output at segment start.
+            val targetRot = computeTargetRotation(displayRotation)
             videoCapture = VideoCapture.Builder(recorder).setTargetRotation(targetRot).build()
 
             // Preview rotation is owned by PreviewView/display, not the sensor listener
@@ -4725,23 +4725,22 @@ internal fun recordedSegmentDurationMs(
 }
 
 /**
- * Phase 6 — Mode picker.
- * Derive CameraX target rotation from the display's natural rotation
- * plus the user-chosen Mode. Portrait = identity; Landscape = quarter-
- * turn clockwise. Mirrors the integer arithmetic `Surface.ROTATION_*`
- * use (0/1/2/3) so the math handles devices whose natural orientation
- * is non-portrait (tablets) correctly.
+ * ADR-0029 PR-γ — normalise display rotation for CameraX target-rotation.
+ * The legacy `mode`-offset parameter ("Portrait" = identity, "Landscape" =
+ * +quarter-turn) is removed: orientation policy is now handled by
+ * OrientationPolicyResolver at each segment boundary, not by a static mode
+ * string at bind time. This function returns the display rotation clamped to
+ * the four valid `Surface.ROTATION_*` constants (identity transform).
  *
  * `internal` (not `private`) so JVM tests in the same module can reach
  * the helper without Robolectric — Phase 3.5 PR #10 gotcha.
  */
-internal fun computeTargetRotation(displayRotation: Int, mode: String): Int {
-    val base = when (displayRotation) {
+internal fun computeTargetRotation(displayRotation: Int): Int {
+    return when (displayRotation) {
         android.view.Surface.ROTATION_0,
         android.view.Surface.ROTATION_90,
         android.view.Surface.ROTATION_180,
         android.view.Surface.ROTATION_270 -> displayRotation
         else -> android.view.Surface.ROTATION_0
     }
-    return if (mode == "Landscape") (base + 1) % 4 else base
 }

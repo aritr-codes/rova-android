@@ -33,7 +33,7 @@ internal object LensFlipPolicy {
         targetIsFront: Boolean = false,
         hasFrontCamera: Boolean = true,
     ): Boolean =
-        mode != ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE &&
+        mode != ModeReconfigurePolicy.MODE_DUALSHOT &&
             !isRecording &&
             (!targetIsFront || hasFrontCamera)
 

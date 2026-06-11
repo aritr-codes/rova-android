@@ -57,8 +57,8 @@ class ModeReconfigurePolicyTest {
         // the selector back to rear, even if the mode label is unchanged.
         assertFalse(
             ModeReconfigurePolicy.shouldSkipReconfigure(
-                requestedMode = ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE,
-                currentMode = ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE,
+                requestedMode = ModeReconfigurePolicy.MODE_DUALSHOT,
+                currentMode = ModeReconfigurePolicy.MODE_DUALSHOT,
                 isCameraActive = true,
                 isFrontCamera = true
             )
@@ -68,8 +68,8 @@ class ModeReconfigurePolicyTest {
     @Test fun samePL_rearCamera_skips() {
         assertTrue(
             ModeReconfigurePolicy.shouldSkipReconfigure(
-                requestedMode = ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE,
-                currentMode = ModeReconfigurePolicy.MODE_PORTRAIT_LANDSCAPE,
+                requestedMode = ModeReconfigurePolicy.MODE_DUALSHOT,
+                currentMode = ModeReconfigurePolicy.MODE_DUALSHOT,
                 isCameraActive = true,
                 isFrontCamera = false
             )
