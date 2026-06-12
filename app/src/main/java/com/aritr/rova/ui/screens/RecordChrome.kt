@@ -231,11 +231,14 @@ fun RecordCameraControls(
     // PR-β — landscape lays the two controls in a Row (a vertical stack in the
     // top-right would reach down toward the center-right record FAB). Same leaves.
     orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
+    // PR-ε (spec §5) — counter-rotation angle for the button glyphs only; the
+    // 48dp circular containers (touch targets) stay stable.
+    spinDegrees: Float = 0f,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint) }
-    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint) }
+    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint, spinDegrees) }
+    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint, spinDegrees) }
     if (orientation == ChromeOrientation.LANDSCAPE) {
         Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
             flash(); flip()
@@ -248,7 +251,7 @@ fun RecordCameraControls(
 }
 
 @Composable
-private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color) {
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color, spinDegrees: Float = 0f) {
     GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
         val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
             flashMode != RovaRecordingService.FLASH_MODE_AUTO
@@ -256,29 +259,33 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
             flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
             else -> tint
         }
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                RecordChromeIcons.flashBolt,
-                contentDescription = stringResource(R.string.record_flash_cd),
-                tint = contentTint,
-                modifier = Modifier.size(15.dp),
-            )
-            if (isOff) {
-                // OFF state — diagonal slash across the bolt (mockup shows
-                // only the bolt; the slash is the app's tri-state affordance).
-                Box(
-                    Modifier
-                        .size(width = 20.dp, height = 1.5.dp)
-                        .rotate(-45f)
-                        .background(contentTint),
+        // PR-ε (spec §5): bolt + OFF slash spin as ONE unit so the slash stays
+        // diagonal relative to the glyph, not the screen.
+        SpinningBox(degrees = spinDegrees) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    RecordChromeIcons.flashBolt,
+                    contentDescription = stringResource(R.string.record_flash_cd),
+                    tint = contentTint,
+                    modifier = Modifier.size(15.dp),
                 )
+                if (isOff) {
+                    // OFF state — diagonal slash across the bolt (mockup shows
+                    // only the bolt; the slash is the app's tri-state affordance).
+                    Box(
+                        Modifier
+                            .size(width = 20.dp, height = 1.5.dp)
+                            .rotate(-45f)
+                            .background(contentTint),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color) {
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color, spinDegrees: Float = 0f) {
     // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
     // P+L mode can disable JUST this button while flash stays usable. P+L is
     // rear-only by design (DualShot needs a single full-FOV sensor frame,
@@ -294,12 +301,14 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
             if (isFrontCamera) R.string.record_switch_to_rear_cd
             else R.string.record_switch_to_front_cd,
         )
-        Icon(
-            flipIcon,
-            contentDescription = flipCd,
-            tint = flipTint,
-            modifier = Modifier.size(16.dp),
-        )
+        SpinningBox(degrees = spinDegrees) {
+            Icon(
+                flipIcon,
+                contentDescription = flipCd,
+                tint = flipTint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -645,17 +654,18 @@ fun RecordBottomNav(
     onFabClick: () -> Unit,
     sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     // Same three leaves in both orientations (identical widgets/sizes) — only the
     // axis + order change. [railOrder] maps the portrait left→right adjacency to the
     // landscape top→bottom rail so Library/FAB/Settings keep their spatial relation
     // (acceptance — muscle memory).
     val library: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary, spinDegrees = spinDegrees)
     }
-    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick) }
+    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick, spinDegrees = spinDegrees) }
     val settings: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings, spinDegrees = spinDegrees)
     }
     if (sense == null) {
         // PORTRAIT — Slice B gradient brush bottom bar. The outer Box paints the brush
@@ -702,7 +712,7 @@ fun RecordBottomNav(
 }
 
 @Composable
-internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: Float = 0f) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -721,23 +731,32 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
                 .clip(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
-                modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
+            // PR-ε (spec §5): glyph spins inside the stable square icon box
+            // (square = rotation-invariant; clickable stays on the Column).
+            SpinningBox(degrees = spinDegrees) {
+                Icon(
+                    icon,
+                    contentDescription = label,
+                    tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
+                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
+                )
+            }
+        }
+        // PR-ε (spec §5): the label ("Library"/"Settings", longer in es) is far
+        // wider than the nav band is tall, so it spins SEPARATELY from the glyph
+        // and fades out at non-0 rotations instead of overlapping the FAB/edges.
+        SpinningBox(degrees = spinDegrees, fadeOutWhenRotated = true) {
+            Text(
+                label,
+                style = RovaTokens.navTxt,
+                color = if (enabled) RecordChromeTokens.navText else Color.White.copy(alpha = 0.12f),
             )
         }
-        Text(
-            label,
-            style = RovaTokens.navTxt,
-            color = if (enabled) RecordChromeTokens.navText else Color.White.copy(alpha = 0.12f),
-        )
     }
 }
 
 @Composable
-internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
+internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: Float = 0f) {
     val (fill, stroke, semanticsLabel) = when (state) {
         RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
         RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
@@ -770,15 +789,21 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
                 },
             contentAlignment = Alignment.Center,
         ) {
-            when (state) {
-                RecordFabState.Stop -> Box(
-                    Modifier
-                        .size(RecordChromeTokens.stopSquareSize)
-                        .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
-                        .background(RecordChromeTokens.stopSquare),
-                )
-                RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
-                RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+            // PR-ε (spec §5): only the glyph spins inside the stable circular
+            // surface (clickable/semantics/ring untouched). The stop square is
+            // near rotation-symmetric but the play triangle is not — wrapping
+            // the whole `when` keeps every state consistent.
+            SpinningBox(degrees = spinDegrees) {
+                when (state) {
+                    RecordFabState.Stop -> Box(
+                        Modifier
+                            .size(RecordChromeTokens.stopSquareSize)
+                            .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
+                            .background(RecordChromeTokens.stopSquare),
+                    )
+                    RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
+                    RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+                }
             }
         }
     }
