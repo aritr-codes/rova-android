@@ -171,7 +171,6 @@
     <string name="record_switching_camera">Switching…</string>
 
     <!-- Idle settings card -->
-    <string name="record_swipe_to_edit">SWIPE TO EDIT</string>
     <string name="record_cell_clip">Length</string>
     <string name="record_cell_repeats">Clips</string>
     <string name="record_cell_wait">Wait</string>
@@ -482,6 +481,11 @@
     <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
     <!-- PR-β5b — polished presets (built-in / my split) + resolved-config summary -->
     <string name="settings_sheet_title">Recording settings</string>
+    <!-- PR-ε floating settings panel (2026-06-12) -->
+    <string name="settings_panel_close_cd">Close settings</string>
+    <string name="settings_panel_preset_none">Custom</string>
+    <string name="settings_panel_row_expanded">Expanded</string>
+    <string name="settings_panel_row_collapsed">Collapsed</string>
     <string name="settings_sheet_section_builtin">Built-in</string>
     <string name="settings_sheet_section_my_presets">My presets</string>
     <string name="settings_presets_edit">Edit</string>

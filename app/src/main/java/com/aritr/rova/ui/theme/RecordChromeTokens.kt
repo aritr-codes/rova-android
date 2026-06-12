@@ -2,6 +2,7 @@ package com.aritr.rova.ui.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -276,4 +277,13 @@ object RecordChromeTokens {
      * `DualPreviewZone`) to honour the softer-chrome direction. Spec §5 #4.
      */
     val camSplitDividerAlpha = 0.06f
+
+    // ── PR-ε rotation-first chrome ───────────────────────────────────────
+    /** PR-ε (spec §2.4) — in-place counter-rotation duration. One UI measures ~80-160ms
+     *  relayout; Material short-motion is 200-300ms; 180ms between, tune on device. */
+    val elementSpinMs: Int = 180
+    /** PR-ε (spec §4) — uniform square slot for config-strip cells, both orientations.
+     *  48dp = touch-target floor AND rotation-invariant bound (research §3/§4);
+     *  spinning content must fit within slot/√2 ≈ 33.9dp visual diameter. */
+    val cellSlot: Dp = 48.dp
 }

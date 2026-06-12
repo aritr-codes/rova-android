@@ -256,6 +256,11 @@ centered-cap; keeps the portrait scroll/sticky baseline.
 
 ## §B′ — "Rotate, don't redesign" (2026-06-11, owner-ratified; supersedes §B)
 
+> **Post-ε note (2026-06-12):** §B″ below demotes this chrome to the **Adaptive
+> fallback only** (sw600dp+). Not withdrawn — the fallback is mandatory (API 36+
+> ignores orientation-lock APIs on sw600dp+; see B″6). Compact devices run §B″
+> `FixedPhysical` instead.
+
 Authoritative spec: `docs/superpowers/specs/2026-06-10-landscape-rotate-not-redesign-design.md`
 (+ its §11 weight amendment). Approved mock: `landscape_record_mockup.html`. Native reference:
 the stock camera app (RZCYA1VBQ2H).
@@ -284,6 +289,61 @@ A top-center config dock / three-zone landscape composition was explicitly rejec
 `effectiveTargetRotation` + `OrientationEventListener` seam — chrome placement must never
 acquire responsibility for recorded-MP4 orientation. Device acceptance: rotate both senses;
 nav/cluster handedness matches the stock camera; recorded MP4 orientation correct in both.
+
+## §B″ — Fixed window + counter-rotating elements (compact, 2026-06-12)
+
+Authoritative spec: `docs/superpowers/specs/2026-06-12-rotation-first-chrome-fixed-window-design.md`
+(research basis committed `953a2c4`). Native references: stock camera + One UI camera (RZCYA1VBQ2H);
+iPad Camera for the sw600dp+ branch.
+
+**B″1. Principle.** Compact (<sw600dp) record-home runs `ChromeMode.FixedPhysical`: the
+window is orientation-locked portrait and the layout is frozen; device rotation only
+counter-rotates designated element **contents** in place (`ChromeSpin.kt` math:
+`uiCounterRotationDegrees` + `shortestPathDelta` on one unwrapped `Animatable`, 180 ms
+tween; `ReducedMotion` snaps).
+
+**B″2. Lock policy — single writer.** `RecordChromeLockPolicy.shouldLock(route ∧ ¬modal ∧
+FixedPhysical)` is the ONLY lock decision point; the single `requestedOrientation` writer
+on the UI side is RecordScreen's unified `DisposableEffect` (lock when the predicate
+holds; Adaptive/modal → pre-ε per-state behavior; restore on dispose). Gate:
+`checkRecordChromeLockSingleSite` (36th).
+
+**B″3. I-style strip (owner-ratified).** One pill, one footprint; uniform 48dp square
+cell slots; frozen order — `landscapeSense`/`railOrder` are NOT used on compact (sense
+only picks spin direction). Cell/nav/FAB/camera glyph contents spin as the Cell class;
+over-slot labels (SWIPE caption, nav labels, LoopSegmentBar) fade out when spun
+(`uprightFadeAlpha`).
+
+**B″4. Info pills spin.** Status chip, HUD timer/clip, and recovery chip spin WITH the
+device — the timer stays readable mid-REC. Deliberate divergence from One UI's frozen
+sideways timer, justified by Follow-Device per-clip re-orientation.
+
+**B″5. Floating settings panel — window NEVER unlocks on compact (owner-ratified
+2026-06-12; supersedes the original unlock-while-open clause A).** On FixedPhysical the
+settings surface is `FloatingSettingsPanel`: a floating near-square centered card (V1
+content × V3 geometry, mockup `floating_panel_mockup.html`, ratified 2026-06-12) — V1
+full-label stepper rows, no scrim, "Presets" collapsed; V3 near-square rotation-invariant
+footprint. The panel is **chrome-class**: it counter-rotates as ONE unit via `SpinningBox`
+like every other chrome element, so no modal feeds the lock anymore — the lock predicate
+on compact is `route ∧ FixedPhysical`, and the window stays locked portrait, always.
+Tap-outside / ✕ / back dismiss with the sheet's save-on-dismiss semantics; the same
+ViewModel plumbing and row composables are shared with the sheet. The bottom-sheet /
+side-panel presentations survive on the **Adaptive branch only** (sw600dp+, where the
+lock never engages). Known deviation, follow-up: the thermal-tips ModalBottomSheet (and
+the warning sheet, whose visibility is not hoisted out of WarningCenter) renders portrait
+under the permanent lock.
+
+**B″6. §B′ demoted to the Adaptive fallback (sw600dp+), which is MANDATORY.** API 36
+ignores orientation-lock APIs on sw600dp+; API 37 (Rova targetSdk) removes the opt-out,
+with no camera exemption. iPad Camera makes the same choice. Slot placement, axis-flip,
+`railOrder`, and the side panel live on in that branch only.
+
+**B″7. DualShot lock subsumed.** The DualShot-only portrait lock is subsumed by the
+unified effect; the Adaptive branch preserves it.
+
+**B″8. Capture side untouched.** The PR-α `effectiveTargetRotation` seam and the existing
+service gates are unaffected — chrome counter-rotation never acquires responsibility for
+recorded-MP4 orientation (B′4 carries over verbatim).
 
 ## Enforcement
 
@@ -319,6 +379,12 @@ wrappers stay thin seams.
     `CaptureTopology.kt` / `CaptureModes.kt` (the capability-gate site, §5);
     PR-δ extends the allowlist with the concurrent-camera module it builds;
   - `checkUserCopyVocabulary` — enforces §C below.
+
+- **Built (PR-ε, 2026-06-12)** — one gate for the §B″ single-writer clause:
+  - `checkRecordChromeLockSingleSite` — `requestedOrientation` touched on the UI
+    side only by `RecordScreen.kt` (the unified lock `DisposableEffect`, §B″2);
+    block/KDoc and line comments stripped before matching so prose mentions
+    (e.g. `DualShotPortraitGate.kt`) stay legal. 36th `check*` gate.
 
 - **Existing gates preserved**, notably `checkPresetNoOrientation` (ADR-0026):
   presets stay orientation-free; `OrientationPolicy` is a capture axis, never a

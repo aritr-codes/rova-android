@@ -723,34 +723,56 @@ private fun SettingsContent(
         )
     }
     pendingDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(R.string.preset_delete_title)) },
-            text = { Text(stringResource(R.string.preset_delete_body, target.name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingDelete = null
-                    onDeletePreset(target)
-                }) {
-                    Text(
-                        text = stringResource(R.string.preset_delete_confirm),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
+        PresetDeleteDialog(
+            target = target,
+            onDismiss = { pendingDelete = null },
+            onConfirm = {
+                pendingDelete = null
+                onDeletePreset(target)
             },
         )
     }
 }
 
+/**
+ * Confirm dialog for deleting a custom preset. Extracted from [SettingsContent]
+ * (PR-ε floating panel, 2026-06-12) so [FloatingSettingsPanel] reuses the exact
+ * same dialog; behavior unchanged.
+ */
+@Composable
+internal fun PresetDeleteDialog(
+    target: RovaPreset,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.preset_delete_title)) },
+        text = { Text(stringResource(R.string.preset_delete_body, target.name)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.preset_delete_confirm),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.dialog_cancel))
+            }
+        },
+    )
+}
+
 /* ── Pieces ───────────────────────────────────────────────────────────── */
 
+// PR-ε floating panel (2026-06-12) — the row-level composables below are
+// `internal` (not `private`) so FloatingSettingsPanel.kt can reuse the exact
+// same rows with the exact same state plumbing. Visibility-only change; the
+// sheet's behavior is untouched.
 @Composable
-private fun SheetSectionLabel(text: String) {
+internal fun SheetSectionLabel(text: String) {
     Text(
         text.uppercase(),
         style = RovaTokens.sheetSectionLabel,
@@ -759,7 +781,7 @@ private fun SheetSectionLabel(text: String) {
 }
 
 @Composable
-private fun SheetRowDivider() {
+internal fun SheetRowDivider() {
     Box(
         Modifier
             .fillMaxWidth()
@@ -769,7 +791,15 @@ private fun SheetRowDivider() {
 }
 
 @Composable
-private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String) -> Unit) {
+internal fun ModeTabs(
+    currentTopology: String,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+    // PR-ε panel refinement (owner 2026-06-12 #8): the floating panel hides
+    // the per-mode caption to keep the square card free of helper copy; the
+    // Adaptive sheet keeps it (default).
+    showCaption: Boolean = true,
+) {
     // Active tab paints the liquid-glass accent gradient (royal-violet in the
     // Eclipse theme), matching the record-home ModeCycleChip. White-on-gradient
     // is the documented record-chrome contrast exception (ADR-0020).
@@ -820,13 +850,15 @@ private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String)
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            stringResource(CaptureMode.forTopology(currentTopology).captionRes),
-            style = RovaTokens.sheetRowLabel,
-            color = SettingsSheetTokens.rowLabelText,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (showCaption) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(CaptureMode.forTopology(currentTopology).captionRes),
+                style = RovaTokens.sheetRowLabel,
+                color = SettingsSheetTokens.rowLabelText,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -837,7 +869,7 @@ private fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String)
  * so it reads as a preference control, not a mode selector.
  */
 @Composable
-private fun OrientationRow(
+internal fun OrientationRow(
     policy: String,
     lockRotation: Int,
     enabled: Boolean,
@@ -912,7 +944,7 @@ private fun OrientationRow(
 }
 
 @Composable
-private fun StepperRow(
+internal fun StepperRow(
     label: String,
     value: String,
     enabled: Boolean,
@@ -972,7 +1004,7 @@ private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun QualityRow(quality: String, enabled: Boolean, onPick: (String) -> Unit) {
+internal fun QualityRow(quality: String, enabled: Boolean, onPick: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -999,8 +1031,10 @@ private fun QualityRow(quality: String, enabled: Boolean, onPick: (String) -> Un
     }
 }
 
+// `internal` (not private): FloatingSettingsPanel reuses the chip inside its
+// Quality disclosure row (PR-ε refinement #2) — same plumbing as QualityRow.
 @Composable
-private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
     val palette = LocalGlassEnvironment.current.palette
     val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
@@ -1079,7 +1113,7 @@ private fun SettingsSummary(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PresetGroups(
+internal fun PresetGroups(
     presets: List<RovaPreset>,
     activePresetId: String?,
     enabled: Boolean,
@@ -1337,7 +1371,7 @@ private fun presetSpokenDescription(p: RovaPreset): String {
  * error (OK simply stays disabled).
  */
 @Composable
-private fun PresetNameDialog(
+internal fun PresetNameDialog(
     existingCustoms: List<RovaPreset>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
@@ -1400,7 +1434,7 @@ private fun PresetNameDialog(
  * alpha, no value/stepper on the right.
  */
 @Composable
-private fun ResetSnoozesRow(count: Int, onClick: () -> Unit) {
+internal fun ResetSnoozesRow(count: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

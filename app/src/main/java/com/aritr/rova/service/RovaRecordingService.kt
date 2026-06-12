@@ -1863,9 +1863,21 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // written here: with MainActivity force-following the sensor, PreviewView
                     // owns the on-screen rotation from the display; a second listener-driven
                     // preview rotation could diverge from the display and mis-rotate preview.
-                    try { videoCapture?.targetRotation = newStable } catch (_: Exception) {}
+                    //
+                    // Policy gate (owner smoke 2026-06-12, finding #4): the raw snap must
+                    // pass the session-frozen OrientationPolicyResolver BEFORE touching the
+                    // camera — under Lock the resolved value is constant, so targetRotation
+                    // (and the HUD rotating-next hint via pendingNextRotation) never follows
+                    // device tilt. Previously the snap was applied unconditionally and the
+                    // resolver only pinned segment metadata after frames were already wrong.
+                    val effectiveRotation = OrientationPolicyResolver.resolve(
+                        policy = currentOrientationPolicy,
+                        lockRotation = currentOrientationLockRotation,
+                        snappedRotation = newStable,
+                    )
+                    try { videoCapture?.targetRotation = effectiveRotation } catch (_: Exception) {}
                     refreshResolutionConsumers()
-                    _serviceState.update { it.copy(pendingNextRotation = newStable) }
+                    _serviceState.update { it.copy(pendingNextRotation = effectiveRotation) }
                 }
             }
         }
@@ -2713,6 +2725,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 lockRotation = currentOrientationLockRotation,
                 snappedRotation = snappedRotation,
             )
+            // ADR-0029 §3 (boundary-only) — pin the camera to THIS segment's
+            // resolved rotation at its boundary. The listener path is policy-
+            // gated too, but orientation tracking also runs during IDLE preview
+            // where the policy fields still hold their FollowDevice defaults
+            // (they are session-frozen at start) — without this write a locked
+            // session's FIRST clip inherits the stale idle-tracked rotation
+            // (owner smoke 2026-06-12, finding #4).
+            try { videoCap.targetRotation = segmentRotation } catch (_: Exception) {}
             _serviceState.update {
                 it.copy(currentSegmentRotation = segmentRotation, pendingNextRotation = segmentRotation)
             }

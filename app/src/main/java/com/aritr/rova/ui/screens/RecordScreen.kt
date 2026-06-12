@@ -8,6 +8,8 @@ import android.os.Build
 import android.view.WindowManager
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.safeDrawing
@@ -25,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -37,13 +40,19 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import android.view.Surface
+import com.aritr.rova.service.orientation.OrientationPolicyResolver
+import com.aritr.rova.ui.screens.chrome.ChromeMode
 import com.aritr.rova.ui.screens.chrome.ChromeOrientation
 import com.aritr.rova.ui.screens.chrome.ChromeSlot
 import com.aritr.rova.ui.screens.chrome.DeviceLandscape
 import com.aritr.rova.ui.screens.chrome.NavEdge
+import com.aritr.rova.ui.screens.chrome.RecordChromeLockPolicy
+import com.aritr.rova.ui.screens.chrome.chromeMode
 import com.aritr.rova.ui.screens.chrome.clusterEdge
 import com.aritr.rova.ui.screens.chrome.landscapeSense
 import com.aritr.rova.ui.screens.chrome.placementFor
+import com.aritr.rova.ui.screens.chrome.shortestPathDelta
+import com.aritr.rova.ui.screens.chrome.uiCounterRotationDegrees
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
@@ -243,11 +252,47 @@ fun RecordScreen(
         onDispose { localView.keepScreenOn = false }
     }
 
-    // ADR-0029 (force-rotate) — the Single-camera Record viewfinder follows the
-    // physical sensor like a camera app, even when the system auto-rotate lock is
-    // ON, so the landscape chrome (PR-β) and device-driven capture rotation (PR-α)
-    // actually engage on locked devices. FULL_SENSOR ignores the lock and allows
-    // all four orientations; the service's OrientationEventListener already snaps
+    // PR-ε (spec §2, §9) — chrome model by smallest width (orientation-stable).
+    // FixedPhysical (compact phones): window locked portrait, chrome contents
+    // counter-rotate. Adaptive (sw600dp+): pre-ε behavior — window rotates.
+    val chromeModeNow = chromeMode(configuration.smallestScreenWidthDp)
+
+    // Snapped physical rotation (sensor-driven; works with the system auto-rotate
+    // lock OFF — the owner's daily configuration — and with the window
+    // orientation-locked, where LocalConfiguration / display.rotation freeze).
+    val snappedRotation by viewModel.deviceRotation.collectAsStateWithLifecycle()
+
+    // PR-ε (spec §2.4) — ONE unwrapped accumulator angle for the whole screen,
+    // shortest-path retarget (never animate to the raw target — a 270°→0°
+    // transition would spin the long way). First composition JUMPS to the
+    // current angle (no spin-on-entry). Known cosmetic edge: on COLD entry held
+    // landscape the signal seeds ROTATION_0 until the listener's first dwell-
+    // filtered emission, so one 180ms spin plays shortly after entry — not a
+    // bug; the locked window offers no better seed (Display.rotation frozen).
+    // Reduced motion snaps instead of animating (ADR-0020 /
+    // checkA11yAnimationGated).
+    val reduceMotion = rememberReduceMotion()
+    // γ orientation policy gates the chrome too (owner smoke 2026-06-12,
+    // finding #4): under Lock the chrome freezes to the LOCKED orientation —
+    // markings match the pinned capture, exactly like iOS with the rotation
+    // lock engaged — instead of following grip. Same resolver as the service's
+    // capture path, so chrome and capture can never disagree.
+    val effectiveChromeRotation = OrientationPolicyResolver.resolve(
+        policy = orientationPolicy,
+        lockRotation = orientationLockRotation,
+        snappedRotation = snappedRotation,
+    )
+    val spin = remember { Animatable(uiCounterRotationDegrees(effectiveChromeRotation)) }
+    LaunchedEffect(effectiveChromeRotation, chromeModeNow, reduceMotion) {
+        if (chromeModeNow != ChromeMode.FixedPhysical) return@LaunchedEffect
+        val target = spin.value + shortestPathDelta(spin.value, uiCounterRotationDegrees(effectiveChromeRotation))
+        if (reduceMotion) spin.snapTo(target)
+        else spin.animateTo(target, animationSpec = tween(RecordChromeTokens.elementSpinMs))
+    }
+    // ADR-0029 (force-rotate, pre-ε Adaptive behavior) — the Single-camera Record
+    // viewfinder follows the physical sensor like a camera app, even when the
+    // system auto-rotate lock is ON. FULL_SENSOR ignores the lock and allows all
+    // four orientations; the service's OrientationEventListener already snaps
     // capture to the same physical value.
     //
     // Gated to Single (mode != "DualShot"): DualShot pins its own rotation in the
@@ -256,22 +301,51 @@ fun RecordScreen(
     // (codex review). DualShot is therefore LOCKED to portrait — explicitly
     // SCREEN_ORIENTATION_PORTRAIT, not USER: with the system auto-rotate lock off,
     // USER would keep whatever orientation Single last forced (e.g. the landscape
-    // that breaks the EGL render). Keying the effect on the resolved target
-    // re-applies on a mid-screen mode switch, snapping the window back to portrait
-    // on entering DualShot. The original requestedOrientation is captured and
-    // restored on leave so this never leaks a policy change to other screens.
-    // Driven off `desiredMode` (pending ?: committed) so a landscape→DualShot pick
-    // starts the window rotating to portrait BEFORE the deferred camera rebind commits.
+    // that breaks the EGL render). Driven off `desiredMode` (pending ?: committed)
+    // so a landscape→DualShot pick starts the window rotating to portrait BEFORE
+    // the deferred camera rebind commits.
     val targetOrientation = if (desiredMode == DualShotPortraitGate.DUAL_SHOT) {
         ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     } else {
         ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
     }
-    DisposableEffect(targetOrientation) {
+
+    // PR-ε (spec §2.1, ADR-0029 §B″) — THE single setRequestedOrientation site
+    // for the record route (gate: checkRecordChromeLockSingleSite). Lock = route
+    // ∧ FixedPhysical. §B″5 rewrite (floating panel, owner-ratified 2026-06-12):
+    // the settings surface on compact is now FloatingSettingsPanel — chrome that
+    // spins as a unit — so NO modal releases the lock anymore; the window stays
+    // locked portrait, always, on compact. `modalOpen` is pinned to false (the
+    // policy parameter is retained for the API and the Adaptive contract, where
+    // shouldLock is false regardless). Known deviation: the thermal tips
+    // ModalBottomSheet now renders portrait under the lock (§B″5, follow-up).
+    // Subsumes the DualShot-only portrait lock (lock target is PORTRAIT, which
+    // is exactly what DualShot required). Adaptive keeps the pre-ε per-state
+    // behavior verbatim via `targetOrientation` above (DualShot → PORTRAIT,
+    // Single → FULL_SENSOR). The original requestedOrientation is captured and
+    // restored on dispose so this never leaks a policy change to other screens.
+    val lockChrome = RecordChromeLockPolicy.shouldLock(
+        isRecordRoute = true,   // RecordScreen only composes on the record route.
+        modalOpen = false,      // ADR-0029 §B″5 — compact never unlocks post-panel.
+        chromeMode = chromeModeNow,
+    )
+    // Counter-rotation is only valid while the window is actually locked
+    // (final-review finding #2 — double compensation otherwise). Post-§B″5
+    // rewrite lockChrome is constant true on FixedPhysical (modalOpen pinned
+    // false), so the guard is vestigial-but-correct; kept so the expression
+    // stays valid if the lock policy ever grows another release condition.
+    val spinDegrees = if (chromeModeNow == ChromeMode.FixedPhysical && lockChrome) spin.value else 0f
+    DisposableEffect(lockChrome, targetOrientation) {
         val activity = localView.context as? Activity
         val previousOrientation = activity?.requestedOrientation
         if (activity != null) {
-            activity.requestedOrientation = targetOrientation
+            activity.requestedOrientation = if (lockChrome) {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                // Adaptive or modal-open: pre-ε behavior exactly as the replaced
+                // block implemented it.
+                targetOrientation
+            }
         }
         onDispose {
             if (activity != null && previousOrientation != null) {
@@ -781,7 +855,24 @@ fun RecordScreen(
                 // behaves like portrait. The settings sheet covers the rotated cluster
                 // (config strip + nav), so chrome is suppressed while it's open in BOTH
                 // orientations. MergeCompleteCard + loading overlay stay outside the gate.
-                if (!combinedOpen) {
+                // PR-ε floating panel (ADR-0029 §B″5, 2026-06-12) — Adaptive-only now:
+                // on FixedPhysical the settings surface is a floating card over the
+                // viewfinder with NO scrim, ratified so the strip/nav stay VISIBLE
+                // below it; the panel's full-screen tap-catcher consumes input so the
+                // visible chrome can't be hit while it's open.
+                if (!combinedOpen || chromeModeNow == ChromeMode.FixedPhysical) {
+                // A11y (ADR-0020) — while the floating panel is open the chrome
+                // stays COMPOSED (visible under the no-scrim card) but must leave
+                // the semantics tree: the panel's tap-catcher blocks touch, yet
+                // TalkBack could otherwise traverse to and ACTIVATE the Start
+                // FAB / nav / recovery chip underneath. clearAndSetSemantics
+                // prunes every descendant node while occluded. (hideFromAccessibility
+                // needs compose-ui 1.8; BOM 2025.01.01 ships 1.7.x.)
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .then(if (combinedOpen) Modifier.clearAndSetSemantics {} else Modifier),
+                ) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -793,6 +884,7 @@ fun RecordScreen(
                             placementFor(ChromeSlot.RECOVERY_CHIP, chromeOrientation),
                             chromeTopInsets,
                         ).then(transientClusterClearance),
+                        spinDegrees = spinDegrees,
                     )
                 }
                 // ADR 0007 — idle WarningCenter mount: renders the warning sheet
@@ -868,18 +960,11 @@ fun RecordScreen(
                     RecordHudState.Waiting,
                     is RecordHudState.Merging -> {
                         // R2 active-state HUD: WarningCenter (mid-rec TopBanner) +
-                        // RecordActiveHud (loop-pill + status-pill). One top-centered
-                        // Column, pushed below the status bar. The status pill consumes
-                        // clipSecondsLeft / waitSecondsLeft / Merging-progress per state;
-                        // the helper dispatches on `state`. Stop is the bottom-nav FAB.
-                        Column(
-                            modifier = slotModifier(
-                                placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
-                                chromeTopInsets,
-                            ).then(transientClusterClearance).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
+                        // RecordActiveHud (loop-pill + status-pill). The status pill
+                        // consumes clipSecondsLeft / waitSecondsLeft / Merging-progress
+                        // per state; the helper dispatches on `state`. Stop is the
+                        // bottom-nav FAB.
+                        val midRecWarnings: @Composable () -> Unit = {
                             WarningCenter(
                                 hudState = hudState,
                                 onStopRecording = { viewModel.stopRecording() },
@@ -887,6 +972,8 @@ fun RecordScreen(
                                 onNavigateToHistory = onNavigateToHistory,
                                 onOpenThermalTips = { showTipsSheet = true },
                             )
+                        }
+                        val activeHud: @Composable (Modifier) -> Unit = { hudModifier ->
                             RecordActiveHud(
                                 state = hudState,
                                 loopIndex = serviceState.currentLoop,
@@ -897,6 +984,54 @@ fun RecordScreen(
                                 // current clip stays frozen; flag the next-clip rotation.
                                 rotatingNextClip = serviceState.pendingNextRotation != serviceState.currentSegmentRotation,
                                 orientation = chromeOrientation,
+                                spinDegrees = spinDegrees,
+                                modifier = hudModifier,
+                            )
+                        }
+                        // PR-ε refinement (owner 2026-06-12 #7): the HUD belongs to the
+                        // PHYSICAL top edge as held, not to the locked window's top. In a
+                        // 90°/270° grip the window-top slot is a physical SIDE edge, so the
+                        // spun group re-anchors to the side-center of the locked-portrait
+                        // window — which IS the physical top-center. Mid-rec warning
+                        // banners are text surfaces (spec §3 — they never spin) and keep
+                        // the window-top slot in every grip. ROTATION_180 keeps the
+                        // window-top anchor (reverse-portrait: same edge geometry).
+                        val hudSideAnchor = if (
+                            chromeModeNow == ChromeMode.FixedPhysical && lockChrome
+                        ) {
+                            when (effectiveChromeRotation) {
+                                1 -> Alignment.CenterEnd    // ROTATION_90 — window right = physical top
+                                3 -> Alignment.CenterStart  // ROTATION_270 — window left = physical top
+                                else -> null
+                            }
+                        } else null
+                        if (hudSideAnchor == null) {
+                            // Portrait grip / Adaptive — original top-centered stack.
+                            Column(
+                                modifier = slotModifier(
+                                    placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                    chromeTopInsets,
+                                ).then(transientClusterClearance).fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                midRecWarnings()
+                                activeHud(Modifier)
+                            }
+                        } else {
+                            Column(
+                                modifier = slotModifier(
+                                    placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                    chromeTopInsets,
+                                ).then(transientClusterClearance).fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                midRecWarnings()
+                            }
+                            activeHud(
+                                Modifier
+                                    .align(hudSideAnchor)
+                                    .padding(horizontal = 10.dp),
                             )
                         }
                     }
@@ -955,6 +1090,7 @@ fun RecordScreen(
                         modifier = configEdgeModifier,
                         orientationPolicy = orientationPolicy,
                         orientationLockRotation = orientationLockRotation,
+                        spinDegrees = spinDegrees,
                     )
                 }
 
@@ -974,6 +1110,7 @@ fun RecordScreen(
                             placementFor(ChromeSlot.STATUS_OVERLAY, chromeOrientation),
                             chromeTopInsets,
                         ),
+                        spinDegrees = spinDegrees,
                     )
                     // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
                     // mode (rear-only by design — DualShot from one full-FOV
@@ -1009,6 +1146,7 @@ fun RecordScreen(
                             placementFor(ChromeSlot.CAMERA_CONTROLS, chromeOrientation),
                             chromeTopInsets,
                         ),
+                        spinDegrees = spinDegrees,
                     )
                 }
                 // PR-β′ — ONE nav in both orientations: the portrait bottom bar rotated
@@ -1028,8 +1166,10 @@ fun RecordScreen(
                     } else {
                         Modifier.align(Alignment.BottomCenter)
                     },
+                    spinDegrees = spinDegrees,
                 )
-                }   // close if (!combinedOpen) — chrome suppressed behind the sheet
+                }   // close a11y wrapper — semantics pruned while panel open
+                }   // close chrome gate — suppressed behind the sheet (Adaptive only; §B″5)
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
                 // shown for ~900 ms between merge success and the
@@ -1051,16 +1191,67 @@ fun RecordScreen(
                 // Task 14 — the in-app tutorial overlay (3-step walkthrough) is
                 // removed; onboarding owns the first-run tutorial now (spec A2).
 
-                // Settings sheet — the custom camera-peek panel
-                // (mockups/new_uiux/02-settings-sheet.html). Always emitted;
-                // SettingsSheet owns its slide animation via `visible`. Edits
-                // write through immediately; Save / handle-drag / back dismiss.
+                // Settings surface — presentation by chrome mode (ADR-0029 §B″5,
+                // owner-ratified 2026-06-12). FixedPhysical (compact): a floating
+                // near-square card over the viewfinder — record CHROME that spins
+                // as one unit via SpinningBox; no scrim; tap-outside / ✕ / back
+                // dismiss. Adaptive (sw600dp+): the pre-existing camera-peek
+                // bottom sheet / side panel, untouched. Both are always emitted
+                // and own their open/close animation via `visible`; edits write
+                // through immediately via the SAME ViewModel plumbing.
                 // Phase 4 Slice 3 — thermal tips bottom sheet. Hosted here so
-                // the sheet survives the same HUD transitions as SettingsSheet.
+                // the sheet survives the same HUD transitions as the settings
+                // surface. On compact it renders portrait under the permanent
+                // lock (§B″5 known deviation, follow-up).
                 if (showTipsSheet) {
                     ThermalTipsSheet(onDismiss = { showTipsSheet = false })
                 }
 
+                if (chromeModeNow == ChromeMode.FixedPhysical) {
+                    FloatingSettingsPanel(
+                        visible = combinedOpen,
+                        spinDegrees = spinDegrees,
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        currentMode = mode,
+                        editable = !isUiLocked,
+                        presets = allPresets,
+                        activePresetId = activePresetId,
+                        onApplyPreset = viewModel::applyPreset,
+                        onSavePreset = viewModel::savePreset,
+                        onDeletePreset = viewModel::deletePreset,
+                        onDurationChange = { viewModel.duration.value = it },
+                        onLoopCountChange = { viewModel.loopCount.value = it },
+                        onIntervalChange = { viewModel.interval.value = it },
+                        onQualityChange = { viewModel.resolution.value = it },
+                        onModePick = { picked ->
+                            // ADR-0029 — defer a landscape→DualShot pick until portrait;
+                            // any other pick commits now and clears a pending switch.
+                            // (On compact the window is always portrait, so this never
+                            // defers in practice — kept identical to the sheet wiring.)
+                            if (DualShotPortraitGate.shouldDefer(picked, isPortrait)) {
+                                pendingMode = picked
+                            } else {
+                                pendingMode = null
+                                viewModel.setTopology(picked)
+                            }
+                        },
+                        snoozedCount = snoozedSet.size,
+                        onResetSnoozes = if (snoozedSet.isNotEmpty()) {
+                            { warningVm.clearSnoozes() }
+                        } else null,
+                        orientationPolicy = orientationPolicy,
+                        orientationLockRotation = orientationLockRotation,
+                        orientationEnabled = !isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT,
+                        currentDeviceRotation = currentDeviceRotation,
+                        onOrientationPick = { policy, lockRot ->
+                            if (!isUiLocked) viewModel.setOrientationPolicy(policy, lockRot)
+                        },
+                        onDismiss = { viewModel.closeSettingsSheet() },
+                    )
+                } else {
                 SettingsSheet(
                     visible = combinedOpen,
                     durationSeconds = duration,
@@ -1112,6 +1303,7 @@ fun RecordScreen(
                     },
                     onDismiss = { viewModel.closeSettingsSheet() },
                 )
+                }   // close settings-surface presentation branch (panel / sheet)
             }   // close Box
         }       // close Scaffold content lambda
 

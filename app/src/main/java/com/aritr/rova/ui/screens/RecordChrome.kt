@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
@@ -77,6 +79,7 @@ import com.aritr.rova.ui.screens.chrome.DeviceLandscape
 import com.aritr.rova.ui.screens.chrome.railOrder
 import com.aritr.rova.ui.screens.chrome.SlotAnchor
 import com.aritr.rova.ui.screens.chrome.SlotPlacement
+import com.aritr.rova.ui.screens.chrome.uprightFadeAlpha
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 
@@ -89,6 +92,41 @@ private val ControlBtnTouchSize = 48.dp           // a11y touch target; the glas
 private val StatusPillShape = RoundedCornerShape(RecordChromeTokens.statusPillRadius)
 private val PillShape = RoundedCornerShape(RecordChromeTokens.loopPillRadius)
 private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCardRadiusPill)
+
+/**
+ * PR-ε (spec §3) — in-place counter-rotation wrapper. The OUTER Box is the
+ * stable layout/interaction container (clickable/semantics belong on it or on
+ * an ancestor — modifiers BEFORE a graphicsLayer are not transformed); only the
+ * INNER visual child rotates. graphicsLayer is draw-phase-only for layout, so
+ * siblings measure against the unrotated bounds — square containers are
+ * rotation-invariant (research §3).
+ *
+ * The child measures UNBOUNDED and centers in the slot: content wider than the
+ * slot (e.g. the LOCKED cell's "Landscape" value in a 48dp square) keeps its
+ * natural size and draws overflow instead of truncating — the accepted
+ * transient-AABB-overflow treatment (research §3); layout siblings still see
+ * only the slot bounds.
+ */
+@Composable
+internal fun SpinningBox(
+    degrees: Float,
+    modifier: Modifier = Modifier,
+    fadeOutWhenRotated: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .wrapContentSize(align = Alignment.Center, unbounded = true)
+                .graphicsLayer {
+                    rotationZ = degrees
+                    // spec §5 — labels that exceed their slot fade out instead of
+                    // permanently overlapping neighboring chrome at ±90/180.
+                    if (fadeOutWhenRotated) alpha = uprightFadeAlpha(degrees)
+                },
+        ) { content() }
+    }
+}
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -104,27 +142,33 @@ fun RecordTopOverlay(
     currentLoop: Int,              // for the loop pill in active states
     totalLoops: Int,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
     // (Recording/Waiting) block was removed — unreachable since T9.
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.topOverlayGap)) {
-        GlassSurface(role = GlassRole.RecordChrome, shape = StatusPillShape) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = RecordChromeTokens.statusPillPaddingH,
-                    vertical = RecordChromeTokens.statusPillPaddingV,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
-            ) {
-                StatusDot(hudState)
-                Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
-                if (statusDetail != null) {
-                    Text(
-                        stringResource(R.string.record_status_detail_prefix, statusDetail),
-                        style = RovaTokens.statusTime,
-                        color = RecordChromeTokens.statusTimeText,
-                    )
+        // PR-ε (spec §3/§6): the WHOLE status pill (glass + dot + text) spins as
+        // one unit in place — info pills stay readable rotated, so no fade; the
+        // transposed AABB overflowing into the viewfinder is accepted by design.
+        SpinningBox(degrees = spinDegrees) {
+            GlassSurface(role = GlassRole.RecordChrome, shape = StatusPillShape) {
+                Row(
+                    modifier = Modifier.padding(
+                        horizontal = RecordChromeTokens.statusPillPaddingH,
+                        vertical = RecordChromeTokens.statusPillPaddingV,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
+                ) {
+                    StatusDot(hudState)
+                    Text(statusText, style = RovaTokens.statusMain, color = RecordChromeTokens.statusMainText)
+                    if (statusDetail != null) {
+                        Text(
+                            stringResource(R.string.record_status_detail_prefix, statusDetail),
+                            style = RovaTokens.statusTime,
+                            color = RecordChromeTokens.statusTimeText,
+                        )
+                    }
                 }
             }
         }
@@ -193,11 +237,14 @@ fun RecordCameraControls(
     // PR-β — landscape lays the two controls in a Row (a vertical stack in the
     // top-right would reach down toward the center-right record FAB). Same leaves.
     orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
+    // PR-ε (spec §5) — counter-rotation angle for the button glyphs only; the
+    // 48dp circular containers (touch targets) stay stable.
+    spinDegrees: Float = 0f,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint) }
-    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint) }
+    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint, spinDegrees) }
+    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint, spinDegrees) }
     if (orientation == ChromeOrientation.LANDSCAPE) {
         Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
             flash(); flip()
@@ -210,7 +257,7 @@ fun RecordCameraControls(
 }
 
 @Composable
-private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color) {
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color, spinDegrees: Float = 0f) {
     GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
         val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
             flashMode != RovaRecordingService.FLASH_MODE_AUTO
@@ -218,29 +265,33 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
             flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
             else -> tint
         }
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                RecordChromeIcons.flashBolt,
-                contentDescription = stringResource(R.string.record_flash_cd),
-                tint = contentTint,
-                modifier = Modifier.size(15.dp),
-            )
-            if (isOff) {
-                // OFF state — diagonal slash across the bolt (mockup shows
-                // only the bolt; the slash is the app's tri-state affordance).
-                Box(
-                    Modifier
-                        .size(width = 20.dp, height = 1.5.dp)
-                        .rotate(-45f)
-                        .background(contentTint),
+        // PR-ε (spec §5): bolt + OFF slash spin as ONE unit so the slash stays
+        // diagonal relative to the glyph, not the screen.
+        SpinningBox(degrees = spinDegrees) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    RecordChromeIcons.flashBolt,
+                    contentDescription = stringResource(R.string.record_flash_cd),
+                    tint = contentTint,
+                    modifier = Modifier.size(15.dp),
                 )
+                if (isOff) {
+                    // OFF state — diagonal slash across the bolt (mockup shows
+                    // only the bolt; the slash is the app's tri-state affordance).
+                    Box(
+                        Modifier
+                            .size(width = 20.dp, height = 1.5.dp)
+                            .rotate(-45f)
+                            .background(contentTint),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color) {
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color, spinDegrees: Float = 0f) {
     // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
     // P+L mode can disable JUST this button while flash stays usable. P+L is
     // rear-only by design (DualShot needs a single full-FOV sensor frame,
@@ -256,12 +307,14 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
             if (isFrontCamera) R.string.record_switch_to_rear_cd
             else R.string.record_switch_to_front_cd,
         )
-        Icon(
-            flipIcon,
-            contentDescription = flipCd,
-            tint = flipTint,
-            modifier = Modifier.size(16.dp),
-        )
+        SpinningBox(degrees = spinDegrees) {
+            Icon(
+                flipIcon,
+                contentDescription = flipCd,
+                tint = flipTint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -304,6 +357,7 @@ fun RecordSettingsCard(
     dimmed: Boolean = false,
     orientationPolicy: String = "FollowDevice",
     orientationLockRotation: Int = 0,
+    spinDegrees: Float = 0f,
 ) {
     Column(
         modifier = modifier
@@ -312,17 +366,10 @@ fun RecordSettingsCard(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap),
     ) {
-        // swipe-to-edit hint
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 1.dp)) {
-            Box(
-                Modifier
-                    .width(RecordChromeTokens.swipeBarWidth)
-                    .height(RecordChromeTokens.swipeBarHeight)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(RecordChromeTokens.swipeHint),
-            )
-            Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
-        }
+        // PR-ε refinement (owner 2026-06-12 #4): the swipe-bar + "SWIPE TO EDIT"
+        // hint above the card is REMOVED — the floating panel's spring slide-up
+        // open animation is the edit affordance now; the tap/swipe gesture
+        // surface on the card itself is unchanged.
         GlassSurface(
             role = GlassRole.RecordChrome,
             modifier = if (sense == null) Modifier.fillMaxWidth() else Modifier,
@@ -361,19 +408,20 @@ fun RecordSettingsCard(
                     modifier = Modifier.fillMaxWidth().then(interaction),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     ModeCycleChip(
                         mode = mode,
                         onCycleMode = onCycleMode,
                         onLongPress = onOpenSheet,
                         enabled = !dimmed,
                         modifier = Modifier.weight(1f),
+                        spinDegrees = spinDegrees,
                     )
                     if (showLocked) {
                         CellSep()
@@ -382,14 +430,20 @@ fun RecordSettingsCard(
                             lockedValueStr,
                             Modifier.weight(1f),
                             readOnly = true,
+                            spinDegrees = spinDegrees,
                         )
                     }
-                    Icon(
-                        RecordChromeIcons.chevronUp,
-                        contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                        tint = RecordChromeTokens.settingsArrow,
-                        modifier = Modifier.padding(start = 8.dp).size(13.dp),
-                    )
+                    // PR-ε (owner smoke 2026-06-12, finding #3): the expand arrow
+                    // spins with the cells — a stable up-arrow reads wrong in
+                    // landscape grip.
+                    SpinningBox(degrees = spinDegrees, modifier = Modifier.padding(start = 8.dp).size(13.dp)) {
+                        Icon(
+                            RecordChromeIcons.chevronUp,
+                            contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                            tint = RecordChromeTokens.settingsArrow,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
                 }
             } else {
                 // LANDSCAPE — the SAME pill rotated to a vertical column on the cluster
@@ -397,16 +451,20 @@ fun RecordSettingsCard(
                 // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
                 // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
                 // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
+                // PR-ε note: this branch is Adaptive-fallback-only (sw600dp+ — compact
+                // phones lock the window and never reach it); the 48dp square cell
+                // slots (spec §4) make the rail taller than the original compact
+                // design — acceptable on tablet heights, re-judge if a device hits it.
                 val baseCells = listOf<@Composable () -> Unit>(
-                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true) },
-                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true, spinDegrees = spinDegrees) },
                 )
                 val cells = if (showLocked) {
                     baseCells + listOf<@Composable () -> Unit>({
-                        SettingsCell(stringResource(R.string.record_cell_locked), lockedValueStr, Modifier, readOnly = true, compact = true)
+                        SettingsCell(stringResource(R.string.record_cell_locked), lockedValueStr, Modifier, readOnly = true, compact = true, spinDegrees = spinDegrees)
                     })
                 } else {
                     baseCells
@@ -457,18 +515,16 @@ private fun ModeCycleChip(
     enabled: Boolean,
     compact: Boolean = false,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     val accented = CaptureMode.isAccented(mode)
     val palette = LocalGlassEnvironment.current.palette
     val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
-    val glyphAlpha = if (enabled) 0.85f else 0.45f
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
     val label = stringResource(CaptureMode.forTopology(mode).labelRes)
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
-            .clip(chipShape)
-            .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
@@ -478,55 +534,69 @@ private fun ModeCycleChip(
                 } else {
                     Modifier
                 }
-            )
-            .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+            ),
     ) {
-        Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                label,
-                style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-                color = if (accented) Color.White else RecordChromeTokens.cellValueText,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
-            Text(
-                stringResource(R.string.record_cell_mode),
-                style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-                color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
+        // PR-ε (spec §3): the accent pill (clip + gradient + label) spins AS A
+        // UNIT inside the stable clickable container — clipping on the stable
+        // container would cut the rotated label (rotated "DualShot" is taller
+        // than the chip's hug-height); the surrounding card gives the spun
+        // pill its vertical clearance. The ↻ cycle glyph is REMOVED (owner
+        // 2026-06-12 refinement #6 — it overlapped the value text); tap-to-
+        // cycle stays discoverable via the chip's accent + long-press sheet.
+        SpinningBox(degrees = spinDegrees, modifier = Modifier.align(Alignment.Center)) {
+            Column(
+                modifier = Modifier
+                    .clip(chipShape)
+                    .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
+                    .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    label,
+                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                    color = if (accented) Color.White else RecordChromeTokens.cellValueText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                Text(
+                    stringResource(R.string.record_cell_mode),
+                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                    color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
         }
-        Text(
-            "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
-            modifier = Modifier.align(Alignment.TopEnd),
-            color = if (accented) Color.White.copy(alpha = glyphAlpha)
-                    else RecordChromeTokens.cellKeyText.copy(alpha = glyphAlpha),
-            fontSize = RecordChromeTokens.modeChipGlyphSize,
-        )
     }
 }
 
 @Composable
-private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false) {
-    Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            value,
-            style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-            color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
-        Text(
-            key.uppercase(),
-            style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-            color = RecordChromeTokens.cellKeyText,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false, spinDegrees: Float = 0f) {
+    // PR-ε (spec §4, I-style owner-ratified): uniform square slot, content
+    // counter-rotates inside it. The OUTER Box keeps the call-site modifier
+    // (portrait cells are weight(1f) — a fixed Row constraint that size()
+    // cannot override, and the pill must keep filling edge-to-edge); the
+    // INNER 48dp square is the uniform rotation-invariant spin slot, centered
+    // within whatever width the call site assigns.
+    Box(modifier, contentAlignment = Alignment.Center) {
+        SpinningBox(degrees = spinDegrees, modifier = Modifier.size(RecordChromeTokens.cellSlot)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    value,
+                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                    color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                Text(
+                    key.uppercase(),
+                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                    color = RecordChromeTokens.cellKeyText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
@@ -576,17 +646,18 @@ fun RecordBottomNav(
     onFabClick: () -> Unit,
     sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     // Same three leaves in both orientations (identical widgets/sizes) — only the
     // axis + order change. [railOrder] maps the portrait left→right adjacency to the
     // landscape top→bottom rail so Library/FAB/Settings keep their spatial relation
     // (acceptance — muscle memory).
     val library: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary, spinDegrees = spinDegrees)
     }
-    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick) }
+    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick, spinDegrees = spinDegrees) }
     val settings: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings, spinDegrees = spinDegrees)
     }
     if (sense == null) {
         // PORTRAIT — Slice B gradient brush bottom bar. The outer Box paints the brush
@@ -633,7 +704,7 @@ fun RecordBottomNav(
 }
 
 @Composable
-internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: Float = 0f) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -652,23 +723,26 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
                 .clip(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
-                modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
-            )
+            // PR-ε (spec §5): glyph spins inside the stable square icon box
+            // (square = rotation-invariant; clickable stays on the Column).
+            SpinningBox(degrees = spinDegrees) {
+                Icon(
+                    icon,
+                    contentDescription = label,
+                    tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
+                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
+                )
+            }
         }
-        Text(
-            label,
-            style = RovaTokens.navTxt,
-            color = if (enabled) RecordChromeTokens.navText else Color.White.copy(alpha = 0.12f),
-        )
+        // PR-ε refinement (owner 2026-06-12 #5): no visible text label in EITHER
+        // orientation — the portrait label vanished in landscape (it faded out
+        // when spun), so for consistency it's gone everywhere. [label] still
+        // names the item for a11y (Icon contentDescription + onClickLabel).
     }
 }
 
 @Composable
-internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
+internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: Float = 0f) {
     val (fill, stroke, semanticsLabel) = when (state) {
         RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
         RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
@@ -701,15 +775,21 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
                 },
             contentAlignment = Alignment.Center,
         ) {
-            when (state) {
-                RecordFabState.Stop -> Box(
-                    Modifier
-                        .size(RecordChromeTokens.stopSquareSize)
-                        .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
-                        .background(RecordChromeTokens.stopSquare),
-                )
-                RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
-                RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+            // PR-ε (spec §5): only the glyph spins inside the stable circular
+            // surface (clickable/semantics/ring untouched). The stop square is
+            // near rotation-symmetric but the play triangle is not — wrapping
+            // the whole `when` keeps every state consistent.
+            SpinningBox(degrees = spinDegrees) {
+                when (state) {
+                    RecordFabState.Stop -> Box(
+                        Modifier
+                            .size(RecordChromeTokens.stopSquareSize)
+                            .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
+                            .background(RecordChromeTokens.stopSquare),
+                    )
+                    RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
+                    RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+                }
             }
         }
     }
@@ -722,28 +802,36 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
  * RovaApp.recoveryReport via RecoveryViewSource.eligibleSessionCount.
  */
 @Composable
-fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier) {
+fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
     // WCAG 2.2 AA SC 1.3.1 / 4.1.2 (ADR-0020, REC-19): one button node with a
     // single spoken name — the decorative history glyph (CD=null) and the label
     // otherwise read as separate fragments.
     val chipDescription = pluralStringResource(R.plurals.record_recovery_chip_cd, count, count)
     val chipLabel = pluralStringResource(R.plurals.record_recovery_chip, count, count)
     val reviewLabel = stringResource(R.string.record_recovery_review)
-    Surface(
+    // PR-ε (spec §3): clickable + semantics stay on the STABLE outer Box (hit-
+    // testing follows graphicsLayer — a rotated clickable would rotate the touch
+    // target); the whole visual chip (glass + glyph + label) spins inside it.
+    Box(
         modifier = modifier
             .clickable(onClickLabel = reviewLabel, role = Role.Button) { onReview() }
             .semantics(mergeDescendants = true) { contentDescription = chipDescription },
-        shape = RoundedCornerShape(20.dp),
-        color = Color.Black.copy(alpha = 0.40f),
-        contentColor = Color.White,
     ) {
-        Row(
-            Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-            Text(chipLabel, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+        SpinningBox(degrees = spinDegrees) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Black.copy(alpha = 0.40f),
+                contentColor = Color.White,
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    Text(chipLabel, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+                }
+            }
         }
     }
 }
@@ -968,7 +1056,7 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
     // loopPillContent is the tested (untouched) hide-gate: null ⇒ single-clip /
     // zero-clip ⇒ no pill. The mockup splits the body into a numeral + a caption,
     // so the numeral is re-derived here with the same clamp loopPillContent uses.
@@ -978,23 +1066,28 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
     } else {
         "${loopIndex.coerceIn(0, loopTotal)}/$loopTotal"
     }
-    Surface(
-        modifier = modifier,
-        shape = PillShape,
-        color = RecordChromeTokens.glassFill,
-        contentColor = Color.White,
-        border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = RecordChromeTokens.loopPillPaddingH,
-                vertical = RecordChromeTokens.loopPillPaddingV,
-            ),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.loopPillContentGap),
+    // PR-ε (spec §3/§6): the whole pill (surface + numeral + caption) spins as one
+    // unit, AFTER the hide-gate so a hidden pill still emits no node (an empty
+    // SpinningBox would consume the HUD Column's spacedBy gap). No fade — info
+    // pills must stay readable rotated.
+    SpinningBox(degrees = spinDegrees, modifier = modifier) {
+        Surface(
+            shape = PillShape,
+            color = RecordChromeTokens.glassFill,
+            contentColor = Color.White,
+            border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
         ) {
-            Text(numeral, style = RovaTokens.loopCount, color = RecordChromeTokens.loopCountText)
-            Text(stringResource(R.string.record_loops_done_caption), style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = RecordChromeTokens.loopPillPaddingH,
+                    vertical = RecordChromeTokens.loopPillPaddingV,
+                ),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.loopPillContentGap),
+            ) {
+                Text(numeral, style = RovaTokens.loopCount, color = RecordChromeTokens.loopCountText)
+                Text(stringResource(R.string.record_loops_done_caption), style = RovaTokens.loopUnit, color = RecordChromeTokens.loopUnitText)
+            }
         }
     }
 }
@@ -1010,67 +1103,77 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
  * the fill is a solid gradient over a 12%-white track, matching `.m-seg i`.
  */
 @Composable
-private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier) {
+private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
     val segments = loopSegments(loopIndex, loopTotal) ?: return
     val palette = LocalGlassEnvironment.current.palette
     val fillBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
     val track = Color.White.copy(alpha = 0.12f)   // mockup .m-seg i background
     val segShape = RoundedCornerShape(3.dp)
     val barHeight = 5.dp
-    when (segments) {
-        is LoopSegments.Discrete -> Row(
-            modifier = modifier.width(200.dp).height(barHeight),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            repeat(segments.total) { i ->
-                val cell = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(segShape)
-                // Two .background overloads (Brush vs Color) keep the cell a single
-                // node — filled segments paint the accent gradient, the rest the track.
-                Box(if (i < segments.filled) cell.background(fillBrush) else cell.background(track))
+    // PR-ε (spec §3, §5): the 200dp bar CANNOT take the info-pill spin — rotated
+    // ±90° it would stand ~200dp tall and cross the HUD pills above it, violating
+    // the §3 transpose-clearance rule. It fades out when spun instead (§5 over-
+    // slot treatment); the timer pill stays the readable landscape-grip element.
+    SpinningBox(degrees = spinDegrees, modifier = modifier, fadeOutWhenRotated = true) {
+        when (segments) {
+            is LoopSegments.Discrete -> Row(
+                modifier = Modifier.width(200.dp).height(barHeight),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                repeat(segments.total) { i ->
+                    val cell = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(segShape)
+                    // Two .background overloads (Brush vs Color) keep the cell a single
+                    // node — filled segments paint the accent gradient, the rest the track.
+                    Box(if (i < segments.filled) cell.background(fillBrush) else cell.background(track))
+                }
             }
-        }
-        is LoopSegments.Continuous -> Box(
-            modifier = modifier.width(200.dp).height(barHeight).clip(segShape).background(track),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(segments.fraction)
-                    .clip(segShape)
-                    .background(fillBrush),
-            )
+            is LoopSegments.Continuous -> Box(
+                modifier = Modifier.width(200.dp).height(barHeight).clip(segShape).background(track),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(segments.fraction)
+                        .clip(segShape)
+                        .background(fillBrush),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = StatusPillShape,
-        color = RecordChromeTokens.glassFill,
-        contentColor = Color.White,
-        border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = RecordChromeTokens.statusPillPaddingH, vertical = RecordChromeTokens.statusPillPaddingV),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
+private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
+    // PR-ε (spec §3/§6): whole pill (surface + dot + timer text) spins as one
+    // unit — mid-REC the timer rotates so it reads upright in landscape grip
+    // (deliberate divergence from One UI). No fade.
+    SpinningBox(degrees = spinDegrees, modifier = modifier) {
+        Surface(
+            shape = StatusPillShape,
+            color = RecordChromeTokens.glassFill,
+            contentColor = Color.White,
+            border = BorderStroke(1.dp, RecordChromeTokens.glassStroke),
         ) {
-            StatusDot(content.dot)
-            Text(
-                content.main.resolve(),
-                style = RovaTokens.statusMain,
-                color = RecordChromeTokens.statusMainText,
-            )
-            Text(
-                content.time.resolve(),
-                style = RovaTokens.statusTime,
-                color = RecordChromeTokens.statusTimeText,
-            )
+            Row(
+                modifier = Modifier.padding(horizontal = RecordChromeTokens.statusPillPaddingH, vertical = RecordChromeTokens.statusPillPaddingV),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
+            ) {
+                StatusDot(content.dot)
+                Text(
+                    content.main.resolve(),
+                    style = RovaTokens.statusMain,
+                    color = RecordChromeTokens.statusMainText,
+                )
+                Text(
+                    content.time.resolve(),
+                    style = RovaTokens.statusTime,
+                    color = RecordChromeTokens.statusTimeText,
+                )
+            }
         }
     }
 }
@@ -1117,6 +1220,7 @@ internal fun RecordActiveHud(
     rotatingNextClip: Boolean = false,
     orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
     // only announcement. mergeDescendants + an explicit contentDescription
@@ -1137,30 +1241,53 @@ internal fun RecordActiveHud(
         // stack reads badly in the short landscape top band). Same composables; the
         // outer Column keeps the live-region semantics either way (ADR-0020).
         if (orientation == ChromeOrientation.LANDSCAPE) {
+            // Adaptive fallback branch (window actually landscape): spinDegrees
+            // is always 0f here — args passed for uniformity only.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
-                StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+                LoopPill(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
+                StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft), spinDegrees = spinDegrees)
             }
+            if (rotatingNextClip) {
+                Text(
+                    text = stringResource(R.string.record_orientation_rotating_next),
+                    style = RovaTokens.statusTime,
+                    color = RecordChromeTokens.statusTimeText,
+                )
+            }
+            LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
         } else {
-            LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
-            StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+            // PR-ε fix (owner smoke 2026-06-12, finding #2): per-pill spin made
+            // the rotated pills' AABBs overlap each other — the Column spaces
+            // them by UNROTATED heights, so two ~120dp-wide pills rotated ±90°
+            // collided. The HUD stack spins AS ONE GROUP instead: relative
+            // arrangement is preserved inside the spun block (pills can never
+            // collide with each other) and the block's transposed AABB extends
+            // only into empty viewfinder below the top band (spec §3 clearance).
+            // Children receive no spin (identity); the segment bar rotates with
+            // the group and stays readable instead of fading.
+            SpinningBox(degrees = spinDegrees) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+                    StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+                    // PR-α (ADR-0029 §Decision 3) — next clip adopts the device's
+                    // new orientation at the segment boundary; quiet caption.
+                    if (rotatingNextClip) {
+                        Text(
+                            text = stringResource(R.string.record_orientation_rotating_next),
+                            style = RovaTokens.statusTime,
+                            color = RecordChromeTokens.statusTimeText,
+                        )
+                    }
+                    // mockup `.m-seg` — self-hides (loopSegments null gate).
+                    LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal)
+                }
+            }
         }
-        // PR-α (ADR-0029 §Decision 3) — the current clip keeps its frozen rotation;
-        // the next clip adopts the device's new orientation at the segment boundary.
-        // Quiet caption reusing the adjacent status-pill's time text style/token.
-        if (rotatingNextClip) {
-            Text(
-                text = stringResource(R.string.record_orientation_rotating_next),
-                style = RovaTokens.statusTime,
-                color = RecordChromeTokens.statusTimeText,
-            )
-        }
-        // mockup `.m-seg` — segments fill left→right as clips complete. Self-hides
-        // (loopSegments null gate) for single-clip / indefinite sessions, so no
-        // call-site conditional is needed; order is LoopPill → StatusPill → bar.
-        LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal)
     }
 }

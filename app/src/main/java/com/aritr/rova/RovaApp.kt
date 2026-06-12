@@ -35,6 +35,7 @@ import com.aritr.rova.data.latestTerminalSession
 import com.aritr.rova.ui.signals.BatteryOptimizationSignal
 import com.aritr.rova.ui.signals.CameraPermissionSignal
 import com.aritr.rova.ui.signals.CameraStateSignal
+import com.aritr.rova.ui.signals.DeviceOrientationSignal
 import com.aritr.rova.ui.signals.ExactAlarmSignal
 import com.aritr.rova.ui.signals.MicrophonePermissionSignal
 import com.aritr.rova.ui.signals.NotificationPermissionSignal
@@ -289,6 +290,19 @@ class RovaApp : Application() {
      */
     val saveFolderSignal: SaveFolderSignal by lazy {
         SaveFolderSignal.forContext(this)
+    }
+
+    /**
+     * PR-ε (spec §2.2) — snapped physical device rotation for the chrome
+     * counter-rotation. Lazy so cold-start receiver paths pay no cost; first
+     * access from a foreground host initializes. No ON_RESUME refresh
+     * contract: the underlying [android.view.OrientationEventListener] is a
+     * push source, and its enable/disable lifecycle follows flow collection
+     * (`WhileSubscribed` inside the signal). Consumer is the Record chrome
+     * (RecordScreen, PR-ε T7).
+     */
+    val deviceOrientationSignal: DeviceOrientationSignal by lazy {
+        DeviceOrientationSignal(appContext = this, scope = appScope)
     }
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
