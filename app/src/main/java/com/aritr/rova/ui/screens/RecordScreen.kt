@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import android.view.Surface
+import com.aritr.rova.service.orientation.OrientationPolicyResolver
 import com.aritr.rova.ui.screens.chrome.ChromeMode
 import com.aritr.rova.ui.screens.chrome.ChromeOrientation
 import com.aritr.rova.ui.screens.chrome.ChromeSlot
@@ -270,10 +271,20 @@ fun RecordScreen(
     // Reduced motion snaps instead of animating (ADR-0020 /
     // checkA11yAnimationGated).
     val reduceMotion = rememberReduceMotion()
-    val spin = remember { Animatable(uiCounterRotationDegrees(snappedRotation)) }
-    LaunchedEffect(snappedRotation, chromeModeNow, reduceMotion) {
+    // γ orientation policy gates the chrome too (owner smoke 2026-06-12,
+    // finding #4): under Lock the chrome freezes to the LOCKED orientation —
+    // markings match the pinned capture, exactly like iOS with the rotation
+    // lock engaged — instead of following grip. Same resolver as the service's
+    // capture path, so chrome and capture can never disagree.
+    val effectiveChromeRotation = OrientationPolicyResolver.resolve(
+        policy = orientationPolicy,
+        lockRotation = orientationLockRotation,
+        snappedRotation = snappedRotation,
+    )
+    val spin = remember { Animatable(uiCounterRotationDegrees(effectiveChromeRotation)) }
+    LaunchedEffect(effectiveChromeRotation, chromeModeNow, reduceMotion) {
         if (chromeModeNow != ChromeMode.FixedPhysical) return@LaunchedEffect
-        val target = spin.value + shortestPathDelta(spin.value, uiCounterRotationDegrees(snappedRotation))
+        val target = spin.value + shortestPathDelta(spin.value, uiCounterRotationDegrees(effectiveChromeRotation))
         if (reduceMotion) spin.snapTo(target)
         else spin.animateTo(target, animationSpec = tween(RecordChromeTokens.elementSpinMs))
     }
