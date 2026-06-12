@@ -1,6 +1,6 @@
 # ADR-0029: Capture topology and orientation policy — two orthogonal axes replace the `mode` string
 
-Status: Proposed
+Status: Accepted (2026-06-11 — promoted on PR-γ landing per the amendment note below)
 Date: 2026-06-08
 
 > **Amendments (2026-06-08, owner-ratified).** Four open questions were
@@ -306,19 +306,33 @@ wrappers stay thin seams.
   - a pure **mode-migration mapper** — legacy `mode` string → `(captureTopology,
     orientationPolicy, legacyMigrated)` per §6.
 
-- **Candidate new `check*` gates (sketch — owner sign-off before building, in the
-  spirit of ADR-0020's not-yet-built `checkA11y*` suite):**
-  - a gate forbidding the old orientation-carrying `mode` strings
-    (`"Portrait"`/`"Landscape"`/`"PortraitLandscape"`) in live capture paths once
-    **γ** lands (legacy read-compat sites allowlisted);
-  - a gate asserting rotation is applied **only at segment boundaries** — no
-    `setTargetRotation` reachable from an active-recording code path (§3);
-  - a gate asserting `FrontBack` construction is **capability-gated** — it cannot
-    be instantiated without first consulting the concurrent-combo query (§5).
+- **Built (PR-γ, 2026-06-11)** — the three candidate gates sketched here shipped,
+  plus a fourth for the §C vocabulary clause:
+  - `checkNoLegacyModeStrings` — forbids the old orientation-carrying `mode`
+    strings (`"Portrait"`/`"Landscape"`/`"PortraitLandscape"`) in live capture
+    paths (legacy read-compat allowlist: `SessionManifest.kt`, `ModeMigration.kt`,
+    `RovaSettings.kt`; comment/KDoc lines skipped — documenting a legacy value is
+    legal, branching on one is not);
+  - `checkSetTargetRotationBoundaryOnly` — `setTargetRotation` reachable only
+    from `RovaRecordingService.kt` / `service/dualrecord/` (§3);
+  - `checkFrontBackCapabilityGated` — `FrontBack` referenced only by
+    `CaptureTopology.kt` / `CaptureModes.kt` (the capability-gate site, §5);
+    PR-δ extends the allowlist with the concurrent-camera module it builds;
+  - `checkUserCopyVocabulary` — enforces §C below.
 
 - **Existing gates preserved**, notably `checkPresetNoOrientation` (ADR-0026):
   presets stay orientation-free; `OrientationPolicy` is a capture axis, never a
   preset field.
+
+## §C — User-copy vocabulary (2026-06-11, owner-ratified; spec 2026-06-11-capture-mode-orientation-ux-design.md)
+
+User-facing copy speaks exactly two nouns: **session** (one Start→Stop run) and
+**clip** (one video within it). "Loop", "repeat", "segment" are banned from
+string VALUES in `values*/strings.xml` (internal code vocabulary unaffected —
+`loopCount`, `Segment*` classes, segment file naming, and the gates that pin
+them are exempt by construction). Mode names are capture strategies
+(Auto / DualShot / DualSight), never orientations; the orientation policy
+displays "Follow Device", never "Auto". Enforced by `checkUserCopyVocabulary`.
 
 ## Consequences
 

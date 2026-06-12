@@ -139,35 +139,35 @@ class StorageEstimatorTest {
     }
 
     @Test
-    fun `estimatePeakBytes for PortraitLandscape doubles single-mode FHD`() {
+    fun `estimatePeakBytes for DualShot doubles single-mode FHD`() {
         val single = StorageEstimator.estimatePeakBytes(
             durationSeconds = 10L, loopCount = 5, resolution = "FHD",
-            tier = ExportTier.TIER1_API29_PLUS, mode = "Portrait"
+            tier = ExportTier.TIER1_API29_PLUS, captureTopology = "Single"
         )
         val dual = StorageEstimator.estimatePeakBytes(
             durationSeconds = 10L, loopCount = 5, resolution = "FHD",
-            tier = ExportTier.TIER1_API29_PLUS, mode = "PortraitLandscape"
+            tier = ExportTier.TIER1_API29_PLUS, captureTopology = "DualShot"
         )
         assertEquals(single * 2, dual)
     }
 
     @Test
-    fun `estimatePeakBytes PortraitLandscape UHD doubles`() {
-        val single = StorageEstimator.estimatePeakBytes(10L, 5, "UHD", ExportTier.TIER1_API29_PLUS, "Portrait")
-        val dual = StorageEstimator.estimatePeakBytes(10L, 5, "UHD", ExportTier.TIER1_API29_PLUS, "PortraitLandscape")
+    fun `estimatePeakBytes DualShot UHD doubles`() {
+        val single = StorageEstimator.estimatePeakBytes(10L, 5, "UHD", ExportTier.TIER1_API29_PLUS, "Single")
+        val dual = StorageEstimator.estimatePeakBytes(10L, 5, "UHD", ExportTier.TIER1_API29_PLUS, "DualShot")
         assertEquals(single * 2, dual)
     }
 
     @Test
-    fun `estimatePeakBytes unknown mode does not double`() {
-        val single = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "Portrait")
-        val unknown = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "NotARealMode")
+    fun `estimatePeakBytes unknown topology does not double`() {
+        val single = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "Single")
+        val unknown = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "NotARealTopology")
         assertEquals(single, unknown)
     }
 
     @Test
-    fun `estimatePeakBytes default mode preserves single-mode math`() {
-        val explicit = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "Portrait")
+    fun `estimatePeakBytes default topology preserves single-mode math`() {
+        val explicit = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS, "Single")
         val defaulted = StorageEstimator.estimatePeakBytes(10L, 5, "FHD", ExportTier.TIER1_API29_PLUS)
         assertEquals(explicit, defaulted)
     }

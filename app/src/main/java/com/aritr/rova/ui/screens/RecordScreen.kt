@@ -87,19 +87,21 @@ fun RecordScreen(
     val loopCount by viewModel.loopCount.collectAsStateWithLifecycle()
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
-    val mode by viewModel.mode.collectAsStateWithLifecycle()
+    val mode by viewModel.topology.collectAsStateWithLifecycle()
+    val orientationPolicy by viewModel.orientationPolicy.collectAsStateWithLifecycle()
+    val orientationLockRotation by viewModel.orientationLockRotation.collectAsStateWithLifecycle()
 
-    // ADR-0029 (P+L portrait-lock · codex review 2026-06-10) — DualShot is portrait-
-    // only and its EGL preview surfaces (ADR-0009) must not be bound while the window
-    // is rotating. Selecting P+L from a LANDSCAPE Single window otherwise commits the
-    // camera rebind concurrently with the landscape→portrait rotation, churning the
-    // preview TextureViews mid-bind → EGL_BAD_SURFACE (device-confirmed, only one P+L
-    // pane renders). Fix: keep Single bound through the rotation and commit P+L (the
-    // rebind) only once the window has settled to portrait. `pendingMode` holds the
-    // requested-but-not-yet-committed mode; the orientation request below is driven
-    // off `desiredMode` so the window starts rotating immediately, while
-    // `viewModel.setMode` fires only after `isPortrait` flips true. See
-    // [DualShotPortraitGate].
+    // ADR-0029 (DualShot portrait-lock · codex review 2026-06-10) — DualShot is
+    // portrait-only and its EGL preview surfaces (ADR-0009) must not be bound while
+    // the window is rotating. Selecting DualShot from a LANDSCAPE Single window
+    // otherwise commits the camera rebind concurrently with the landscape→portrait
+    // rotation, churning the preview TextureViews mid-bind → EGL_BAD_SURFACE
+    // (device-confirmed, only one pane renders). Fix: keep Single bound through the
+    // rotation and commit DualShot (the rebind) only once the window has settled to
+    // portrait. `pendingMode` holds the requested-but-not-yet-committed mode; the
+    // orientation request below is driven off `desiredMode` so the window starts
+    // rotating immediately, while `viewModel.setTopology` fires only after
+    // `isPortrait` flips true. See [DualShotPortraitGate].
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
     var pendingMode by remember { mutableStateOf<String?>(null) }
@@ -107,7 +109,7 @@ fun RecordScreen(
     LaunchedEffect(pendingMode, isPortrait) {
         val pm = pendingMode
         if (pm != null && isPortrait) {
-            viewModel.setMode(pm)
+            viewModel.setTopology(pm)
             pendingMode = null
         }
     }
@@ -248,19 +250,19 @@ fun RecordScreen(
     // all four orientations; the service's OrientationEventListener already snaps
     // capture to the same physical value.
     //
-    // Gated to Single (mode != "PortraitLandscape"): DualShot/P+L pins its own
-    // rotation in the EGL path (ADR-0009) and does NOT participate in orientation
-    // tracking, so a landscape window mismatches its pinned capture/output and the
-    // preview tears (codex review). DualShot is therefore LOCKED to portrait —
-    // explicitly SCREEN_ORIENTATION_PORTRAIT, not USER: with the system auto-rotate
-    // lock off, USER would keep whatever orientation Single last forced (e.g. the
-    // landscape that breaks the EGL render). Keying the effect on the resolved
-    // target re-applies on a mid-screen mode switch, snapping the window back to
-    // portrait on entering P+L. The original requestedOrientation is captured and
+    // Gated to Single (mode != "DualShot"): DualShot pins its own rotation in the
+    // EGL path (ADR-0009) and does NOT participate in orientation tracking, so a
+    // landscape window mismatches its pinned capture/output and the preview tears
+    // (codex review). DualShot is therefore LOCKED to portrait — explicitly
+    // SCREEN_ORIENTATION_PORTRAIT, not USER: with the system auto-rotate lock off,
+    // USER would keep whatever orientation Single last forced (e.g. the landscape
+    // that breaks the EGL render). Keying the effect on the resolved target
+    // re-applies on a mid-screen mode switch, snapping the window back to portrait
+    // on entering DualShot. The original requestedOrientation is captured and
     // restored on leave so this never leaks a policy change to other screens.
-    // Driven off `desiredMode` (pending ?: committed) so a landscape→P+L pick starts
-    // the window rotating to portrait BEFORE the deferred camera rebind commits.
-    val targetOrientation = if (desiredMode == "PortraitLandscape") {
+    // Driven off `desiredMode` (pending ?: committed) so a landscape→DualShot pick
+    // starts the window rotating to portrait BEFORE the deferred camera rebind commits.
+    val targetOrientation = if (desiredMode == DualShotPortraitGate.DUAL_SHOT) {
         ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     } else {
         ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
@@ -407,7 +409,7 @@ fun RecordScreen(
                         viewModel.duration.value,
                         viewModel.loopCount.value,
                         viewModel.resolution.value,
-                        viewModel.mode.value
+                        viewModel.topology.value
                     )
                 }
                 else -> {}
@@ -647,10 +649,15 @@ fun RecordScreen(
     // edge + rail order derive from the DISPLAY ROTATION sense (to match the stock
     // camera), not the nav-bar inset. Non-null exactly in landscape; configChanges
     // recompose re-reads it on rotation.
-    val currentSense: DeviceLandscape? = run {
+    val currentSense: DeviceLandscape?
+    val currentDeviceRotation: Int?
+    run {
         @Suppress("DEPRECATION")
         val rot = LocalView.current.display?.rotation ?: Surface.ROTATION_0
-        landscapeSense(rot)
+        currentSense = landscapeSense(rot)
+        // Expose the raw Surface.ROTATION_* Int for OrientationRow / lockRotationForLandscapePick;
+        // null in portrait (rot == ROTATION_0 or ROTATION_2) so the picker defaults to ROTATION_90.
+        currentDeviceRotation = if (currentSense != null) rot else null
     }
     val clusterAnchor: NavEdge? = currentSense?.let { clusterEdge(it) }
     // §B′ polish P1 (2026-06-11, owner: "correctness fix, not visual tweak") —
@@ -682,8 +689,8 @@ fun RecordScreen(
                 // Camera Preview
                 if (hasCapturePermissions) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        if (mode == "PortraitLandscape") {
-                            // Phase 6.1c — P+L mode renders via two
+                        if (mode == DualShotPortraitGate.DUAL_SHOT) {
+                            // Phase 6.1c — DualShot mode renders via two
                             // dedicated TextureView zones; the
                             // PreviewView is bound by CameraX but covered
                             // visually by the DualPreviewZone. Shown in
@@ -906,7 +913,7 @@ fun RecordScreen(
                     // (see [DualShotPortraitGate]). Shared by both card layouts.
                     val onCycleModeGated: () -> Unit = {
                         if (pendingMode == null) {
-                            val next = cycleModeNext(mode)
+                            val next = CaptureMode.cycleNext(mode)
                             if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
                                 pendingMode = next
                             } else {
@@ -914,7 +921,7 @@ fun RecordScreen(
                             }
                         }
                     }
-                    val modeLabel = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode
+                    val modeLabel = stringResource(CaptureMode.forTopology(mode).labelRes)
                     // PR-β′ — ONE config strip in both orientations: the portrait
                     // horizontal pill (PARAMS_CARD placement) rotated to a vertical
                     // strip on the cluster edge, just inboard of the nav rail (spec §5).
@@ -946,6 +953,8 @@ fun RecordScreen(
                         sense = currentSense,
                         dimmed = hudState != RecordHudState.Idle,
                         modifier = configEdgeModifier,
+                        orientationPolicy = orientationPolicy,
+                        orientationLockRotation = orientationLockRotation,
                     )
                 }
 
@@ -971,13 +980,13 @@ fun RecordScreen(
                     // sensor frame; entry-level devices like Samsung A17
                     // don't support concurrent rear+front streams either).
                     // Gated INDEPENDENTLY of `enabled` so flash stays usable
-                    // in P+L; `onFlip` lambda also re-checks to prevent
+                    // in DualShot; `onFlip` lambda also re-checks to prevent
                     // accessibility-tool callers from bypassing the visual
                     // disable.
                     // B6 (codex review) — also require a front sensor: a
                     // front-less device must not show a dead flip toggle (a no-op
                     // tap would latch the "Switching…" overlay).
-                    val flipAllowed = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera
+                    val flipAllowed = !isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT && serviceState.hasFrontCamera
                     RecordCameraControls(
                         flashMode = flashMode,
                         onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
@@ -1067,11 +1076,11 @@ fun RecordScreen(
                     onDeletePreset = viewModel::deletePreset,
                     statusText = statusText,
                     flashMode = flashMode,
-                    flipEnabled = !isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera,
+                    flipEnabled = !isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT && serviceState.hasFrontCamera,
                     isFrontCamera = serviceState.isFrontCamera,
                     onCycleFlash = { if (!isUiLocked) viewModel.setFlashMode((flashMode + 1) % 3) },
                     onFlip = {
-                        if (!isUiLocked && mode != "PortraitLandscape" && serviceState.hasFrontCamera) {
+                        if (!isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT && serviceState.hasFrontCamera) {
                             flipInFlight = true
                             viewModel.flipCamera()
                         }
@@ -1081,19 +1090,26 @@ fun RecordScreen(
                     onIntervalChange = { viewModel.interval.value = it },
                     onQualityChange = { viewModel.resolution.value = it },
                     onModePick = { picked ->
-                        // ADR-0029 — defer a landscape→P+L pick until portrait; any
+                        // ADR-0029 — defer a landscape→DualShot pick until portrait; any
                         // other pick commits now and clears a pending switch.
                         if (DualShotPortraitGate.shouldDefer(picked, isPortrait)) {
                             pendingMode = picked
                         } else {
                             pendingMode = null
-                            viewModel.setMode(picked)
+                            viewModel.setTopology(picked)
                         }
                     },
                     snoozedCount = snoozedSet.size,
                     onResetSnoozes = if (snoozedSet.isNotEmpty()) {
                         { warningVm.clearSnoozes() }
                     } else null,
+                    orientationPolicy = orientationPolicy,
+                    orientationLockRotation = orientationLockRotation,
+                    orientationEnabled = !isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT,
+                    currentDeviceRotation = currentDeviceRotation,
+                    onOrientationPick = { policy, lockRot ->
+                        if (!isUiLocked) viewModel.setOrientationPolicy(policy, lockRot)
+                    },
                     onDismiss = { viewModel.closeSettingsSheet() },
                 )
             }   // close Box

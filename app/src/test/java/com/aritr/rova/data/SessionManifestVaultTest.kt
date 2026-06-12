@@ -10,7 +10,7 @@ class SessionManifestVaultTest {
     private fun baseManifest() = SessionManifest(
         sessionId = "s1",
         startedAt = 1000L,
-        config = SessionConfig(10, 1, "HD", 10, "Portrait"),
+        config = SessionConfig(10, 1, "HD", 10),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
     )
@@ -50,9 +50,9 @@ class SessionManifestVaultTest {
     }
 
     @Test
-    fun schemaVersion_isTen() {
-        // 9 -> 10: ADR-0029 PR-α per-segment effectiveTargetRotation.
-        assertEquals(10, SessionManifest.SCHEMA_VERSION)
+    fun schemaVersion_isEleven() {
+        // 10 -> 11: ADR-0029 PR-γ captureTopology/orientationPolicy axes.
+        assertEquals(11, SessionManifest.SCHEMA_VERSION)
     }
 
     // B5 / ADR-0025 commit-before-finalize follow-up: the in-flight public

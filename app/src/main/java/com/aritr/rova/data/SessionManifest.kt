@@ -184,7 +184,8 @@ data class SessionManifest(
         // 8->9: daily-window schedule fields (ADR-0027).
         // 9->10: SegmentRecord.effectiveTargetRotation per-clip device-driven
         //        orientation (ADR-0029 PR-α). Schema-<10 segments read null.
-        const val SCHEMA_VERSION = 10   // 6->7: vault fields (B5 / ADR-0025)
+        // 10->11: captureTopology/orientationPolicy axes, legacy mode read-only (ADR-0029 PR-γ §6)
+        const val SCHEMA_VERSION = 11   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -254,7 +255,7 @@ data class SessionManifest(
 }
 
 /**
- * Persisted session configuration. All four fields capture the user's
+ * Persisted session configuration. All four base fields capture the user's
  * REQUESTED settings at session start; none of them are updated to
  * reflect what the device actually delivered.
  *
@@ -278,26 +279,47 @@ data class SessionConfig(
     val intervalMinutes: Int,
     val resolution: String,
     val loopCount: Int,
-    val mode: String = "Portrait"
+    /** ADR-0029 PR-γ axes (schema 11). */
+    val captureTopology: String = "Single",
+    val orientationPolicy: String = "FollowDevice",
+    val orientationLockRotation: Int = -1,
+    /**
+     * ADR-0029 §6 — the legacy schema<=10 "mode" label, preserved verbatim so
+     * recovery rewrites of old manifests never lose the historical capture
+     * meaning. Read-only; never set for new sessions.
+     */
+    val legacyMode: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("durationSeconds", durationSeconds)
         put("intervalMinutes", intervalMinutes)
         put("resolution", resolution)
         put("loopCount", loopCount)
-        put("mode", mode)
+        put("captureTopology", captureTopology)
+        put("orientationPolicy", orientationPolicy)
+        if (orientationLockRotation in 0..3) put("orientationLockRotation", orientationLockRotation)
+        legacyMode?.let { put("mode", it) }
     }
 
     companion object {
-        fun fromJson(json: JSONObject): SessionConfig = SessionConfig(
-            durationSeconds = json.getInt("durationSeconds"),
-            intervalMinutes = json.getInt("intervalMinutes"),
-            resolution = json.getString("resolution"),
-            loopCount = json.getInt("loopCount"),
-            mode = json.optString("mode", "").ifEmpty { null }
+        fun fromJson(json: JSONObject): SessionConfig {
+            val legacy = json.optString("mode", "").ifEmpty { null }
                 ?.takeIf { it == "Portrait" || it == "Landscape" || it == "PortraitLandscape" }
-                ?: "Portrait"
-        )
+            val topology = json.optString("captureTopology", "").ifEmpty { null }
+                ?.takeIf { CaptureTopology.isValidPersisted(it) }
+                ?: ModeMigration.migrate(legacy).topology
+            return SessionConfig(
+                durationSeconds = json.getInt("durationSeconds"),
+                intervalMinutes = json.getInt("intervalMinutes"),
+                resolution = json.getString("resolution"),
+                loopCount = json.getInt("loopCount"),
+                captureTopology = topology,
+                orientationPolicy = json.optString("orientationPolicy", "")
+                    .takeIf { it == "FollowDevice" || it == "Lock" } ?: "FollowDevice",
+                orientationLockRotation = json.optInt("orientationLockRotation", -1),
+                legacyMode = legacy,
+            )
+        }
     }
 }
 

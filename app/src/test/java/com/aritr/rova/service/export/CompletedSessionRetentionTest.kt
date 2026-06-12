@@ -114,8 +114,7 @@ class CompletedSessionRetentionTest {
                 durationSeconds = 5,
                 intervalMinutes = 1,
                 resolution = "720p",
-                loopCount = 0,
-                mode = "Portrait"
+                loopCount = 0
             ),
             segments = records,
             exportTier = ExportTier.TIER1_API29_PLUS,

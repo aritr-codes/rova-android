@@ -24,9 +24,9 @@ class LensFlipPolicyTest {
     }
 
     @Test
-    fun portraitLandscape_idle_blocksFlip() {
-        // P+L (DualShot) is rear-only by design — the flip must be a no-op.
-        assertFalse(LensFlipPolicy.shouldAllowFlip(mode = "PortraitLandscape", isRecording = false))
+    fun dualShot_idle_blocksFlip() {
+        // DualShot is rear-only by design — the flip must be a no-op (ADR-0029 PR-γ).
+        assertFalse(LensFlipPolicy.shouldAllowFlip(mode = "DualShot", isRecording = false))
     }
 
     @Test

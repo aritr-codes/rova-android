@@ -65,7 +65,7 @@ internal object TierArtifactValidator {
         // P+L branch — at-least-one-side-valid satisfies the gate. The
         // shared pointers are null for a P+L session per OQ-C; we must
         // consult the per-side fields instead.
-        if (manifest.config.mode == "PortraitLandscape") {
+        if (manifest.config.captureTopology == "DualShot") {
             return when (manifest.exportTier) {
                 ExportTier.TIER1_API29_PLUS -> {
                     val portraitOk = manifest.portraitPendingUri?.let(tier1Probe) ?: false

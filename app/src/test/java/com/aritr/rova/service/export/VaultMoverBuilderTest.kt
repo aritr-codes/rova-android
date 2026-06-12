@@ -15,23 +15,19 @@ import org.junit.Test
  */
 class VaultMoverBuilderTest {
 
-    private fun manifest(mode: String) = SessionManifest(
+    private fun manifest(captureTopology: String) = SessionManifest(
         sessionId = "s1",
         startedAt = 1000L,
-        config = SessionConfig(10, 1, "HD", 10, mode),
+        config = SessionConfig(10, 1, "HD", 10, captureTopology = captureTopology),
         segments = emptyList(),
         exportTier = ExportTier.TIER1_API29_PLUS,
     )
 
-    @Test fun portrait_isMovable() {
-        assertTrue(VaultMoverBuilder.isSingleModeMovable(manifest("Portrait")))
+    @Test fun single_isMovable() {
+        assertTrue(VaultMoverBuilder.isSingleModeMovable(manifest("Single")))
     }
 
-    @Test fun landscape_isMovable() {
-        assertTrue(VaultMoverBuilder.isSingleModeMovable(manifest("Landscape")))
-    }
-
-    @Test fun portraitLandscape_isNotMovable() {
-        assertFalse(VaultMoverBuilder.isSingleModeMovable(manifest("PortraitLandscape")))
+    @Test fun dualShot_isNotMovable() {
+        assertFalse(VaultMoverBuilder.isSingleModeMovable(manifest("DualShot")))
     }
 }

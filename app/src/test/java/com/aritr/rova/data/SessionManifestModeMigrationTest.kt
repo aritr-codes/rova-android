@@ -9,12 +9,17 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Phase 6 — verifies that [SessionManifest.fromJson] correctly handles the
- * [SessionConfig.mode] field across schema versions. See spec §2, §4, §6 D7.
+ * ADR-0029 PR-γ §6 — verifies that [SessionManifest.fromJson] correctly handles
+ * the legacy "mode" field across schema versions. See spec §2, §4, §6 D7.
  *
- * v3 manifests (no `mode` key in `config`) must default to `"Portrait"`.
- * v4 manifests must round-trip valid values and coerce unknown / null / empty
- * values to `"Portrait"`.
+ * Schema<=10 manifests carry a "mode" key in config; schema 11+ use
+ * "captureTopology"/"orientationPolicy". Legacy "mode" values must derive
+ * the correct [SessionConfig.captureTopology] via [ModeMigration], and the
+ * raw label must be preserved in [SessionConfig.legacyMode] for recovery
+ * rewrites.
+ *
+ * Manifests with no "mode" key (v3) derive "Single" topology (null → default).
+ * Unknown/garbage mode values also derive "Single" (safe coercion).
  */
 class SessionManifestModeMigrationTest {
 
@@ -39,44 +44,58 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun v3_manifest_with_no_mode_key_defaults_to_Portrait() {
+    fun v3_manifest_with_no_mode_key_derivesSingle_noLegacy() {
         val json = buildManifestJson(schemaVersion = 3, configJson = v3ConfigJson())
         val manifest = SessionManifest.fromJson(json)
-        assertEquals("Portrait", manifest.config.mode)
+        assertEquals("Single", manifest.config.captureTopology)
+        assertNull(manifest.config.legacyMode)
     }
 
     @Test
-    fun v4_manifest_with_Portrait_mode_round_trips() {
+    fun v4_manifest_with_Portrait_mode_derivesSingle_preservesLegacy() {
         val configJson = v3ConfigJson().apply { put("mode", "Portrait") }
         val manifest = SessionManifest.fromJson(buildManifestJson(4, configJson))
-        assertEquals("Portrait", manifest.config.mode)
+        assertEquals("Single", manifest.config.captureTopology)
+        assertEquals("Portrait", manifest.config.legacyMode)
     }
 
     @Test
-    fun v4_manifest_with_Landscape_mode_round_trips() {
+    fun v4_manifest_with_Landscape_mode_derivesSingle_preservesLegacy() {
         val configJson = v3ConfigJson().apply { put("mode", "Landscape") }
         val manifest = SessionManifest.fromJson(buildManifestJson(4, configJson))
-        assertEquals("Landscape", manifest.config.mode)
+        assertEquals("Single", manifest.config.captureTopology)
+        assertEquals("Landscape", manifest.config.legacyMode)
     }
 
     @Test
-    fun v4_manifest_with_unknown_mode_coerces_to_Portrait() {
+    fun v4_manifest_with_PortraitLandscape_derivesDualShot_preservesLegacy() {
+        val configJson = v3ConfigJson().apply { put("mode", "PortraitLandscape") }
+        val manifest = SessionManifest.fromJson(buildManifestJson(4, configJson))
+        assertEquals("DualShot", manifest.config.captureTopology)
+        assertEquals("PortraitLandscape", manifest.config.legacyMode)
+    }
+
+    @Test
+    fun v4_manifest_with_unknown_mode_derivesSingle_noLegacy() {
         val configJson = v3ConfigJson().apply { put("mode", "Diagonal") }
         val manifest = SessionManifest.fromJson(buildManifestJson(4, configJson))
-        assertEquals("Portrait", manifest.config.mode)
+        assertEquals("Single", manifest.config.captureTopology)
+        assertNull(manifest.config.legacyMode)
     }
 
     @Test
-    fun v4_manifest_with_null_or_empty_mode_coerces_to_Portrait() {
+    fun v4_manifest_with_null_or_empty_mode_derivesSingle_noLegacy() {
         // JSONObject.NULL case
         val nullConfigJson = v3ConfigJson().apply { put("mode", JSONObject.NULL) }
         val nullManifest = SessionManifest.fromJson(buildManifestJson(4, nullConfigJson))
-        assertEquals("Portrait", nullManifest.config.mode)
+        assertEquals("Single", nullManifest.config.captureTopology)
+        assertNull(nullManifest.config.legacyMode)
 
         // Empty string case
         val emptyConfigJson = v3ConfigJson().apply { put("mode", "") }
         val emptyManifest = SessionManifest.fromJson(buildManifestJson(4, emptyConfigJson))
-        assertEquals("Portrait", emptyManifest.config.mode)
+        assertEquals("Single", emptyManifest.config.captureTopology)
+        assertNull(emptyManifest.config.legacyMode)
     }
 
     @Test
@@ -120,11 +139,12 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 10`() {
-        // Bumped 9 -> 10 for ADR-0029 PR-α per-segment effectiveTargetRotation.
-        // Previously: 8 -> 9 ADR-0027 daily-window schedule fields;
+    fun `SCHEMA_VERSION is 11`() {
+        // Bumped 10 -> 11 for ADR-0029 PR-γ captureTopology/orientationPolicy axes.
+        // Previously: 9 -> 10 ADR-0029 PR-α per-segment effectiveTargetRotation;
+        // 8 -> 9 ADR-0027 daily-window schedule fields;
         // 7 -> 8 commit-before-finalize move-out pointers;
         // 6 -> 7 vault fields; 5 -> 6 ADR-0024 SAF target fields.
-        assertEquals(10, SessionManifest.SCHEMA_VERSION)
+        assertEquals(11, SessionManifest.SCHEMA_VERSION)
     }
 }

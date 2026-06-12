@@ -3,9 +3,10 @@ package com.aritr.rova.service.orientation
 import android.view.Surface
 
 /**
- * PR-α (ADR-0029 §Decision 2) — dwell duration before a new candidate rotation
- * becomes `stable`. First device-tuning guess; spec §7 (Risks) flags this as a
- * one-constant tuning seam. Mirrors THERMAL_FALL_DWELL_MS.
+ * PR-α/γ (ADR-0029 §Decision 2, Ratified-D) — dwell duration before a new candidate
+ * rotation becomes `stable`. First device-tuning guess; spec §7 (Risks) flags this
+ * as a one-constant tuning seam. Mirrors THERMAL_FALL_DWELL_MS.
+ * Effective rotation (FollowDevice vs Lock) is resolved by [OrientationPolicyResolver].
  */
 internal const val ORIENTATION_DWELL_MS: Long = 350L
 
@@ -18,17 +19,6 @@ internal const val ORIENTATION_HYSTERESIS_DEG: Int = 12
 
 /** Sentinel from OrientationEventListener for an undeterminable rotation. */
 internal const val ORIENTATION_UNKNOWN: Int = -1
-
-/**
- * PR-α — default orientation behaviour. PR-α only ships "Auto" (device-driven),
- * so the live value is `true`. The OrientationPolicy enum (Auto vs PortraitLock)
- * does NOT exist until PR-γ; this single constant is the seam so the owner's
- * Decision A flips behaviour in ONE place when the enum lands.
- *
- * Ratified 2026-06-08 (Decision A): Auto default, conditional on a visible
- * session-setup orientation control (else PortraitLock). See ADR-0029 §2.
- */
-internal const val DEFAULT_ORIENTATION_POLICY_IS_AUTO: Boolean = true
 
 /**
  * PR-α — opaque hysteresis state held inside [RovaRecordingService]. `stable` is

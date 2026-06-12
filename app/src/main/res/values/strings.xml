@@ -79,8 +79,8 @@
     <string name="notification_preparing_camera">Preparing camera...</string>
     <string name="notification_camera_failed">Camera failed to start. Please restart recording.</string>
     <string name="notification_recording_failed_stopping">Recording failed. Stopping session.</string>
-    <string name="notification_segment_saved">Segment Saved: %1$d KB</string>
-    <string name="notification_empty_segment">Recording produced an empty segment</string>
+    <string name="notification_segment_saved">Clip saved (%1$d KB)</string>
+    <string name="notification_empty_segment">Recording produced an empty clip</string>
     <string name="notification_recording_failed_unexpected">Recording failed unexpectedly</string>
     <string name="notification_error_insufficient_storage">Not enough storage space</string>
     <string name="notification_error_source_inactive">Camera was disconnected</string>
@@ -172,13 +172,28 @@
 
     <!-- Idle settings card -->
     <string name="record_swipe_to_edit">SWIPE TO EDIT</string>
-    <string name="record_cell_clip">Clip</string>
-    <string name="record_cell_repeats">Repeats</string>
+    <string name="record_cell_clip">Length</string>
+    <string name="record_cell_repeats">Clips</string>
     <string name="record_cell_wait">Wait</string>
     <string name="record_cell_quality">Quality</string>
     <string name="record_cell_mode">MODE</string>
     <string name="record_edit_session_settings_cd">Edit session settings</string>
-    <string name="record_mode_pl_label">P + L</string>
+    <!-- Capture modes (spec 2026-06-11 §3, ADR-0029 PR-γ). DualShot/DualSight are brand names, both locales. -->
+    <string name="capture_mode_auto">Auto</string>
+    <string name="capture_mode_dualshot" translatable="false">DualShot</string>
+    <string name="capture_mode_dualsight" translatable="false">DualSight</string>
+    <string name="capture_mode_auto_caption">Records clips, rotates with your device</string>
+    <string name="capture_mode_dualshot_caption">Every clip saved as portrait + landscape (2× storage)</string>
+    <string name="capture_mode_dualsight_caption">Front + rear cameras in one video</string>
+    <!-- Orientation policy row (spec §4). "Auto" is reserved for the mode; the policy says Follow Device. -->
+    <string name="settings_sheet_orientation">Orientation</string>
+    <string name="orientation_follow_device">Follow Device</string>
+    <string name="orientation_lock_portrait">Lock Portrait</string>
+    <string name="orientation_lock_landscape">Lock Landscape</string>
+    <!-- Locked-state config cell (spec §5) -->
+    <string name="record_cell_locked">Locked</string>
+    <string name="record_locked_portrait">Portrait</string>
+    <string name="record_locked_landscape">Landscape</string>
 
     <!-- Bottom nav -->
     <string name="record_nav_library">Library</string>
@@ -193,7 +208,7 @@
     <string name="record_recovery_review">Review</string>
 
     <!-- Active HUD -->
-    <string name="record_loops_done_caption">LOOPS DONE</string>
+    <string name="record_loops_done_caption">CLIPS DONE</string>
     <string name="record_status_detail_prefix">· %1$s</string>
 
     <!-- PR-α (ADR-0029 §Decision 3) — shown in the active HUD when the device has
@@ -202,8 +217,8 @@
     <string name="record_orientation_rotating_next">Next clip will rotate</string>
 
     <!-- Active-HUD loop pill (B3 i18n task 2) -->
-    <string name="record_hud_loops_done_indefinite">%1$d loops done</string>
-    <string name="record_hud_loops_done">%1$d/%2$d loops done</string>
+    <string name="record_hud_loops_done_indefinite">%1$d clips done</string>
+    <string name="record_hud_loops_done">%1$d/%2$d clips done</string>
 
     <!-- Active-HUD status pill copy + time captions (B3 i18n task 2) -->
     <string name="record_hud_status_recording">Recording</string>
@@ -217,11 +232,11 @@
     <string name="record_hud_time_percent">· %1$d%%</string>
 
     <!-- RecordHudFormatters user-facing copy (B3 i18n task 2b) -->
-    <string name="record_hud_loop_position">Loop %1$d / %2$d</string>
-    <string name="record_hud_loop_position_continuous">Loop %1$d</string>
+    <string name="record_hud_loop_position">Clip %1$d / %2$d</string>
+    <string name="record_hud_loop_position_continuous">Clip %1$d</string>
     <string name="record_hud_loops_remaining_continuous">Records until you stop</string>
     <string name="record_hud_loops_remaining_last">Last clip in progress</string>
-    <string name="record_hud_loops_remaining">%1$d of %2$d loops remaining</string>
+    <string name="record_hud_loops_remaining">%1$d of %2$d clips remaining</string>
     <string name="record_hud_next_clip_momentary">Next clip will run momentarily</string>
     <string name="record_hud_next_clip_seconds">Next clip will run for %1$d s</string>
     <string name="record_hud_next_clip_one_minute">Next clip will run for 1 m</string>
@@ -245,20 +260,20 @@
     <string name="record_hud_merge_preparing">Preparing to merge</string>
     <string name="record_hud_merge_preparing_clips">Preparing to merge %1$d clips</string>
     <string name="record_hud_merge_clip_of">Merging clip %1$d of %2$d</string>
-    <string name="record_hud_session_status_recording_of">Recording, loop %1$d of %2$d.</string>
-    <string name="record_hud_session_status_recording">Recording, loop %1$d.</string>
-    <string name="record_hud_session_status_queued_of">Queued, loop %1$d of %2$d.</string>
-    <string name="record_hud_session_status_queued">Queued, loop %1$d.</string>
+    <string name="record_hud_session_status_recording_of">Recording, clip %1$d of %2$d.</string>
+    <string name="record_hud_session_status_recording">Recording, clip %1$d.</string>
+    <string name="record_hud_session_status_queued_of">Queued, clip %1$d of %2$d.</string>
+    <string name="record_hud_session_status_queued">Queued, clip %1$d.</string>
     <string name="record_hud_merge_complete_summary_one">%1$d clip · saved to Library</string>
     <string name="record_hud_merge_complete_summary_other">%1$d clips · saved to Library</string>
 
     <!-- Active-HUD TalkBack announcements (anti-chant; B3 i18n task 2) -->
     <string name="record_hud_announce_recording">Recording.</string>
-    <string name="record_hud_announce_recording_loop">Recording. Loop %1$d.</string>
-    <string name="record_hud_announce_recording_loop_of">Recording. Loop %1$d of %2$d.</string>
+    <string name="record_hud_announce_recording_loop">Recording. Clip %1$d.</string>
+    <string name="record_hud_announce_recording_loop_of">Recording. Clip %1$d of %2$d.</string>
     <string name="record_hud_announce_on_break">On break.</string>
-    <string name="record_hud_announce_on_break_loop">On break. Loop %1$d.</string>
-    <string name="record_hud_announce_on_break_loop_of">On break. Loop %1$d of %2$d.</string>
+    <string name="record_hud_announce_on_break_loop">On break. Clip %1$d.</string>
+    <string name="record_hud_announce_on_break_loop_of">On break. Clip %1$d of %2$d.</string>
     <!-- Bug B — startup grace announcement -->
     <string name="record_hud_announce_starting">Preparing to record.</string>
 
@@ -331,7 +346,7 @@
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
     <string name="history_config_title">Recording Settings</string>
     <string name="history_config_clip_length">Clip length</string>
-    <string name="history_config_repeats">Repeats</string>
+    <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Wait</string>
     <string name="history_config_quality">Quality</string>
     <string name="history_config_close">Close</string>
@@ -395,11 +410,11 @@
     <!-- Recording-defaults rows -->
     <string name="settings_default_resolution_label">Default resolution</string>
     <string name="settings_default_resolution_supporting">Quality new recordings start at.</string>
-    <string name="settings_clip_duration_label">Clip duration</string>
+    <string name="settings_clip_duration_label">Clip length</string>
     <string name="settings_clip_duration_supporting">How long each clip records.</string>
     <string name="settings_interval_label">Interval between clips</string>
     <string name="settings_interval_supporting">Wait time before the next clip.</string>
-    <string name="settings_loops_label">Number of loops</string>
+    <string name="settings_loops_label">Number of clips</string>
     <string name="settings_loops_supporting">How many clips before stopping.</string>
 
     <!-- Recording-behavior rows -->
@@ -459,11 +474,8 @@
     <string name="settings_sheet_section_recording_mode">Recording mode</string>
     <string name="settings_sheet_section_presets">Presets</string>
     <string name="settings_sheet_section_settings">Settings</string>
-    <string name="settings_sheet_mode_portrait">Portrait</string>
-    <string name="settings_sheet_mode_landscape">Landscape</string>
-    <string name="settings_sheet_mode_pl">P + L</string>
-    <string name="settings_sheet_clip_duration">Clip Duration</string>
-    <string name="settings_sheet_repeats">Repeats</string>
+    <string name="settings_sheet_clip_duration">Clip length</string>
+    <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Wait Between</string>
     <string name="settings_sheet_quality">Quality</string>
     <string name="settings_sheet_save">Save</string>
@@ -524,7 +536,7 @@
 
     <!-- EXACT_ALARM_DENIED -->
     <string name="warning_exact_alarm_title">Alarm permission required</string>
-    <string name="warning_exact_alarm_body">Rova uses exact alarms to time recording segments. Without it, clips won\'t start or stop on schedule.</string>
+    <string name="warning_exact_alarm_body">Rova uses exact alarms to time recording clips. Without it, clips won\'t start or stop on schedule.</string>
     <string name="warning_exact_alarm_primary">Allow exact alarms</string>
 
     <!-- STORAGE_INSUFFICIENT -->
@@ -539,7 +551,7 @@
     <string name="warning_mic_secondary">Continue without audio</string>
 
     <!-- NOTIFICATIONS_DENIED -->
-    <string name="warning_notifications_title">Stay in the loop</string>
+    <string name="warning_notifications_title">Stay informed</string>
     <string name="warning_notifications_body">Enable notifications to see when recording starts, stops, or finishes merging — even with the screen off.</string>
     <string name="warning_notifications_primary">Enable notifications</string>
     <string name="warning_notifications_why">Notifications are how Rova tells you what\'s happening while you\'re not in the app — recording started, clip merged, session finished. Without them, you\'ll need to open the app to check progress.</string>
@@ -581,9 +593,9 @@
 
     <!-- CANT_MERGE -->
     <string name="warning_cant_merge_title">Can\'t merge yet</string>
-    <string name="warning_cant_merge_body">Free space and retry, or keep the raw segments for later.</string>
+    <string name="warning_cant_merge_body">Free space and retry, or keep the raw clips for later.</string>
     <string name="warning_cant_merge_primary">Free space &amp; retry</string>
-    <string name="warning_cant_merge_secondary">Save segments only</string>
+    <string name="warning_cant_merge_secondary">Save clips only</string>
     <string name="warning_cant_merge_tertiary">Discard session</string>
 
     <!-- SAVE_FOLDER_UNAVAILABLE (B4b ADR-0024) -->
@@ -652,12 +664,12 @@
     <string name="recovery_title_killed_by_system">Recording stopped by your device</string>
     <string name="recovery_title_force_stopped">Recording was force-stopped</string>
     <!-- Bodies per terminator kind -->
-    <string name="recovery_body_user_stopped">Your last session ended before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
-    <string name="recovery_body_killed_by_system">Your device\'s battery management stopped the recording before the segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
-    <string name="recovery_body_force_stopped">The app was force-stopped before the last session\'s segments could merge. The recovered segments stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_user_stopped">Your last session ended before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_killed_by_system">Your device\'s battery management stopped the recording before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_body_force_stopped">The app was force-stopped before the last session\'s clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
     <!-- CTA labels -->
     <string name="recovery_discard_label">Discard recording</string>
-    <string name="recovery_merge_label">Merge segments</string>
+    <string name="recovery_merge_label">Merge clips</string>
     <string name="recovery_keep_raw_label">Keep as raw clips</string>
     <string name="recovery_retry_merge_label">Retry merge</string>
     <!-- Discard CTA content description. %1$s = discard label -->
@@ -665,12 +677,12 @@
     <!-- Merge-failed inline error. %1$s = runtime failure reason -->
     <string name="recovery_merge_failed_prefix">Merge failed: %1$s</string>
     <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
-    <string name="recovery_artifact_recovered_segments">Recovered %1$d segment(s) from disk</string>
-    <string name="recovery_artifact_missing_segments">Missing segment(s) at indices %1$s</string>
-    <string name="recovery_artifact_invalid_segments">Invalid segment(s) at indices %1$s</string>
-    <string name="recovery_artifact_orphan_segments">Orphan segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_recovered_segments">Recovered %1$d clip(s) from disk</string>
+    <string name="recovery_artifact_missing_segments">Missing clip(s) at indices %1$s</string>
+    <string name="recovery_artifact_invalid_segments">Invalid clip(s) at indices %1$s</string>
+    <string name="recovery_artifact_orphan_segments">Orphan clip(s) at indices %1$s</string>
     <string name="recovery_artifact_invalid_orphans">%1$d unreadable orphan file(s)</string>
-    <string name="recovery_artifact_duplicate_segments">Duplicate segment(s) at indices %1$s</string>
+    <string name="recovery_artifact_duplicate_segments">Duplicate clip(s) at indices %1$s</string>
     <string name="recovery_artifact_unknown_files">%1$d unknown file(s) in session dir</string>
     <string name="recovery_artifact_malformed_records">%1$d malformed manifest record(s)</string>
     <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
@@ -683,7 +695,7 @@
     <!-- Numeric chip. %1$d = filled, %2$d = total -->
     <string name="recovery_progress_chip">%1$d / %2$d</string>
     <!-- Progress strip "merging" content description. %1$d = filled, %2$d = total -->
-    <string name="recovery_progress_cd_merging">Merging: %1$d of %2$d segments.</string>
+    <string name="recovery_progress_cd_merging">Merging: %1$d of %2$d clips.</string>
     <!-- Footer for hidden older sessions. %1$d = count -->
     <string name="recovery_hidden_footer">+%1$d older interrupted sessions</string>
 
@@ -709,10 +721,10 @@
     <string name="card_session_recording">Recording in progress</string>
     <!-- %1$d = seconds until next capture -->
     <string name="card_session_next_capture">Next capture in %1$ds</string>
-    <!-- %1$d = current loop, %2$d = total loops -->
-    <string name="card_session_loop_of">Loop %1$d of %2$d</string>
-    <!-- %1$d = current loop -->
-    <string name="card_session_loop">Loop %1$d</string>
+    <!-- %1$d = current clip, %2$d = total clips -->
+    <string name="card_session_loop_of">Clip %1$d of %2$d</string>
+    <!-- %1$d = current clip -->
+    <string name="card_session_loop">Clip %1$d</string>
     <string name="card_session_live">LIVE</string>
     <string name="card_session_queued">QUEUED</string>
     <string name="card_last_recording_label">Last recording</string>

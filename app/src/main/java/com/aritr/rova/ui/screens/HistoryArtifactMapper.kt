@@ -65,7 +65,7 @@ internal object HistoryArtifactMapper {
     fun finalizedManifests(manifests: List<SessionManifest>): List<SessionManifest> =
         manifests.filter { m ->
             val isFinalized = m.exportState == ExportState.FINALIZED
-            val isDualWithArtifacts = m.config.mode == "PortraitLandscape" &&
+            val isDualWithArtifacts = m.config.captureTopology == "DualShot" &&
                 m.terminated == Terminated.COMPLETED &&
                 (m.portraitPublicTargetPath != null || m.landscapePublicTargetPath != null)
             // Milestone 2 — MULTI_SEGMENT_KEPT sessions never reach
@@ -167,7 +167,7 @@ internal object HistoryArtifactMapper {
         manifest: SessionManifest,
         resolveTier1Uri: (uriString: String) -> File?
     ): List<PerSideArtifact> {
-        if (manifest.config.mode != "PortraitLandscape") return emptyList()
+        if (manifest.config.captureTopology != "DualShot") return emptyList()
         val out = mutableListOf<PerSideArtifact>()
         VideoSide.entries.forEach { side ->
             val (sidePending, sidePublic) = when (side) {

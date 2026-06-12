@@ -42,7 +42,7 @@ class PlayerUriResolverVaultTest {
         publicTargetPath: String? = null,
         segments: List<SegmentRecord> = emptyList(),
         durationSeconds: Int = 30,
-        mode: String = "Portrait",
+        mode: String = "Single",
         vaultState: VaultState = VaultState.VAULTED,
         vaultFilePath: String? = null,
         portraitVaultFilePath: String? = null,
@@ -55,7 +55,7 @@ class PlayerUriResolverVaultTest {
             intervalMinutes = 0,
             resolution = "FHD",
             loopCount = segments.size.coerceAtLeast(1),
-            mode = mode
+            captureTopology = mode
         ),
         segments = segments,
         exportTier = tier,
@@ -135,7 +135,7 @@ class PlayerUriResolverVaultTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 vaultState = VaultState.VAULTED,
                 portraitVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_p.mp4",
                 landscapeVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_l.mp4",
@@ -158,7 +158,7 @@ class PlayerUriResolverVaultTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 vaultState = VaultState.VAULTED,
                 portraitVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_p.mp4",
                 landscapeVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_l.mp4",
@@ -181,7 +181,7 @@ class PlayerUriResolverVaultTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 vaultState = VaultState.VAULTED,
                 portraitVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_p.mp4",
                 landscapeVaultFilePath = "/data/user/0/com.aritr.rova/files/videos/Rova_l.mp4",

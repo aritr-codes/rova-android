@@ -95,7 +95,7 @@ internal object PlayerUriResolver {
         if (manifest.exportState != ExportState.FINALIZED) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_finished))
         }
-        val isPlusL = manifest.config.mode == "PortraitLandscape"
+        val isPlusL = manifest.config.captureTopology == "DualShot"
         if (isPlusL && side == null) {
             // Defensive: HistoryViewModel.flatMap always supplies a
             // non-null side for P+L rows. A null here means the caller

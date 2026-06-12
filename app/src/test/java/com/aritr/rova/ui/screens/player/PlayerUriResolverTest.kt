@@ -38,7 +38,7 @@ class PlayerUriResolverTest {
         segments: List<SegmentRecord> = emptyList(),
         durationSeconds: Int = 30,
         startedAt: Long = 1_715_000_000_000L,
-        mode: String = "Portrait",
+        mode: String = "Single",
         portraitPendingUri: String? = null,
         portraitPublicTargetPath: String? = null,
         landscapePendingUri: String? = null,
@@ -51,7 +51,7 @@ class PlayerUriResolverTest {
             intervalMinutes = 0,
             resolution = "FHD",
             loopCount = segments.size.coerceAtLeast(1),
-            mode = mode
+            captureTopology = mode
         ),
         segments = segments,
         exportTier = tier,
@@ -277,7 +277,7 @@ class PlayerUriResolverTest {
             manifest(
                 sessionId = "pl1",
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
                 segments = listOf(
@@ -298,7 +298,7 @@ class PlayerUriResolverTest {
             manifest(
                 sessionId = "pl1",
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
                 segments = listOf(
@@ -317,7 +317,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER2_API26_28,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPublicTargetPath = "/storage/Movies/Rova/Rova_portrait.mp4",
                 landscapePublicTargetPath = "/storage/Movies/Rova/Rova_landscape.mp4",
                 segments = listOf(
@@ -342,7 +342,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/external/video/media/100",
                 landscapePendingUri = "content://media/external/video/media/200",
                 segments = listOf(seg(10_000, VideoSide.PORTRAIT))
@@ -362,7 +362,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "Portrait",
+                mode = "Single",
                 pendingUri = "content://media/single/canonical",
                 portraitPendingUri = "content://media/stale/portrait",
                 landscapePendingUri = "content://media/stale/landscape",
@@ -389,7 +389,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/p",
                 landscapePendingUri = "content://media/l",
                 segments = listOf(
@@ -412,7 +412,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/p",
                 landscapePendingUri = "content://media/l",
                 segments = listOf(
@@ -441,7 +441,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "PortraitLandscape",
+                mode = "DualShot",
                 portraitPendingUri = "content://media/p_recovered",
                 landscapePendingUri = "content://media/l",
                 segments = listOf(
@@ -468,7 +468,7 @@ class PlayerUriResolverTest {
         val state = PlayerUriResolver.resolve(
             manifest(
                 tier = ExportTier.TIER1_API29_PLUS,
-                mode = "Portrait",
+                mode = "Single",
                 pendingUri = "content://media/single",
                 segments = listOf(seg(10_000), seg(10_000), seg(10_000))
             ),

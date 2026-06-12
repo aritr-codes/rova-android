@@ -81,7 +81,7 @@ class RecoveryScannerTest {
         exportState: ExportState = ExportState.NOT_STARTED,
         stopReason: StopReason = StopReason.NONE,
         audioMode: AudioMode = AudioMode.VIDEO_ONLY,
-        mode: String = "Portrait",
+        captureTopology: String = "Single",
         startedBySchedule: Boolean = false,
         scheduleWindowEndMillis: Long = 0L
     ) {
@@ -91,7 +91,7 @@ class RecoveryScannerTest {
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = startedAt,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, mode = mode),
+            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
             segments = manifestSegments.mapIndexed { i, name ->
                 SegmentRecord(filename = name, durationMs = 1_000L, sizeBytes = 1L, sha1 = "sha-$i")
             },
@@ -123,14 +123,14 @@ class RecoveryScannerTest {
         exportState: ExportState = ExportState.NOT_STARTED,
         stopReason: StopReason = StopReason.NONE,
         audioMode: AudioMode = AudioMode.VIDEO_ONLY,
-        mode: String = "Portrait"
+        captureTopology: String = "Single"
     ) {
         val sessionDir = File(rootDir, sessionId).also { it.mkdirs() }
         diskSegmentNames.forEach { name -> File(sessionDir, name).writeBytes(byteArrayOf(0x00)) }
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = startedAt,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, mode = mode),
+            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
             segments = manifestRecords,
             exportTier = ExportTier.TIER1_API29_PLUS,
             exportState = exportState,
@@ -846,7 +846,7 @@ class RecoveryScannerTest {
             ),
             diskSegmentNames = listOf("segment_0001_P.mp4", "segment_0001_L.mp4"),
             terminated = Terminated.USER_STOPPED,
-            mode = "PortraitLandscape"
+            captureTopology = "DualShot"
         )
 
         val classification = newScanner().classify(sid, nowMillis)
@@ -864,7 +864,7 @@ class RecoveryScannerTest {
             sessionId = sid,
             manifestRecords = emptyList(),
             diskSegmentNames = listOf("segment_0001_P.mp4"),  // _L missing
-            mode = "PortraitLandscape"
+            captureTopology = "DualShot"
         )
 
         val classification = newScanner().classify(sid, nowMillis)
@@ -886,7 +886,7 @@ class RecoveryScannerTest {
             sessionId = sid,
             manifestRecords = emptyList(),
             diskSegmentNames = listOf("segment_0001_P.mp4", "segment_0001_L.mp4"),
-            mode = "PortraitLandscape"
+            captureTopology = "DualShot"
         )
 
         val classification = newScanner().classify(sid, nowMillis)
@@ -907,7 +907,7 @@ class RecoveryScannerTest {
             sessionId = sid,
             manifestSegments = listOf("segment_0001.mp4"),
             diskSegmentNames = listOf("segment_0001.mp4", "segment_0002.mp4"),
-            mode = "Portrait"
+            captureTopology = "Single"
         )
 
         val classification = newScanner().classify(sid, nowMillis)
