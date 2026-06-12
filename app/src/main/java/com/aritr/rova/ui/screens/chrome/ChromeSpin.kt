@@ -21,7 +21,8 @@ internal fun uiCounterRotationDegrees(snappedRotation: Int): Float = when (snapp
 
 /**
  * PR-ε (research §3) — minimal signed delta from an UNWRAPPED accumulator angle
- * to a target (mod 360). Result in [-180, 180]; +180 chosen for the half-turn.
+ * to a target (mod 360). Result in (-180, 180]; +180 chosen for the half-turn,
+ * -180 never returned.
  * Animate `current + shortestPathDelta(current, target)` — never animate to the
  * raw target or a 270°→0° transition spins the long way.
  */
