@@ -44,6 +44,25 @@ class ChromeSpinTest {
         assertEquals(180f, shortestPathDelta(0f, 180f), 0f)
     }
 
+    // Fade for over-slot labels (spec §5): opaque upright, gone by 45°.
+    @Test fun uprightFade_uprightIsOpaque() {
+        assertEquals(1f, uprightFadeAlpha(0f), 0f)
+        assertEquals(1f, uprightFadeAlpha(360f), 0f)
+        assertEquals(1f, uprightFadeAlpha(-720f), 0f)
+    }
+
+    @Test fun uprightFade_goneAtRightAnglesBothSenses() {
+        assertEquals(0f, uprightFadeAlpha(90f), 0f)
+        assertEquals(0f, uprightFadeAlpha(-90f), 0f)
+        assertEquals(0f, uprightFadeAlpha(180f), 0f)
+        assertEquals(0f, uprightFadeAlpha(-630f), 0f) // unwrapped accumulator, ≡ 90
+    }
+
+    @Test fun uprightFade_linearMidSpin() {
+        assertEquals(0.5f, uprightFadeAlpha(22.5f), 1e-6f)
+        assertEquals(0.5f, uprightFadeAlpha(-22.5f), 1e-6f)
+    }
+
     @Test fun accumulator_neverDriftsFromTarget() {
         // applying delta lands exactly on target mod 360
         var angle = 0f

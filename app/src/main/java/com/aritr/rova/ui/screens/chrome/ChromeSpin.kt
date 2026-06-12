@@ -30,3 +30,16 @@ internal fun shortestPathDelta(currentUnwrapped: Float, targetMod360: Float): Fl
     val diff = (((targetMod360 - currentUnwrapped) % 360f) + 360f) % 360f  // [0,360)
     return if (diff > 180f) diff - 360f else diff
 }
+
+/**
+ * PR-ε (spec §5) — fade alpha for spun labels that exceed their slot (e.g. the
+ * SWIPE-TO-EDIT caption, ~75dp wide in an ~11dp band): fully opaque upright,
+ * fading to invisible by 45° so the label is gone before its rotated AABB can
+ * overlap neighboring chrome at steady-state ±90/180. Accepts any unwrapped
+ * accumulator angle.
+ */
+internal fun uprightFadeAlpha(degrees: Float): Float {
+    val normalized = ((degrees % 360f) + 360f) % 360f          // [0,360)
+    val distFromUpright = minOf(normalized, 360f - normalized) // [0,180]
+    return (1f - distFromUpright / 45f).coerceIn(0f, 1f)
+}

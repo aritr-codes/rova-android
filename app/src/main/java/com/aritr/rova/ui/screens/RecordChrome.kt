@@ -79,6 +79,7 @@ import com.aritr.rova.ui.screens.chrome.DeviceLandscape
 import com.aritr.rova.ui.screens.chrome.railOrder
 import com.aritr.rova.ui.screens.chrome.SlotAnchor
 import com.aritr.rova.ui.screens.chrome.SlotPlacement
+import com.aritr.rova.ui.screens.chrome.uprightFadeAlpha
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 
@@ -110,13 +111,19 @@ private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCa
 internal fun SpinningBox(
     degrees: Float,
     modifier: Modifier = Modifier,
+    fadeOutWhenRotated: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Box(
             Modifier
                 .wrapContentSize(align = Alignment.Center, unbounded = true)
-                .graphicsLayer { rotationZ = degrees },
+                .graphicsLayer {
+                    rotationZ = degrees
+                    // spec §5 — labels that exceed their slot fade out instead of
+                    // permanently overlapping neighboring chrome at ±90/180.
+                    if (fadeOutWhenRotated) alpha = uprightFadeAlpha(degrees)
+                },
         ) { content() }
     }
 }
@@ -353,9 +360,11 @@ fun RecordSettingsCard(
                     .clip(RoundedCornerShape(1.dp))
                     .background(RecordChromeTokens.swipeHint),
             )
-            // PR-ε (spec §3): the caption is a Cell-class element — its text
-            // counter-rotates in place; the bar + gesture surface stay stable.
-            SpinningBox(degrees = spinDegrees) {
+            // PR-ε (spec §3, §5): the caption is a Cell-class element but far
+            // wider than its band (~75dp in ~11dp) — it counter-rotates AND
+            // fades out by 45° so it never overlaps the swipe bar / card edge
+            // at steady-state landscape; the bar + gesture surface stay stable.
+            SpinningBox(degrees = spinDegrees, fadeOutWhenRotated = true) {
                 Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
             }
         }
@@ -435,6 +444,10 @@ fun RecordSettingsCard(
                 // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
                 // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
                 // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
+                // PR-ε note: this branch is Adaptive-fallback-only (sw600dp+ — compact
+                // phones lock the window and never reach it); the 48dp square cell
+                // slots (spec §4) make the rail taller than the original compact
+                // design — acceptable on tablet heights, re-judge if a device hits it.
                 val baseCells = listOf<@Composable () -> Unit>(
                     { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
