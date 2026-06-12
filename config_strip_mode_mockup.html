@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — config strip: mode-cell visibility A vs B</title>
+<style>
+  :root{
+    --acc:#34d399;--acc2:#10b981;
+    --txt:rgba(255,255,255,.93);--dim:rgba(255,255,255,.6);--faint:rgba(255,255,255,.4);
+    --edge:rgba(255,255,255,.1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--txt);font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background:linear-gradient(135deg,#070a10,#0a0e16 50%,#07090f);padding:26px 22px 80px}
+  h1{font-size:18px;margin:0 0 4px}
+  h2{font-size:13px;margin:34px 0 10px;color:var(--dim);font-weight:600;letter-spacing:.3px}
+  .sub{font-size:12px;color:var(--faint);margin:0 0 24px;max-width:760px;line-height:1.5}
+  .lane{display:flex;flex-direction:column;gap:14px;max-width:860px}
+  .case{display:flex;align-items:center;gap:18px}
+  .case .tag{width:210px;font-size:11px;color:var(--dim);text-align:right;line-height:1.4;flex:0 0 auto}
+  .case .tag b{color:var(--txt)}
+
+  /* config strip */
+  .strip{display:inline-flex;gap:5px;padding:8px;border-radius:15px;
+    background:rgba(18,22,32,.58);border:1px solid var(--edge);align-items:center}
+  .cell{display:flex;flex-direction:column;align-items:center;padding:5px 10px;min-width:54px;border-radius:10px}
+  .cell b{font-size:12px;font-weight:700;color:var(--txt)}
+  .cell small{font-size:7px;letter-spacing:.7px;color:var(--faint);text-transform:uppercase;margin-top:2px}
+  .cell.acc{background:linear-gradient(135deg,var(--acc),var(--acc2))}
+  .cell.acc b,.cell.acc small{color:#fff}
+  .cell.lock{border:1px dashed rgba(255,255,255,.22)}
+
+  /* phones */
+  .phones{display:flex;gap:30px;flex-wrap:wrap;margin-top:14px}
+  .pcell{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .plbl{font-size:11.5px;font-weight:600;color:var(--dim)}
+  .plbl b{color:var(--txt)}
+  .phone{position:relative;width:250px;height:530px;background:#000;overflow:hidden;border-radius:26px;
+    box-shadow:0 18px 44px rgba(0,0,0,.55),inset 0 0 0 1.4px rgba(255,255,255,.07)}
+  .scene{position:absolute;inset:0;background:
+    radial-gradient(circle at 30% 24%,#1d2433 0,transparent 45%),
+    radial-gradient(circle at 76% 72%,#241a26 0,transparent 48%),#05060a}
+  .guide{position:absolute;top:95px;bottom:195px;left:30px;right:30px;
+    border:1.2px dashed rgba(255,255,255,.14);border-radius:8px}
+  .status{position:absolute;top:11px;left:12px;display:inline-flex;align-items:center;gap:5px;
+    padding:4px 9px;border-radius:14px;background:rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.08)}
+  .status i{width:5px;height:5px;border-radius:50%;background:#34d399;box-shadow:0 0 6px #34d399}
+  .status span{font-size:8px;color:var(--dim)}
+  .pstrip{position:absolute;left:50%;transform:translateX(-50%) scale(.82);bottom:92px;white-space:nowrap}
+  .nav{position:absolute;bottom:20px;left:0;width:100%;display:flex;align-items:center;
+    justify-content:space-between;padding:0 32px}
+  .ni{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .ni i{width:20px;height:20px;border-radius:6px;border:1.4px solid rgba(255,255,255,.5);display:block}
+  .ni span{font-size:6.5px;color:rgba(255,255,255,.55)}
+  .fab{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
+  .fab .g{width:0;height:0;border-style:solid;border-width:7px 0 7px 12px;border-color:transparent;
+    border-left-color:rgba(255,255,255,.95)}
+</style>
+</head>
+<body>
+  <h1>Config strip — should "Auto" be visible in the common case?</h1>
+  <p class="sub">
+    <b>A</b> — mode cell always present; quiet when Auto, accented when DualShot/DualSight.
+    <b>B</b> — mode cell hidden when Auto (strip = parameters only); accented chip appears only for non-default modes.
+    Locked-orientation cell behaves identically in both (appears only when locked).
+    Note in B: the strip reflows when mode changes, and the home screen loses the mode switch/discovery affordance (sheet-only).
+  </p>
+
+  <h2>VARIANT A — Auto visible, quiet</h2>
+  <div class="lane">
+    <div class="case"><div class="tag"><b>Auto</b> (common case)</div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        <div class="cell"><b>Auto</b><small>Mode</small></div>
+      </div>
+    </div>
+    <div class="case"><div class="tag"><b>DualShot</b> active</div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        <div class="cell acc"><b>DualShot</b><small>Mode</small></div>
+      </div>
+    </div>
+    <div class="case"><div class="tag"><b>Auto + Lock Portrait</b></div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        <div class="cell"><b>Auto</b><small>Mode</small></div>
+        <div class="cell lock"><b>Portrait</b><small>Locked</small></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>VARIANT B — Auto hidden, parameters only</h2>
+  <div class="lane">
+    <div class="case"><div class="tag"><b>Auto</b> (common case)</div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+      </div>
+    </div>
+    <div class="case"><div class="tag"><b>DualShot</b> active — chip appears, strip reflows</div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        <div class="cell acc"><b>DualShot</b><small>Mode</small></div>
+      </div>
+    </div>
+    <div class="case"><div class="tag"><b>Auto + Lock Portrait</b></div>
+      <div class="strip">
+        <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+        <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        <div class="cell lock"><b>Portrait</b><small>Locked</small></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>IN CONTEXT — Auto idle, full frame</h2>
+  <div class="phones">
+    <div class="pcell"><div class="plbl"><b>A</b> — Auto visible, quiet</div>
+      <div class="phone">
+        <div class="scene"></div><div class="guide"></div>
+        <div class="status"><i></i><span>Ready to record</span></div>
+        <div class="strip pstrip">
+          <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+          <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+          <div class="cell"><b>Auto</b><small>Mode</small></div>
+        </div>
+        <div class="nav"><div class="ni"><i></i><span>Library</span></div><div class="fab"><div class="g"></div></div><div class="ni"><i></i><span>Settings</span></div></div>
+      </div>
+    </div>
+    <div class="pcell"><div class="plbl"><b>B</b> — Auto hidden</div>
+      <div class="phone">
+        <div class="scene"></div><div class="guide"></div>
+        <div class="status"><i></i><span>Ready to record</span></div>
+        <div class="strip pstrip">
+          <div class="cell"><b>5s</b><small>Length</small></div><div class="cell"><b>2</b><small>Clips</small></div>
+          <div class="cell"><b>None</b><small>Wait</small></div><div class="cell"><b>FHD</b><small>Quality</small></div>
+        </div>
+        <div class="nav"><div class="ni"><i></i><span>Library</span></div><div class="fab"><div class="g"></div></div><div class="ni"><i></i><span>Settings</span></div></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

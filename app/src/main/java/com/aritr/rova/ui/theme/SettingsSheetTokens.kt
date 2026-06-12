@@ -43,6 +43,26 @@ object SettingsSheetTokens {
     val sheetCornerRadius = 24.dp
     val sheetPaddingH = 18.dp
     val sheetPaddingBottom = 26.dp
+    /**
+     * Max width for the whole sheet (peek + panel), centered horizontally. On a
+     * LANDSCAPE/wide window, filling the full width makes the sheet look stretched
+     * and inconsistent with portrait (owner feedback 2026-06-10). Capping to roughly
+     * a phone-portrait width keeps the silhouette consistent across orientations; the
+     * side gutters show the live camera behind, matching the peek aesthetic. Sits
+     * above typical phone portrait widths (~411 dp) so portrait never caps.
+     */
+    val sheetMaxWidth = 440.dp
+
+    // ── Landscape side-anchored sheet (rotate-spec §11 D2, 2026-06-11) ──
+    /**
+     * Landscape side-panel width CAP — the portrait sheet's silhouette. The Phase-A
+     * derived width (availableWidth − peekHeight ≈ 76% of a 2.16:1 window) was
+     * owner-rejected as "desktop panel"; what transfers across the aspect swap is
+     * portrait's SILHOUETTE, not its proportion. Floor below = split-screen guard.
+     */
+    val sideSheetWidth = 380.dp
+    /** Floor for pathologically narrow windows (split-screen); loses to no cap. */
+    val sideSheetMinWidth = 360.dp
 
     // ── Sheet-top handle ────────────────────────────────────────────────
     val handleWidth = 32.dp
@@ -105,9 +125,20 @@ object SettingsSheetTokens {
     /** Unselected chip label — mockup 0.28 → 0.55 for AA (SC 1.4.3). */
     val chipOffText = Color.White.copy(alpha = 0.55f)
 
+    // ── Resolved-config summary line (PR-β5b) ───────────────────────────
+    /** `.summary` muted body — value vocabulary echoing the active config. */
+    val summaryText = Color.White.copy(alpha = 0.60f)
+    /** Leading preset-name segment — brighter than the rest of the summary. */
+    val summaryStrong = Color.White.copy(alpha = 0.84f)
+    val summaryTopGap = 10.dp
+    val summaryBottomGap = 4.dp
+
     // ── Save CTA ────────────────────────────────────────────────────────
     val ctaTopMargin = 18.dp
     val ctaPaddingV = 16.dp
+    /** Landscape Save CTA vertical padding (rotate-spec §11 D3) — slimmed to scale
+     *  with the 380dp panel; portrait keeps [ctaPaddingV]. */
+    val ctaPaddingVCompact = 12.dp
     val ctaFill = Color.White.copy(alpha = 0.07f)
     val ctaStroke = Color.White.copy(alpha = 0.10f)
     val ctaRadius = 16.dp

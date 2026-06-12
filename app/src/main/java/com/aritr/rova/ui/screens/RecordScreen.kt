@@ -1,11 +1,16 @@
 package com.aritr.rova.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Build
+import android.view.WindowManager
 import android.view.ViewGroup
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,7 +19,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -28,6 +36,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import android.view.Surface
+import com.aritr.rova.ui.screens.chrome.ChromeOrientation
+import com.aritr.rova.ui.screens.chrome.ChromeSlot
+import com.aritr.rova.ui.screens.chrome.DeviceLandscape
+import com.aritr.rova.ui.screens.chrome.NavEdge
+import com.aritr.rova.ui.screens.chrome.clusterEdge
+import com.aritr.rova.ui.screens.chrome.landscapeSense
+import com.aritr.rova.ui.screens.chrome.placementFor
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.RovaRecordingService
@@ -38,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import com.aritr.rova.ui.components.*
+import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.components.MergeCompleteCount
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.MergeCompleteCard
@@ -71,6 +88,30 @@ fun RecordScreen(
     val flashMode by viewModel.flashMode.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val mode by viewModel.mode.collectAsStateWithLifecycle()
+
+    // ADR-0029 (P+L portrait-lock · codex review 2026-06-10) — DualShot is portrait-
+    // only and its EGL preview surfaces (ADR-0009) must not be bound while the window
+    // is rotating. Selecting P+L from a LANDSCAPE Single window otherwise commits the
+    // camera rebind concurrently with the landscape→portrait rotation, churning the
+    // preview TextureViews mid-bind → EGL_BAD_SURFACE (device-confirmed, only one P+L
+    // pane renders). Fix: keep Single bound through the rotation and commit P+L (the
+    // rebind) only once the window has settled to portrait. `pendingMode` holds the
+    // requested-but-not-yet-committed mode; the orientation request below is driven
+    // off `desiredMode` so the window starts rotating immediately, while
+    // `viewModel.setMode` fires only after `isPortrait` flips true. See
+    // [DualShotPortraitGate].
+    val configuration = LocalConfiguration.current
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    var pendingMode by remember { mutableStateOf<String?>(null) }
+    val desiredMode = pendingMode ?: mode
+    LaunchedEffect(pendingMode, isPortrait) {
+        val pm = pendingMode
+        if (pm != null && isPortrait) {
+            viewModel.setMode(pm)
+            pendingMode = null
+        }
+    }
+
     val combinedOpen by viewModel.combinedSettingsOpen.collectAsStateWithLifecycle()
     val allPresets by viewModel.allPresets.collectAsStateWithLifecycle()
     val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
@@ -198,6 +239,65 @@ fun RecordScreen(
     DisposableEffect(keepScreenOn) {
         localView.keepScreenOn = keepScreenOn
         onDispose { localView.keepScreenOn = false }
+    }
+
+    // ADR-0029 (force-rotate) — the Single-camera Record viewfinder follows the
+    // physical sensor like a camera app, even when the system auto-rotate lock is
+    // ON, so the landscape chrome (PR-β) and device-driven capture rotation (PR-α)
+    // actually engage on locked devices. FULL_SENSOR ignores the lock and allows
+    // all four orientations; the service's OrientationEventListener already snaps
+    // capture to the same physical value.
+    //
+    // Gated to Single (mode != "PortraitLandscape"): DualShot/P+L pins its own
+    // rotation in the EGL path (ADR-0009) and does NOT participate in orientation
+    // tracking, so a landscape window mismatches its pinned capture/output and the
+    // preview tears (codex review). DualShot is therefore LOCKED to portrait —
+    // explicitly SCREEN_ORIENTATION_PORTRAIT, not USER: with the system auto-rotate
+    // lock off, USER would keep whatever orientation Single last forced (e.g. the
+    // landscape that breaks the EGL render). Keying the effect on the resolved
+    // target re-applies on a mid-screen mode switch, snapping the window back to
+    // portrait on entering P+L. The original requestedOrientation is captured and
+    // restored on leave so this never leaks a policy change to other screens.
+    // Driven off `desiredMode` (pending ?: committed) so a landscape→P+L pick starts
+    // the window rotating to portrait BEFORE the deferred camera rebind commits.
+    val targetOrientation = if (desiredMode == "PortraitLandscape") {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
+    DisposableEffect(targetOrientation) {
+        val activity = localView.context as? Activity
+        val previousOrientation = activity?.requestedOrientation
+        if (activity != null) {
+            activity.requestedOrientation = targetOrientation
+        }
+        onDispose {
+            if (activity != null && previousOrientation != null) {
+                activity.requestedOrientation = previousOrientation
+            }
+        }
+    }
+
+    // ADR-0029 (force-rotate) — seamless rotation, like a native camera app. The
+    // default ROTATION_ANIMATION_ROTATE screenshots the old orientation and rotates
+    // the screenshot, so the viewfinder visibly flips before CameraX re-applies the
+    // corrected transform on a later frame. ROTATION_ANIMATION_SEAMLESS skips that
+    // screenshot-rotate and lets the app render directly in the new orientation (the
+    // system falls back automatically when it can't render in time). Applied for the
+    // whole Record screen and restored on leave so other screens keep the default.
+    DisposableEffect(Unit) {
+        val window = (localView.context as? Activity)?.window
+        val previousAnim = window?.attributes?.rotationAnimation
+        if (window != null) {
+            window.attributes = window.attributes.apply {
+                rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS
+            }
+        }
+        onDispose {
+            if (window != null && previousAnim != null) {
+                window.attributes = window.attributes.apply { rotationAnimation = previousAnim }
+            }
+        }
     }
 
     // Preview Management (Retain instance to prevent black screen)
@@ -540,6 +640,35 @@ fun RecordScreen(
     // panel + the two SwitchRows) is removed; Keep-Screen-On / Sounds now live
     // in the Settings screen. settingsViewModel is still consumed for the
     // keepScreenOn DisposableEffect above.
+    val chromeOrientation =
+        if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+            ChromeOrientation.LANDSCAPE else ChromeOrientation.PORTRAIT
+    // PR-β′ (spec 2026-06-10 §4) — "rotate, don't redesign": the landscape chrome
+    // edge + rail order derive from the DISPLAY ROTATION sense (to match the stock
+    // camera), not the nav-bar inset. Non-null exactly in landscape; configChanges
+    // recompose re-reads it on rotation.
+    val currentSense: DeviceLandscape? = run {
+        @Suppress("DEPRECATION")
+        val rot = LocalView.current.display?.rotation ?: Surface.ROTATION_0
+        landscapeSense(rot)
+    }
+    val clusterAnchor: NavEdge? = currentSense?.let { clusterEdge(it) }
+    // §B′ polish P1 (2026-06-11, owner: "correctness fix, not visual tweak") —
+    // in landscape the system bars live on the SIDES and the punch-hole on a
+    // side edge, so single-bar insets (statusBars/navigationBars) under-pad and
+    // chrome collides with system UI. Landscape chrome therefore pads the full
+    // safeDrawing union (status + nav bars + display cutout). Portrait keeps
+    // the original per-bar insets — byte-identical.
+    val chromeTopInsets = if (currentSense != null) WindowInsets.safeDrawing else WindowInsets.statusBars
+    // §B′ polish P2 — generic transient-message rule: anything mounted in the
+    // top transient slots (WARNING_CENTER, RECOVERY_CHIP, ACTIVE_HUD) clears
+    // the device-anchored cluster band on its edge. New banner types inherit
+    // this automatically by mounting in the same slots.
+    val transientClusterClearance = when (clusterAnchor) {
+        NavEdge.Leading -> Modifier.padding(start = RecordChromeTokens.clusterBandClearance)
+        NavEdge.Trailing -> Modifier.padding(end = RecordChromeTokens.clusterBandClearance)
+        null -> Modifier
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Black,
@@ -639,9 +768,12 @@ fun RecordScreen(
 
                 // Chrome (recovery chip, idle WarningCenter, active HUD, settings
                 // card, top overlay / cam-controls, bottom nav) is suppressed while
-                // the SettingsSheet is open — the sheet is a camera-peek panel, so
-                // only the camera preview shows behind it. The MergeCompleteCard and
-                // loading overlay stay outside this gate.
+                // the SettingsSheet is open — but ONLY in PORTRAIT, where the sheet is
+                // a camera-peek panel so only the camera preview shows behind it.
+                // PR-β′ (spec 2026-06-10) — "rotate, don't redesign": landscape now
+                // behaves like portrait. The settings sheet covers the rotated cluster
+                // (config strip + nav), so chrome is suppressed while it's open in BOTH
+                // orientations. MergeCompleteCard + loading overlay stay outside the gate.
                 if (!combinedOpen) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
@@ -650,10 +782,10 @@ fun RecordScreen(
                     RecordRecoveryChip(
                         count = interruptedSessionCount,
                         onReview = onNavigateToHistory,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 70.dp),   // sits just below the status pill (~16 + pill height)
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.RECOVERY_CHIP, chromeOrientation),
+                            chromeTopInsets,
+                        ).then(transientClusterClearance),
                     )
                 }
                 // ADR 0007 — idle WarningCenter mount: renders the warning sheet
@@ -664,10 +796,10 @@ fun RecordScreen(
                 // Column below.
                 if (hudState is RecordHudState.Idle) {
                     Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 110.dp)
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.WARNING_CENTER, chromeOrientation),
+                            chromeTopInsets,
+                        ).then(transientClusterClearance)
                     ) {
                         WarningCenter(
                             hudState = RecordHudState.Idle,
@@ -734,11 +866,10 @@ fun RecordScreen(
                         // clipSecondsLeft / waitSecondsLeft / Merging-progress per state;
                         // the helper dispatches on `state`. Stop is the bottom-nav FAB.
                         Column(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .windowInsetsPadding(WindowInsets.statusBars)
-                                .padding(top = 16.dp)
-                                .fillMaxWidth(),
+                            modifier = slotModifier(
+                                placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                chromeTopInsets,
+                            ).then(transientClusterClearance).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
@@ -758,6 +889,7 @@ fun RecordScreen(
                                 // PR-α (ADR-0029 §Decision 3) — the device rotated but the
                                 // current clip stays frozen; flag the next-clip rotation.
                                 rotatingNextClip = serviceState.pendingNextRotation != serviceState.currentSegmentRotation,
+                                orientation = chromeOrientation,
                             )
                         }
                     }
@@ -769,36 +901,52 @@ fun RecordScreen(
                 // states show the card at 75% opacity). Suppressed only during
                 // the brief post-merge MergeCompleteCard grace window.
                 if (!showCompleteCard) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(
-                                // Slice B — bottomNavClearance clears above the dock;
-                                // settingsCardLift adds the 30 dp the gradient's
-                                // transparent top zone needs. See
-                                // RecordChromeMetrics.settingsCardLift KDoc.
-                                bottom = RecordChromeMetrics.bottomNavClearance + RecordChromeMetrics.settingsCardLift,
-                                start = 16.dp,
-                                end = 16.dp,
-                            )
-                            .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        // ADR-0026 — presets now live inside the settings sheet
-                        // (between RECORDING MODE and SETTINGS), not as a loose
-                        // idle chip row. See the SettingsSheet call below.
-                        RecordSettingsCard(
-                            durationSeconds = duration,
-                            loopCount = loopCount,
-                            intervalMinutes = interval,
-                            quality = resolution,
-                            mode = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode,
-                            onOpenSheet = { viewModel.openSettingsSheet() },
-                            onCycleMode = { viewModel.cycleMode() },
-                            dimmed = hudState != RecordHudState.Idle,
-                        )
+                    // ADR-0029 — ignore re-taps while a deferred switch is in flight;
+                    // otherwise route a landscape→P+L cycle through the portrait gate
+                    // (see [DualShotPortraitGate]). Shared by both card layouts.
+                    val onCycleModeGated: () -> Unit = {
+                        if (pendingMode == null) {
+                            val next = cycleModeNext(mode)
+                            if (DualShotPortraitGate.shouldDefer(next, isPortrait)) {
+                                pendingMode = next
+                            } else {
+                                viewModel.cycleMode()
+                            }
+                        }
                     }
+                    val modeLabel = if (mode == "PortraitLandscape") stringResource(R.string.record_mode_pl_label) else mode
+                    // PR-β′ — ONE config strip in both orientations: the portrait
+                    // horizontal pill (PARAMS_CARD placement) rotated to a vertical
+                    // strip on the cluster edge, just inboard of the nav rail (spec §5).
+                    // Tap opens the settings sheet exactly like portrait. The sheet
+                    // covers it when open (no §B mutual-exclusion gate).
+                    val configEdgeModifier = if (currentSense != null) {
+                        Modifier
+                            .align(if (clusterAnchor == NavEdge.Trailing) Alignment.CenterEnd else Alignment.CenterStart)
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                            // §B′ polish P3 — single-source inboard offset clearing the rail band.
+                            .padding(
+                                end = if (clusterAnchor == NavEdge.Trailing) RecordChromeTokens.railBandInboardOffset else 0.dp,
+                                start = if (clusterAnchor == NavEdge.Trailing) 0.dp else RecordChromeTokens.railBandInboardOffset,
+                            )
+                    } else {
+                        slotModifier(
+                            placementFor(ChromeSlot.PARAMS_CARD, chromeOrientation),
+                            WindowInsets.navigationBars,
+                        ).fillMaxWidth()
+                    }
+                    RecordSettingsCard(
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        mode = modeLabel,
+                        onOpenSheet = { viewModel.openSettingsSheet() },
+                        onCycleMode = onCycleModeGated,
+                        sense = currentSense,
+                        dimmed = hudState != RecordHudState.Idle,
+                        modifier = configEdgeModifier,
+                    )
                 }
 
                 // ── Task 13/14 — new chrome: top overlay + cam-controls (top),
@@ -813,10 +961,10 @@ fun RecordScreen(
                         statusDetail = statusDetail,
                         currentLoop = serviceState.currentLoop,
                         totalLoops = serviceState.totalLoops,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(start = 16.dp, top = 16.dp),
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.STATUS_OVERLAY, chromeOrientation),
+                            chromeTopInsets,
+                        ),
                     )
                     // Phase 6.1b smoke-fix #6 — flip-camera disabled in P+L
                     // mode (rear-only by design — DualShot from one full-FOV
@@ -847,21 +995,30 @@ fun RecordScreen(
                         enabled = !isUiLocked,
                         flipEnabled = flipAllowed,
                         isFrontCamera = serviceState.isFrontCamera,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            // 7.dp + the 9.dp the 30.dp glass circle is inset within its
-                            // 48.dp touch box ≈ the mockup's 16.dp from the safe-area edge.
-                            .padding(end = 7.dp, top = 7.dp),
+                        orientation = chromeOrientation,
+                        modifier = slotModifier(
+                            placementFor(ChromeSlot.CAMERA_CONTROLS, chromeOrientation),
+                            chromeTopInsets,
+                        ),
                     )
                 }
+                // PR-β′ — ONE nav in both orientations: the portrait bottom bar rotated
+                // to a vertical rail on the cluster edge (rotation-mapped order). Nav-
+                // Settings navigates to the Settings SCREEN in BOTH orientations (same as
+                // portrait — the config-strip tap opens the sheet); the §B rail-toggles-
+                // sheet repurposing is removed (acceptance — same muscle memory).
                 RecordBottomNav(
                     fabState = fabState,
                     navItemsLocked = isUiLocked,
                     onLibrary = onNavigateToHistory,
                     onSettings = onNavigateToSettings,
                     onFabClick = onFabClick,
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    sense = currentSense,
+                    modifier = if (currentSense != null) {
+                        Modifier.align(if (clusterAnchor == NavEdge.Trailing) Alignment.CenterEnd else Alignment.CenterStart)
+                    } else {
+                        Modifier.align(Alignment.BottomCenter)
+                    },
                 )
                 }   // close if (!combinedOpen) — chrome suppressed behind the sheet
 
@@ -923,7 +1080,16 @@ fun RecordScreen(
                     onLoopCountChange = { viewModel.loopCount.value = it },
                     onIntervalChange = { viewModel.interval.value = it },
                     onQualityChange = { viewModel.resolution.value = it },
-                    onModePick = { viewModel.setMode(it) },
+                    onModePick = { picked ->
+                        // ADR-0029 — defer a landscape→P+L pick until portrait; any
+                        // other pick commits now and clears a pending switch.
+                        if (DualShotPortraitGate.shouldDefer(picked, isPortrait)) {
+                            pendingMode = picked
+                        } else {
+                            pendingMode = null
+                            viewModel.setMode(picked)
+                        }
+                    },
                     snoozedCount = snoozedSet.size,
                     onResetSnoozes = if (snoozedSet.isNotEmpty()) {
                         { warningVm.clearSnoozes() }

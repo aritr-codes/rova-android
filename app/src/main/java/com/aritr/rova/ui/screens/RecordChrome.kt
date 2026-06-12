@@ -8,18 +8,22 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsets as LayoutWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +71,11 @@ import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.screens.chrome.ChromeOrientation
+import com.aritr.rova.ui.screens.chrome.DeviceLandscape
+import com.aritr.rova.ui.screens.chrome.railOrder
+import com.aritr.rova.ui.screens.chrome.SlotAnchor
+import com.aritr.rova.ui.screens.chrome.SlotPlacement
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 
@@ -180,59 +189,78 @@ fun RecordCameraControls(
     // B6 — true when the FRONT lens is currently bound. Swaps the flip glyph +
     // contentDescription so the affordance names the lens the tap will switch TO.
     isFrontCamera: Boolean = false,
+    // PR-β — landscape lays the two controls in a Row (a vertical stack in the
+    // top-right would reach down toward the center-right record FAB). Same leaves.
+    orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
-        GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
-            val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
-                flashMode != RovaRecordingService.FLASH_MODE_AUTO
-            val contentTint = when {
-                flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
-                else -> tint
-            }
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    RecordChromeIcons.flashBolt,
-                    contentDescription = stringResource(R.string.record_flash_cd),
-                    tint = contentTint,
-                    modifier = Modifier.size(15.dp),
-                )
-                if (isOff) {
-                    // OFF state — diagonal slash across the bolt (mockup shows
-                    // only the bolt; the slash is the app's tri-state affordance).
-                    Box(
-                        Modifier
-                            .size(width = 20.dp, height = 1.5.dp)
-                            .rotate(-45f)
-                            .background(contentTint),
-                    )
-                }
-            }
+    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint) }
+    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint) }
+    if (orientation == ChromeOrientation.LANDSCAPE) {
+        Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
+            flash(); flip()
         }
-        // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from
-        // [enabled] so P+L mode can disable JUST this button while
-        // flash stays usable. P+L is rear-only by design (DualShot needs
-        // a single full-FOV sensor frame, software-cropped to portrait
-        // AND landscape; the front camera path is not productionised
-        // and entry-level Samsung devices like the A17 don't support
-        // concurrent rear+front camera streams either).
-        GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
-            // B6 — name the lens the tap switches TO (front active → "rear"
-            // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
-            // requirement; strings are localized resources (checkNoHardcodedUiStrings).
-            val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
-            val flipCd = stringResource(
-                if (isFrontCamera) R.string.record_switch_to_rear_cd
-                else R.string.record_switch_to_front_cd,
-            )
+    } else {
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
+            flash(); flip()
+        }
+    }
+}
+
+@Composable
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color) {
+    GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
+        val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
+            flashMode != RovaRecordingService.FLASH_MODE_AUTO
+        val contentTint = when {
+            flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
+            else -> tint
+        }
+        Box(contentAlignment = Alignment.Center) {
             Icon(
-                flipIcon,
-                contentDescription = flipCd,
-                tint = flipTint,
-                modifier = Modifier.size(16.dp),
+                RecordChromeIcons.flashBolt,
+                contentDescription = stringResource(R.string.record_flash_cd),
+                tint = contentTint,
+                modifier = Modifier.size(15.dp),
             )
+            if (isOff) {
+                // OFF state — diagonal slash across the bolt (mockup shows
+                // only the bolt; the slash is the app's tri-state affordance).
+                Box(
+                    Modifier
+                        .size(width = 20.dp, height = 1.5.dp)
+                        .rotate(-45f)
+                        .background(contentTint),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color) {
+    // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
+    // P+L mode can disable JUST this button while flash stays usable. P+L is
+    // rear-only by design (DualShot needs a single full-FOV sensor frame,
+    // software-cropped to portrait AND landscape; the front camera path is not
+    // productionised and entry-level Samsung devices like the A17 don't support
+    // concurrent rear+front camera streams either).
+    GlassCircleButton(onClick = onFlip, enabled = flipEnabled) {
+        // B6 — name the lens the tap switches TO (front active → "rear"
+        // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
+        // requirement; strings are localized resources (checkNoHardcodedUiStrings).
+        val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
+        val flipCd = stringResource(
+            if (isFrontCamera) R.string.record_switch_to_rear_cd
+            else R.string.record_switch_to_front_cd,
+        )
+        Icon(
+            flipIcon,
+            contentDescription = flipCd,
+            tint = flipTint,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -270,12 +298,13 @@ fun RecordSettingsCard(
     mode: String,
     onOpenSheet: () -> Unit,
     onCycleMode: () -> Unit,
+    sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
     dimmed: Boolean = false,
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
+            .then(if (sense == null) Modifier.fillMaxWidth() else Modifier)
             .alpha(if (dimmed) 0.75f else 1f),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap),
@@ -293,52 +322,77 @@ fun RecordSettingsCard(
         }
         GlassSurface(
             role = GlassRole.RecordChrome,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = if (sense == null) Modifier.fillMaxWidth() else Modifier,
             shape = SettingsCardShape,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)              // a11y minimum touch target
-                    .then(
-                        if (dimmed) {
-                            Modifier
-                        } else {
-                            Modifier
-                                .clickable { onOpenSheet() }
-                                .pointerInput(Unit) {
-                                    detectVerticalDragGestures { _, dragAmount ->
-                                        if (dragAmount < -8f) onOpenSheet()
-                                    }
+            // Shared interaction surface: tap (or swipe) opens the settings sheet.
+            // Same gesture contract in both orientations (acceptance — interaction flow).
+            val interaction = Modifier
+                .heightIn(min = 48.dp)              // a11y minimum touch target
+                .then(
+                    if (dimmed) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clickable { onOpenSheet() }
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (dragAmount < -8f) onOpenSheet()
                                 }
-                        },
+                            }
+                    },
+                )
+                .padding(
+                    horizontal = RecordChromeTokens.settingsCardPaddingH,
+                    vertical = RecordChromeTokens.settingsCardPaddingV,
+                )
+            if (sense == null) {
+                // PORTRAIT — horizontal pill: Clip · Repeats · Wait · Quality · Mode.
+                Row(
+                    modifier = Modifier.fillMaxWidth().then(interaction),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                    CellSep()
+                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                    ModeCycleChip(
+                        mode = mode,
+                        onCycleMode = onCycleMode,
+                        onLongPress = onOpenSheet,
+                        enabled = !dimmed,
+                        modifier = Modifier.weight(1f),
                     )
-                    .padding(
-                        horizontal = RecordChromeTokens.settingsCardPaddingH,
-                        vertical = RecordChromeTokens.settingsCardPaddingV,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
-                CellSep()
-                SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
-                ModeCycleChip(
-                    mode = mode,
-                    onCycleMode = onCycleMode,
-                    onLongPress = onOpenSheet,
-                    enabled = !dimmed,
-                    modifier = Modifier.weight(1f),
+                    Icon(
+                        RecordChromeIcons.chevronUp,
+                        contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                        tint = RecordChromeTokens.settingsArrow,
+                        modifier = Modifier.padding(start = 8.dp).size(13.dp),
+                    )
+                }
+            } else {
+                // LANDSCAPE — the SAME pill rotated to a vertical column on the cluster
+                // edge: identical 5 cells in rotation-mapped order, same SettingsCell /
+                // ModeCycleChip widgets, no weights (vertical). All 5 cells incl. Wait.
+                // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
+                // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
+                val cells = listOf<@Composable () -> Unit>(
+                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true) },
+                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true) },
                 )
-                Icon(
-                    RecordChromeIcons.chevronUp,
-                    contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                    tint = RecordChromeTokens.settingsArrow,
-                    modifier = Modifier.padding(start = 8.dp).size(13.dp),
-                )
+                Column(
+                    modifier = interaction,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.landscapeCellGap),
+                ) {
+                    railOrder(cells, sense).forEach { it() }
+                }
             }
         }
     }
@@ -367,6 +421,7 @@ private fun ModeCycleChip(
     onCycleMode: () -> Unit,
     onLongPress: () -> Unit,
     enabled: Boolean,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // PR2 §d (mockup-exact, owner-signed 2026-06-08): the selected-mode chip is
@@ -405,14 +460,14 @@ private fun ModeCycleChip(
         ) {
             Text(
                 mode,
-                style = RovaTokens.cellValue,
+                style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
                 color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 stringResource(R.string.record_cell_mode),
-                style = RovaTokens.cellKey,
+                style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
                 color = Color.White.copy(alpha = 0.80f),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
@@ -428,18 +483,18 @@ private fun ModeCycleChip(
 }
 
 @Composable
-private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean) {
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false) {
     Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             value,
-            style = RovaTokens.cellValue,
+            style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
             color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )
         Text(
             key.uppercase(),
-            style = RovaTokens.cellKey,
+            style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
             color = RecordChromeTokens.cellKeyText,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -491,44 +546,66 @@ fun RecordBottomNav(
     onLibrary: () -> Unit,
     onSettings: () -> Unit,
     onFabClick: () -> Unit,
+    sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
 ) {
-    // Slice B — gradient brush replaces the flat `bottomNavFill`. The
-    // outer Box paints the brush across the Box's full intrinsic height,
-    // INCLUDING the navigation-bar inset zone that the inner Row consumes
-    // via `windowInsetsPadding`. This is what makes the gradient dissolve
-    // into the OS-transparent gesture-nav region (Slice A — see ADR-0011)
-    // with no band edge. Painting the brush on the Row directly would
-    // bound it to the inset-padded layout, breaking the seamless blend.
-    // The 1 dp top stroke is deleted — a gradient has no top, so a stroke
-    // would re-introduce the edge we're killing.
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(RecordChromeTokens.bottomNavBrush)
-    ) {
-        Row(
-            modifier = Modifier
+    // Same three leaves in both orientations (identical widgets/sizes) — only the
+    // axis + order change. [railOrder] maps the portrait left→right adjacency to the
+    // landscape top→bottom rail so Library/FAB/Settings keep their spatial relation
+    // (acceptance — muscle memory).
+    val library: @Composable () -> Unit = {
+        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
+    }
+    val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick) }
+    val settings: @Composable () -> Unit = {
+        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+    }
+    if (sense == null) {
+        // PORTRAIT — Slice B gradient brush bottom bar. The outer Box paints the brush
+        // across its full intrinsic height INCLUDING the nav-bar inset zone the Row
+        // consumes via `windowInsetsPadding`, so the gradient dissolves into the
+        // OS-transparent gesture-nav region (Slice A — ADR-0011) with no band edge.
+        Box(
+            modifier = modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(
-                    start = RecordChromeTokens.bottomNavPaddingH,
-                    end = RecordChromeTokens.bottomNavPaddingH,
-                    top = 14.dp,
-                    bottom = RecordChromeTokens.bottomNavPaddingBottom,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround,
+                .background(RecordChromeTokens.bottomNavBrush)
         ) {
-            NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary)
-            RecordFab(state = fabState, onClick = onFabClick)
-            NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(
+                        start = RecordChromeTokens.bottomNavPaddingH,
+                        end = RecordChromeTokens.bottomNavPaddingH,
+                        top = 14.dp,
+                        bottom = RecordChromeTokens.bottomNavPaddingBottom,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceAround,
+            ) {
+                library(); fab(); settings()
+            }
+        }
+    } else {
+        // LANDSCAPE — the SAME bar rotated to a vertical rail on the cluster edge:
+        // identical leaves, same inter-item spacing token, rotation-mapped order.
+        Column(
+            modifier = modifier
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(
+                    horizontal = RecordChromeTokens.bottomNavPaddingH,
+                    vertical = RecordChromeTokens.bottomNavPaddingH,
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.bottomNavPaddingH),
+        ) {
+            railOrder(listOf(library, fab, settings), sense).forEach { it() }
         }
     }
 }
 
 @Composable
-private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -563,7 +640,7 @@ private fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick:
 }
 
 @Composable
-private fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
+internal fun RecordFab(state: RecordFabState, onClick: () -> Unit) {
     val (fill, stroke, semanticsLabel) = when (state) {
         RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
         RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
@@ -978,6 +1055,30 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
  * Layout: vertical Column at the top safe-area, centered, with 8 dp spacing between the
  * loop-pill and the status-pill. Both pills are glass-on-camera (R1 token set).
  */
+/**
+ * PR-β — maps a pure [SlotPlacement] to a Compose Modifier inside a Box: align +
+ * (optional) window inset + edge padding + (optional) width cap, in that order
+ * (matches today's `align().windowInsetsPadding().padding()` order, so portrait
+ * is byte-identical). [insets] is the region's existing inset (statusBars for
+ * top regions, navigationBars for bottom/side regions); pass null for none.
+ */
+@Composable
+fun BoxScope.slotModifier(p: SlotPlacement, insets: LayoutWindowInsets? = null): Modifier {
+    val alignment = when (p.anchor) {
+        SlotAnchor.TOP_START     -> Alignment.TopStart
+        SlotAnchor.TOP_END       -> Alignment.TopEnd
+        SlotAnchor.TOP_CENTER    -> Alignment.TopCenter
+        SlotAnchor.BOTTOM_CENTER -> Alignment.BottomCenter
+        SlotAnchor.CENTER_START  -> Alignment.CenterStart
+        SlotAnchor.CENTER_END    -> Alignment.CenterEnd
+    }
+    var m = Modifier.align(alignment)
+    if (insets != null) m = m.windowInsetsPadding(insets)
+    m = m.padding(start = p.startDp.dp, top = p.topDp.dp, end = p.endDp.dp, bottom = p.bottomDp.dp)
+    if (p.maxWidthDp != null) m = m.widthIn(max = p.maxWidthDp.dp)
+    return m
+}
+
 @Composable
 internal fun RecordActiveHud(
     state: RecordHudState,
@@ -986,6 +1087,7 @@ internal fun RecordActiveHud(
     clipSecondsLeft: Int,
     waitSecondsLeft: Int,
     rotatingNextClip: Boolean = false,
+    orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
     modifier: Modifier = Modifier,
 ) {
     // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
@@ -1003,8 +1105,21 @@ internal fun RecordActiveHud(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
-        StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        // PR-β — landscape places the loop pill beside the status pill (a vertical
+        // stack reads badly in the short landscape top band). Same composables; the
+        // outer Column keeps the live-region semantics either way (ADR-0020).
+        if (orientation == ChromeOrientation.LANDSCAPE) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+                StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+            }
+        } else {
+            LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+            StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+        }
         // PR-α (ADR-0029 §Decision 3) — the current clip keeps its frozen rotation;
         // the next clip adopts the device's new orientation at the segment boundary.
         // Quiet caption reusing the adjacent status-pill's time text style/token.

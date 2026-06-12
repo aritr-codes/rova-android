@@ -466,6 +466,15 @@
     <string name="settings_sheet_quality">Calidad</string>
     <string name="settings_sheet_save">Guardar</string>
     <string name="settings_sheet_reset_snoozes">Restablecer advertencias pospuestas</string>
+    <!-- PR-β5b — presets pulidos (predefinidos / míos) + resumen de configuración -->
+    <string name="settings_sheet_title">Ajustes de grabación</string>
+    <string name="settings_sheet_section_builtin">Predefinidos</string>
+    <string name="settings_sheet_section_my_presets">Mis ajustes</string>
+    <string name="settings_presets_edit">Editar</string>
+    <string name="settings_summary_clips">%1$s clips</string>
+    <string name="settings_summary_every">cada %1$s</string>
+    <string name="settings_summary_repeats">×%1$d</string>
+    <string name="settings_summary_continuous">Continuo</string>
 
     <!-- Edit sheet shell button labels (EditSheetShell) -->
     <string name="settings_edit_sheet_done">Listo</string>

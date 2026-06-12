@@ -180,6 +180,29 @@ object RecordChromeTokens {
     val settingsCellPaddingH = 3.dp
     /** `.settings-wrap` vertical gap. */
     val settingsWrapGap = 7.dp
+    /**
+     * Rotate-spec §11 D1 — vertical gap between compact landscape config cells.
+     * Tighter than the previous hardcoded 10.dp so the column reads as one slim
+     * chip stack, not a tower (portrait uses weights + dividers instead).
+     */
+    val landscapeCellGap = 6.dp
+    /**
+     * §B′ polish P3 — inboard offset between the cluster screen-edge and the
+     * landscape config strip: clears the nav-rail band (icon box + labels + gaps).
+     * Single source of truth — was a provisional inline 96.dp at the A6 checkpoint;
+     * 112.dp gives the strip's "swipe to edit" cap clearance from the rail labels.
+     */
+    val railBandInboardOffset = 112.dp
+    /**
+     * §B′ polish P2 — horizontal clearance reserved for the landscape cluster band
+     * (nav rail + inboard config strip + gaps; ≈ [railBandInboardOffset] + strip
+     * width + margin, measured on RZCYA1VBQ2H). ALL transient top-anchored chrome
+     * (warning banners/chips, the recovery chip, the active HUD with its mid-rec
+     * banner) pads by this on the cluster edge, so ANY current or future banner
+     * type mounted in those slots inherits collision avoidance automatically —
+     * the rule is on the slot, not the specific warning.
+     */
+    val clusterBandClearance = 240.dp
     /** `.settings-wrap` bottom offset. */
     val settingsCardBottomInset = 110.dp
     /** `.swipe-bar` dimensions. */
