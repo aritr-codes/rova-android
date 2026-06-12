@@ -2130,6 +2130,54 @@ val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
     }
 }
 
+// PR-ε — ADR-0029 §B″ (single lock writer): `requestedOrientation` on the UI
+// side is written ONLY by RecordScreen's unified lock DisposableEffect
+// (RecordChromeLockPolicy.shouldLock is the sole decision point). A second
+// writer reintroduces the lock/unlock races the §B″ model exists to prevent.
+// Comments are stripped before matching (block/KDoc + line) because prose
+// mentions are legal — e.g. DualShotPortraitGate.kt documents the legacy
+// lock in KDoc.
+val checkRecordChromeLockSingleSite = tasks.register("checkRecordChromeLockSingleSite") {
+    group = "verification"
+    description = "Forbid requestedOrientation writes in ui/ outside RecordScreen.kt (ADR-0029 §B″ single lock writer)."
+    val uiDir = file("src/main/java/com/aritr/rova/ui")
+    inputs.dir(uiDir).withPropertyName("rovaUiSources")
+    doLast {
+        if (!uiDir.exists()) {
+            throw GradleException("checkRecordChromeLockSingleSite: Rova ui source dir missing: $uiDir")
+        }
+        // Blank out block/KDoc comments but keep their newlines so reported
+        // line numbers stay true to the file on disk.
+        val blockComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+        val offenders = uiDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.name != "RecordScreen.kt" }
+            .mapNotNull { f ->
+                val stripped = blockComment.replace(f.readText()) { m ->
+                    m.value.filter { ch -> ch == '\n' }
+                }
+                val hits = stripped.lines()
+                    .withIndex()
+                    .filter { (_, line) ->
+                        line.substringBefore("//").contains("requestedOrientation")
+                    }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
+            }
+            throw GradleException(
+                "ADR-0029 §B″ violation: requestedOrientation touched on the UI side " +
+                    "outside RecordScreen.kt. The unified DisposableEffect in " +
+                    "RecordScreen is the ONLY UI-layer requestedOrientation writer; " +
+                    "RecordChromeLockPolicy.shouldLock is the sole decision point. " +
+                    "A second writer reintroduces lock/unlock races.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 afterEvaluate {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
@@ -2171,6 +2219,7 @@ afterEvaluate {
         dependsOn(checkSetTargetRotationBoundaryOnly)
         dependsOn(checkFrontBackCapabilityGated)
         dependsOn(checkUserCopyVocabulary)
+        dependsOn(checkRecordChromeLockSingleSite)
     }
 }
 
