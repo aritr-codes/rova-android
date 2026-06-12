@@ -263,8 +263,12 @@ fun RecordScreen(
     // PR-ε (spec §2.4) — ONE unwrapped accumulator angle for the whole screen,
     // shortest-path retarget (never animate to the raw target — a 270°→0°
     // transition would spin the long way). First composition JUMPS to the
-    // current angle (no spin-on-entry). Reduced motion snaps instead of
-    // animating (ADR-0020 / checkA11yAnimationGated).
+    // current angle (no spin-on-entry). Known cosmetic edge: on COLD entry held
+    // landscape the signal seeds ROTATION_0 until the listener's first dwell-
+    // filtered emission, so one 180ms spin plays shortly after entry — not a
+    // bug; the locked window offers no better seed (Display.rotation frozen).
+    // Reduced motion snaps instead of animating (ADR-0020 /
+    // checkA11yAnimationGated).
     val reduceMotion = rememberReduceMotion()
     val spin = remember { Animatable(uiCounterRotationDegrees(snappedRotation)) }
     LaunchedEffect(snappedRotation, chromeModeNow, reduceMotion) {
