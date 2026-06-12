@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
@@ -89,6 +91,35 @@ private val ControlBtnTouchSize = 48.dp           // a11y touch target; the glas
 private val StatusPillShape = RoundedCornerShape(RecordChromeTokens.statusPillRadius)
 private val PillShape = RoundedCornerShape(RecordChromeTokens.loopPillRadius)
 private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCardRadiusPill)
+
+/**
+ * PR-ε (spec §3) — in-place counter-rotation wrapper. The OUTER Box is the
+ * stable layout/interaction container (clickable/semantics belong on it or on
+ * an ancestor — modifiers BEFORE a graphicsLayer are not transformed); only the
+ * INNER visual child rotates. graphicsLayer is draw-phase-only for layout, so
+ * siblings measure against the unrotated bounds — square containers are
+ * rotation-invariant (research §3).
+ *
+ * The child measures UNBOUNDED and centers in the slot: content wider than the
+ * slot (e.g. the LOCKED cell's "Landscape" value in a 48dp square) keeps its
+ * natural size and draws overflow instead of truncating — the accepted
+ * transient-AABB-overflow treatment (research §3); layout siblings still see
+ * only the slot bounds.
+ */
+@Composable
+internal fun SpinningBox(
+    degrees: Float,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .wrapContentSize(align = Alignment.Center, unbounded = true)
+                .graphicsLayer { rotationZ = degrees },
+        ) { content() }
+    }
+}
 
 /**
  * The top-of-viewfinder overlay: a status pill that reads the current mode, plus,
@@ -304,6 +335,7 @@ fun RecordSettingsCard(
     dimmed: Boolean = false,
     orientationPolicy: String = "FollowDevice",
     orientationLockRotation: Int = 0,
+    spinDegrees: Float = 0f,
 ) {
     Column(
         modifier = modifier
@@ -321,7 +353,11 @@ fun RecordSettingsCard(
                     .clip(RoundedCornerShape(1.dp))
                     .background(RecordChromeTokens.swipeHint),
             )
-            Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
+            // PR-ε (spec §3): the caption is a Cell-class element — its text
+            // counter-rotates in place; the bar + gesture surface stay stable.
+            SpinningBox(degrees = spinDegrees) {
+                Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
+            }
         }
         GlassSurface(
             role = GlassRole.RecordChrome,
@@ -361,19 +397,20 @@ fun RecordSettingsCard(
                     modifier = Modifier.fillMaxWidth().then(interaction),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false)
+                    SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     ModeCycleChip(
                         mode = mode,
                         onCycleMode = onCycleMode,
                         onLongPress = onOpenSheet,
                         enabled = !dimmed,
                         modifier = Modifier.weight(1f),
+                        spinDegrees = spinDegrees,
                     )
                     if (showLocked) {
                         CellSep()
@@ -382,6 +419,7 @@ fun RecordSettingsCard(
                             lockedValueStr,
                             Modifier.weight(1f),
                             readOnly = true,
+                            spinDegrees = spinDegrees,
                         )
                     }
                     Icon(
@@ -398,15 +436,15 @@ fun RecordSettingsCard(
                 // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
                 // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
                 val baseCells = listOf<@Composable () -> Unit>(
-                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true) },
-                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true) },
-                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true) },
+                    { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true, spinDegrees = spinDegrees) },
                 )
                 val cells = if (showLocked) {
                     baseCells + listOf<@Composable () -> Unit>({
-                        SettingsCell(stringResource(R.string.record_cell_locked), lockedValueStr, Modifier, readOnly = true, compact = true)
+                        SettingsCell(stringResource(R.string.record_cell_locked), lockedValueStr, Modifier, readOnly = true, compact = true, spinDegrees = spinDegrees)
                     })
                 } else {
                     baseCells
@@ -457,6 +495,7 @@ private fun ModeCycleChip(
     enabled: Boolean,
     compact: Boolean = false,
     modifier: Modifier = Modifier,
+    spinDegrees: Float = 0f,
 ) {
     val accented = CaptureMode.isAccented(mode)
     val palette = LocalGlassEnvironment.current.palette
@@ -467,8 +506,6 @@ private fun ModeCycleChip(
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
-            .clip(chipShape)
-            .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
             .then(
                 if (enabled) {
                     Modifier.combinedClickable(
@@ -478,27 +515,36 @@ private fun ModeCycleChip(
                 } else {
                     Modifier
                 }
-            )
-            .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+            ),
     ) {
-        Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                label,
-                style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-                color = if (accented) Color.White else RecordChromeTokens.cellValueText,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
-            Text(
-                stringResource(R.string.record_cell_mode),
-                style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-                color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
+        // PR-ε (spec §3): the accent pill (clip + gradient + label) spins AS A
+        // UNIT inside the stable clickable container — clipping on the stable
+        // container would cut the rotated label (rotated "DualShot" is taller
+        // than the chip's hug-height); the surrounding card gives the spun
+        // pill its vertical clearance. The ↻ cycle glyph stays unrotated.
+        SpinningBox(degrees = spinDegrees, modifier = Modifier.align(Alignment.Center)) {
+            Column(
+                modifier = Modifier
+                    .clip(chipShape)
+                    .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
+                    .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    label,
+                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                    color = if (accented) Color.White else RecordChromeTokens.cellValueText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                Text(
+                    stringResource(R.string.record_cell_mode),
+                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                    color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
         }
         Text(
             "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
@@ -511,22 +557,32 @@ private fun ModeCycleChip(
 }
 
 @Composable
-private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false) {
-    Column(modifier = modifier.padding(horizontal = RecordChromeTokens.settingsCellPaddingH), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            value,
-            style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-            color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
-        Text(
-            key.uppercase(),
-            style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-            color = RecordChromeTokens.cellKeyText,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false, spinDegrees: Float = 0f) {
+    // PR-ε (spec §4, I-style owner-ratified): uniform square slot, content
+    // counter-rotates inside it. The OUTER Box keeps the call-site modifier
+    // (portrait cells are weight(1f) — a fixed Row constraint that size()
+    // cannot override, and the pill must keep filling edge-to-edge); the
+    // INNER 48dp square is the uniform rotation-invariant spin slot, centered
+    // within whatever width the call site assigns.
+    Box(modifier, contentAlignment = Alignment.Center) {
+        SpinningBox(degrees = spinDegrees, modifier = Modifier.size(RecordChromeTokens.cellSlot)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    value,
+                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                    color = if (readOnly) RecordChromeTokens.cellValueReadOnlyText else RecordChromeTokens.cellValueText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                Text(
+                    key.uppercase(),
+                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                    color = RecordChromeTokens.cellKeyText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
