@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.camera.core.Preview
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aritr.rova.RovaApp
 import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.service.RovaRecordingService
@@ -45,6 +46,17 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     private val context: Context = application
     private val settings = RovaSettings(context)
+
+    /**
+     * PR-ε — snapped physical device rotation for chrome counter-rotation (spec §2.2).
+     * Pass-through from the RovaApp-owned [DeviceOrientationSignal] seam via the
+     * canonical AndroidViewModel accessor (no factory conversion — this VM has no
+     * signal constructor params, unlike WarningCenterViewModel). Listener lifecycle
+     * is WhileSubscribed inside the signal; collection here costs nothing when the
+     * chrome is not collecting.
+     */
+    val deviceRotation: StateFlow<Int> =
+        getApplication<RovaApp>().deviceOrientationSignal.snappedRotation
 
     // --- Service state (C1: pulled from instance, not companion static) ---
     private var serviceBinder: RovaRecordingService.LocalBinder? = null
