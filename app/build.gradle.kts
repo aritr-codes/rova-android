@@ -2149,8 +2149,11 @@ val checkRecordChromeLockSingleSite = tasks.register("checkRecordChromeLockSingl
         // Blank out block/KDoc comments but keep their newlines so reported
         // line numbers stay true to the file on disk.
         val blockComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+        // Canonical-path compare (checkScanTriggerSingleSite precedent) — a
+        // second RecordScreen.kt in another ui/ subpackage must not slip through.
+        val allowedWriter = file("src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt").canonicalFile
         val offenders = uiDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name != "RecordScreen.kt" }
+            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != allowedWriter }
             .mapNotNull { f ->
                 val stripped = blockComment.replace(f.readText()) { m ->
                     m.value.filter { ch -> ch == '\n' }
