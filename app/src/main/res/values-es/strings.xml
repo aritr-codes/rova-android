@@ -172,7 +172,6 @@
     <string name="record_switching_camera">Cambiando…</string>
 
     <!-- Idle settings card -->
-    <string name="record_swipe_to_edit">DESLIZA PARA EDITAR</string>
     <string name="record_cell_clip">Duración</string>
     <string name="record_cell_repeats">Clips</string>
     <string name="record_cell_wait">Espera</string>
@@ -482,6 +481,9 @@
     <string name="settings_sheet_title">Ajustes de grabación</string>
     <!-- PR-ε panel flotante de ajustes (2026-06-12) -->
     <string name="settings_panel_close_cd">Cerrar ajustes</string>
+    <string name="settings_panel_preset_none">Personalizado</string>
+    <string name="settings_panel_row_expanded">Expandido</string>
+    <string name="settings_panel_row_collapsed">Contraído</string>
     <string name="settings_sheet_section_builtin">Predefinidos</string>
     <string name="settings_sheet_section_my_presets">Mis ajustes</string>
     <string name="settings_presets_edit">Editar</string>

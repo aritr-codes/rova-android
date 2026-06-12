@@ -960,18 +960,11 @@ fun RecordScreen(
                     RecordHudState.Waiting,
                     is RecordHudState.Merging -> {
                         // R2 active-state HUD: WarningCenter (mid-rec TopBanner) +
-                        // RecordActiveHud (loop-pill + status-pill). One top-centered
-                        // Column, pushed below the status bar. The status pill consumes
-                        // clipSecondsLeft / waitSecondsLeft / Merging-progress per state;
-                        // the helper dispatches on `state`. Stop is the bottom-nav FAB.
-                        Column(
-                            modifier = slotModifier(
-                                placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
-                                chromeTopInsets,
-                            ).then(transientClusterClearance).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
+                        // RecordActiveHud (loop-pill + status-pill). The status pill
+                        // consumes clipSecondsLeft / waitSecondsLeft / Merging-progress
+                        // per state; the helper dispatches on `state`. Stop is the
+                        // bottom-nav FAB.
+                        val midRecWarnings: @Composable () -> Unit = {
                             WarningCenter(
                                 hudState = hudState,
                                 onStopRecording = { viewModel.stopRecording() },
@@ -979,6 +972,8 @@ fun RecordScreen(
                                 onNavigateToHistory = onNavigateToHistory,
                                 onOpenThermalTips = { showTipsSheet = true },
                             )
+                        }
+                        val activeHud: @Composable (Modifier) -> Unit = { hudModifier ->
                             RecordActiveHud(
                                 state = hudState,
                                 loopIndex = serviceState.currentLoop,
@@ -990,6 +985,53 @@ fun RecordScreen(
                                 rotatingNextClip = serviceState.pendingNextRotation != serviceState.currentSegmentRotation,
                                 orientation = chromeOrientation,
                                 spinDegrees = spinDegrees,
+                                modifier = hudModifier,
+                            )
+                        }
+                        // PR-ε refinement (owner 2026-06-12 #7): the HUD belongs to the
+                        // PHYSICAL top edge as held, not to the locked window's top. In a
+                        // 90°/270° grip the window-top slot is a physical SIDE edge, so the
+                        // spun group re-anchors to the side-center of the locked-portrait
+                        // window — which IS the physical top-center. Mid-rec warning
+                        // banners are text surfaces (spec §3 — they never spin) and keep
+                        // the window-top slot in every grip. ROTATION_180 keeps the
+                        // window-top anchor (reverse-portrait: same edge geometry).
+                        val hudSideAnchor = if (
+                            chromeModeNow == ChromeMode.FixedPhysical && lockChrome
+                        ) {
+                            when (effectiveChromeRotation) {
+                                1 -> Alignment.CenterEnd    // ROTATION_90 — window right = physical top
+                                3 -> Alignment.CenterStart  // ROTATION_270 — window left = physical top
+                                else -> null
+                            }
+                        } else null
+                        if (hudSideAnchor == null) {
+                            // Portrait grip / Adaptive — original top-centered stack.
+                            Column(
+                                modifier = slotModifier(
+                                    placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                    chromeTopInsets,
+                                ).then(transientClusterClearance).fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                midRecWarnings()
+                                activeHud(Modifier)
+                            }
+                        } else {
+                            Column(
+                                modifier = slotModifier(
+                                    placementFor(ChromeSlot.ACTIVE_HUD, chromeOrientation),
+                                    chromeTopInsets,
+                                ).then(transientClusterClearance).fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                midRecWarnings()
+                            }
+                            activeHud(
+                                Modifier
+                                    .align(hudSideAnchor)
+                                    .padding(horizontal = 10.dp),
                             )
                         }
                     }

@@ -366,23 +366,10 @@ fun RecordSettingsCard(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.settingsWrapGap),
     ) {
-        // swipe-to-edit hint
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(bottom = 1.dp)) {
-            Box(
-                Modifier
-                    .width(RecordChromeTokens.swipeBarWidth)
-                    .height(RecordChromeTokens.swipeBarHeight)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(RecordChromeTokens.swipeHint),
-            )
-            // PR-ε (spec §3, §5): the caption is a Cell-class element but far
-            // wider than its band (~75dp in ~11dp) — it counter-rotates AND
-            // fades out by 45° so it never overlaps the swipe bar / card edge
-            // at steady-state landscape; the bar + gesture surface stay stable.
-            SpinningBox(degrees = spinDegrees, fadeOutWhenRotated = true) {
-                Text(stringResource(R.string.record_swipe_to_edit), style = RovaTokens.swipeLabel, color = RecordChromeTokens.swipeHint)
-            }
-        }
+        // PR-ε refinement (owner 2026-06-12 #4): the swipe-bar + "SWIPE TO EDIT"
+        // hint above the card is REMOVED — the floating panel's spring slide-up
+        // open animation is the edit affordance now; the tap/swipe gesture
+        // surface on the card itself is unchanged.
         GlassSurface(
             role = GlassRole.RecordChrome,
             modifier = if (sense == null) Modifier.fillMaxWidth() else Modifier,
@@ -533,7 +520,6 @@ private fun ModeCycleChip(
     val accented = CaptureMode.isAccented(mode)
     val palette = LocalGlassEnvironment.current.palette
     val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
-    val glyphAlpha = if (enabled) 0.85f else 0.45f
     val chipShape = RoundedCornerShape(RecordChromeTokens.modeChipCornerRadius)
     val label = stringResource(CaptureMode.forTopology(mode).labelRes)
     Box(
@@ -554,40 +540,30 @@ private fun ModeCycleChip(
         // UNIT inside the stable clickable container — clipping on the stable
         // container would cut the rotated label (rotated "DualShot" is taller
         // than the chip's hug-height); the surrounding card gives the spun
-        // pill its vertical clearance. The ↻ cycle glyph spins WITH the pill
-        // (owner smoke 2026-06-12, finding #3: a stable glyph pointed the wrong
-        // way next to the rotated label) — it anchors TopEnd of the spun block
-        // so it keeps its corner relative to the reading orientation.
+        // pill its vertical clearance. The ↻ cycle glyph is REMOVED (owner
+        // 2026-06-12 refinement #6 — it overlapped the value text); tap-to-
+        // cycle stays discoverable via the chip's accent + long-press sheet.
         SpinningBox(degrees = spinDegrees, modifier = Modifier.align(Alignment.Center)) {
-            Box {
-                Column(
-                    modifier = Modifier
-                        .clip(chipShape)
-                        .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
-                        .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        label,
-                        style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-                        color = if (accented) Color.White else RecordChromeTokens.cellValueText,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                    )
-                    Text(
-                        stringResource(R.string.record_cell_mode),
-                        style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-                        color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                    )
-                }
+            Column(
+                modifier = Modifier
+                    .clip(chipShape)
+                    .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
+                    .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
-                    "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    color = if (accented) Color.White.copy(alpha = glyphAlpha)
-                            else RecordChromeTokens.cellKeyText.copy(alpha = glyphAlpha),
-                    fontSize = RecordChromeTokens.modeChipGlyphSize,
+                    label,
+                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                    color = if (accented) Color.White else RecordChromeTokens.cellValueText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+                Text(
+                    stringResource(R.string.record_cell_mode),
+                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                    color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
                 )
             }
         }
@@ -758,16 +734,10 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
                 )
             }
         }
-        // PR-ε (spec §5): the label ("Library"/"Settings", longer in es) is far
-        // wider than the nav band is tall, so it spins SEPARATELY from the glyph
-        // and fades out at non-0 rotations instead of overlapping the FAB/edges.
-        SpinningBox(degrees = spinDegrees, fadeOutWhenRotated = true) {
-            Text(
-                label,
-                style = RovaTokens.navTxt,
-                color = if (enabled) RecordChromeTokens.navText else Color.White.copy(alpha = 0.12f),
-            )
-        }
+        // PR-ε refinement (owner 2026-06-12 #5): no visible text label in EITHER
+        // orientation — the portrait label vanished in landscape (it faded out
+        // when spun), so for consistency it's gone everywhere. [label] still
+        // names the item for a11y (Icon contentDescription + onClickLabel).
     }
 }
 

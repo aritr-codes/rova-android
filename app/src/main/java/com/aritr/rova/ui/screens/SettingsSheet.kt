@@ -791,7 +791,15 @@ internal fun SheetRowDivider() {
 }
 
 @Composable
-internal fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String) -> Unit) {
+internal fun ModeTabs(
+    currentTopology: String,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+    // PR-ε panel refinement (owner 2026-06-12 #8): the floating panel hides
+    // the per-mode caption to keep the square card free of helper copy; the
+    // Adaptive sheet keeps it (default).
+    showCaption: Boolean = true,
+) {
     // Active tab paints the liquid-glass accent gradient (royal-violet in the
     // Eclipse theme), matching the record-home ModeCycleChip. White-on-gradient
     // is the documented record-chrome contrast exception (ADR-0020).
@@ -842,13 +850,15 @@ internal fun ModeTabs(currentTopology: String, enabled: Boolean, onPick: (String
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            stringResource(CaptureMode.forTopology(currentTopology).captionRes),
-            style = RovaTokens.sheetRowLabel,
-            color = SettingsSheetTokens.rowLabelText,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (showCaption) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(CaptureMode.forTopology(currentTopology).captionRes),
+                style = RovaTokens.sheetRowLabel,
+                color = SettingsSheetTokens.rowLabelText,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -1021,8 +1031,10 @@ internal fun QualityRow(quality: String, enabled: Boolean, onPick: (String) -> U
     }
 }
 
+// `internal` (not private): FloatingSettingsPanel reuses the chip inside its
+// Quality disclosure row (PR-ε refinement #2) — same plumbing as QualityRow.
 @Composable
-private fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
     val palette = LocalGlassEnvironment.current.palette
     val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
