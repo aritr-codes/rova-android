@@ -446,12 +446,17 @@ fun RecordSettingsCard(
                             spinDegrees = spinDegrees,
                         )
                     }
-                    Icon(
-                        RecordChromeIcons.chevronUp,
-                        contentDescription = stringResource(R.string.record_edit_session_settings_cd),
-                        tint = RecordChromeTokens.settingsArrow,
-                        modifier = Modifier.padding(start = 8.dp).size(13.dp),
-                    )
+                    // PR-ε (owner smoke 2026-06-12, finding #3): the expand arrow
+                    // spins with the cells — a stable up-arrow reads wrong in
+                    // landscape grip.
+                    SpinningBox(degrees = spinDegrees, modifier = Modifier.padding(start = 8.dp).size(13.dp)) {
+                        Icon(
+                            RecordChromeIcons.chevronUp,
+                            contentDescription = stringResource(R.string.record_edit_session_settings_cd),
+                            tint = RecordChromeTokens.settingsArrow,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
                 }
             } else {
                 // LANDSCAPE — the SAME pill rotated to a vertical column on the cluster
@@ -549,38 +554,43 @@ private fun ModeCycleChip(
         // UNIT inside the stable clickable container — clipping on the stable
         // container would cut the rotated label (rotated "DualShot" is taller
         // than the chip's hug-height); the surrounding card gives the spun
-        // pill its vertical clearance. The ↻ cycle glyph stays unrotated.
+        // pill its vertical clearance. The ↻ cycle glyph spins WITH the pill
+        // (owner smoke 2026-06-12, finding #3: a stable glyph pointed the wrong
+        // way next to the rotated label) — it anchors TopEnd of the spun block
+        // so it keeps its corner relative to the reading orientation.
         SpinningBox(degrees = spinDegrees, modifier = Modifier.align(Alignment.Center)) {
-            Column(
-                modifier = Modifier
-                    .clip(chipShape)
-                    .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
-                    .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+            Box {
+                Column(
+                    modifier = Modifier
+                        .clip(chipShape)
+                        .then(if (accented) Modifier.background(selectedBrush, chipShape) else Modifier)
+                        .padding(horizontal = RecordChromeTokens.settingsCellPaddingH, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        label,
+                        style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
+                        color = if (accented) Color.White else RecordChromeTokens.cellValueText,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                    Text(
+                        stringResource(R.string.record_cell_mode),
+                        style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
+                        color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                }
                 Text(
-                    label,
-                    style = if (compact) RovaTokens.cellValueCompact else RovaTokens.cellValue,
-                    color = if (accented) Color.White else RecordChromeTokens.cellValueText,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
-                Text(
-                    stringResource(R.string.record_cell_mode),
-                    style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
-                    color = if (accented) Color.White.copy(alpha = 0.80f) else RecordChromeTokens.cellKeyText,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    color = if (accented) Color.White.copy(alpha = glyphAlpha)
+                            else RecordChromeTokens.cellKeyText.copy(alpha = glyphAlpha),
+                    fontSize = RecordChromeTokens.modeChipGlyphSize,
                 )
             }
         }
-        Text(
-            "↻", // i18n-opt-out: decorative cycle glyph, not translatable copy
-            modifier = Modifier.align(Alignment.TopEnd),
-            color = if (accented) Color.White.copy(alpha = glyphAlpha)
-                    else RecordChromeTokens.cellKeyText.copy(alpha = glyphAlpha),
-            fontSize = RecordChromeTokens.modeChipGlyphSize,
-        )
     }
 }
 
@@ -1260,9 +1270,9 @@ internal fun RecordActiveHud(
         // PR-β — landscape places the loop pill beside the status pill (a vertical
         // stack reads badly in the short landscape top band). Same composables; the
         // outer Column keeps the live-region semantics either way (ADR-0020).
-        // PR-ε (spec §3): each pill spins individually in place (inside the pill
-        // composables); the Row/Column containers and live-region stay stable.
         if (orientation == ChromeOrientation.LANDSCAPE) {
+            // Adaptive fallback branch (window actually landscape): spinDegrees
+            // is always 0f here — args passed for uniformity only.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1270,28 +1280,44 @@ internal fun RecordActiveHud(
                 LoopPill(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
                 StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft), spinDegrees = spinDegrees)
             }
-        } else {
-            LoopPill(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
-            StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft), spinDegrees = spinDegrees)
-        }
-        // PR-α (ADR-0029 §Decision 3) — the current clip keeps its frozen rotation;
-        // the next clip adopts the device's new orientation at the segment boundary.
-        // Quiet caption reusing the adjacent status-pill's time text style/token.
-        if (rotatingNextClip) {
-            // PR-ε (spec §3/§6): orientation feedback — exactly the message a
-            // landscape-grip user must be able to read, so it spins like the
-            // pills (no fade).
-            SpinningBox(degrees = spinDegrees) {
+            if (rotatingNextClip) {
                 Text(
                     text = stringResource(R.string.record_orientation_rotating_next),
                     style = RovaTokens.statusTime,
                     color = RecordChromeTokens.statusTimeText,
                 )
             }
+            LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
+        } else {
+            // PR-ε fix (owner smoke 2026-06-12, finding #2): per-pill spin made
+            // the rotated pills' AABBs overlap each other — the Column spaces
+            // them by UNROTATED heights, so two ~120dp-wide pills rotated ±90°
+            // collided. The HUD stack spins AS ONE GROUP instead: relative
+            // arrangement is preserved inside the spun block (pills can never
+            // collide with each other) and the block's transposed AABB extends
+            // only into empty viewfinder below the top band (spec §3 clearance).
+            // Children receive no spin (identity); the segment bar rotates with
+            // the group and stays readable instead of fading.
+            SpinningBox(degrees = spinDegrees) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    LoopPill(loopIndex = loopIndex, loopTotal = loopTotal)
+                    StatusPill(content = hudStatusPillContent(state, clipSecondsLeft, waitSecondsLeft))
+                    // PR-α (ADR-0029 §Decision 3) — next clip adopts the device's
+                    // new orientation at the segment boundary; quiet caption.
+                    if (rotatingNextClip) {
+                        Text(
+                            text = stringResource(R.string.record_orientation_rotating_next),
+                            style = RovaTokens.statusTime,
+                            color = RecordChromeTokens.statusTimeText,
+                        )
+                    }
+                    // mockup `.m-seg` — self-hides (loopSegments null gate).
+                    LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal)
+                }
+            }
         }
-        // mockup `.m-seg` — segments fill left→right as clips complete. Self-hides
-        // (loopSegments null gate) for single-clip / indefinite sessions, so no
-        // call-site conditional is needed; order is LoopPill → StatusPill → bar.
-        LoopSegmentBar(loopIndex = loopIndex, loopTotal = loopTotal, spinDegrees = spinDegrees)
     }
 }
