@@ -480,6 +480,8 @@
     <string name="settings_sheet_reset_snoozes">Restablecer advertencias pospuestas</string>
     <!-- PR-β5b — presets pulidos (predefinidos / míos) + resumen de configuración -->
     <string name="settings_sheet_title">Ajustes de grabación</string>
+    <!-- PR-ε panel flotante de ajustes (2026-06-12) -->
+    <string name="settings_panel_close_cd">Cerrar ajustes</string>
     <string name="settings_sheet_section_builtin">Predefinidos</string>
     <string name="settings_sheet_section_my_presets">Mis ajustes</string>
     <string name="settings_presets_edit">Editar</string>

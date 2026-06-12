@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -311,26 +312,28 @@ fun RecordScreen(
 
     // PR-ε (spec §2.1, ADR-0029 §B″) — THE single setRequestedOrientation site
     // for the record route (gate: checkRecordChromeLockSingleSite). Lock = route
-    // ∧ no-modal ∧ FixedPhysical; a modal open releases the lock so the sheet
-    // rotates as a normal window surface (spec §7); on modal close the effect
-    // re-runs and re-locks → window snaps back to portrait (ratified §7).
+    // ∧ FixedPhysical. §B″5 rewrite (floating panel, owner-ratified 2026-06-12):
+    // the settings surface on compact is now FloatingSettingsPanel — chrome that
+    // spins as a unit — so NO modal releases the lock anymore; the window stays
+    // locked portrait, always, on compact. `modalOpen` is pinned to false (the
+    // policy parameter is retained for the API and the Adaptive contract, where
+    // shouldLock is false regardless). Known deviation: the thermal tips
+    // ModalBottomSheet now renders portrait under the lock (§B″5, follow-up).
     // Subsumes the DualShot-only portrait lock (lock target is PORTRAIT, which
-    // is exactly what DualShot required). Adaptive — and FixedPhysical with a
-    // modal open — keeps the pre-ε per-state behavior verbatim via
-    // `targetOrientation` above (DualShot → PORTRAIT, Single → FULL_SENSOR).
-    // The original requestedOrientation is captured and restored on dispose so
-    // this never leaks a policy change to other screens.
-    val modalOpen = combinedOpen || showTipsSheet
+    // is exactly what DualShot required). Adaptive keeps the pre-ε per-state
+    // behavior verbatim via `targetOrientation` above (DualShot → PORTRAIT,
+    // Single → FULL_SENSOR). The original requestedOrientation is captured and
+    // restored on dispose so this never leaks a policy change to other screens.
     val lockChrome = RecordChromeLockPolicy.shouldLock(
         isRecordRoute = true,   // RecordScreen only composes on the record route.
-        modalOpen = modalOpen,
+        modalOpen = false,      // ADR-0029 §B″5 — compact never unlocks post-panel.
         chromeMode = chromeModeNow,
     )
-    // Counter-rotation is only valid while the window is actually locked: with a
-    // modal open the lock releases and the window itself rotates (FULL_SENSOR),
-    // so applying spin.value on top would leave chrome that stays visible behind
-    // the sheet scrim (thermal tips) 90° off gravity — double compensation
-    // (final-review finding #2). The 0f snap happens behind the scrim.
+    // Counter-rotation is only valid while the window is actually locked
+    // (final-review finding #2 — double compensation otherwise). Post-§B″5
+    // rewrite lockChrome is constant true on FixedPhysical (modalOpen pinned
+    // false), so the guard is vestigial-but-correct; kept so the expression
+    // stays valid if the lock policy ever grows another release condition.
     val spinDegrees = if (chromeModeNow == ChromeMode.FixedPhysical && lockChrome) spin.value else 0f
     DisposableEffect(lockChrome, targetOrientation) {
         val activity = localView.context as? Activity
@@ -852,7 +855,24 @@ fun RecordScreen(
                 // behaves like portrait. The settings sheet covers the rotated cluster
                 // (config strip + nav), so chrome is suppressed while it's open in BOTH
                 // orientations. MergeCompleteCard + loading overlay stay outside the gate.
-                if (!combinedOpen) {
+                // PR-ε floating panel (ADR-0029 §B″5, 2026-06-12) — Adaptive-only now:
+                // on FixedPhysical the settings surface is a floating card over the
+                // viewfinder with NO scrim, ratified so the strip/nav stay VISIBLE
+                // below it; the panel's full-screen tap-catcher consumes input so the
+                // visible chrome can't be hit while it's open.
+                if (!combinedOpen || chromeModeNow == ChromeMode.FixedPhysical) {
+                // A11y (ADR-0020) — while the floating panel is open the chrome
+                // stays COMPOSED (visible under the no-scrim card) but must leave
+                // the semantics tree: the panel's tap-catcher blocks touch, yet
+                // TalkBack could otherwise traverse to and ACTIVATE the Start
+                // FAB / nav / recovery chip underneath. clearAndSetSemantics
+                // prunes every descendant node while occluded. (hideFromAccessibility
+                // needs compose-ui 1.8; BOM 2025.01.01 ships 1.7.x.)
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .then(if (combinedOpen) Modifier.clearAndSetSemantics {} else Modifier),
+                ) {
                 // Slice 2 / Phase 2.4 — read-only recovery echo, now a chip pinned
                 // just below the status pill. Idle only; hidden during Recording,
                 // Waiting, or Merging so the active HUD owns the user's attention.
@@ -1106,7 +1126,8 @@ fun RecordScreen(
                     },
                     spinDegrees = spinDegrees,
                 )
-                }   // close if (!combinedOpen) — chrome suppressed behind the sheet
+                }   // close a11y wrapper — semantics pruned while panel open
+                }   // close chrome gate — suppressed behind the sheet (Adaptive only; §B″5)
 
                 // Phase 2.4 — Merge Complete card. Brief overlay
                 // shown for ~900 ms between merge success and the
@@ -1128,16 +1149,67 @@ fun RecordScreen(
                 // Task 14 — the in-app tutorial overlay (3-step walkthrough) is
                 // removed; onboarding owns the first-run tutorial now (spec A2).
 
-                // Settings sheet — the custom camera-peek panel
-                // (mockups/new_uiux/02-settings-sheet.html). Always emitted;
-                // SettingsSheet owns its slide animation via `visible`. Edits
-                // write through immediately; Save / handle-drag / back dismiss.
+                // Settings surface — presentation by chrome mode (ADR-0029 §B″5,
+                // owner-ratified 2026-06-12). FixedPhysical (compact): a floating
+                // near-square card over the viewfinder — record CHROME that spins
+                // as one unit via SpinningBox; no scrim; tap-outside / ✕ / back
+                // dismiss. Adaptive (sw600dp+): the pre-existing camera-peek
+                // bottom sheet / side panel, untouched. Both are always emitted
+                // and own their open/close animation via `visible`; edits write
+                // through immediately via the SAME ViewModel plumbing.
                 // Phase 4 Slice 3 — thermal tips bottom sheet. Hosted here so
-                // the sheet survives the same HUD transitions as SettingsSheet.
+                // the sheet survives the same HUD transitions as the settings
+                // surface. On compact it renders portrait under the permanent
+                // lock (§B″5 known deviation, follow-up).
                 if (showTipsSheet) {
                     ThermalTipsSheet(onDismiss = { showTipsSheet = false })
                 }
 
+                if (chromeModeNow == ChromeMode.FixedPhysical) {
+                    FloatingSettingsPanel(
+                        visible = combinedOpen,
+                        spinDegrees = spinDegrees,
+                        durationSeconds = duration,
+                        loopCount = loopCount,
+                        intervalMinutes = interval,
+                        quality = resolution,
+                        currentMode = mode,
+                        editable = !isUiLocked,
+                        presets = allPresets,
+                        activePresetId = activePresetId,
+                        onApplyPreset = viewModel::applyPreset,
+                        onSavePreset = viewModel::savePreset,
+                        onDeletePreset = viewModel::deletePreset,
+                        onDurationChange = { viewModel.duration.value = it },
+                        onLoopCountChange = { viewModel.loopCount.value = it },
+                        onIntervalChange = { viewModel.interval.value = it },
+                        onQualityChange = { viewModel.resolution.value = it },
+                        onModePick = { picked ->
+                            // ADR-0029 — defer a landscape→DualShot pick until portrait;
+                            // any other pick commits now and clears a pending switch.
+                            // (On compact the window is always portrait, so this never
+                            // defers in practice — kept identical to the sheet wiring.)
+                            if (DualShotPortraitGate.shouldDefer(picked, isPortrait)) {
+                                pendingMode = picked
+                            } else {
+                                pendingMode = null
+                                viewModel.setTopology(picked)
+                            }
+                        },
+                        snoozedCount = snoozedSet.size,
+                        onResetSnoozes = if (snoozedSet.isNotEmpty()) {
+                            { warningVm.clearSnoozes() }
+                        } else null,
+                        orientationPolicy = orientationPolicy,
+                        orientationLockRotation = orientationLockRotation,
+                        orientationEnabled = !isUiLocked && mode != DualShotPortraitGate.DUAL_SHOT,
+                        currentDeviceRotation = currentDeviceRotation,
+                        onOrientationPick = { policy, lockRot ->
+                            if (!isUiLocked) viewModel.setOrientationPolicy(policy, lockRot)
+                        },
+                        onDismiss = { viewModel.closeSettingsSheet() },
+                    )
+                } else {
                 SettingsSheet(
                     visible = combinedOpen,
                     durationSeconds = duration,
@@ -1189,6 +1261,7 @@ fun RecordScreen(
                     },
                     onDismiss = { viewModel.closeSettingsSheet() },
                 )
+                }   // close settings-surface presentation branch (panel / sheet)
             }   // close Box
         }       // close Scaffold content lambda
 

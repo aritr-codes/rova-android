@@ -482,6 +482,8 @@
     <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
     <!-- PR-β5b — polished presets (built-in / my split) + resolved-config summary -->
     <string name="settings_sheet_title">Recording settings</string>
+    <!-- PR-ε floating settings panel (2026-06-12) -->
+    <string name="settings_panel_close_cd">Close settings</string>
     <string name="settings_sheet_section_builtin">Built-in</string>
     <string name="settings_sheet_section_my_presets">My presets</string>
     <string name="settings_presets_edit">Edit</string>

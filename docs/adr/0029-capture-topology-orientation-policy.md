@@ -318,10 +318,20 @@ over-slot labels (SWIPE caption, nav labels, LoopSegmentBar) fade out when spun
 device — the timer stays readable mid-REC. Deliberate divergence from One UI's frozen
 sideways timer, justified by Follow-Device per-clip re-orientation.
 
-**B″5. Unlock-while-open (owner-ratified A).** A modal open releases the lock; the window
-rotates normally; the existing bottom-sheet/side-panel presentations are reused verbatim.
-v1 scope: settings sheet + thermal tips sheet. The warning sheet's visibility is not
-hoisted out of WarningCenter and keeps the lock — known deviation, follow-up.
+**B″5. Floating settings panel — window NEVER unlocks on compact (owner-ratified
+2026-06-12; supersedes the original unlock-while-open clause A).** On FixedPhysical the
+settings surface is `FloatingSettingsPanel`: a floating near-square centered card (V1
+content × V3 geometry, mockup `floating_panel_mockup.html`, ratified 2026-06-12) — V1
+full-label stepper rows, no scrim, "Presets" collapsed; V3 near-square rotation-invariant
+footprint. The panel is **chrome-class**: it counter-rotates as ONE unit via `SpinningBox`
+like every other chrome element, so no modal feeds the lock anymore — the lock predicate
+on compact is `route ∧ FixedPhysical`, and the window stays locked portrait, always.
+Tap-outside / ✕ / back dismiss with the sheet's save-on-dismiss semantics; the same
+ViewModel plumbing and row composables are shared with the sheet. The bottom-sheet /
+side-panel presentations survive on the **Adaptive branch only** (sw600dp+, where the
+lock never engages). Known deviation, follow-up: the thermal-tips ModalBottomSheet (and
+the warning sheet, whose visibility is not hoisted out of WarningCenter) renders portrait
+under the permanent lock.
 
 **B″6. §B′ demoted to the Adaptive fallback (sw600dp+), which is MANDATORY.** API 36
 ignores orientation-lock APIs on sw600dp+; API 37 (Rova targetSdk) removes the opt-out,
