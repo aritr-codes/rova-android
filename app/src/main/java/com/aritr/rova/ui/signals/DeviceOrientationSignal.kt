@@ -35,11 +35,21 @@ class DeviceOrientationSignal(
     private val appContext: Context,
     scope: CoroutineScope,
 ) {
+    /**
+     * Last dwell-confirmed rotation, retained across flow restarts. The
+     * callbackFlow relaunches on every WhileSubscribed resubscription (tab
+     * return, screen-off/on); seeding from ROTATION_0 and emitting it would
+     * spin the chrome to portrait and back while held landscape (final-review
+     * finding #1). Seed from the retained value and emit ONLY from the
+     * listener — stateIn supplies the cold-start initial value.
+     */
+    @Volatile
+    private var lastStable: Int = Surface.ROTATION_0
+
     val snappedRotation: StateFlow<Int> = callbackFlow {
         var state = OrientationSnapState(
-            stable = Surface.ROTATION_0, candidate = null, candidateSinceMs = null,
+            stable = lastStable, candidate = null, candidateSinceMs = null,
         )
-        trySend(state.stable)
         val listener = object : OrientationEventListener(appContext) {
             override fun onOrientationChanged(orientation: Int) {
                 state = snapOrientation(
@@ -47,6 +57,7 @@ class DeviceOrientationSignal(
                     current = state,
                     nowMs = SystemClock.elapsedRealtime(),
                 )
+                lastStable = state.stable
                 trySend(state.stable)
             }
         }

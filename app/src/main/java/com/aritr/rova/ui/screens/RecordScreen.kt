@@ -277,8 +277,6 @@ fun RecordScreen(
         if (reduceMotion) spin.snapTo(target)
         else spin.animateTo(target, animationSpec = tween(RecordChromeTokens.elementSpinMs))
     }
-    val spinDegrees = if (chromeModeNow == ChromeMode.FixedPhysical) spin.value else 0f
-
     // ADR-0029 (force-rotate, pre-ε Adaptive behavior) — the Single-camera Record
     // viewfinder follows the physical sensor like a camera app, even when the
     // system auto-rotate lock is ON. FULL_SENSOR ignores the lock and allows all
@@ -317,6 +315,12 @@ fun RecordScreen(
         modalOpen = modalOpen,
         chromeMode = chromeModeNow,
     )
+    // Counter-rotation is only valid while the window is actually locked: with a
+    // modal open the lock releases and the window itself rotates (FULL_SENSOR),
+    // so applying spin.value on top would leave chrome that stays visible behind
+    // the sheet scrim (thermal tips) 90° off gravity — double compensation
+    // (final-review finding #2). The 0f snap happens behind the scrim.
+    val spinDegrees = if (chromeModeNow == ChromeMode.FixedPhysical && lockChrome) spin.value else 0f
     DisposableEffect(lockChrome, targetOrientation) {
         val activity = localView.context as? Activity
         val previousOrientation = activity?.requestedOrientation
