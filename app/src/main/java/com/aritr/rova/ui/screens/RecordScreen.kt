@@ -334,7 +334,14 @@ fun RecordScreen(
     // rewrite lockChrome is constant true on FixedPhysical (modalOpen pinned
     // false), so the guard is vestigial-but-correct; kept so the expression
     // stays valid if the lock policy ever grows another release condition.
-    val spinDegrees = if (chromeModeNow == ChromeMode.FixedPhysical && lockChrome) spin.value else 0f
+    // FU-4 — defer the per-frame `spin.value` read to draw time. Threaded as a
+    // provider so the 180ms spin re-runs only each SpinningBox graphicsLayer
+    // block, not the chrome subtree's composition. Remembered so an unrelated
+    // RecordScreen recomposition doesn't hand intermediates a new lambda identity
+    // (codex: do NOT key the remember on spin.value).
+    val spinDegrees: () -> Float = remember(chromeModeNow, lockChrome, spin) {
+        { if (chromeModeNow == ChromeMode.FixedPhysical && lockChrome) spin.value else 0f }
+    }
     DisposableEffect(lockChrome, targetOrientation) {
         val activity = localView.context as? Activity
         val previousOrientation = activity?.requestedOrientation
