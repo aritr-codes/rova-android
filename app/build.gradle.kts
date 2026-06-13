@@ -2004,6 +2004,90 @@ val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
     }
 }
 
+// ADR-0020 §Decision-1 — checkA11yClickableHasRole (WCAG 2.2 AA SC 4.1.2 Name,
+// Role, Value). A custom `Modifier.clickable` / `combinedClickable` (a Row/Box/
+// Surface/Column the developer made tappable) must declare an accessibility role
+// so TalkBack announces it as actionable, not as a generic container. The role
+// may sit in the clickable call (`clickable(role = …)`) or on an adjacent
+// `.semantics { role = … }` / `.clearAndSetSemantics { role = … }`.
+//
+// Detection (pragmatic same-chain approximation): for each clickable, scan a
+// FIXED bounded window — a small backward cushion + the clickable line + a
+// generous forward span — for a `role =` token (in the clickable call args or a
+// nearby `.semantics`/`.clearAndSetSemantics`). A fixed window (rather than a
+// structural chain parse, and rather than an early-stop terminator) can only
+// over-reach, never cut a chain short before a trailing `.semantics { role }`,
+// so it fails SAFE toward false-pass and never false-fails valid code (codex).
+//
+// Out of scope (NOT flagged): Material Button/IconButton/TextButton (component
+// calls, not the modifier) and toggleable/selectable (their own role/state
+// invariant). Opt-out: a clickable line bearing `a11y-opt-out` is skipped — spell
+// a non-empty reason (`// a11y-opt-out: <reason>`), mirroring i18n-opt-out.
+//
+// Accepted blind spot (mirrors checkNoHardcodedUiStrings): an UNRELATED `role =`
+// inside the window can mask a missing one. This fails SAFE — toward false-pass
+// (a missed regression), never false-fail (a blocked legit build).
+val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
+    group = "verification"
+    description = "Require an accessibility role on custom Modifier.clickable/combinedClickable — WCAG 2.2 AA SC 4.1.2 (ADR-0020 §Decision-1)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkA11yClickableHasRole: Rova source dir missing: $srcDir")
+        }
+        // `.clickable(`/`.combinedClickable(` (paren) or `… {` (trailing lambda).
+        val clickable = Regex("""\.(clickable|combinedClickable)\s*[({]""")
+        val roleAssign = Regex("""\brole\s*=""")
+        // Window spans the modifier chain in BOTH directions: a chain's
+        // `.semantics { role }` can sit either AFTER the clickable (forward) or
+        // BEFORE it (e.g. a tab whose `.semantics { selected; role = Role.Tab }`
+        // precedes a conditional `.let { … clickable … }` ~10 lines further down).
+        // Both spans are generous so such a legitimately-roled chain is never
+        // false-FAILED (a blocked legit build). The trade-off is the SAFE
+        // direction: an unrelated role within the span can over-reach into a
+        // false-PASS (a missed regression), never a false-fail.
+        val backWindow = 15
+        val forwardWindow = 20
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val lines = f.readLines()
+                val hits = lines.withIndex().filter { (idx, line) ->
+                    if (line.contains("a11y-opt-out")) return@filter false
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@filter false
+                    if (!clickable.containsMatchIn(line)) return@filter false
+                    val from = maxOf(0, idx - backWindow)
+                    val to = minOf(lines.size - 1, idx + forwardWindow)
+                    !roleAssign.containsMatchIn(lines.subList(from, to + 1).joinToString("\n"))
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) ->
+                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
+                }
+            }
+            throw GradleException(
+                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 4.1.2 Name, " +
+                    "Role, Value): custom Modifier.clickable / combinedClickable " +
+                    "used without an accessibility role on the same modifier " +
+                    "chain. A custom clickable container (Row/Box/Surface/Column) " +
+                    "must declare a role so TalkBack announces it as actionable — " +
+                    "either `clickable(role = Role.Button, …)` or an adjacent " +
+                    "`.semantics { role = … }` / `.clearAndSetSemantics { role = … }`. " +
+                    "Material Button/IconButton supply a role already. For toggles/" +
+                    "selections use toggleable/selectable (out of scope here). For a " +
+                    "genuinely role-exempt case, add `// a11y-opt-out: <reason>` " +
+                    "(reason required) on the clickable line.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 // B5 / ADR-0025 — the core privacy invariant, mechanically enforced:
 // VaultExporter must never reach a public-publish API. A vaulted recording
 // stays app-private; any MediaStore insert / media scan / public-dir write
@@ -2214,6 +2298,7 @@ afterEvaluate {
         dependsOn(checkNoHardcodedUiStrings)
         dependsOn(checkLocaleConfigNoPseudolocale)
         dependsOn(checkA11yAnimationGated)
+        dependsOn(checkA11yClickableHasRole)
         dependsOn(checkPresetNoOrientation)
         dependsOn(checkVaultExporterNoPublicPublish)
         dependsOn(checkRecordSurfaceNoBlur)
