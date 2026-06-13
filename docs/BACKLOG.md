@@ -103,6 +103,22 @@ ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker finding
 - [ ] **PR-ε: per-frame recomposition during 180ms chrome spin (v2)** — **P2**
   PR-ε's counter-rotation triggers a full recomposition per frame during the 180ms spin (minor perf cost, KDoc'd). v2 fix: read the spin angle as a `State<Float>` *inside* the `graphicsLayer` lambda so the rotation updates in the layout/draw phase without recomposing. *(Source: `memory/project_pr_epsilon_rotation_first_chrome.md` smoke-watch "per-frame recomposition during 180ms spin (minor perf, v2: State<Float> read inside layer)".)*
 
+- [ ] **Build-speed: unblock the Gradle configuration cache (gate refactor)** — **P2**
+  Cold builds run ~17-20 min largely because the **configuration cache is OFF**: the 40 `check*`
+  gates capture build-script references in their `doLast` actions, which the configuration cache
+  cannot serialize (it **fails at execution** — "CompiledKotlinBuildScript ... this$0 is null" —
+  not just warns; see the `gradle.properties` note). Refactor the gates to script-ref-free task
+  I/O — move each scan into a `@CacheableTask`/`build-logic` convention plugin with explicit
+  `inputs.dir(...)` **and** an `outputs.file(...)` sentinel — then set
+  `org.gradle.configuration-cache=true`. Prereq fact: the gates declare `inputs` but **no
+  `outputs`** today, so none are UP-TO-DATE/cacheable (they re-run every build; cheap, but the
+  cleanup is a config-cache prerequisite). **Independent quick win (zero code):** the old
+  per-build cache-wipe "recovery dance" is **obsolete** — the `~/.claude/hooks/kotlin-postedit.ps1`
+  hook that corrupted the Kotlin incremental cache was disabled 2026-06-09 (no-op), so **warm
+  incremental builds (~1-3 min vs ~17 cold) are safe**; clean only on-demand if a build errors.
+  *(Source: `gradle.properties` config-cache note; `memory/project_build_env_perf.md`; measured:
+  `app/build.gradle.kts` gates have `inputs`, no `outputs`.)*
+
 - [ ] **Promote standing-requirement ADRs from Proposed → Accepted (or close)** — **P3** · **VERIFY**
   Four ADRs are still marked **Proposed** while their mechanisms ship in code: ADR-0006 (recording-lifecycle robustness), ADR-0018 (recovery-merge retry classifier preflight), ADR-0019 (thermal hysteresis), ADR-0020 (WCAG 2.2 AA). **VERIFY** each is intentionally Proposed vs. a stale status line before promoting/closing. *(Source: `docs/adr/` status scan 2026-06-13.)*
 
