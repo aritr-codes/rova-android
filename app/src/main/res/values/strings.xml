@@ -175,7 +175,7 @@
     <string name="record_cell_repeats">Clips</string>
     <string name="record_cell_wait">Wait</string>
     <string name="record_cell_quality">Quality</string>
-    <string name="record_cell_mode">MODE</string>
+    <string name="record_cell_mode">Mode</string>
     <string name="record_edit_session_settings_cd">Edit session settings</string>
     <!-- Capture modes (spec 2026-06-11 §3, ADR-0029 PR-γ). DualShot/DualSight are brand names, both locales. -->
     <string name="capture_mode_auto">Auto</string>

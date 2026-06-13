@@ -595,7 +595,7 @@ private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnl
                     maxLines = 1,
                 )
                 Text(
-                    key.uppercase(),
+                    key,
                     style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
                     color = RecordChromeTokens.cellKeyText,
                     textAlign = TextAlign.Center,
