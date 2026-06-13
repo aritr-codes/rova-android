@@ -75,14 +75,20 @@ import com.aritr.rova.ui.theme.SettingsSheetTokens
 // rotation-INVARIANT: the card spins as one unit via SpinningBox and a
 // square never changes its AABB, so it can never clip a window edge in a
 // landscape grip (round-1 rectangle did — Screenshot_20260612_220008).
+//
+// BASELINE side — multiplied by `rememberChromeScale()` at use (owner refinement
+// 2026-06-13): the cap tracks screen size, pinned to this value on the 411dp
+// reference device and scaling on narrower phones / wider tablets & foldables.
 private val PanelMaxSide = 320.dp
 private val PanelEdgeClearance = 44.dp
 // Bottom anchor: nav-bar inset + the strip's own clearance stack. The strip
 // (PARAMS_CARD slot) sits at navInset + 120dp (CARD_BOTTOM_P — pinned by the
-// ChromeSlotPlacement test) and the portrait pill is ~62dp tall (48dp cell
-// slot + card padding); 16dp of visual gap above it matches the V1 mockup's
-// panel-to-strip spacing (20px @ 240px-wide mock phone ≈ 30dp incl. its
-// internal shadow band).
+// ChromeSlotPlacement test). The 62dp strip-height term is the PRE-slim value
+// (48dp slot + padding); the 2026-06-13 slim trimmed the strip to ~56dp, but
+// this term is left at 62 ON PURPOSE so the panel does NOT move on the
+// reference device (owner: "panel is perfect") — the consequence is the gap
+// above the strip reads ~6dp larger (≈22dp vs the V1 mockup's 16dp), a benign
+// touch more breathing room. Revisit only if the owner wants the gap tightened.
 private val PanelBottomClearance = 120.dp + 62.dp + 16.dp
 // Minimum breathing room above the square (status-bar band + margin) when the
 // window is short (split-screen) and the side is height-capped.
@@ -183,10 +189,15 @@ internal fun FloatingSettingsPanel(
             // window (split-screen / freeform) would otherwise push the square
             // past the top edge — the bottom offset is fixed, so the side must
             // shrink instead.
+            // Device-anchored responsive cap: PanelMaxSide × ChromeScale (== 1.0
+            // on the 411dp reference device, so the side stays its tuned ~320dp
+            // here; narrower phones shrink, tablets/foldables grow). Still bounded
+            // by the available width/height above the bottom anchor.
+            val chromeScale = rememberChromeScale()
             val panelSide = minOf(
                 maxWidth - PanelEdgeClearance,
                 maxHeight - PanelBottomClearance - PanelTopMargin,
-            ).coerceAtMost(PanelMaxSide)
+            ).coerceAtMost(PanelMaxSide * chromeScale)
             SpinningBox(
                 degrees = spinDegrees,
                 modifier = Modifier
@@ -261,7 +272,7 @@ internal fun FloatingSettingsPanel(
                         SheetRowDivider()
                         StepperRow(
                             label = stringResource(R.string.settings_sheet_repeats),
-                            value = recordRepeatsStepperValue(loopCount),
+                            value = recordRepeatsCompactValue(loopCount),
                             enabled = editable,
                             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
                             atMax = RecordSettingBounds.repeatsAtMax(loopCount),

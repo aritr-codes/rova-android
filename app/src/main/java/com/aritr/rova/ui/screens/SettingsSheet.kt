@@ -682,7 +682,7 @@ private fun SettingsContent(
         SheetRowDivider()
         StepperRow(
             label = stringResource(R.string.settings_sheet_repeats),
-            value = recordRepeatsStepperValue(loopCount),
+            value = recordRepeatsCompactValue(loopCount),
             enabled = editable,
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),

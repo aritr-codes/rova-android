@@ -174,9 +174,10 @@ object RecordChromeTokens {
     val modeChipCornerRadius = 11.dp
     /** Slice B — Mode chip `↻` glyph text size. */
     val modeChipGlyphSize = 7.sp
-    /** `.settings-card` padding — `7px 12px`. */
+    /** `.settings-card` padding — mockup `7px 12px`; vertical trimmed 7→6 (owner
+     *  refinement 2026-06-13) to slim the strip alongside the [cellSlot] reduction. */
     val settingsCardPaddingH = 12.dp
-    val settingsCardPaddingV = 7.dp
+    val settingsCardPaddingV = 6.dp
     /** `.s-cell` horizontal padding. */
     val settingsCellPaddingH = 3.dp
     /** `.settings-wrap` vertical gap. */
@@ -282,8 +283,13 @@ object RecordChromeTokens {
     /** PR-ε (spec §2.4) — in-place counter-rotation duration. One UI measures ~80-160ms
      *  relayout; Material short-motion is 200-300ms; 180ms between, tune on device. */
     val elementSpinMs: Int = 180
-    /** PR-ε (spec §4) — uniform square slot for config-strip cells, both orientations.
-     *  48dp = touch-target floor AND rotation-invariant bound (research §3/§4);
-     *  spinning content must fit within slot/√2 ≈ 33.9dp visual diameter. */
-    val cellSlot: Dp = 48.dp
+    /** PR-ε (spec §4) — BASELINE uniform square slot for config-strip cells, both
+     *  orientations. Multiplied at the call site by [ChromeScale.factor] (== 1.0 on
+     *  the 411dp reference device) so the strip scales with screen size. The 48dp
+     *  touch-target floor is held SEPARATELY by the card's `heightIn(min = 48.dp)`
+     *  (RecordSettingsCard), so this slot is free to read smaller: owner refinement
+     *  2026-06-13 trimmed it 48→44 for a slimmer strip / more unobstructed preview.
+     *  Rotation-invariant bound holds at ANY square size — spinning content must fit
+     *  within slot/√2 (≈31.1dp at 44dp). PR-ε spec §4 amended for this deviation. */
+    val cellSlot: Dp = 44.dp
 }

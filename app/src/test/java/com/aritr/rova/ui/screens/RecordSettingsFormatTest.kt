@@ -19,4 +19,13 @@ class RecordSettingsFormatTest {
     @Test fun tileSummary_quickSample() {
         assertEquals("10 s · ×3 · HD", presetTileSummary(10, 3, "HD"))
     }
+
+    @Test fun compactRepeats_continuousShowsInfinity() {
+        // The record-home strip cell uses this (owner 2026-06-13) — continuous → ∞.
+        assertEquals("∞", recordRepeatsCompactValue(-1))
+    }
+
+    @Test fun compactRepeats_finiteShowsNumber() {
+        assertEquals("20", recordRepeatsCompactValue(20))
+    }
 }

@@ -376,7 +376,7 @@ CSS `backdrop-filter` blur is deliberately **not** tokenised here — Compose ha
 |---|---|---|
 | `settingsCardRadiusPill` | `22.dp` | Settings card pill corner radius (Slice B; supersedes `settingsCardRadius`) |
 | `settingsCardPaddingH` | 12.dp | horizontal padding |
-| `settingsCardPaddingV` | 7.dp | vertical padding |
+| `settingsCardPaddingV` | 6.dp | vertical padding (trimmed 7→6, 2026-06-13 slim-strip) |
 | `settingsCellPaddingH` | 3.dp | `.s-cell` horizontal padding |
 | `settingsWrapGap` | 7.dp | `.settings-wrap` vertical gap |
 | `settingsCardBottomInset` | 110.dp | `.settings-wrap` bottom offset above nav |
