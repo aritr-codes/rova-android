@@ -43,6 +43,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
+import com.aritr.rova.ui.theme.ChromeScale
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
@@ -415,7 +417,7 @@ fun RecordSettingsCard(
                 ) {
                     SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
+                    SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsCompactValue(loopCount), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
                     SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
@@ -457,12 +459,13 @@ fun RecordSettingsCard(
                 // COMPACT density (rotate-spec §11 D1): slimmer type + gap so the column
                 // doesn't dominate the rail — owner NO-GO 2026-06-11 on full density.
                 // PR-ε note: this branch is Adaptive-fallback-only (sw600dp+ — compact
-                // phones lock the window and never reach it); the 48dp square cell
-                // slots (spec §4) make the rail taller than the original compact
-                // design — acceptable on tablet heights, re-judge if a device hits it.
+                // phones lock the window and never reach it); the 44dp-baseline
+                // (ChromeScale-scaled, spec §4 amended 2026-06-13) square cell slots
+                // make the rail taller than the original compact design — acceptable
+                // on tablet heights, re-judge if a device hits it.
                 val baseCells = listOf<@Composable () -> Unit>(
                     { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
-                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsCompactValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true, spinDegrees = spinDegrees) },
@@ -549,6 +552,13 @@ private fun ModeCycleChip(
         // pill its vertical clearance. The ↻ cycle glyph is REMOVED (owner
         // 2026-06-12 refinement #6 — it overlapped the value text); tap-to-
         // cycle stays discoverable via the chip's accent + long-press sheet.
+        //
+        // ChromeScale EXEMPT (codex 2026-06-13): unlike SettingsCell, the Mode
+        // chip is intrinsically content-hugging (its accent pill must fit
+        // "DualShot"), not a fixed square slot — so it carries no scaled
+        // `cellSlot`. It already renders shorter than the scaled SettingsCell
+        // slots and centres within the row, so the row height (driven by those
+        // slots) scales uniformly without it.
         SpinningBox(degrees = spinDegrees, modifier = Modifier.align(Alignment.Center)) {
             Column(
                 modifier = Modifier
@@ -576,16 +586,30 @@ private fun ModeCycleChip(
     }
 }
 
+/**
+ * Device-anchored scale factor for the config strip + floating panel geometry.
+ * Reads the orientation-invariant [android.content.res.Configuration.smallestScreenWidthDp]
+ * so the value is stable across rotation (it must NOT resize PR-ε chrome
+ * mid-spin). 1.0 on the 411dp reference device; see [ChromeScale]. Shared by
+ * [FloatingSettingsPanel] (same package) for the panel-side cap.
+ */
+@Composable
+internal fun rememberChromeScale(): Float {
+    val sw = LocalConfiguration.current.smallestScreenWidthDp
+    return remember(sw) { ChromeScale.factor(sw.toFloat()) }
+}
+
 @Composable
 private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false, spinDegrees: () -> Float = { 0f }) {
     // PR-ε (spec §4, I-style owner-ratified): uniform square slot, content
     // counter-rotates inside it. The OUTER Box keeps the call-site modifier
     // (portrait cells are weight(1f) — a fixed Row constraint that size()
     // cannot override, and the pill must keep filling edge-to-edge); the
-    // INNER 48dp square is the uniform rotation-invariant spin slot, centered
-    // within whatever width the call site assigns.
+    // INNER square (44dp baseline × rememberChromeScale(), spec §4 amended
+    // 2026-06-13) is the uniform rotation-invariant spin slot, centered within
+    // whatever width the call site assigns.
     Box(modifier, contentAlignment = Alignment.Center) {
-        SpinningBox(degrees = spinDegrees, modifier = Modifier.size(RecordChromeTokens.cellSlot)) {
+        SpinningBox(degrees = spinDegrees, modifier = Modifier.size(RecordChromeTokens.cellSlot * rememberChromeScale())) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     value,
@@ -595,7 +619,7 @@ private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnl
                     maxLines = 1,
                 )
                 Text(
-                    key.uppercase(),
+                    key,
                     style = if (compact) RovaTokens.cellKeyCompact else RovaTokens.cellKey,
                     color = RecordChromeTokens.cellKeyText,
                     textAlign = TextAlign.Center,

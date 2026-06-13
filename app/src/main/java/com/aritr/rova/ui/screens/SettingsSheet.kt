@@ -88,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aritr.rova.R
@@ -628,7 +629,8 @@ private fun SettingsContent(
     var pendingDelete by remember { mutableStateOf<RovaPreset?>(null) }
     val customNames = presets.filter { !it.isBuiltIn }
     val bodyScroll = rememberScrollState()
-    Column(modifier = modifier.verticalScroll(bodyScroll)) {
+    Box(modifier) {
+        Column(modifier = Modifier.verticalScroll(bodyScroll)) {
         if (showTitle) {
             Text(
                 stringResource(R.string.settings_sheet_title),
@@ -680,7 +682,7 @@ private fun SettingsContent(
         SheetRowDivider()
         StepperRow(
             label = stringResource(R.string.settings_sheet_repeats),
-            value = recordRepeatsStepperValue(loopCount),
+            value = recordRepeatsCompactValue(loopCount),
             enabled = editable,
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
@@ -712,6 +714,12 @@ private fun SettingsContent(
             SheetRowDivider()
             ResetSnoozesRow(count = snoozedCount, onClick = onResetSnoozes)
         }
+        }
+        ScrollFadeBottom(
+            visible = bodyScroll.canScrollForward,
+            fill = SettingsSheetTokens.sheetFill,
+            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+        )
     }
     if (namingVisible) {
         PresetNameDialog(
@@ -788,6 +796,24 @@ internal fun SheetRowDivider() {
             .fillMaxWidth()
             .height(1.dp)
             .background(SettingsSheetTokens.rowDivider),
+    )
+}
+
+/**
+ * Decorative bottom scroll cue — a short transparent→[fill] gradient that
+ * appears only while there's more content below ([visible] = canScrollForward),
+ * so it never lies. Static (alpha toggles, no animation → not gated by
+ * checkA11yAnimationGated); no pointerInput, so it does not intercept the scroll
+ * drag underneath. (preset-ui-polish spec §3.)
+ */
+@Composable
+internal fun ScrollFadeBottom(visible: Boolean, fill: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .alpha(if (visible) 1f else 0f)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, fill))),
     )
 }
 
@@ -1148,19 +1174,19 @@ internal fun PresetGroups(
         verticalArrangement = Arrangement.spacedBy(SettingsSheetTokens.sectionLabelGap),
     ) {
         SheetSectionLabel(stringResource(R.string.settings_sheet_section_builtin))
-        PresetChipFlow {
-            builtIns.forEach { preset ->
-                PresetSheetChip(
-                    preset = preset,
-                    selected = preset.id == activePresetId,
-                    enabled = enabled,
-                    onClick = { onApply(preset) },
-                    onLongClick = null,
-                    deletable = false,
-                    onDelete = null,
-                )
-            }
-        }
+        PresetTileGrid(
+            builtIns.map { preset ->
+                @Composable {
+                    PresetTile(
+                        preset = preset,
+                        selected = preset.id == activePresetId,
+                        enabled = enabled,
+                        onClick = { onApply(preset) },
+                        onLongClick = null,
+                    )
+                }
+            },
+        )
 
         if (customs.isNotEmpty()) {
             Spacer(Modifier.height(SettingsSheetTokens.sectionLabelGap))
@@ -1189,54 +1215,68 @@ internal fun PresetGroups(
                     )
                 }
             }
-            PresetChipFlow {
-                customs.forEach { preset ->
-                    PresetSheetChip(
-                        preset = preset,
-                        selected = preset.id == activePresetId,
-                        enabled = enabled,
-                        onClick = { onApply(preset) },
-                        // Long-press deletes user customs (built-ins are read-only).
-                        onLongClick = { onRequestDelete(preset) },
-                        deletable = editMode,
-                        onDelete = { onRequestDelete(preset) },
-                    )
+            val customCells: List<@Composable () -> Unit> =
+                customs.map { preset ->
+                    @Composable {
+                        PresetTile(
+                            preset = preset,
+                            selected = preset.id == activePresetId,
+                            enabled = enabled,
+                            onClick = { onApply(preset) },
+                            // Long-press deletes user customs (built-ins are read-only).
+                            onLongClick = { onRequestDelete(preset) },
+                            deletable = editMode,
+                            onDelete = { onRequestDelete(preset) },
+                        )
+                    }
+                } + if (activePresetId == null && enabled) {
+                    listOf<@Composable () -> Unit>({ NewPresetTile(onClick = onRequestSave) })
+                } else {
+                    emptyList()
                 }
-            }
+            PresetTileGrid(customCells)
+        } else if (activePresetId == null && enabled) {
+            // No customs yet, but the live config is unsaved → offer the New tile.
+            PresetTileGrid(listOf<@Composable () -> Unit>({ NewPresetTile(onClick = onRequestSave) }))
         }
+    }
+}
 
-        // "+ Save" appears only when the current config matches no preset
-        // (activePresetId == null = genuinely Custom) and the sheet is editable.
-        if (activePresetId == null && enabled) {
-            PresetChipFlow {
-                SavePresetChip(onClick = onRequestSave)
+/**
+ * Equal-width 2-column tile grid. Chunks [cells] into rows of two, each cell
+ * `weight(1f)` so columns are identical width regardless of name length; a
+ * trailing odd cell pairs with a Spacer. Plain Column/Row (NOT LazyVerticalGrid)
+ * so it nests safely inside the panel's existing verticalScroll.
+ */
+@Composable
+private fun PresetTileGrid(cells: List<@Composable () -> Unit>) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(SettingsSheetTokens.tileGap),
+    ) {
+        cells.chunked(2).forEach { rowCells ->
+            Row(horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.tileGap)) {
+                rowCells.forEach { cell ->
+                    Box(Modifier.weight(1f)) { cell() }
+                }
+                if (rowCells.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PresetChipFlow(content: @Composable FlowRowScope.() -> Unit) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.chipGroupGap),
-        verticalArrangement = Arrangement.spacedBy(SettingsSheetTokens.chipGroupGap),
-        content = content,
-    )
-}
-
 /**
- * Sheet-native preset chip — same fill/stroke styling as [QualityChip], plus a
- * leading check icon when selected so the selected state is conveyed by more
- * than colour (WCAG 1.4.1, ADR-0020). `selected` semantics + a spoken
- * [presetSpokenDescription] make it screen-reader complete; a >=48dp min height
- * keeps the touch target comfortable. Custom (non-built-in) chips support
- * long-press-to-delete via [onLongClick] + a TalkBack custom action label.
+ * Uniform preset tile — fixed min-height, name (1 line, ellipsis) over a quiet
+ * [presetTileSummary]. Selected = faint accent wash + gradient ring + a check
+ * badge (selection by more than colour, WCAG 1.4.1). Custom tiles support
+ * long-press-to-delete ([onLongClick] + TalkBack label) and, in Edit mode, an
+ * inline × ([deletable]/[onDelete]). a11y carried over 1:1 from the old chip:
+ * Role.Button, `selected` semantics + spoken [presetSpokenDescription], 48dp
+ * min target, disabled state.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PresetSheetChip(
+private fun PresetTile(
     preset: RovaPreset,
     selected: Boolean,
     enabled: Boolean,
@@ -1245,23 +1285,26 @@ private fun PresetSheetChip(
     deletable: Boolean = false,
     onDelete: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
+    val shape = RoundedCornerShape(SettingsSheetTokens.tileRadius)
     val palette = LocalGlassEnvironment.current.palette
-    val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
-    val stroke = if (selected) Color.Transparent else SettingsSheetTokens.chipOffStroke
-    val textColor = if (selected) Color.White else SettingsSheetTokens.chipOffText
+    val ringBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
     val cd = presetSpokenDescription(preset)
-    // The long-press label surfaces delete as a TalkBack/Switch/Voice custom
-    // action — the non-gesture equivalent required by WCAG SC 2.5.1 / 2.1.1
-    // (codex a11y review). The inline × (Edit mode) is the sighted-touch
-    // equivalent of the same delete action.
     val deleteLabel = stringResource(R.string.preset_chip_delete_action)
-    Row(
+    val summary = presetTileSummary(preset.duration, preset.loopCount, preset.resolution)
+    val nameColor = if (selected) SettingsSheetTokens.chipOnText else SettingsSheetTokens.chipOffText
+    Box(
         modifier = Modifier
-            .heightIn(min = 48.dp)
+            .fillMaxWidth()
+            .heightIn(min = SettingsSheetTokens.tileMinHeight)
             .clip(shape)
-            .then(if (selected) Modifier.background(selectedBrush) else Modifier.background(Color.Transparent))
-            .border(1.dp, stroke, shape)
+            .background(
+                if (selected) palette.accent.copy(alpha = SettingsSheetTokens.tileSelFillAlpha)
+                else SettingsSheetTokens.tileFill,
+            )
+            .then(
+                if (selected) Modifier.border(1.5.dp, ringBrush, shape)
+                else Modifier.border(1.dp, SettingsSheetTokens.tileStroke, shape),
+            )
             .then(
                 if (enabled) {
                     Modifier
@@ -1282,35 +1325,61 @@ private fun PresetSheetChip(
                 contentDescription = cd
                 if (!enabled) disabled()
             }
-            .padding(
-                horizontal = SettingsSheetTokens.chipPaddingH,
-                vertical = SettingsSheetTokens.chipPaddingV,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {
-        if (selected) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = textColor,
-                modifier = Modifier.size(16.dp),
-            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (selected) {
+                // Selection conveyed by more than colour (WCAG 1.4.1) — a leading
+                // check that stays visible even in Edit mode, when the TopEnd slot
+                // holds the delete ×, so the two cues never collide. codex a11y
+                // review 019ec1b3.
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = palette.accent,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    preset.name,
+                    style = RovaTokens.sheetChip,
+                    color = nameColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // reserve room for the TopEnd delete × only when it's shown
+                    modifier = Modifier.padding(end = if (deletable) 22.dp else 0.dp),
+                )
+                Text(
+                    summary,
+                    style = RovaTokens.tileSummary,
+                    color = SettingsSheetTokens.summaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        Text(preset.name, style = RovaTokens.sheetChip, color = textColor)
         if (deletable && onDelete != null) {
             Box(
                 modifier = Modifier
+                    .align(Alignment.TopEnd)
                     .clip(CircleShape)
                     .focusHighlight(CircleShape)
                     .clickable(role = Role.Button, onClickLabel = deleteLabel) { onDelete() }
-                    .size(22.dp),
+                    // SC 2.5.8 — ≥24dp touch target (parent supplies the action label)
+                    .size(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = deleteLabel,
-                    tint = textColor,
+                    contentDescription = null,
+                    tint = SettingsSheetTokens.chipOnText,
                     modifier = Modifier.size(14.dp),
                 )
             }
@@ -1319,38 +1388,43 @@ private fun PresetSheetChip(
 }
 
 /**
- * The "+ Save" affordance — styled like an unselected [PresetSheetChip] with a
- * leading Add icon. Shown only when the config matches no preset; tapping opens
- * the naming dialog. (ADR-0026.)
+ * The "+ Save" affordance as a uniform tile — same footprint as [PresetTile],
+ * solid (not dashed) stroke to avoid a custom PathEffect. Shown only when the
+ * live config matches no preset; tapping opens the naming dialog (ADR-0026,
+ * behavior unchanged).
  */
 @Composable
-private fun SavePresetChip(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(SettingsSheetTokens.chipRadius)
-    val textColor = SettingsSheetTokens.chipOffText
+private fun NewPresetTile(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(SettingsSheetTokens.tileRadius)
     val cd = stringResource(R.string.preset_save_chip_cd)
-    Row(
+    Box(
         modifier = Modifier
-            .heightIn(min = 48.dp)
+            .fillMaxWidth()
+            .heightIn(min = SettingsSheetTokens.tileMinHeight)
             .clip(shape)
-            .background(Color.Transparent)
-            .border(1.dp, SettingsSheetTokens.chipOffStroke, shape)
+            .border(1.dp, SettingsSheetTokens.tileStroke, shape)
             .focusHighlight(shape)
             .clickable(role = Role.Button) { onClick() }
             .semantics { contentDescription = cd }
-            .padding(
-                horizontal = SettingsSheetTokens.chipPaddingH,
-                vertical = SettingsSheetTokens.chipPaddingV,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(12.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = Icons.Filled.Add,
-            contentDescription = null,
-            tint = textColor,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(stringResource(R.string.preset_save_chip), style = RovaTokens.sheetChip, color = textColor)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                tint = SettingsSheetTokens.chipOffText,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                stringResource(R.string.preset_save_chip),
+                style = RovaTokens.sheetChip,
+                color = SettingsSheetTokens.chipOffText,
+            )
+        }
     }
 }
 

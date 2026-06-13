@@ -713,7 +713,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         )
         RecordingDefaultSheet.LOOPS -> SettingsStepperSheet(
             title = stringResource(R.string.settings_loops_label),
-            valueLabel = recordRepeatsStepperValue(loopCount),
+            valueLabel = recordRepeatsCompactValue(loopCount),
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
             onStep = { dir ->

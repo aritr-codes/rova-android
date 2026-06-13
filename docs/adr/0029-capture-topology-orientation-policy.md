@@ -308,11 +308,23 @@ on the UI side is RecordScreen's unified `DisposableEffect` (lock when the predi
 holds; Adaptive/modal → pre-ε per-state behavior; restore on dispose). Gate:
 `checkRecordChromeLockSingleSite` (36th).
 
-**B″3. I-style strip (owner-ratified).** One pill, one footprint; uniform 48dp square
+**B″3. I-style strip (owner-ratified).** One pill, one footprint; uniform square
 cell slots; frozen order — `landscapeSense`/`railOrder` are NOT used on compact (sense
 only picks spin direction). Cell/nav/FAB/camera glyph contents spin as the Cell class;
 over-slot labels (SWIPE caption, nav labels, LoopSegmentBar) fade out when spun
 (`uprightFadeAlpha`).
+
+> **Amendment 2026-06-13 (owner refinement — slimmer + responsive strip/panel).**
+> The cell slot baseline is **44dp** (was 48dp) and the card vertical padding **6dp**
+> (was 7dp), for a slimmer strip / more unobstructed preview. The 48dp **touch-target
+> floor** is unaffected — it is held separately by the card's `heightIn(min = 48.dp)`,
+> not by the slot — and the rotation-invariant bound (content ≤ slot/√2) holds at any
+> square size (≈31.1dp at 44dp). Both the slot and the `FloatingSettingsPanel` side cap
+> (`PanelMaxSide`, baseline 320dp) are now multiplied by `ChromeScale.factor(...)`, a
+> device-anchored scale keyed on `smallestScreenWidthDp` (== 1.0 on the 411dp reference
+> device, so geometry is byte-identical there; clamped 0.88–1.15 so narrower phones
+> shrink and tablets/foldables grow proportionally). `smallestScreenWidthDp` is
+> orientation-invariant, so the chrome does NOT resize mid-spin.
 
 **B″4. Info pills spin.** Status chip, HUD timer/clip, and recovery chip spin WITH the
 device — the timer stays readable mid-REC. Deliberate divergence from One UI's frozen

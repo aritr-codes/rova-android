@@ -24,10 +24,24 @@ internal fun recordWaitValue(intervalMinutes: Int): String = when {
 }
 
 /**
- * Compact repeats value for the inline stepper's narrow value slot — the
- * continuous sentinel renders as `∞` (the full "Until you stop" string from
- * [recordRepeatsValue] is too wide for the 34 dp slot; the Phase-2 settings
- * card still uses [recordRepeatsValue]).
+ * Compact repeats value for narrow value slots — the continuous sentinel
+ * renders as `∞`. Shared by the inline steppers (sheet / panel / settings) AND
+ * the record-home config-strip cells. Owner refinement 2026-06-13 switched the
+ * strip from the full "Until you stop" of [recordRepeatsValue] to `∞` for a
+ * tidier cell and vocabulary parity with the stepper + [presetTileSummary]; the
+ * wider Settings-screen display row still uses [recordRepeatsValue].
  */
-internal fun recordRepeatsStepperValue(loopCount: Int): String =
+internal fun recordRepeatsCompactValue(loopCount: Int): String =
     if (loopCount < 0) "∞" else loopCount.toString()
+
+/**
+ * Compact, glanceable summary for a preset TILE — `clip · repeats · quality`,
+ * e.g. "30 s · ×20 · FHD" or "1 m · ∞ · HD". Wait is intentionally omitted
+ * (usually "None") to keep the tile to one tidy line (preset-ui-polish spec
+ * §2.1). Repeats render as "∞" for continuous (loopCount < 0) else "×N".
+ * Reuses [recordClipValue] so the clip vocabulary matches the strip exactly.
+ */
+internal fun presetTileSummary(durationSeconds: Int, loopCount: Int, resolution: String): String {
+    val repeats = if (loopCount < 0) "∞" else "×$loopCount"
+    return "${recordClipValue(durationSeconds)} · $repeats · $resolution"
+}
