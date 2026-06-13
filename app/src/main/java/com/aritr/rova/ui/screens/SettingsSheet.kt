@@ -1077,6 +1077,7 @@ internal fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onC
     Box(
         modifier = Modifier
             .clip(shape)
+            .heightIn(min = 24.dp) // SC 2.5.8 (AA) touch-target floor (ADR-0020): chip ≈24dp; pin so font-metric variance can't drop it below 24
             .then(if (selected) Modifier.background(selectedBrush) else Modifier.background(Color.Transparent))
             .border(1.dp, stroke, shape)
             .then(if (enabled) Modifier.focusHighlight(shape).clickable(role = Role.Button) { onClick() } else Modifier)
@@ -1211,7 +1212,10 @@ internal fun PresetGroups(
                             .clip(editShape)
                             .focusHighlight(editShape)
                             .clickable(role = Role.Button) { editMode = !editMode }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            // v 4→7: lifts the Edit/Done tap target ~20dp→~26dp to clear
+                            // the 24dp SC 2.5.8 (AA) floor (ADR-0020). Touch-padding only —
+                            // the label glyph/size is unchanged.
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
                     )
                 }
             }
