@@ -324,7 +324,7 @@ private fun WhyExpander(
                     color = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowBorderAlpha),
                     shape = RoundedCornerShape(RovaWarningsV3.whyRowCornerRadius),
                 )
-                .clickable { onToggle() }
+                .clickable(role = Role.Button) { onToggle() }
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -371,7 +371,7 @@ private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
             .height(RovaWarningsV3.sheetCtaHeight)
             .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
             .background(accent)
-            .clickable { onClick() }
+            .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -402,7 +402,7 @@ private fun SecondaryCta(label: String, onClick: () -> Unit) {
                 color = Color.White.copy(alpha = RovaWarningsV3.secondaryCtaStrokeAlpha),
                 shape = RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius),
             )
-            .clickable { onClick() }
+            .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -384,7 +385,7 @@ fun RecordSettingsCard(
                         Modifier
                     } else {
                         Modifier
-                            .clickable { onOpenSheet() }
+                            .clickable(role = Role.Button) { onOpenSheet() }
                             .pointerInput(Unit) {
                                 detectVerticalDragGestures { _, dragAmount ->
                                     if (dragAmount < -8f) onOpenSheet()
@@ -530,6 +531,7 @@ private fun ModeCycleChip(
                     Modifier.combinedClickable(
                         onClick = onCycleMode,
                         onLongClick = onLongPress,
+                        role = Role.Button,
                     )
                 } else {
                     Modifier
@@ -772,6 +774,7 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: 
                 .semantics {
                     contentDescription = semanticsLabel
                     liveRegion = LiveRegionMode.Polite
+                    role = Role.Button
                 },
             contentAlignment = Alignment.Center,
         ) {
