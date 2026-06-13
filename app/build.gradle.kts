@@ -2024,9 +2024,12 @@ val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
 // invariant). Opt-out: a clickable line bearing `a11y-opt-out` is skipped — spell
 // a non-empty reason (`// a11y-opt-out: <reason>`), mirroring i18n-opt-out.
 //
-// Accepted blind spot (mirrors checkNoHardcodedUiStrings): an UNRELATED `role =`
-// inside the window can mask a missing one. This fails SAFE — toward false-pass
-// (a missed regression), never false-fail (a blocked legit build).
+// Accepted blind spot (mirrors checkNoHardcodedUiStrings): an UNRELATED
+// `role = Role.…` for a DIFFERENT clickable inside the window can mask a missing
+// one. (The matcher requires a literal `Role.`, so a design-system
+// `role = GlassRole.…` arg does NOT count — see roleAssign below.) This fails
+// SAFE — toward false-pass (a missed regression), never false-fail (a blocked
+// legit build).
 val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
     group = "verification"
     description = "Require an accessibility role on custom Modifier.clickable/combinedClickable — WCAG 2.2 AA SC 4.1.2 (ADR-0020 §Decision-1)."
@@ -2038,7 +2041,11 @@ val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
         }
         // `.clickable(`/`.combinedClickable(` (paren) or `… {` (trailing lambda).
         val clickable = Regex("""\.(clickable|combinedClickable)\s*[({]""")
-        val roleAssign = Regex("""\brole\s*=""")
+        // Require a literal `Role.` so the design-system `role = GlassRole.…`
+        // Liquid Glass arg does NOT satisfy the a11y-role requirement.
+        val roleAssign = Regex("""\brole\s*=\s*Role\.""")
+        // Opt-out is honored only when a non-empty reason follows the colon.
+        val optOut = Regex("""a11y-opt-out:\s*\S""")
         // Window spans the modifier chain in BOTH directions: a chain's
         // `.semantics { role }` can sit either AFTER the clickable (forward) or
         // BEFORE it (e.g. a tab whose `.semantics { selected; role = Role.Tab }`
@@ -2054,7 +2061,7 @@ val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
             .mapNotNull { f ->
                 val lines = f.readLines()
                 val hits = lines.withIndex().filter { (idx, line) ->
-                    if (line.contains("a11y-opt-out")) return@filter false
+                    if (optOut.containsMatchIn(line)) return@filter false
                     val trimmed = line.trimStart()
                     if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@filter false
                     if (!clickable.containsMatchIn(line)) return@filter false

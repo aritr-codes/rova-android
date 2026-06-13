@@ -1043,12 +1043,21 @@ internal fun QualityChip(label: String, selected: Boolean, enabled: Boolean, onC
     val selectedBrush = remember(palette) { Brush.linearGradient(listOf(palette.accent, palette.accent2)) }
     val stroke = if (selected) Color.Transparent else SettingsSheetTokens.chipOffStroke
     val textColor = if (selected) Color.White else SettingsSheetTokens.chipOffText
+    // The param is named `selected`, which collides with the `semantics { }`
+    // receiver's `selected` property: on the RHS the receiver property (write-only)
+    // would win, and on the LHS the bare name resolves to the val param. Alias the
+    // RHS read and qualify the LHS with `this.` to target the receiver property.
+    val isSelected = selected
     Box(
         modifier = Modifier
             .clip(shape)
             .then(if (selected) Modifier.background(selectedBrush) else Modifier.background(Color.Transparent))
             .border(1.dp, stroke, shape)
             .then(if (enabled) Modifier.focusHighlight(shape).clickable(role = Role.Button) { onClick() } else Modifier)
+            // Single-select quality chip: announce on/off state to TalkBack so it is not
+            // read as a plain Button (review round: checkA11yClickableHasRole gate landing
+            // — SC 4.1.2 Value; sibling ModeTabs/OrientationRow expose `selected` too).
+            .semantics { this.selected = isSelected }
             .alpha(if (enabled) 1f else 0.5f)
             .padding(
                 horizontal = SettingsSheetTokens.chipPaddingH,
