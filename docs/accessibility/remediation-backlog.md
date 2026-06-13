@@ -12,6 +12,17 @@ Ranked by severity (Blocker > Serious > Moderate > Advisory), tie-broken by reac
 > failures** — deferred from the AA-severity remediation pass. Re-rank them as
 > Advisory for AA purposes.
 
+> **Panel touch-target pass (2026-06-13, ADR-0020).** The compact
+> `FloatingSettingsPanel` (PR-ε) and its `#112` preset tile-grid introduced two
+> controls below the 24dp AA floor that the 2026-05-30 reclassification predates:
+> the preset **Edit/Done** toggle (~20dp) and the shared **QualityChip** (~24dp,
+> on the metric line). Both raised to ≥24dp via **touch-padding only** (no glyph
+> or visual-size change) — Edit/Done v-padding 4→7dp (~26dp); QualityChip pinned
+> with `heightIn(min = 24.dp)`. Every other panel control (step ± 27, close ✕ 44,
+> delete × 24, mode/orientation tabs ~29, disclosure rows ~39) already passed AA.
+> The full 48dp Material-guideline pass remains M3-polish only (owner deferred
+> 2026-06-13).
+
 > **Slice-6 exemptions (2026-05-30, contrast-remainder).** Within rows 14/16
 > the disabled-state findings — **PLR-03** (player disabled-icon), **RECOV-07**
 > (recovery disabled ghost text), **SHAR-02** (shared disabled button) — are
