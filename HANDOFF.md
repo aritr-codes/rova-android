@@ -9,7 +9,7 @@
 
 - **Branch:** `master` — **HEAD `24cdae7`** ("PR-ε: fixed-window + counter-rotating record chrome (ADR-0029 §B″) (#108)").
 - **Open PRs:** zero.
-- **Working tree:** clean except two untracked planning docs created this session — `docs/BACKLOG.md` and `HANDOFF.md` (this file). Neither is committed yet.
+- **Working tree:** clean. The two planning docs from this session — `docs/BACKLOG.md` and `HANDOFF.md` — are committed, plus a follow-up CLAUDE.md drift-fix (gate count → 39, ADR count → 29).
 - **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke is mandatory — emulators fail CameraX video recording.
 - **Static gates:** **39** custom `check*` tasks wired into `preBuild` (measured — see drift note below).
 
@@ -19,13 +19,13 @@
 2. **Drafted [`docs/BACKLOG.md`](docs/BACKLOG.md)** — 33 sourced items across 8 themes + a "Top 3 next" callout. Every item traces to an ADR / roadmap / accessibility doc / memory file / measured code fact.
 3. **Codebase-hygiene run** — reclaimed **~477.6 MB** of untracked junk: 88 `gradle_*.log` + stray `nul`, 4 `obs_*.mp4` (409 MB), `obs_frames/` (419 files, 55 MB), 6 `landscape_checkpoint_*.png`, 17 untracked root `.html` mockups, 3 stale merged-PR plan docs. **Protected:** the 2 *tracked* root mockups (`config_strip_mode_mockup.html`, `landscape_record_mockup.html`), `keystore.properties`, and all gitignored tool/build dirs (`.codegraph/`, `.idea/`, `app/build/` — never `git clean -x`'d).
 
-## ⚠️ Documentation drift to fix (P1, mechanical)
+## ⚠️ Documentation drift — FIXED 2026-06-13 (was P1)
 
-`CLAUDE.md` says "**28** custom `check*` tasks" (Static-check-gate section) and "the existing **25** checks" (ADR-0020 paragraph); PR-ε memory carried "**36**". **The true count is 39** — measured: 39 unique `tasks.register("check…` in `app/build.gradle.kts`, all 39 wired into `preBuild`. The full alphabetized gate list is inlined in `docs/BACKLOG.md` under "Gate-count documentation recount sweep". Fix `CLAUDE.md` (both numbers) + any ADR text that cites a count + correct the memory files.
+`CLAUDE.md` says "**28** custom `check*` tasks" (Static-check-gate section) and "the existing **25** checks" (ADR-0020 paragraph); PR-ε memory carried "**36**". **The true count is 39** — measured: 39 unique `tasks.register("check…` in `app/build.gradle.kts`, all 39 wired into `preBuild`. The full alphabetized gate list is inlined in `docs/BACKLOG.md` under "Gate-count documentation recount sweep". ✅ **Done this session:** `CLAUDE.md` corrected — 28→39 + full inline gate list; "20 ADRs (0001–0020)"→"29 ADRs (0001–0029)"; "25 checks"→39. Memory updated. ADR-0020/0022's "25 checks" intentionally **left as-is** (point-in-time-at-authoring counts in immutable decision records — rewriting would corrupt the historical narrative).
 
 ## Top 3 next candidates (from the backlog)
 
-1. **Gate-count recount sweep** — P1, zero-risk doc fix (the drift above).
+1. ✅ **Gate-count recount sweep** — DONE this session (CLAUDE.md fixed); lead candidates are now items 2–3.
 2. **PR-δ FrontBack PiP** — P2, the last unbuilt phase of ADR-0029 (Accepted). `FrontBack` is only an enum + UI refs + the `checkFrontBackCapabilityGated` fence today; no concurrent-camera source under `service/`. ADR already specifies the shape (single-file PiP via CameraX `CompositionSettings`, capability-gated).
 3. **Preset UI polish** — P1, owner called the in-sheet PRESETS section "kinda mess" (device-smoke otherwise PASS); not yet specced → start with brainstorming.
 
@@ -68,13 +68,14 @@ Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-a
 Orient first: read HANDOFF.md, CLAUDE.md, and the auto-loaded MEMORY.md, then docs/BACKLOG.md.
 Don't re-explore what those already establish.
 
-State: master @ 24cdae7, zero open PRs, tree clean (HANDOFF.md + docs/BACKLOG.md untracked,
-uncommitted). Tests green on master; device smoke is mandatory (emulators fail CameraX).
+State: master tip = docs commits on top of PR-ε 24cdae7 (#108), zero open PRs, tree clean.
+Tests green on master; device smoke is mandatory (emulators fail CameraX).
 
 I want to work on: <PICK ONE>
-  1. Gate-count recount sweep — P1, mechanical: fix CLAUDE.md "28"/"25" → 39 (true measured
-     count, full gate list in docs/BACKLOG.md), plus any ADR text citing a count, and correct
-     the stale "36" in the memory files. Pure docs, zero code risk.
+  1. Build the checkA11y* static-gate suite — P2 (ADR-0020 Proposed): only checkA11yAnimationGated
+     exists today; add semantics-presence / live-region / reduced-motion / touch-target gates per
+     the invariant->check*->preBuild convention. (The gate-count recount sweep that used to be
+     option 1 is already DONE — CLAUDE.md was fixed 2026-06-13.)
   2. PR-δ FrontBack PiP — P2: build CaptureTopology.FrontBack (two concurrent camera bindings
      → single-file PiP via CameraX CompositionSettings, capability-gated). Brainstorm → spec →
      plan → ADR-0029 amendment → subagent-driven build. Last unbuilt phase of the mode/
