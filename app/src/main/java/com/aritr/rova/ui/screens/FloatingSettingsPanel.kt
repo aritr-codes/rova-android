@@ -235,11 +235,11 @@ internal fun FloatingSettingsPanel(
                 ) {
                     PanelHeader(onDismiss = onDismiss)
                     Spacer(Modifier.height(SettingsSheetTokens.modeTabsBottomMargin))
-                    Column(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
+                    val panelScroll = rememberScrollState()
+                    Box(modifier = Modifier.weight(1f, fill = false)) {
+                        Column(
+                            modifier = Modifier.verticalScroll(panelScroll),
+                        ) {
                         // Owner refinement #8 — no mode caption, no section
                         // labels: the rows speak for themselves.
                         ModeTabs(
@@ -344,6 +344,12 @@ internal fun FloatingSettingsPanel(
                             SheetRowDivider()
                             ResetSnoozesRow(count = snoozedCount, onClick = onResetSnoozes)
                         }
+                        }
+                        ScrollFadeBottom(
+                            visible = panelScroll.canScrollForward,
+                            fill = SettingsSheetTokens.sheetFill,
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        )
                     }
                 }
             }

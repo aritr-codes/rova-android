@@ -629,7 +629,8 @@ private fun SettingsContent(
     var pendingDelete by remember { mutableStateOf<RovaPreset?>(null) }
     val customNames = presets.filter { !it.isBuiltIn }
     val bodyScroll = rememberScrollState()
-    Column(modifier = modifier.verticalScroll(bodyScroll)) {
+    Box(modifier) {
+        Column(modifier = Modifier.verticalScroll(bodyScroll)) {
         if (showTitle) {
             Text(
                 stringResource(R.string.settings_sheet_title),
@@ -713,6 +714,12 @@ private fun SettingsContent(
             SheetRowDivider()
             ResetSnoozesRow(count = snoozedCount, onClick = onResetSnoozes)
         }
+        }
+        ScrollFadeBottom(
+            visible = bodyScroll.canScrollForward,
+            fill = SettingsSheetTokens.sheetFill,
+            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+        )
     }
     if (namingVisible) {
         PresetNameDialog(
@@ -789,6 +796,24 @@ internal fun SheetRowDivider() {
             .fillMaxWidth()
             .height(1.dp)
             .background(SettingsSheetTokens.rowDivider),
+    )
+}
+
+/**
+ * Decorative bottom scroll cue — a short transparent→[fill] gradient that
+ * appears only while there's more content below ([visible] = canScrollForward),
+ * so it never lies. Static (alpha toggles, no animation → not gated by
+ * checkA11yAnimationGated); no pointerInput, so it does not intercept the scroll
+ * drag underneath. (preset-ui-polish spec §3.)
+ */
+@Composable
+internal fun ScrollFadeBottom(visible: Boolean, fill: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .alpha(if (visible) 1f else 0f)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, fill))),
     )
 }
 
