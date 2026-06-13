@@ -31,3 +31,15 @@ internal fun recordWaitValue(intervalMinutes: Int): String = when {
  */
 internal fun recordRepeatsStepperValue(loopCount: Int): String =
     if (loopCount < 0) "∞" else loopCount.toString()
+
+/**
+ * Compact, glanceable summary for a preset TILE — `clip · repeats · quality`,
+ * e.g. "30 s · ×20 · FHD" or "1 m · ∞ · HD". Wait is intentionally omitted
+ * (usually "None") to keep the tile to one tidy line (preset-ui-polish spec
+ * §2.1). Repeats render as "∞" for continuous (loopCount < 0) else "×N".
+ * Reuses [recordClipValue] so the clip vocabulary matches the strip exactly.
+ */
+internal fun presetTileSummary(durationSeconds: Int, loopCount: Int, resolution: String): String {
+    val repeats = if (loopCount < 0) "∞" else "×$loopCount"
+    return "${recordClipValue(durationSeconds)} · $repeats · $resolution"
+}
