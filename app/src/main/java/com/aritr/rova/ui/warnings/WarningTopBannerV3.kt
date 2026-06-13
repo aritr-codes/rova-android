@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
@@ -123,7 +124,7 @@ internal fun WarningTopBannerV3(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
                     .background(severityColor.copy(alpha = 0.20f))
-                    .clickable { onAction() }
+                    .clickable(role = Role.Button) { onAction() }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

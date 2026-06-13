@@ -834,7 +834,7 @@ private fun SettingsRow(
                         )
                     onClick != null -> base
                         .focusHighlight(RectangleShape)
-                        .clickable(onClick = onClick)
+                        .clickable(onClick = onClick, role = Role.Button)
                     else -> base
                 }
             }
