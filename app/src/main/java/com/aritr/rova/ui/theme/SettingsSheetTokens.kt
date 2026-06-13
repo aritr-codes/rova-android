@@ -125,6 +125,15 @@ object SettingsSheetTokens {
     /** Unselected chip label — mockup 0.28 → 0.55 for AA (SC 1.4.3). */
     val chipOffText = Color.White.copy(alpha = 0.55f)
 
+    // ── Preset tiles (preset-ui-polish) ─────────────────────────────────
+    val tileMinHeight = 56.dp
+    val tileRadius = 16.dp
+    val tileGap = 8.dp
+    val tileFill = Color.White.copy(alpha = 0.045f)
+    val tileStroke = Color.White.copy(alpha = 0.08f)
+    /** Faint accent wash behind a selected tile (alpha applied to palette accent at call site). */
+    val tileSelFillAlpha = 0.14f
+
     // ── Resolved-config summary line (PR-β5b) ───────────────────────────
     /** `.summary` muted body — value vocabulary echoing the active config. */
     val summaryText = Color.White.copy(alpha = 0.60f)

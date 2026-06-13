@@ -188,6 +188,13 @@ object RovaTokens {
         letterSpacing = 0.4.sp,
     )
 
+    val tileSummary: TextStyle = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 9.sp,
+        letterSpacing = 0.2.sp,
+    )
+
     /** `.mode-tab` — the recording-mode tab label. */
     val sheetModeTab: TextStyle = TextStyle(
         fontFamily = Inter,
