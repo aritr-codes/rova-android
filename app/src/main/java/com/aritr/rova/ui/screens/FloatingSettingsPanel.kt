@@ -2,6 +2,7 @@ package com.aritr.rova.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Spring
@@ -118,7 +119,7 @@ private val PanelTopMargin = 56.dp
 @Composable
 internal fun FloatingSettingsPanel(
     visible: Boolean,
-    spinDegrees: Float,
+    spinDegrees: () -> Float,
     durationSeconds: Int,
     loopCount: Int,
     intervalMinutes: Int,
@@ -151,7 +152,17 @@ internal fun FloatingSettingsPanel(
         enter = if (reduceMotion) EnterTransition.None else fadeIn(tween(160)),
         exit = if (reduceMotion) ExitTransition.None else fadeOut(tween(160)),
     ) {
-        BackHandler(enabled = visible, onBack = onDismiss)
+        // FU-3 — the exit animation runs while this content is STILL composed.
+        // Keep the back gesture consumed until the transition settles so a
+        // back-press can't race the fade-out and pop the nav (enabled = visible
+        // alone went false the instant dismissal started). While exiting we
+        // consume as a NO-OP; only a press while actually visible re-fires dismiss.
+        val exiting = transition.targetState == EnterExitState.PostExit
+        val backArmed = transition.currentState == EnterExitState.Visible ||
+            transition.targetState == EnterExitState.Visible
+        BackHandler(enabled = backArmed) {
+            if (!exiting) onDismiss()
+        }
         var namingVisible by remember { mutableStateOf(false) }
         var pendingDelete by remember { mutableStateOf<RovaPreset?>(null) }
         // One disclosure row open at a time — keeps the square's scroll area

@@ -110,7 +110,7 @@ private val SettingsCardShape = RoundedCornerShape(RecordChromeTokens.settingsCa
  */
 @Composable
 internal fun SpinningBox(
-    degrees: Float,
+    degrees: () -> Float,
     modifier: Modifier = Modifier,
     fadeOutWhenRotated: Boolean = false,
     content: @Composable () -> Unit,
@@ -120,10 +120,14 @@ internal fun SpinningBox(
             Modifier
                 .wrapContentSize(align = Alignment.Center, unbounded = true)
                 .graphicsLayer {
-                    rotationZ = degrees
+                    // FU-4 — draw-phase read of the spin provider; NEVER hoist
+                    // `val deg = degrees()` above this block (that reintroduces a
+                    // composition read and defeats the optimization).
+                    val deg = degrees()
+                    rotationZ = deg
                     // spec §5 — labels that exceed their slot fade out instead of
                     // permanently overlapping neighboring chrome at ±90/180.
-                    if (fadeOutWhenRotated) alpha = uprightFadeAlpha(degrees)
+                    if (fadeOutWhenRotated) alpha = uprightFadeAlpha(deg)
                 },
         ) { content() }
     }
@@ -143,7 +147,7 @@ fun RecordTopOverlay(
     currentLoop: Int,              // for the loop pill in active states
     totalLoops: Int,
     modifier: Modifier = Modifier,
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     // R2: RecordTopOverlay is now Idle-only (RecordScreen.kt gate); the loop pill
     // (Recording/Waiting) block was removed — unreachable since T9.
@@ -240,7 +244,7 @@ fun RecordCameraControls(
     orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
     // PR-ε (spec §5) — counter-rotation angle for the button glyphs only; the
     // 48dp circular containers (touch targets) stay stable.
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
     val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
@@ -258,7 +262,7 @@ fun RecordCameraControls(
 }
 
 @Composable
-private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color, spinDegrees: Float = 0f) {
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color, spinDegrees: () -> Float = { 0f }) {
     GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
         val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
             flashMode != RovaRecordingService.FLASH_MODE_AUTO
@@ -292,7 +296,7 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
 }
 
 @Composable
-private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color, spinDegrees: Float = 0f) {
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color, spinDegrees: () -> Float = { 0f }) {
     // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
     // P+L mode can disable JUST this button while flash stays usable. P+L is
     // rear-only by design (DualShot needs a single full-FOV sensor frame,
@@ -358,7 +362,7 @@ fun RecordSettingsCard(
     dimmed: Boolean = false,
     orientationPolicy: String = "FollowDevice",
     orientationLockRotation: Int = 0,
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     Column(
         modifier = modifier
@@ -516,7 +520,7 @@ private fun ModeCycleChip(
     enabled: Boolean,
     compact: Boolean = false,
     modifier: Modifier = Modifier,
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     val accented = CaptureMode.isAccented(mode)
     val palette = LocalGlassEnvironment.current.palette
@@ -573,7 +577,7 @@ private fun ModeCycleChip(
 }
 
 @Composable
-private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false, spinDegrees: Float = 0f) {
+private fun SettingsCell(key: String, value: String, modifier: Modifier, readOnly: Boolean, compact: Boolean = false, spinDegrees: () -> Float = { 0f }) {
     // PR-ε (spec §4, I-style owner-ratified): uniform square slot, content
     // counter-rotates inside it. The OUTER Box keeps the call-site modifier
     // (portrait cells are weight(1f) — a fixed Row constraint that size()
@@ -648,7 +652,7 @@ fun RecordBottomNav(
     onFabClick: () -> Unit,
     sense: DeviceLandscape? = null,
     modifier: Modifier = Modifier,
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     // Same three leaves in both orientations (identical widgets/sizes) — only the
     // axis + order change. [railOrder] maps the portrait left→right adjacency to the
@@ -706,7 +710,7 @@ fun RecordBottomNav(
 }
 
 @Composable
-internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: Float = 0f) {
+internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: () -> Float = { 0f }) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -744,7 +748,7 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
 }
 
 @Composable
-internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: Float = 0f) {
+internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: () -> Float = { 0f }) {
     val (fill, stroke, semanticsLabel) = when (state) {
         RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
         RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
@@ -805,7 +809,7 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: 
  * RovaApp.recoveryReport via RecoveryViewSource.eligibleSessionCount.
  */
 @Composable
-fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
+fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Modifier, spinDegrees: () -> Float = { 0f }) {
     // WCAG 2.2 AA SC 1.3.1 / 4.1.2 (ADR-0020, REC-19): one button node with a
     // single spoken name — the decorative history glyph (CD=null) and the label
     // otherwise read as separate fragments.
@@ -1059,7 +1063,7 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
+private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: () -> Float = { 0f }) {
     // loopPillContent is the tested (untouched) hide-gate: null ⇒ single-clip /
     // zero-clip ⇒ no pill. The mockup splits the body into a numeral + a caption,
     // so the numeral is re-derived here with the same clamp loopPillContent uses.
@@ -1106,7 +1110,7 @@ private fun LoopPill(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifi
  * the fill is a solid gradient over a 12%-white track, matching `.m-seg i`.
  */
 @Composable
-private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
+private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = Modifier, spinDegrees: () -> Float = { 0f }) {
     val segments = loopSegments(loopIndex, loopTotal) ?: return
     val palette = LocalGlassEnvironment.current.palette
     val fillBrush = Brush.linearGradient(listOf(palette.accent, palette.accent2))
@@ -1149,7 +1153,7 @@ private fun LoopSegmentBar(loopIndex: Int, loopTotal: Int, modifier: Modifier = 
 }
 
 @Composable
-private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier, spinDegrees: Float = 0f) {
+private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier, spinDegrees: () -> Float = { 0f }) {
     // PR-ε (spec §3/§6): whole pill (surface + dot + timer text) spins as one
     // unit — mid-REC the timer rotates so it reads upright in landscape grip
     // (deliberate divergence from One UI). No fade.
@@ -1223,7 +1227,7 @@ internal fun RecordActiveHud(
     rotatingNextClip: Boolean = false,
     orientation: ChromeOrientation = ChromeOrientation.PORTRAIT,
     modifier: Modifier = Modifier,
-    spinDegrees: Float = 0f,
+    spinDegrees: () -> Float = { 0f },
 ) {
     // SC 4.1.3 (REC-22): one polite live region carrying a stable, boundary-
     // only announcement. mergeDescendants + an explicit contentDescription
