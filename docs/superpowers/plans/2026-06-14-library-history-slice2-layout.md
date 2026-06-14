@@ -27,6 +27,26 @@ JUnit4 pure tests, the Slice-1 `ui.library` helpers (`LibraryRow`, `LibraryQuery
 PR #117) — this slice **stacks on that branch** (base it on `feat/library-history-foundation`, not `master`,
 per `memory/feedback_stacked_pr_merge_train.md`).
 
+### Owner adjustments (2026-06-14, ratified before execution)
+
+1. **Hero invariant (single representation).** The newest recording renders in **exactly one** place. `hero =
+   LibraryQuery.hero(rows)`; `collection = LibraryQuery.collection(rows, sort, filter, hero?.stableKey)` — the
+   `heroKey` argument structurally excludes the hero from the day-grouped collection. There is never a hero card
+   **and** a duplicate first grid/list item for the same `stableKey`. Documented + asserted at the ViewModel
+   integration point (Task 6) and the screen (Task 12); a pure-helper test guards it (Task 12a).
+2. **Favorite write is NON-optimistic + failure-safe (Task 6).** The UI reflects the sidecar snapshot only; the
+   star flips **after** a successful `LibraryMetadataStore.update` bumps `_sidecarRevision`. If the write throws,
+   UI state is preserved (no optimistic flip to roll back → no desync), the failure is logged, and a
+   non-blocking one-shot error event is exposed for the screen to surface (no dialog/block).
+3. **Thumbnail cache carries resolution at zero cost (Task 15).** On a cache hit, the quality label is recovered
+   from the decoded bitmap's own `width`/`height` via `QualityLabels.forDimensions` (`getFrameAtTime` returns the
+   native video frame), so cached rows keep their real resolution label — **no companion file, no key/format
+   change, no migration**. (If a future change downscales stored thumbnails, revisit; flagged inline.)
+4. **No recovery-path refactor.** Default = **retain** the existing recovery-cards + warning-strip wiring exactly
+   (Task 13 renders the redesigned browse body beneath the retained header). Extract a shared header composable
+   ONLY if the lift is clean and behavior-identical; otherwise leave `HistoryScreen`'s header machinery untouched.
+   No ADR-0005 path is modified either way.
+
 **Build/verify (Windows, WARM — no `--stop`, no cache wipe):** `gradlew.bat :app:testDebugUnitTest` for tests;
 `gradlew.bat :app:assembleDebug` for the gate suite + APK. `lintDebug` is RED on a pre-existing unrelated issue —
 gate-build with `assembleDebug`. Single test:
@@ -75,7 +95,8 @@ in the new screen (re-skin only where trivial; behavior unchanged).
 | Create `app/src/main/java/com/aritr/rova/ui/library/components/VideoFrame.kt` | Opaque thumbnail composable (Bitmap → center-crop, never glass) |
 
 Tests (JVM, mirror under `app/src/test/java/com/aritr/rova/ui/library/`):
-`LibraryRowMapperTest`, `LibraryDayGroupingTest`, `TileSemanticsTest`, `CaptionScrimTest`.
+`LibraryRowMapperTest`, `LibraryDayGroupingTest`, `TileSemanticsTest`, `CaptionScrimTest`,
+`LibraryQueryHeroDedupTest` (Task 12a — hero single-representation invariant).
 
 > **Why no Compose tests:** the repo has **no** `createComposeRule` harness (Explore-confirmed: only JVM/pure
 > tests + one trivial instrumented context test). Per house convention every framework-touching composable has a
@@ -819,18 +840,46 @@ private fun toRow(
 
 fun setViewMode(mode: LibraryViewMode) { _viewMode.value = mode }
 
-/** Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). Off-main. */
+/**
+ * Non-blocking one-shot signal that a sidecar write failed (owner adjustment 2).
+ * The screen collects it to show a transient message; null = nothing to show.
+ * Set to a monotonic counter so repeated failures each emit.
+ */
+private val _sidecarWriteError = MutableStateFlow(0)
+val sidecarWriteError: StateFlow<Int> = _sidecarWriteError.asStateFlow()
+
+/**
+ * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI is
+ * NON-optimistic (owner adjustment 2): the star reflects the sidecar snapshot, and
+ * only flips after a SUCCESSFUL [LibraryMetadataStore.update] bumps the revision and
+ * triggers a recompute. On failure we never optimistically flipped, so there is no
+ * desync to roll back — we log and raise a non-blocking error signal. Off-main.
+ */
 fun toggleFavorite(stableKey: String) {
     val s = store ?: return
     viewModelScope.launch(Dispatchers.IO) {
-        s.update(stableKey) { it.copy(favorite = !it.favorite) }
-        _sidecarRevision.value += 1
+        try {
+            s.update(stableKey) { it.copy(favorite = !it.favorite) }
+            _sidecarRevision.value += 1   // success → recompute reads the new snapshot
+        } catch (t: Throwable) {
+            RovaLog.e("HistoryViewModel", "favorite sidecar write failed for $stableKey", t)
+            _sidecarWriteError.value += 1 // UI unchanged; surface a non-blocking notice
+        }
     }
 }
 ```
 
 Add the missing imports: `kotlinx.coroutines.flow.SharingStarted`, `kotlinx.coroutines.flow.combine`,
-`kotlinx.coroutines.flow.stateIn`.
+`kotlinx.coroutines.flow.stateIn`, `kotlinx.coroutines.flow.asStateFlow`, and `com.aritr.rova.utils.RovaLog`
+(if not already imported).
+
+> **Failure semantics (owner adjustment 2):** `LibraryMetadataStore.update` is itself transactional
+> (temp-then-rename; an in-memory map mutation only commits after a successful rename — see its KDoc). Because the
+> derived `libraryUiState` recomputes ONLY on a `_sidecarRevision` bump, a thrown write leaves both the persisted
+> file and the on-screen star exactly as they were. The `sidecarWriteError` counter lets the screen show a
+> one-shot `Snackbar`/`Toast` ("Couldn't update favorite") without blocking; wiring it is optional in this slice
+> but the signal MUST exist so a future surface is non-blocking by construction. Do NOT add an optimistic local
+> star state — that would reintroduce the desync this adjustment forbids.
 
 > **Gate note (ADR-0030 / `checkLibraryNoManifestWrite`):** `toggleFavorite` writes only `LibraryMetadataStore` —
 > never a `SessionStore` manifest setter. `HistoryViewModel.kt` is **in scope** for the gate (filename contains
@@ -1593,6 +1642,10 @@ fun LibraryScreen(
     val interruptedLabel = stringResource(R.string.library_badge_interrupted)
     val plLabel = stringResource(R.string.library_badge_pl)
 
+    // Hero invariant (owner adjustment 1): the newest row renders in EXACTLY one
+    // place. `collection` is built with `hero?.stableKey` so LibraryQuery.collection
+    // structurally drops the hero from the day-grouped list — never a hero card AND a
+    // duplicate first tile for the same stableKey. (Guarded by LibraryQueryHeroDedupTest.)
     val hero = remember(ui.rows) { LibraryQuery.hero(ui.rows) }
     val collection = remember(ui.rows) {
         LibraryQuery.collection(ui.rows, LibrarySort.NEWEST, LibraryFilter(), hero?.stableKey)
@@ -1723,18 +1776,87 @@ git commit -m "feat(library): LibraryScreen hero+grid/list orchestrator + grid a
 
 ---
 
+## Task 12a: Hero-dedup regression test (owner adjustment 1)
+
+**Files:**
+- Test: `app/src/test/java/com/aritr/rova/ui/library/LibraryQueryHeroDedupTest.kt`
+
+> `LibraryQuery.hero`/`collection` are Slice-1 helpers, but the single-representation invariant is owner-mandated
+> for this slice — pin it with an explicit regression test so a future refactor of the screen or the query can't
+> silently reintroduce a duplicate hero. Pure JVM (no Compose).
+
+- [ ] **Step 1: Write the test**
+
+```kotlin
+package com.aritr.rova.ui.library
+
+import com.aritr.rova.data.CaptureTopology
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Test
+
+class LibraryQueryHeroDedupTest {
+
+    private fun row(key: String, date: Long) =
+        LibraryRow(key, key, "", date, 0, 0, CaptureTopology.Single, null, false)
+
+    @Test fun `hero is excluded from the collection — single representation`() {
+        val rows = listOf(row("c", 300), row("b", 200), row("a", 100)) // newest first
+        val hero = LibraryQuery.hero(rows)
+        assertNotNull(hero)
+        assertEquals("c", hero!!.stableKey)
+        val collection = LibraryQuery.collection(rows, LibrarySort.NEWEST, LibraryFilter(), hero.stableKey)
+        assertFalse(
+            "hero stableKey must not also appear in the collection",
+            collection.any { it.stableKey == hero.stableKey },
+        )
+        assertEquals(listOf("b", "a"), collection.map { it.stableKey })
+    }
+
+    @Test fun `single row yields a hero and an empty collection (no duplicate)`() {
+        val rows = listOf(row("only", 100))
+        val hero = LibraryQuery.hero(rows)
+        val collection = LibraryQuery.collection(rows, LibrarySort.NEWEST, LibraryFilter(), hero?.stableKey)
+        assertEquals("only", hero?.stableKey)
+        assertEquals(emptyList<String>(), collection.map { it.stableKey })
+    }
+
+    @Test fun `empty rows yield no hero and no collection`() {
+        assertEquals(null, LibraryQuery.hero(emptyList()))
+        assertEquals(
+            emptyList<String>(),
+            LibraryQuery.collection(emptyList(), LibrarySort.NEWEST, LibraryFilter(), null).map { it.stableKey },
+        )
+    }
+}
+```
+
+- [ ] **Step 2: Run it** (`gradlew.bat :app:testDebugUnitTest --tests "com.aritr.rova.ui.library.LibraryQueryHeroDedupTest"`)
+  — Expected: PASS (Slice-1 `LibraryQuery` already satisfies it; this pins the invariant). If RED, the bug is in
+  `LibraryQuery.collection`'s `heroKey` exclusion — fix the helper, not the test.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add app/src/test/java/com/aritr/rova/ui/library/LibraryQueryHeroDedupTest.kt
+git commit -m "test(library): pin hero single-representation invariant (owner adj. 1)"
+```
+
+---
+
 ## Task 13: Lift recovery/warning header + wire `MainScreen` to `LibraryScreen`
 
 **Files:**
 - Modify: `app/src/main/java/com/aritr/rova/ui/screens/HistoryScreen.kt`
 - Modify: `app/src/main/java/com/aritr/rova/ui/MainScreen.kt`
 
-- [ ] **Step 1: Decide header strategy** (per Task 12 note). Recommended: keep the existing recovery/warning
-  header **inside the route** by having `MainScreen` render the old `HistoryScreen`'s recovery/warning header
-  composable above `LibraryScreen`, OR (cleaner) extract it. The minimal, lowest-risk wiring for this slice:
-  call `LibraryScreen` as the route content and pass through the existing nav callbacks. The recovery cards +
-  warning strip continue to be provided by the retained `HistoryScreen` header block, which you render above
-  `LibraryScreen` in the same route Composable.
+- [ ] **Step 1: Header strategy — RETAIN by default (owner adjustment 4).** Do **not** refactor the recovery
+  path. The default, lowest-risk wiring: `MainScreen` keeps invoking the existing `HistoryScreen` recovery-cards +
+  warning-strip header machinery unchanged and renders the new `LibraryScreen` browse body beneath it (same
+  route Composable, existing nav callbacks passed through). Only extract a shared `@Composable` header **if** the
+  lift is clean and provably behavior-identical (no ADR-0005 path touched); if extraction looks at all entangled,
+  leave `HistoryScreen`'s header exactly as-is and stop. Note which path you took in the commit message.
 
 - [ ] **Step 2: Update `MainScreen.kt`** — replace the `HistoryScreen(...)` call in the `"history"`/library route
   with:
@@ -1887,10 +2009,26 @@ fun encodeThumb(bitmap: Bitmap, quality: Int = 80): ByteArray {
 /** Decode disk-cache bytes back to a Bitmap (null on corrupt entry). */
 fun decodeThumb(bytes: ByteArray): Bitmap? =
     runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+
+/**
+ * Recover the quality label for a cached thumbnail from its own pixel dimensions
+ * (owner adjustment 3). `getFrameAtTime` returns the frame at the NATIVE video
+ * resolution, so the decoded thumbnail's width/height equal the source dimensions
+ * and reproduce the exact [QualityLabels.forDimensions] label with no stored
+ * companion field and no migration. Returns [UNKNOWN_RESOLUTION] for a null bitmap.
+ *
+ * NOTE: valid only while the disk cache stores the FULL-resolution keyframe (it
+ * does today — `encodeThumb` compresses the unscaled `getFrameAtTime` bitmap). If a
+ * future change downscales before caching, this label would shrink — revisit then.
+ */
+fun resolutionForBitmap(bitmap: Bitmap?): String =
+    if (bitmap == null) UNKNOWN_RESOLUTION
+    else QualityLabels.forDimensions(bitmap.width, bitmap.height) ?: UNKNOWN_RESOLUTION
 ```
 
-> `Bitmap.compress` returns defaults under JVM tests — this seam is **not** unit-tested (matches the house rule
-> that framework-touching code is a thin seam). The cache logic it feeds IS tested in Slice 1.
+> `Bitmap.compress` / `decodeByteArray` return defaults under JVM tests — this seam is **not** unit-tested (matches
+> the house rule that framework-touching code is a thin seam). The cache logic it feeds IS tested in Slice 1.
+> `QualityLabels` is already imported in this file. (Add `import android.graphics.Bitmap` if not present.)
 
 - [ ] **Step 2: Wire read-before-extract in `HistoryViewModel`** — construct the cache lazily and consult it in
   the `extract` lambda passed to `HistoryMetadataLoader.fillMissing`:
@@ -1928,8 +2066,9 @@ HistoryMetadataLoader.fillMissing(
         val cachedBytes = cacheKey?.let { thumbDiskCache.get(it) }
         if (cachedBytes != null) {
             val bmp = VideoMetadataUtils.decodeThumb(cachedBytes)
-            // resolution unknown from cache → re-derive cheaply or keep UNKNOWN; the card shows duration, not resolution
-            bmp to VideoMetadataUtils.UNKNOWN_RESOLUTION
+            // owner adjustment 3: recover the real quality label from the decoded
+            // frame's native dimensions — zero extra storage, no migration.
+            bmp to VideoMetadataUtils.resolutionForBitmap(bmp)
         } else {
             val (bmp, res) = VideoMetadataUtils.extractMetadata(app, key)
             if (bmp != null && cacheKey != null) {
