@@ -1,0 +1,813 @@
+--------- beginning of main
+06-14 13:42:39.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424759
+06-14 13:42:39.411   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:40.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424760
+06-14 13:42:40.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:41.003   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:41.004   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:41.004   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:41.004   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:41.004   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:41.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424761
+06-14 13:42:41.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:42.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424762
+06-14 13:42:42.413   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:43.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424763
+06-14 13:42:43.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:43.826 20796 21067 E Routine@Core[4.9.04.20]: WearNodeHelper: getConnectedNearlyNodes: ExecutionException - java.util.concurrent.ExecutionException: com.google.android.gms.common.api.ApiException: 17: API: Wearable.API is not available on this device. Connection failed with: ConnectionResult{statusCode=API_UNAVAILABLE, resolution=null, message=null}
+06-14 13:42:43.840 20796 21067 E Routine@Core[4.9.04.20]: WearNodeManagerImpl: getNodeId: exception - com.google.android.gms.common.api.ApiException: 17: API: Wearable.API is not available on this device. Connection failed with: ConnectionResult{statusCode=API_UNAVAILABLE, resolution=null, message=null}
+06-14 13:42:43.923 20796 21066 E Routine@Core[4.9.04.20]: ResultCode.FailCustomCode: fromValidState: failed to parse. validState=0x1
+06-14 13:42:44.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424764
+06-14 13:42:44.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:44.981   791   831 E BatteryDump: !@new_battery_dump : 4061,237,475,550,69,330,330,386,0,0,353,386,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40510,6802,972,0,
+06-14 13:42:45.087   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:45.087   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:45.087   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:45.087   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:45.087   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:45.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424765
+06-14 13:42:45.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:46.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424766
+06-14 13:42:46.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:47.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424767
+06-14 13:42:47.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:48.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424768
+06-14 13:42:48.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:49.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424769
+06-14 13:42:49.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:50.088   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:50.088   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:50.088   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:50.088   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:50.088   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:50.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424770
+06-14 13:42:50.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:51.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424771
+06-14 13:42:51.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:52.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424772
+06-14 13:42:52.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:53.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424773
+06-14 13:42:53.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:54.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424774
+06-14 13:42:54.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:55.073   791   831 E BatteryDump: !@new_battery_dump : 4064,367,475,550,69,330,330,375,0,0,355,375,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40510,6805,972,0,
+06-14 13:42:55.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424775
+06-14 13:42:55.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:56.137   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:56.137   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:56.137   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:56.137   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:56.137   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:42:56.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424776
+06-14 13:42:56.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:57.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424777
+06-14 13:42:57.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:58.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424778
+06-14 13:42:58.411   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:42:59.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424779
+06-14 13:42:59.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:00.073   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:00.073   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:00.073   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:00.073   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:00.073   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:00.298 21398 21417 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+06-14 13:43:00.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424780
+06-14 13:43:00.411   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:00.886 21443 21443 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+06-14 13:43:01.101 21423 21459 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+06-14 13:43:01.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424781
+06-14 13:43:01.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:01.751 21423 21423 E MemoryLeakHandler: initialize - not working for release
+06-14 13:43:01.790 22591 22600 E SamsungAccount: [FamilyGroupUtil] getCountryCodeListWithRegionMcc - no country code with region mcc
+06-14 13:43:02.169   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:02.169   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:02.169   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:02.169   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:02.169   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:02.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424782
+06-14 13:43:02.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:03.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424783
+06-14 13:43:03.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:04.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424784
+06-14 13:43:04.413   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:04.556   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.556   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.556   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.556   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.556   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.561  2955  2955 E pageboostd: Received HALT command code 2
+06-14 13:43:04.655 20896 20896 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+06-14 13:43:04.698   848   848 E SurfaceFlinger: alpha changed 1.000 -> 0.000 - Task=11580#373884
+06-14 13:43:04.698   848   848 E SurfaceFlinger: alpha changed 0.000 -> 0.000 - Task=11580#373884
+06-14 13:43:04.731   848   848 E SurfaceFlinger: alpha changed 0.000 -> 0.160 - Task=11580#373884
+06-14 13:43:04.733   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.733   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.733   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.733   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.733   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.733   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.752   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.752   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.752   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.752   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.752   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.752   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.768   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.768   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.768   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.768   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.768   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.769   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.785   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.785   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.785   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.785   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.785   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.785   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.801   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.801   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.801   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.801   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.801   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.802   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.803 20896 20896 I DualSightProbe: QUERY api=36 featureFlag=false camera2Combos=0
+06-14 13:43:04.818   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.818   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.818   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.818   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.818   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.818   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.834   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.834   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.834   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.834   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.834   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.834   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.851   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.851   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.851   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.851   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.851   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.851   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.868   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.868   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.868   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.868   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.868   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.868   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.884   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.884   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.884   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.884   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.884   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.884   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.903   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.903   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.903   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.903   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.903   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.903   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.920   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.920   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.920   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.920   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.920   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.920   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.938   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.938   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.938   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.938   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.938   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.938   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.955   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.955   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.955   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.955   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.955   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.955   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.975   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.976   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.976   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.976   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.976   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.976   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.991   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.992   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.992   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:04.992   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.992   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.992   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:04.995  2955  2955 E pageboostd: Received HALT command code 2
+06-14 13:43:05.012   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.012   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.012   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.012   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.012   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.012   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.012   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.031   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.031   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.031   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.031   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.031   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.031   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.031   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.054   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.054   848   848 E CompositionEngine: [bitpit.launcher/bitpit.launcher.ui.HomeActivity$_20843#373873] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.054   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.054   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Client (1) --> Client (1)
+06-14 13:43:05.054   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.054   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.054   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [Wallpaper BBQ wrapper 5_system#85] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [Splash Screen com.aritr.rova$_1661#373887] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.079   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.088 20896 20896 I DualSightProbe: QUERY cameraXCombos=0 combos=[]
+06-14 13:43:05.088 20896 20896 I DualSightProbe: VERDICT(query) frontBackBindable=false
+06-14 13:43:05.088 20896 20896 I DualSightProbe: Next: attempt A (CameraX CompositionSettings record)
+06-14 13:43:05.160   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.160   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.160   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.160   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: ATTEMPT-A bind/record threw
+06-14 13:43:05.174 20896 20896 E DualSightProbe: java.lang.UnsupportedOperationException: Concurrent camera is not supported on the device.
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at androidx.camera.lifecycle.LifecycleCameraProviderImpl.bindToLifecycle(LifecycleCameraProviderImpl.kt:383)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at androidx.camera.lifecycle.ProcessCameraProvider.bindToLifecycle(ProcessCameraProvider.kt:374)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at com.aritr.rova.probe.CameraXConcurrentProbe.bindConcurrent(CameraXConcurrentProbe.kt:188)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at com.aritr.rova.probe.CameraXConcurrentProbe.run$lambda$7(CameraXConcurrentProbe.kt:71)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at com.aritr.rova.probe.CameraXConcurrentProbe$$ExternalSyntheticLambda4.run(D8$$SyntheticClass:0)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at android.os.Handler.handleCallback(Handler.java:995)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at android.os.Handler.dispatchMessage(Handler.java:103)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at android.os.Looper.loopOnce(Looper.java:273)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at android.os.Looper.loop(Looper.java:363)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at android.app.ActivityThread.main(ActivityThread.java:10060)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at java.lang.reflect.Method.invoke(Native Method)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:632)
+06-14 13:43:05.174 20896 20896 E DualSightProbe: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:975)
+06-14 13:43:05.175 20896 20896 I DualSightProbe: VERDICT(attemptA) recordSucceeded=false (exception)
+06-14 13:43:05.182   791   831 E BatteryDump: !@new_battery_dump : 4045,360,475,550,69,329,330,377,0,0,353,377,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40513,6805,972,0,
+--------- beginning of system
+06-14 13:43:05.205  1128  3705 E WindowManager: win=Window{b39b7c u0 bitpit.launcher/bitpit.launcher.ui.HomeActivity} destroySurfaces: appStopped=true cleanupOnResume=false win.mWindowRemovalAllowed=false win.mRemoveOnExit=false win.mViewVisibility=8 caller=com.android.server.wm.ActivityRecord.destroySurfaces:25 com.android.server.wm.ActivityRecord.activityStopped:192 com.android.server.wm.ActivityClientController.activityStopped:97 android.app.IActivityClientController$Stub.onTransact:740 com.android.server.wm.ActivityClientController.onTransact:1 android.os.Binder.execTransactInternal:1462 android.os.Binder.execTransact:1401 
+06-14 13:43:05.215   848   848 E SurfaceFlinger: alpha changed 1.000 -> 0.000 - Surface(name=1ecbc4d InputMethod)/@0x855d049 - animation-leash of insets_animation#373897
+06-14 13:43:05.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424785
+06-14 13:43:05.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:06.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424786
+06-14 13:43:06.419   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:06.608  1128  1163 E Watchdog: !@Sync: 43622 heap(MB): 178 / 214 FD: 1485 [2026-06-14 13:43:06.607]
+06-14 13:43:06.676 20896 20896 I DualSightProbe: attempt A done — starting attempt B (Camera2 hardware truth)
+06-14 13:43:06.681 20896 20896 I DualSightProbe: VERDICT(attemptB) recordSucceeded=false (no front+back combo in getConcurrentCameraIds)
+06-14 13:43:06.681 20896 20896 I DualSightProbe: attempt B done — probe complete
+06-14 13:43:06.681 20896 20896 I DualSightProbe: MIRROR check: open attempt-A clip; front inset text must read correctly
+06-14 13:43:07.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424787
+06-14 13:43:07.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:07.560  1128  4270 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-14 13:43:07.563  1128  4270 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-14 13:43:07.563  1128  4270 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-14 13:43:08.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424788
+06-14 13:43:08.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:09.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424789
+06-14 13:43:09.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:10.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424790
+06-14 13:43:10.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:11.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424791
+06-14 13:43:11.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:12.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424792
+06-14 13:43:12.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:13.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424793
+06-14 13:43:13.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:14.275   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:14.275   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:14.275   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:14.275   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:14.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424794
+06-14 13:43:14.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:15.286   791   831 E BatteryDump: !@new_battery_dump : 4067,373,475,550,69,329,329,372,0,0,351,372,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40513,6807,972,0,
+06-14 13:43:15.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424795
+06-14 13:43:15.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:16.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424796
+06-14 13:43:16.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:17.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424797
+06-14 13:43:17.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:18.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424798
+06-14 13:43:18.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:19.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424799
+06-14 13:43:19.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:20.323   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:20.323   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:20.323   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:20.323   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:20.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424800
+06-14 13:43:20.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:21.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424801
+06-14 13:43:21.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:22.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424802
+06-14 13:43:22.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:23.358   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:23.358   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:23.358   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:23.358   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:23.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424803
+06-14 13:43:23.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:24.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424804
+06-14 13:43:24.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:25.389   791   831 E BatteryDump: !@new_battery_dump : 4069,392,475,550,69,328,328,366,0,0,350,366,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40515,6809,972,0,
+06-14 13:43:25.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424805
+06-14 13:43:25.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:25.481  2879  2942 E RequestManager_FLP: [LocationManager] Location request 8919CBEE(Listener) network interval=0ms (min=0ms) from system(SLocationService) (1000_FINE_unknown_false_foreground)
+06-14 13:43:25.497  2879  2942 E RequestManager_FLP: [LocationManager] Location request 844D016B(Listener) fused interval=0ms (min=0ms) from system(SLocationService) (1000_FINE_unknown_false_foreground)
+06-14 13:43:25.545  2879  2942 E RequestManager_FLP: [LocationManager] Location remove 8919CBEE from system
+06-14 13:43:25.559  2879  2942 E RequestManager_FLP: [LocationManager] Location remove 844D016B from system
+06-14 13:43:26.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424806
+06-14 13:43:26.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:27.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424807
+06-14 13:43:27.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:28.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424808
+06-14 13:43:28.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:29.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424809
+06-14 13:43:29.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:30.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424810
+06-14 13:43:30.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:30.785  1128  1596 E SmartFaceManager: checkForSmartStay S
+06-14 13:43:30.785  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:30.803 14203 14203 E SmartFaceServiceStarter: onCreate
+06-14 13:43:30.824 14203 14203 E SmartFaceServiceStarter: onBind
+06-14 13:43:30.828  1128  2626 E SmartFaceManager/ServiceManagerGlobal: smart face service connected
+06-14 13:43:30.829  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 0 -> 1
+06-14 13:43:30.829  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:30.829  1128  1596 E SmartFaceManager/ServiceManagerGlobal: already tried bound to smart face service
+06-14 13:43:30.829  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 1 -> 2
+06-14 13:43:30.831  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 2 -> 1
+06-14 13:43:30.831  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:30.831  1128  1596 E SmartFaceManager/ServiceManagerGlobal: already tried bound to smart face service
+06-14 13:43:30.831  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 1 -> 2
+06-14 13:43:30.874   916  2046 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:30.889   916  2046 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:30.970   916  2046 E Camera2-FrameProcessorBase: FrameProcessorBase: created
+06-14 13:43:30.971   916  2046 E Camera2-FrameProcessorBase: registerListener: Registering listener for frame id range 0 - 2147483647
+06-14 13:43:31.017   788   833 E Unihal  : TagManager.cpp: GetTagInfo: 233: Unexpected tag. : parameterTag=PARAMETER_SAMSUNG_ANDROID_UNIHAL_VIDEO_MODE(0x80200001)
+06-14 13:43:31.017   788   833 E Unihal  : TagManager.cpp: GetTagInfo: 233: Unexpected tag. : parameterTag=PARAMETER_SAMSUNG_ANDROID_UNIHAL_VIDEO_MODE(0x80200001)
+06-14 13:43:31.022   788 21632 E WNC]ColorFormat: [calculateBufferInfo:944] Invalid pixelFormat(0)
+06-14 13:43:31.097   916 21695 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:31.100  1128  2626 E SmartFaceManager: Listener does not implements SmartFaceInfoListener2
+06-14 13:43:31.117   788 21699 E WNC]SensorHWProcessorImpl: [acquire3aaPath:122] [F_0_Preview] reserved 0 is used for specific scednario(pip:1, single:0)
+06-14 13:43:31.184   788 21634 E exynos-libhwjpeg: Failed to open '/dev/video13' [No such file or directory]
+06-14 13:43:31.184   788 21634 E exynos-libhwjpeg: Failed to query capability of /dev/video12 [Bad file descriptor]
+06-14 13:43:31.184   788 21634 E exynos-libhwjpeg: Failed to open '/dev/video13' [No such file or directory]
+06-14 13:43:31.184   788 21634 E exynos-libhwjpeg: Failed to query capability of /dev/video12 [Bad file descriptor]
+06-14 13:43:31.377   788 21719 E WNC]SensorHWProcessorImpl: [acquire3aaPath:122] [F_0_Preview] reserved 0 is used for specific scednario(pip:1, single:0)
+06-14 13:43:31.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424811
+06-14 13:43:31.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:31.530   848   876 E HWComposer: getLuts: getLuts failed for display 4633128672291735931: UNSUPPORTED (8)
+06-14 13:43:31.565  1661  1661 E MULTISIM-PROD-REPO: isDataBlocked : mSimCardManagerService is null.
+06-14 13:43:31.590   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.590   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.590   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373883] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.590   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.611   788 21710 E WNC]LmeMcscPreviewHWProcessor: [handleLmePrevImage:203] [F_104_Preview] lmePrevQueue is empty.
+06-14 13:43:31.629  1128  3705 E WindowManager: win=Window{8e64298 u0 com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService} destroySurfaces: appStopped=true cleanupOnResume=false win.mWindowRemovalAllowed=false win.mRemoveOnExit=false win.mViewVisibility=8 caller=com.android.server.wm.WindowManagerService.tryStartExitingAnimation:134 com.android.server.wm.WindowManagerService.relayoutWindow:1138 com.android.server.wm.Session.relayout:27 android.view.IWindowSession$Stub.onTransact:829 com.android.server.wm.Session.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 
+06-14 13:43:31.636   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.636   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.636   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.659 14203 21629 E SmartScreen_JNI: processImage start : prev time [ 166080 ]
+06-14 13:43:31.670   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.670   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.670   848   848 E CompositionEngine: [NotificationShade$_1661#373898] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.670   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:31.683 14203 21629 E SmartScreen_JNI: processImage end : function time [ 28540 ] [90] 
+06-14 13:43:31.684 14203 21629 E SmartScreen_JNI: processImage start : prev time [ 29828 ]
+06-14 13:43:31.685  1128  2626 E SmartFaceManager: checkForSmartStay onInfo: 100: 1
+06-14 13:43:31.695 14203 21629 E SmartScreen_JNI: processImage end : function time [ 9943 ] [90] 
+06-14 13:43:31.696  1128  2626 E SmartFaceManager: checkForSmartStay onInfo: 100: 1
+06-14 13:43:31.715   916  3749 E Camera2-FrameProcessorBase: removeListener: 
+06-14 13:43:31.738   788 21696 E WNC]ProcessController: [handleRequestProcessFail:714] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610523393] 
+06-14 13:43:31.738   788 21696 E WNC]Scenario: [onRequestProcessFail:945] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610523393] (frameType:1)
+06-14 13:43:31.738   788 21696 E WNC]Scenario: [sendBufferError:826] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610523393] streamBuffer is skipped. buf idx(0) state ERROR
+06-14 13:43:31.739   788 21696 E WNC]ProcessController: [handleRequestProcessFail:714] [Cam1][(N) camIndex:0 frN:3 HwfrN:14 Id:3 T:2610523360] 
+06-14 13:43:31.739   788 21696 E WNC]Scenario: [onRequestProcessFail:945] [Cam1][(N) camIndex:0 frN:3 HwfrN:14 Id:3 T:2610523360] (frameType:1)
+06-14 13:43:31.739   788 21696 E WNC]Scenario: [sendBufferError:826] [Cam1][(N) camIndex:0 frN:3 HwfrN:14 Id:3 T:2610523360] streamBuffer is skipped. buf idx(0) state ERROR
+06-14 13:43:31.763   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_SENSOR:/dev/video102:0xb400006f7db4a180] failed to dequeueImage. videoNodeFd = 15 buf->id = -1 errno(22-Invalid argument), length:3
+06-14 13:43:31.763   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_BAYER:/dev/video214:0xb400006f7db4a190] failed to dequeueImage. videoNodeFd = 16 buf->id = -1 errno(22-Invalid argument), length:3
+06-14 13:43:31.763   788 21718 E WNC]SensorHWProcessorImpl: [captureNodeDequeue:1224] [Cam1][senIdx:0 frN:6 Id:6] [F_0_Preview] failed to get image SensorBayer.276995/6/542,m553, from node F_0_Preview_FRONT0_BAYER
+06-14 13:43:31.764   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_SENSOR:/dev/video102:0xb400006f7db4a180] failed to dequeueImage. videoNodeFd = 15 buf->id = -1 errno(22-Invalid argument), length:2
+06-14 13:43:31.764   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_BAYER:/dev/video214:0xb400006f7db4a190] failed to dequeueImage. videoNodeFd = 16 buf->id = -1 errno(22-Invalid argument), length:2
+06-14 13:43:31.764   788 21696 E WNC]CaptureController: [handleRequestCaptureFail:1318] [Cam1][(N) camIndex:0 frN:6 HwfrN:17 Id:6 T:2610523453] (frameType:1)
+06-14 13:43:31.764   788 21718 E WNC]SensorHWProcessorImpl: [captureNodeDequeue:1224] [Cam1][senIdx:0 frN:7 Id:7] [F_0_Preview] failed to get image SensorBayer.276995/7/555,m556, from node F_0_Preview_FRONT0_BAYER
+06-14 13:43:31.764   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_SENSOR:/dev/video102:0xb400006f7db4a180] failed to dequeueImage. videoNodeFd = 15 buf->id = -1 errno(22-Invalid argument), length:1
+06-14 13:43:31.764   788 21718 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_BAYER:/dev/video214:0xb400006f7db4a190] failed to dequeueImage. videoNodeFd = 16 buf->id = -1 errno(22-Invalid argument), length:1
+06-14 13:43:31.764   788 21718 E WNC]SensorHWProcessorImpl: [captureNodeDequeue:1224] [Cam1][senIdx:0 frN:8 Id:8] [F_0_Preview] failed to get image SensorBayer.276995/8/1044,m1336, from node F_0_Preview_FRONT0_BAYER
+06-14 13:43:31.765   788 21696 E WNC]VendorCameraScenario: [sendBufferErrorForAllPreviewBuffers:7202] [Cam1][(N) camIndex:0 frN:5 HwfrN:16 Id:5 T:2610523413] index(0) streamId(5) isReprocess(0)
+06-14 13:43:31.766   788 21696 E WNC]Scenario: [sendBufferError:826] [Cam1][(N) camIndex:0 frN:5 HwfrN:16 Id:5 T:2610523413] streamBuffer is skipped. buf idx(0) state ERROR
+06-14 13:43:31.767   788 21696 E WNC]CaptureController: [handleRequestCaptureFail:1318] [Cam1][(N) camIndex:0 frN:7 HwfrN:0 Id:7 T:0] (frameType:1)
+06-14 13:43:31.768   788 21696 E WNC]CaptureController: [handleRequestCaptureFail:1318] [Cam1][(N) camIndex:0 frN:8 HwfrN:0 Id:8 T:0] (frameType:1)
+06-14 13:43:31.856   788 21632 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:31.857   788 21632 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:31.858   788 21632 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:31.888   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:4 Send Buffer:0 needFenceHandling (0) fence(-1, -1)
+06-14 13:43:31.889   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:3 Send Buffer:0 needFenceHandling (0) fence(-1, -1)
+06-14 13:43:31.891   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:6 Send Buffer:0 needFenceHandling (1) fence(-1, -1)
+06-14 13:43:31.892   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:5 Send Buffer:0 needFenceHandling (0) fence(-1, -1)
+06-14 13:43:31.893   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:7 Send Buffer:0 needFenceHandling (1) fence(-1, -1)
+06-14 13:43:31.894   788 21632 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:8 Send Buffer:0 needFenceHandling (1) fence(-1, -1)
+06-14 13:43:31.896   916   916 E CameraDeviceClient: notifyError: pid=14203, errorCode=5, errorStreamId=0, frameNumber=3
+06-14 13:43:31.896   916   916 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.898   916   916 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 3 , due to buffer error.
+06-14 13:43:31.901   916   916 E CameraDeviceClient: notifyError: pid=14203, errorCode=5, errorStreamId=0, frameNumber=4
+06-14 13:43:31.901   916   916 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.902   916   916 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 4 , due to buffer error.
+06-14 13:43:31.903   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=3, errorStreamId=0, frameNumber=6
+06-14 13:43:31.903   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.905   916   916 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 6 , due to buffer error.
+06-14 13:43:31.908   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=5, errorStreamId=0, frameNumber=5
+06-14 13:43:31.909   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.909   916  2046 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 5 , due to buffer error.
+06-14 13:43:31.910   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=3, errorStreamId=0, frameNumber=7
+06-14 13:43:31.910   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.911   916   916 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 7 , due to buffer error.
+06-14 13:43:31.912   916   916 E CameraDeviceClient: notifyError: pid=14203, errorCode=3, errorStreamId=0, frameNumber=8
+06-14 13:43:31.912   916   916 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:31.913   916 25947 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 8 , due to buffer error.
+06-14 13:43:31.921   788 21632 E WNC]Scenario: [stop:252] invalid state 1
+06-14 13:43:31.939   916  3749 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:31.955  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 2 -> 1
+06-14 13:43:31.956  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 1 -> 0
+06-14 13:43:31.958 14203 14203 E SmartFaceServiceStarter: onDestroy
+06-14 13:43:31.959  1128  1596 E SmartFaceManager: checkForSmartStay X: true
+06-14 13:43:32.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424812
+06-14 13:43:32.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:32.731  1661  1661 E NowBarCardStackView: getTopCard topCard is null view size = 0
+06-14 13:43:32.790   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.791   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.791   848   848 E CompositionEngine: [NotificationShade$_1661#373898] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.791   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.959  1128  3710 E WindowManager: win=Window{7725335 u0 NotificationShade} destroySurfaces: appStopped=true cleanupOnResume=false win.mWindowRemovalAllowed=false win.mRemoveOnExit=false win.mViewVisibility=4 caller=com.android.server.wm.WindowManagerService.tryStartExitingAnimation:134 com.android.server.wm.WindowManagerService.relayoutWindow:1138 com.android.server.wm.Session.relayout:27 android.view.IWindowSession$Stub.onTransact:829 com.android.server.wm.Session.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 
+06-14 13:43:32.971   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.971   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:32.971   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:33.036   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:33.036   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:33.036   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:33.036   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:33.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424813
+06-14 13:43:33.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:33.615   846   861 E perfmond: [PERFMOND][BOTTLENECK_HINT]  HINT ON  WIN=0 AVG=0 JANK=4
+06-14 13:43:33.617   846   861 E PerfHint: REPORT_BOTTLENECK_HINT_TRANSACTION :: name = perfmond
+06-14 13:43:34.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424814
+06-14 13:43:34.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:34.624   846   862 E PerfHint: PerfHint release
+06-14 13:43:34.624   846   862 E perfmond: [PERFMOND][BOTTLENECK_HINT]  HINT OFF  WIN=0 AVG=0
+06-14 13:43:35.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424815
+06-14 13:43:35.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:35.440   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:35.440   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:35.440   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:35.440   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:35.475   791   831 E BatteryDump: !@new_battery_dump : 4067,332,475,550,70,328,328,365,0,0,347,365,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40517,6810,972,0,
+06-14 13:43:36.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424816
+06-14 13:43:36.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:36.616  1128  1163 E Watchdog: !@Sync: 43623 heap(MB): 192 / 214 FD: 1498 [2026-06-14 13:43:36.615]
+06-14 13:43:37.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424817
+06-14 13:43:37.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:38.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424818
+06-14 13:43:38.414   832   847 E HeatmapThread: !@Entered the read from path function
+06-14 13:43:38.416   832   847 E HeatmapThread: !@Read Extended_heatmap from efs is: 11493 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3532 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3517 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3786 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3317 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3307 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2831 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3018 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2643 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3030 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2959 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 9469 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10676 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25506 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 21764 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20065 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20003 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6811 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 8328 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 5514 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1915 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 106 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 110 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 73 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25 0 0 0
+06-14 13:43:38.416   832   847 E HeatmapThread: !@Write Extended Heatmap to efs is: 11493 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3532 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3517 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3786 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3317 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3307 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2831 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3018 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2643 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3030 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2959 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 9469 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10676 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25506 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 21765 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20065 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20003 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6811 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 8328 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 5514 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1915 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 106 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 110 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 73 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25 0 0 0 
+06-14 13:43:38.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:39.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424819
+06-14 13:43:39.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:39.927  1823  2972 E EPDG -- [IPSECADAPTER_ERIS]: checkConnection cid (3 ) - timeout : 5
+06-14 13:43:40.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424820
+06-14 13:43:40.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:41.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424821
+06-14 13:43:41.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:42.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424822
+06-14 13:43:42.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:43.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424823
+06-14 13:43:43.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:44.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424824
+06-14 13:43:44.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:44.499   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:44.499   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:44.499   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:44.499   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:45.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424825
+06-14 13:43:45.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:45.575   791   831 E BatteryDump: !@new_battery_dump : 4071,375,475,550,70,328,327,362,0,0,345,362,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40518,6812,972,0,
+06-14 13:43:46.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424826
+06-14 13:43:46.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:47.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424827
+06-14 13:43:47.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:47.543   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:47.543   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:47.543   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:47.543   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:48.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424828
+06-14 13:43:48.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:49.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424829
+06-14 13:43:49.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:49.989  1128  1596 E SmartFaceManager: checkForSmartStay S
+06-14 13:43:49.990  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:50.002 14203 14203 E SmartFaceServiceStarter: onCreate
+06-14 13:43:50.026 14203 14203 E SmartFaceServiceStarter: onBind
+06-14 13:43:50.030  1128  2626 E SmartFaceManager/ServiceManagerGlobal: smart face service connected
+06-14 13:43:50.031  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 0 -> 1
+06-14 13:43:50.031  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:50.031  1128  1596 E SmartFaceManager/ServiceManagerGlobal: already tried bound to smart face service
+06-14 13:43:50.031  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 1 -> 2
+06-14 13:43:50.034  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 2 -> 1
+06-14 13:43:50.034  1128  1596 E SmartFaceManager/ServiceManagerGlobal: bind to smart face service
+06-14 13:43:50.034  1128  1596 E SmartFaceManager/ServiceManagerGlobal: already tried bound to smart face service
+06-14 13:43:50.034  1128  1596 E SmartFaceManager/ServiceManagerGlobal: Service is available, connection count = 1 -> 2
+06-14 13:43:50.080   916  3749 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:50.096   916  3749 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:50.164   916  3749 E Camera2-FrameProcessorBase: FrameProcessorBase: created
+06-14 13:43:50.165   916  3749 E Camera2-FrameProcessorBase: registerListener: Registering listener for frame id range 0 - 2147483647
+06-14 13:43:50.214   788   833 E Unihal  : TagManager.cpp: GetTagInfo: 233: Unexpected tag. : parameterTag=PARAMETER_SAMSUNG_ANDROID_UNIHAL_VIDEO_MODE(0x80200001)
+06-14 13:43:50.214   788   833 E Unihal  : TagManager.cpp: GetTagInfo: 233: Unexpected tag. : parameterTag=PARAMETER_SAMSUNG_ANDROID_UNIHAL_VIDEO_MODE(0x80200001)
+06-14 13:43:50.217   788 21888 E WNC]ColorFormat: [calculateBufferInfo:944] Invalid pixelFormat(0)
+06-14 13:43:50.290   916 21954 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:50.291  1128  2626 E SmartFaceManager: Listener does not implements SmartFaceInfoListener2
+06-14 13:43:50.295   788 21958 E WNC]SensorHWProcessorImpl: [acquire3aaPath:122] [F_0_Preview] reserved 0 is used for specific scednario(pip:1, single:0)
+06-14 13:43:50.379   788 21889 E exynos-libhwjpeg: Failed to open '/dev/video13' [No such file or directory]
+06-14 13:43:50.379   788 21889 E exynos-libhwjpeg: Failed to query capability of /dev/video12 [Bad file descriptor]
+06-14 13:43:50.380   788 21889 E exynos-libhwjpeg: Failed to open '/dev/video13' [No such file or directory]
+06-14 13:43:50.380   788 21889 E exynos-libhwjpeg: Failed to query capability of /dev/video12 [Bad file descriptor]
+06-14 13:43:50.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424830
+06-14 13:43:50.411   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:50.537   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:50.537   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:50.537   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:50.537   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:50.567   788 21979 E WNC]SensorHWProcessorImpl: [acquire3aaPath:122] [F_0_Preview] reserved 0 is used for specific scednario(pip:1, single:0)
+06-14 13:43:50.832   788 21971 E WNC]LmeMcscPreviewHWProcessor: [handleLmePrevImage:203] [F_104_Preview] lmePrevQueue is empty.
+06-14 13:43:50.843 14203 21857 E SmartScreen_JNI: processImage start : prev time [ 125924 ]
+06-14 13:43:50.869 14203 21857 E SmartScreen_JNI: processImage end : function time [ 31225 ] [-1] 
+06-14 13:43:50.869 14203 21857 E SmartScreen_JNI: processImage start : prev time [ 32102 ]
+06-14 13:43:50.870  1128  2626 E SmartFaceManager: checkForSmartStay onInfo: 100: 0
+06-14 13:43:50.894 14203 21857 E SmartScreen_JNI: processImage end : function time [ 26056 ] [-1] 
+06-14 13:43:50.895  1128  2626 E SmartFaceManager: checkForSmartStay onInfo: 100: 0
+06-14 13:43:50.957   916 25947 E Camera2-FrameProcessorBase: removeListener: 
+06-14 13:43:50.975   788 21959 E WNC]ProcessController: [handleRequestProcessFail:714] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610542616] 
+06-14 13:43:50.975   788 21959 E WNC]Scenario: [onRequestProcessFail:945] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610542616] (frameType:1)
+06-14 13:43:50.975   788 21959 E WNC]Scenario: [sendBufferError:826] [Cam1][(N) camIndex:0 frN:4 HwfrN:15 Id:4 T:2610542616] streamBuffer is skipped. buf idx(0) state ERROR
+06-14 13:43:50.998   788 21959 E WNC]VendorCameraScenario: [sendBufferErrorForAllPreviewBuffers:7202] [Cam1][(N) camIndex:0 frN:5 HwfrN:16 Id:5 T:2610542657] index(0) streamId(5) isReprocess(0)
+06-14 13:43:50.998   788 21959 E WNC]Scenario: [sendBufferError:826] [Cam1][(N) camIndex:0 frN:5 HwfrN:16 Id:5 T:2610542657] streamBuffer is skipped. buf idx(0) state ERROR
+06-14 13:43:50.999   788 21978 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_SENSOR:/dev/video102:0xb400006f95384800] failed to dequeueImage. videoNodeFd = 14 buf->id = -1 errno(22-Invalid argument), length:2
+06-14 13:43:50.999   788 21978 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_BAYER:/dev/video214:0xb400006f95384810] failed to dequeueImage. videoNodeFd = 20 buf->id = -1 errno(22-Invalid argument), length:2
+06-14 13:43:50.999   788 21978 E WNC]SensorHWProcessorImpl: [captureNodeDequeue:1224] [Cam1][senIdx:0 frN:6 Id:6] [F_0_Preview] failed to get image SensorBayer.628673/6/348,m423, from node F_0_Preview_FRONT0_BAYER
+06-14 13:43:50.999   788 21978 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_SENSOR:/dev/video102:0xb400006f95384800] failed to dequeueImage. videoNodeFd = 14 buf->id = -1 errno(22-Invalid argument), length:1
+06-14 13:43:51.000   788 21959 E WNC]CaptureController: [handleRequestCaptureFail:1318] [Cam1][(N) camIndex:0 frN:6 HwfrN:17 Id:6 T:2610542697] (frameType:1)
+06-14 13:43:51.000   788 21978 E WNC]DeviceNode: [dequeueImage:808] [F_0_Preview_FRONT0_BAYER:/dev/video214:0xb400006f95384810] failed to dequeueImage. videoNodeFd = 20 buf->id = -1 errno(22-Invalid argument), length:1
+06-14 13:43:51.000   788 21978 E WNC]SensorHWProcessorImpl: [captureNodeDequeue:1224] [Cam1][senIdx:0 frN:7 Id:7] [F_0_Preview] failed to get image SensorBayer.628673/7/532,m542, from node F_0_Preview_FRONT0_BAYER
+06-14 13:43:51.002   788 21959 E WNC]CaptureController: [handleRequestCaptureFail:1318] [Cam1][(N) camIndex:0 frN:7 HwfrN:0 Id:7 T:0] (frameType:1)
+06-14 13:43:51.076   788 21888 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:51.076   788 21888 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:51.077   788 21888 E libcsc  : csc_deinit:: unsupported csc_hw_type
+06-14 13:43:51.079   788 21888 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:4 Send Buffer:0 needFenceHandling (0) fence(-1, -1)
+06-14 13:43:51.080   788 21888 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:5 Send Buffer:0 needFenceHandling (0) fence(-1, -1)
+06-14 13:43:51.080   788 21888 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:6 Send Buffer:0 needFenceHandling (1) fence(-1, -1)
+06-14 13:43:51.080   788 21888 E WNC]RequestManager: [sendBufferError:676] sendBufferError: frN:7 Send Buffer:0 needFenceHandling (1) fence(-1, -1)
+06-14 13:43:51.082   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=5, errorStreamId=0, frameNumber=4
+06-14 13:43:51.082   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:51.083   916  2046 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 4 , due to buffer error.
+06-14 13:43:51.087   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=5, errorStreamId=0, frameNumber=5
+06-14 13:43:51.087   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:51.088   916  2046 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 5 , due to buffer error.
+06-14 13:43:51.090   916  2046 E CameraDeviceClient: notifyError: pid=14203, errorCode=3, errorStreamId=0, frameNumber=6
+06-14 13:43:51.090   916  2046 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:51.091   916  3749 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 6 , due to buffer error.
+06-14 13:43:51.092   916  3749 E CameraDeviceClient: notifyError: pid=14203, errorCode=3, errorStreamId=0, frameNumber=7
+06-14 13:43:51.092   916  3749 E CameraDeviceClient: notifyError: pid=14203, skipClientNotification=false
+06-14 13:43:51.094   916  3749 E Camera3-OutputStream: returnBufferCheckedLocked: A frame is dropped for stream 0 frame 7 , due to buffer error.
+06-14 13:43:51.104   788 21888 E WNC]Scenario: [stop:252] invalid state 1
+06-14 13:43:51.114   916 25947 E cameraserver: isBiometricsFaceService : face AIDL HAL Pid(777) is not same with callingPid(14203)
+06-14 13:43:51.125  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 2 -> 1
+06-14 13:43:51.125  1128  1596 E SmartFaceManager/ServiceManagerGlobal: unbind from smart face service, connection count = 1 -> 0
+06-14 13:43:51.127 14203 14203 E SmartFaceServiceStarter: onDestroy
+06-14 13:43:51.128  1128  2626 E SmartFaceManager: Listener does not implements SmartFaceInfoListener2
+06-14 13:43:51.129  1128  1596 E SmartFaceManager: checkForSmartStay X: false
+06-14 13:43:51.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424831
+06-14 13:43:51.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:52.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424832
+06-14 13:43:52.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:53.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424833
+06-14 13:43:53.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:53.578   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:53.579   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:53.579   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:53.579   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:54.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424834
+06-14 13:43:54.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:55.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424835
+06-14 13:43:55.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:55.670   791   831 E BatteryDump: !@new_battery_dump : 4073,391,475,550,70,328,327,360,0,0,344,360,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40520,6815,972,0,
+06-14 13:43:56.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424836
+06-14 13:43:56.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:56.612   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:56.612   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:56.612   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:56.612   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:57.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424837
+06-14 13:43:57.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:58.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424838
+06-14 13:43:58.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:59.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424839
+06-14 13:43:59.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:43:59.663   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:59.663   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:59.663   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:43:59.663   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:00.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424840
+06-14 13:44:00.411   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:01.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424841
+06-14 13:44:01.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:02.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424842
+06-14 13:44:02.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:02.662   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:02.662   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:02.662   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:02.662   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:03.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424843
+06-14 13:44:03.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:04.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424844
+06-14 13:44:04.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:05.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424845
+06-14 13:44:05.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:05.699   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:05.700   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:05.700   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:05.700   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:05.771   791   831 E BatteryDump: !@new_battery_dump : 4071,394,475,550,70,328,327,358,0,0,342,358,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40523,6817,972,0,
+06-14 13:44:06.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424846
+06-14 13:44:06.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:06.622  1128  1163 E Watchdog: !@Sync: 43624 heap(MB): 165 / 211 FD: 1481 [2026-06-14 13:44:06.622]
+06-14 13:44:07.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424847
+06-14 13:44:07.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:08.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424848
+06-14 13:44:08.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:09.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424849
+06-14 13:44:09.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:10.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424850
+06-14 13:44:10.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:11.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424851
+06-14 13:44:11.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:12.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424852
+06-14 13:44:12.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:13.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424853
+06-14 13:44:13.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:14.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424854
+06-14 13:44:14.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:15.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424855
+06-14 13:44:15.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:15.875   791   831 E BatteryDump: !@new_battery_dump : 4072,391,475,550,70,328,327,355,0,0,340,355,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40525,6820,972,0,
+06-14 13:44:16.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424856
+06-14 13:44:16.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:17.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424857
+06-14 13:44:17.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:18.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424858
+06-14 13:44:18.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:19.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424859
+06-14 13:44:19.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:20.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424860
+06-14 13:44:20.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:20.814   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:20.814   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:20.814   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:20.814   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:21.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424861
+06-14 13:44:21.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:22.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424862
+06-14 13:44:22.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:23.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424863
+06-14 13:44:23.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:24.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424864
+06-14 13:44:24.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:25.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424865
+06-14 13:44:25.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:25.974   791   831 E BatteryDump: !@new_battery_dump : 4074,392,475,550,70,327,327,353,0,0,340,353,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40528,6821,972,0,
+06-14 13:44:26.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424866
+06-14 13:44:26.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:27.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424867
+06-14 13:44:27.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:28.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424868
+06-14 13:44:28.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:29.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424869
+06-14 13:44:29.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:30.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424870
+06-14 13:44:30.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:31.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424871
+06-14 13:44:31.413   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:32.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424872
+06-14 13:44:32.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:32.930   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:32.930   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:32.930   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:32.930   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:33.067  2879  2942 E RequestManager_FLP: [FusedLocationApi] Location request 6926f81(Listener) PRIORITY_HIGH_ACCURACY interval=1000ms from com.samsung.android.fmm (1000_FINE_unknown_false_background)
+06-14 13:44:33.117  2879  2942 E RequestManager_FLP: [LocationManager] Location request 54EF8805(Listener) gps interval=1000ms (min=0ms) from com.google.android.gms (10241_FINE_fg_svc_true_foreground)
+06-14 13:44:33.131  2879  2942 E RequestManager_FLP: [LocationManager] Location request F0B492F7(Listener) passive (min=0ms) from com.google.android.gms (10241_FINE_fg_svc_true_foreground)
+06-14 13:44:33.205   774   818 E SensorsHub: AccSensor : Meta event
+06-14 13:44:33.224   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.228   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.242   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.246   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.247   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.252   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.252   760  1397 E power   : Failed to get SystemSuspend service
+06-14 13:44:33.288  1128  1128 E SehAGnssRilJni: setRefLocation: SehGnss Hal Using AIDL: 179
+06-14 13:44:33.354  1128  1297 E SensorService: BigData:Pakage) 1 already enabled. 
+06-14 13:44:33.354   774   818 E SensorsHub: AccSensor : Meta event
+06-14 13:44:33.354   774   818 E SensorsHub: AccSensor : Meta event
+06-14 13:44:33.357   774   818 E SensorsHub: UncalGyroSensor : Meta event
+06-14 13:44:33.359   774   818 E SensorsHub: UncalGyroSensor : Meta event
+06-14 13:44:33.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424873
+06-14 13:44:33.412   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:33.437   962  2810 E gpsd    : Critical Error: SllPmAidSourceRequestAiding: prefAidingType: 0, isSuplWlanAPEnable: 0, otaTechType: 3, suplVer: 2, isSuplServiceEnable: 1
+06-14 13:44:33.448  2879  2942 E RequestManager_FLP: [LocationManager] Location request D2E7BB58(Listener) network interval=1000ms (min=166ms) from system(GnssService) (1000_FINE_unknown_false_foreground)
+06-14 13:44:33.470  2879  2942 E RequestManager_FLP: [LocationManager] Location remove D2E7BB58 from system
+06-14 13:44:33.488   962  2810 E gpsd    : Critical Error: SllPmAidSourceRequestAiding: prefAidingType: 0, isSuplWlanAPEnable: 0, otaTechType: 3, suplVer: 2, isSuplServiceEnable: 1
+06-14 13:44:34.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424874
+06-14 13:44:34.413   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:35.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424875
+06-14 13:44:35.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:36.075   791   831 E BatteryDump: !@new_battery_dump : 4059,59,475,550,70,327,327,352,0,0,338,352,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40529,6823,972,0,
+06-14 13:44:36.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424876
+06-14 13:44:36.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:36.630  1128  1163 E Watchdog: !@Sync: 43625 heap(MB): 171 / 211 FD: 1483 [2026-06-14 13:44:36.629]
+06-14 13:44:37.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424877
+06-14 13:44:37.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:38.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424878
+06-14 13:44:38.412   832   847 E HeatmapThread: !@Entered the read from path function
+06-14 13:44:38.413   832   847 E HeatmapThread: !@Read Extended_heatmap from efs is: 11493 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3532 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3517 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3786 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3317 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3307 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2831 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3018 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2643 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3030 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2959 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 9469 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10676 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25506 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 21765 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20065 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20003 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6811 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 8328 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 5514 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1915 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 106 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 110 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 73 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25 0 0 0
+06-14 13:44:38.413   832   847 E HeatmapThread: !@Write Extended Heatmap to efs is: 11493 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3532 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3517 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3786 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3317 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3307 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2831 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3018 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2643 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3030 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2959 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 9469 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 10676 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25506 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 21766 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20065 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20119 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 20003 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6811 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 8328 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 5514 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1915 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 106 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 110 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 73 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 25 0 0 0 
+06-14 13:44:38.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:39.198  2879  2942 E RequestManager_FLP: [FusedLocationApi] Location remove 6926f81 from com.samsung.android.fmm
+06-14 13:44:39.220  2879  2942 E RequestManager_FLP: [LocationManager] Location remove 54EF8805 from com.google.android.gms
+06-14 13:44:39.245  2879  2942 E NewStopController_FLP: already registered stationary, return
+06-14 13:44:39.252  2879  2942 E RequestManager_FLP: [LocationManager] Location remove F0B492F7 from com.google.android.gms
+06-14 13:44:39.297   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:39.297   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:39.297   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:39.297   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:39.408   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424879
+06-14 13:44:39.410   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:40.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424880
+06-14 13:44:40.414   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:40.449  2054  2577 E BtGatt.AdvertiseManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_ADV_SET_START, appName: com.samsung.android.fmm, id: 1, isLegacy: true
+06-14 13:44:41.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424881
+06-14 13:44:41.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:42.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424882
+06-14 13:44:42.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:43.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424883
+06-14 13:44:43.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:44.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424884
+06-14 13:44:44.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:45.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424885
+06-14 13:44:45.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:46.163   791   831 E BatteryDump: !@new_battery_dump : 4073,393,475,550,70,326,326,351,0,0,337,351,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40531,6824,972,0,
+06-14 13:44:46.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424886
+06-14 13:44:46.415   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:47.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424887
+06-14 13:44:47.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:47.440  2054  2577 E BtGatt.AdvertiseManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_ADV_SET_STOP, appName: com.samsung.android.fmm, id: 1, isLegacy: true
+06-14 13:44:48.066   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:48.066   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:48.066   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:48.066   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:48.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424888
+06-14 13:44:48.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:49.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424889
+06-14 13:44:49.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:50.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424890
+06-14 13:44:50.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:51.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424891
+06-14 13:44:51.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:52.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424892
+06-14 13:44:52.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:53.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424893
+06-14 13:44:53.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:53.488  1128  2008 E SLocation: GeopointLastLocation - Last location is more well than current Location.
+06-14 13:44:54.100   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:54.100   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:54.101   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:54.101   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:54.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424894
+06-14 13:44:54.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:55.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424895
+06-14 13:44:55.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:56.264   791   831 E BatteryDump: !@new_battery_dump : 4074,386,475,550,70,326,326,349,0,0,337,349,0,Charging,NO_CHARGING,Normal,Good,USB,1,Normal,0,0,9416,0x0,0x10000,0x0,0,0,0,v0004,0,0/0-0-0-0,0000,0000,00000000,0,0,0,0,0,0,89,40532,6827,972,0,
+06-14 13:44:56.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424896
+06-14 13:44:56.416   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:57.151   848   848 E CompositionEngine: [com.aritr.rova/com.aritr.rova.probe.DualSightProbeActivity$_20896#373891] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:57.151   848   848 E CompositionEngine: [StatusBar$_1661#102] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:57.151   848   848 E CompositionEngine: [com.sec.android.app.launcher/com.samsung.app.honeyspace.edge.edgepanel.app.CocktailBarService$_2210#373903] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:57.151   848   848 E CompositionEngine: [NavigationBar0$_1661#98] Invalid device requested composition type change: Device (2) --> Device (2)
+06-14 13:44:57.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424897
+06-14 13:44:57.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:58.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424898
+06-14 13:44:58.418   832   847 E HeatmapThread: !@ CAM New BSOH: 98
+06-14 13:44:59.409   832   847 E HeatmapThread: ECT Thread time in milliseconds: 1781424899
+06-14 13:44:59.417   832   847 E HeatmapThread: !@ CAM New BSOH: 98
