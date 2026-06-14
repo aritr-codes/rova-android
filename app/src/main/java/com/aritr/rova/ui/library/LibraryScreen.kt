@@ -78,8 +78,10 @@ import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
 import com.aritr.rova.ui.screens.RetentionCleanupNotices
 import com.aritr.rova.data.SessionConfig
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.TimeZone
 
@@ -228,6 +230,9 @@ fun LibraryScreen(
     // ---- deferred-delete owner coroutine (owner + codex) ----
     fun startDeferredDelete(keys: Set<String>) {
         if (keys.isEmpty()) return
+        // Commit any batch whose snackbar is still showing (stock showSnackbar QUEUES rather than
+        // replaces — codex): dismissing it resolves the prior job Dismissed → it commits now.
+        snackbarHostState.currentSnackbarData?.dismiss()
         pending = PendingDelete(pending.keys + keys)
         selection = SelectionReducer.removeAll(selection, keys)
         pendingJob = coroutineScope.launch {
@@ -237,11 +242,17 @@ fun LibraryScreen(
                 duration = SnackbarDuration.Short,
             )
             when (result) {
-                SnackbarResult.ActionPerformed -> pending = pending.restore(keys) // UNDO → un-hide
-                SnackbarResult.Dismissed -> {                                      // timeout/swipe → commit
+                // UNDO → un-hide (rows still in ui.rows reappear); abandon the delete.
+                SnackbarResult.ActionPerformed -> pending = pending.restore(keys)
+                SnackbarResult.Dismissed -> {
+                    // Timeout/swipe = decided commit. NonCancellable so a screen-dispose mid-delete can't
+                    // half-delete (the still-showing-snackbar abandon path is the cancel of showSnackbar
+                    // ABOVE, which never reaches here). deleteItemsKeyed refreshes items internally.
                     val targets = viewModel.itemsForKeys(keys)
-                    val failed = viewModel.deleteItemsKeyed(targets)
-                    pending = pending.restore(failed)  // failed rows reappear; deleted ones drop via refresh
+                    val failed = withContext(NonCancellable) { viewModel.deleteItemsKeyed(targets) }
+                    // Drop the WHOLE batch from pending: succeeded keys are gone from ui.rows, failed keys
+                    // remain there and reappear once un-hidden — no stale-key leak (codex #1).
+                    pending = pending.restore(keys)
                     if (failed.isNotEmpty()) {
                         snackbarHostState.showSnackbar(
                             context.getString(R.string.library_delete_failed, failed.size),
