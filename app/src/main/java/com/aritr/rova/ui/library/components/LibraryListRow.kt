@@ -54,14 +54,14 @@ fun LibraryListRow(
         role = GlassRole.Card,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
                 role = Role.Button
                 contentDescription = tileDescription
                 if (isSelectionMode) stateDescription = if (isSelected) selectedLabel else notSelectedLabel
             },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(LibraryDimens.cardRadius),
     ) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isSelectionMode) {

@@ -2,16 +2,17 @@ package com.aritr.rova.ui.library.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.library.CaptionScrim
 import com.aritr.rova.ui.library.LibraryBadge
@@ -29,13 +30,16 @@ private val captionTextColor = Color(
     alpha = 1f,
 )
 
+/** Vertical scrim brush behind captions: transparent → AA scrim, so the frame isn't flatly darkened. */
+private val captionScrimBrush = Brush.verticalGradient(listOf(Color.Transparent, scrimColor))
+
 /** Small pill over a thumbnail, on a structural scrim (AA-guaranteed). Decorative — semantics cleared. */
 @Composable
 fun OverlayPill(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier
             .clearAndSetSemantics {}
-            .background(scrimColor, RoundedCornerShape(8.dp))
+            .background(scrimColor, RoundedCornerShape(LibraryDimens.pillRadius))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
@@ -55,20 +59,24 @@ fun statusBadgeLabel(badge: LibraryBadge?, recovered: String, interrupted: Strin
     null -> null
 }
 
-/** Bottom caption bar over a thumbnail: scrim + caption text. Decorative — semantics cleared (merged on tile). */
+/**
+ * Bottom caption over a thumbnail: a vertical gradient scrim (transparent → AA scrim) so text stays
+ * readable over any frame without flatly dimming the image. Decorative — semantics cleared (merged on tile).
+ */
 @Composable
 fun CaptionBar(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier
             .clearAndSetSemantics {}
-            .background(scrimColor)
-            .padding(PaddingValues(horizontal = 8.dp, vertical = 4.dp)),
+            .background(captionScrimBrush)
+            .padding(start = 8.dp, end = 8.dp, top = 18.dp, bottom = 6.dp),
     ) {
         Text(
             text = text,
             color = captionTextColor,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

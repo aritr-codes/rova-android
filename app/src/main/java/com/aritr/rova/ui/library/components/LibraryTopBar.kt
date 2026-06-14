@@ -3,6 +3,8 @@ package com.aritr.rova.ui.library.components
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -39,29 +41,42 @@ fun LibraryTopBar(
 ) {
     GlassSurface(role = GlassRole.NavBar, modifier = modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 4.dp, vertical = LibraryDimens.topBarPadV),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backLabel)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = backLabel,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
                 }
             }
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = if (onBack != null) 4.dp else 12.dp),
             )
             if (onOpenVault != null) {
-                IconButton(onClick = onOpenVault) { Icon(Icons.Filled.Lock, contentDescription = vaultLabel) }
+                IconButton(onClick = onOpenVault) {
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = vaultLabel,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                }
             }
             IconButton(onClick = onToggleView) {
-                if (viewMode == LibraryViewMode.GRID) {
-                    Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = listLabel)
-                } else {
-                    Icon(Icons.Filled.GridView, contentDescription = gridLabel)
-                }
+                Icon(
+                    if (viewMode == LibraryViewMode.GRID) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView,
+                    contentDescription = if (viewMode == LibraryViewMode.GRID) listLabel else gridLabel,
+                    modifier = Modifier.size(LibraryDimens.navIcon),
+                )
             }
         }
     }

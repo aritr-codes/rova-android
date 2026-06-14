@@ -3,12 +3,15 @@ package com.aritr.rova.ui.library.components
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -29,7 +32,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.library.LibraryRow
-import com.aritr.rova.ui.library.SmartTitle
 
 /**
  * spec §5.1 — opaque 2-column grid tile. Thumbnail plane + mandatory duration pill
@@ -58,11 +60,15 @@ fun LibraryGridCard(
     selectedLabel: String = "",
     notSelectedLabel: String = "",
 ) {
+    val shape = RoundedCornerShape(LibraryDimens.cardRadius)
     Box(
         modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shape)
+            .then(
+                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier,
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
                 role = Role.Button
@@ -72,37 +78,38 @@ fun LibraryGridCard(
             },
     ) {
         VideoFrame(thumbnail, Modifier.fillMaxSize())
-        if (statusLabel != null) {
-            OverlayPill(statusLabel, Modifier.align(Alignment.TopStart).padding(6.dp))
+        // Exceptional / P+L badges only outside selection mode (selection owns the top-start slot, and
+        // selection should de-clutter — Photos/Gallery convention).
+        if (!isSelectionMode) {
+            if (statusLabel != null) {
+                OverlayPill(statusLabel, Modifier.align(Alignment.TopStart).padding(6.dp))
+            }
+            if (row.topology == CaptureTopology.DualShot) {
+                OverlayPill(plLabel, Modifier.align(Alignment.TopEnd).padding(6.dp))
+            }
         }
-        if (row.topology == CaptureTopology.DualShot) {
-            OverlayPill(plLabel, Modifier.align(Alignment.TopEnd).padding(6.dp))
-        }
-        if (row.durationMs > 0L) {
-            OverlayPill(
-                SmartTitle.durationLabel(row.durationMs),
-                Modifier.align(Alignment.BottomEnd).padding(6.dp),
-            )
-        }
-        CaptionBar(
-            row.title,
-            Modifier.align(Alignment.BottomStart).fillMaxWidth(),
-        )
+        // Single caption (date · clips · duration via the title) over a gradient scrim — the redundant
+        // duration pill is gone (polish pass).
+        CaptionBar(row.title, Modifier.align(Alignment.BottomStart).fillMaxWidth())
         if (isSelectionMode) {
-            // Selection scrim + check indicator (decorative — state is on the merged tile node).
-            if (isSelected) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+            // Lighter selection (Photos/Gallery): keep the frame bright, lean on a ring + filled check on a
+            // small contrasting chip. State lives on the merged tile node — these are decorative.
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.32f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
+                    modifier = Modifier.size(22.dp),
                 )
             }
-            Icon(
-                imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                contentDescription = null,
-                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-            )
         }
     }
 }

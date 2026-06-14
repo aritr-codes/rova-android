@@ -112,7 +112,7 @@ fun LibraryScreen(
 
     val ui by viewModel.libraryUiState.collectAsStateWithLifecycle()
     val items by viewModel.items.collectAsStateWithLifecycle()
-    @Suppress("UNUSED_VARIABLE")
+    // Hero muted autoplay is gated by reduce-motion (ADR-0020): off → static frame (owner polish #2).
     val reduceMotion = rememberReduceMotion()
 
     // Recovery header (factory relocated to ui/recovery/ — ADR-0030 §2).
@@ -309,9 +309,11 @@ fun LibraryScreen(
 
     @Composable
     fun renderHero(row: LibraryRow) {
+        val item = byKey[row.stableKey]
+        val previewUri = item?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
         LibraryHeroCard(
             row = row,
-            thumbnail = byKey[row.stableKey]?.thumbnail,
+            thumbnail = item?.thumbnail,
             eyebrow = eyebrow,
             playDescription = TileSemantics.describe(row, frag),
             favoriteLabel = favoriteLabel,
@@ -320,6 +322,8 @@ fun LibraryScreen(
             onPlay = { play(row.stableKey) },
             onFavorite = { viewModel.toggleFavorite(row.stableKey) },
             onShare = { byKey[row.stableKey]?.let { shareItems(listOf(it)) } },
+            previewUri = previewUri,
+            autoplay = !reduceMotion,
         )
     }
 
@@ -432,7 +436,7 @@ fun LibraryScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = com.aritr.rova.ui.library.components.LibraryDimens.screenPadH)
                         .semantics {
                             isTraversalGroup = true
                             collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
@@ -455,7 +459,7 @@ fun LibraryScreen(
                                 statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
                                 plLabel = plLabel,
                                 onClick = { onTileClick(row.stableKey) },
-                                modifier = Modifier.padding(4.dp),
+                                modifier = Modifier.padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter),
                                 itemSemantics = {
                                     collectionItemInfo = CollectionItemInfo(
                                         rowIndex = index / GRID_COLUMNS,
