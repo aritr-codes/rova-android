@@ -12,6 +12,13 @@ import java.io.File
  * file (the map is tiny — one small record per recording). Callers invoke off the
  * main thread.
  *
+ * Construct ONE instance per [filesDir] (production: the `RovaApp` lazy prop). The
+ * in-memory cache is per-instance, so a second instance over the same directory
+ * would serve stale reads after the first one writes; and the single fixed temp
+ * file assumes a single OS process (Android app default). Both hold under the
+ * app's single-process, single-lazy-prop wiring — do not bypass it (e.g. a second
+ * store built in a separate `:process` or WorkManager process).
+ *
  * @param filesDir a stable app-internal directory (production: `context.filesDir`).
  */
 class LibraryMetadataStore(private val filesDir: File) {

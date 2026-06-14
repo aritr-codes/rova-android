@@ -1860,7 +1860,10 @@ val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") 
                 if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
                 val marked = line.contains(allowMarker)
                 if (marked) allowMarks += "$rel:${i + 1}: ${line.trim()}"
-                if (callRegex.containsMatchIn(line) && !marked) offenders += "$rel:${i + 1}: ${line.trim()}"
+                // Match only the code before an inline `//` so a commented-out
+                // example call (e.g. `x // markTerminated(`) cannot false-fail.
+                val code = line.substringBefore("//")
+                if (callRegex.containsMatchIn(code) && !marked) offenders += "$rel:${i + 1}: ${line.trim()}"
             }
         }
         // The marker is reserved for the single sanctioned recovery-keep write.
