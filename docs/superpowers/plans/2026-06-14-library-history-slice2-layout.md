@@ -1845,7 +1845,20 @@ git commit -m "test(library): pin hero single-representation invariant (owner ad
 
 ---
 
-## Task 13: Lift recovery/warning header + wire `MainScreen` to `LibraryScreen`
+## Task 13: Wire `MainScreen` to `LibraryScreen` — **DEFERRED to Slice 3 (owner decision 2026-06-14)**
+
+> **Resolved during execution.** `HistoryScreen` is a single monolithic composable: recovery cards, warning
+> strip, per-row overflow (Share/View settings/Move-to-Vault/Delete), multi-select, the view-settings + vault
+> dialogs, and snackbars all share local state with the list. There is **no clean header to extract** (adjustment
+> 4 forbids refactoring the recovery path), and the new `LibraryScreen` deliberately carries none of that
+> management machinery (multi-select/batch are Slice 3). Swapping the route now would either regress
+> Delete/Vault/View-settings/multi-select or balloon scope into a HistoryScreen rebuild. **Owner chose to defer
+> the route swap to Slice 3**, where selection + batch already require touching that surface and porting
+> recovery/warnings/overflow. Slice 2 therefore lands `LibraryScreen` built + JVM-tested but **not yet wired**;
+> `MainScreen` + `HistoryScreen` are left byte-unchanged. Steps below are carried into the Slice-3 plan.
+
+### (original — carried to Slice 3)
+### Task 13: Lift recovery/warning header + wire `MainScreen` to `LibraryScreen`
 
 **Files:**
 - Modify: `app/src/main/java/com/aritr/rova/ui/screens/HistoryScreen.kt`
@@ -2122,7 +2135,9 @@ Expected: BUILD SUCCESSFUL — baseline + Slice-1 + Slice-2 pure tests all pass.
 Run: `gradlew.bat :app:assembleDebug`
 Expected: BUILD SUCCESSFUL — all 42 gates pass.
 
-- [ ] **Step 3: Install + device smoke on RZCYA1VBQ2H**
+- [ ] **Step 3: Install + device smoke on RZCYA1VBQ2H** — **DEFERRED to Slice 3** (owner decision): the screen
+  is not wired into a route this slice, so there is nothing to smoke yet. Slice 2 ships on JVM tests + the 42-gate
+  build only. The device-smoke checklist below moves to Slice 3 (the slice that wires `LibraryScreen` in).
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
