@@ -69,8 +69,19 @@ class DualSightProbeActivity : ComponentActivity() {
         val preview = Preview.Builder().build()
         preview.surfaceProvider = previewView.surfaceProvider
         CameraXConcurrentProbe(this, this).run(preview) {
-            // Attempt B (raw Camera2 hardware truth) runs next — wired in Task 5.
-            Log.i(tag, "attempt A done")
+            Log.i(tag, "attempt A done — starting attempt B (Camera2 hardware truth)")
+            runAttemptB()
+        }
+    }
+
+    private fun runAttemptB() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Log.i(tag, "VERDICT(attemptB) recordSucceeded=false (API<R, getConcurrentCameraIds unavailable)")
+            return
+        }
+        Camera2ConcurrentProbe(this).run {
+            Log.i(tag, "attempt B done — probe complete")
+            Log.i(tag, "MIRROR check: open attempt-A clip; front inset text must read correctly")
         }
     }
 }
