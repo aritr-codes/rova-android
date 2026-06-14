@@ -7,7 +7,9 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.aritr.rova.service.dualsight.ConcurrentCameraCapability
 import com.aritr.rova.service.dualsight.LensFacing
@@ -19,9 +21,12 @@ import com.aritr.rova.service.dualsight.LensFacing
  */
 class DualSightProbeActivity : ComponentActivity() {
     private val tag = "DualSightProbe"
+    private lateinit var previewView: PreviewView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        previewView = PreviewView(this)
+        setContentView(previewView)
         runQueries()
     }
 
@@ -55,7 +60,17 @@ class DualSightProbeActivity : ComponentActivity() {
             val supported = ConcurrentCameraCapability.supportsConcurrentFrontAndBack(hasFlag, combos)
             Log.i(tag, "QUERY cameraXCombos=${combos.size} combos=$combos")
             Log.i(tag, "VERDICT(query) frontBackBindable=$supported")
-            Log.i(tag, "Next: see CameraXConcurrentProbe (attempt A) + Camera2ConcurrentProbe (attempt B)")
+            Log.i(tag, "Next: attempt A (CameraX CompositionSettings record)")
+            runAttemptA()
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun runAttemptA() {
+        val preview = Preview.Builder().build()
+        preview.surfaceProvider = previewView.surfaceProvider
+        CameraXConcurrentProbe(this, this).run(preview) {
+            // Attempt B (raw Camera2 hardware truth) runs next — wired in Task 5.
+            Log.i(tag, "attempt A done")
+        }
     }
 }
