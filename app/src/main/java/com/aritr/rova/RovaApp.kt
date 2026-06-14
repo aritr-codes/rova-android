@@ -126,6 +126,16 @@ class RovaApp : Application() {
     }
 
     /**
+     * ADR-0030 sidecar for Library UI metadata (favorite / rename / lastPlayedAt).
+     * Single instance per app (per-instance in-memory cache + single-process atomic
+     * write — see LibraryMetadataStore KDoc). filesDir is the canonical app-internal
+     * directory; the sidecar is `files/library_metadata.json`.
+     */
+    val libraryMetadataStore: com.aritr.rova.ui.library.LibraryMetadataStore by lazy {
+        com.aritr.rova.ui.library.LibraryMetadataStore(filesDir)
+    }
+
+    /**
      * Phase 3.2 (NEW_UI_BACKEND_REPLAN §5 row 3.2). Process-wide
      * StateFlow of the current `POST_NOTIFICATIONS` grant state.
      * Pre-API-33 the flow is a constant `true` (OS does not gate
