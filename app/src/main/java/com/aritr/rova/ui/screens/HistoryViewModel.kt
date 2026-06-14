@@ -328,6 +328,50 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * Slice 3 — rename = sidecar `customTitle` write (ADR-0030: NEVER the manifest). Same
+     * non-optimistic failure model as [toggleFavorite]; a blank title clears the custom name
+     * (the row falls back to [SmartTitle]). Off-main.
+     */
+    fun renameSession(stableKey: String, newTitle: String) {
+        val store = libraryStore ?: return
+        val trimmed = newTitle.trim()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                store.update(stableKey) { it.copy(customTitle = trimmed.ifBlank { null }) }
+                _sidecarRevision.update { it + 1 }
+            } catch (t: Throwable) {
+                RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
+                _sidecarWriteError.update { it + 1 }
+            }
+        }
+    }
+
+    /** Slice 3 — resolve selected stableKeys to concrete [VideoItem]s (batch share/delete need the artifacts). */
+    fun itemsForKeys(keys: Set<String>): List<VideoItem> {
+        val byKey = items.value.associateBy { it.stableKey }
+        return keys.mapNotNull { byKey[it] }
+    }
+
+    /** Result of a batch Vault move: [moved] succeeded, [skipped] were non-movable (P+L) or failed. */
+    data class VaultBatchResult(val moved: Int, val skipped: Int)
+
+    /**
+     * Slice 3 — batch Vault move. Each selected session is moved via [moveToVault], which self-gates on
+     * [VaultMoverBuilder.isSingleModeMovable] (P+L not movable, ADR-0009/0025) and is fail-closed, so a
+     * row-level pre-filter is not required for safety. [refresh] fires inside each move; the now-VAULTED
+     * rows drop out of the PUBLIC-only listing.
+     */
+    suspend fun batchMoveToVault(keys: Set<String>): VaultBatchResult {
+        val byKey = items.value.associateBy { it.stableKey }
+        var moved = 0
+        for (k in keys) {
+            val sid = byKey[k]?.sessionId ?: continue
+            if (moveToVault(sid)) moved++
+        }
+        return VaultBatchResult(moved = moved, skipped = keys.size - moved)
+    }
+
+    /**
      * Phase 1.7 commit-7 NO-GO patch round 2 — manifest-driven listing.
      * Successful exports no longer leave a file under
      * `videos/<sessionId>/Rova_*.mp4`; the artifact lives in
@@ -923,9 +967,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * with the canonical `shareUri` (already plumbed by the share
      * fixes) closes that gap.
      */
-    suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult =
+    suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult {
+        val total = items.size
+        val failedKeys = deleteItemsKeyed(items)
+        return DeleteResult(deleted = total - failedKeys.size, failed = failedKeys.size)
+    }
+
+    /**
+     * Slice 3 — keyed delete used by the deferred-delete Snackbar-UNDO flow. Returns the set of
+     * [VideoItem.stableKey]s whose delete FAILED, so the screen can restore exactly those rows to the
+     * library while the truly-deleted rows drop out via the [refresh] that fires here. [deleteItems]
+     * delegates to this and reduces to counts for legacy callers.
+     */
+    suspend fun deleteItemsKeyed(items: Collection<VideoItem>): Set<String> =
         withContext(Dispatchers.IO) {
-            if (items.isEmpty()) return@withContext DeleteResult(0, 0)
+            if (items.isEmpty()) return@withContext emptySet()
             val app = getApplication<Application>()
             val resolver = app.contentResolver
             // Same access pattern as `refresh()`: read sessionStore via
@@ -947,13 +1003,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             )
-            var deleted = 0
-            var failed = 0
+            val failed = mutableSetOf<String>()
             items.forEach { item ->
-                if (deleter.delete(item)) deleted++ else failed++
+                if (!deleter.delete(item)) failed += item.stableKey
             }
             refresh()
-            DeleteResult(deleted = deleted, failed = failed)
+            failed
         }
 
     /**
