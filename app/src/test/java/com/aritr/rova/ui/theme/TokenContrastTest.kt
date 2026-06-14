@@ -10,6 +10,15 @@ import org.junit.Test
  * token alphas via [ContrastMath] so lowering any token back below the bar
  * re-breaks this test.
  *
+ * **This is the authoritative SC 1.4.3 enforcement for the design tokens.**
+ * ADR-0020 originally sketched a `checkA11yNoLowAlphaTextToken` static gate
+ * (a regex `alpha < 0.55f` heuristic); it was rejected — contrast is
+ * background-dependent (e.g. `rowLabelText` 0.46α reads 4.67:1 over the opaque
+ * sheet, but the same alpha fails over bright camera footage), so a flat alpha
+ * floor would false-fail AA-passing tokens. This test computes the real ratio
+ * over each token's actual surface, which a regex cannot, so it covers **every**
+ * text/label token — any future text token MUST be added here.
+ *
  * **Backgrounds.**
  * - Settings-sheet tokens sit on the near-opaque sheet fill (`#F7090D14` ≈
  *   `#090D14`), so 4.5:1 is a genuine guarantee there.
@@ -32,9 +41,13 @@ class TokenContrastTest {
     @Test
     fun `record chrome text tokens meet AA over the dark-scene reference`() {
         val tokens = mapOf(
+            "loopCountText" to RecordChromeTokens.loopCountText,
             "loopUnitText" to RecordChromeTokens.loopUnitText,
+            "statusMainText" to RecordChromeTokens.statusMainText,
             "statusTimeText" to RecordChromeTokens.statusTimeText,
+            "cellValueText" to RecordChromeTokens.cellValueText,
             "cellKeyText" to RecordChromeTokens.cellKeyText,
+            "cellValueReadOnlyText" to RecordChromeTokens.cellValueReadOnlyText,
             "settingsArrow" to RecordChromeTokens.settingsArrow,
             "swipeHint" to RecordChromeTokens.swipeHint,
             "navIcon" to RecordChromeTokens.navIcon,
@@ -55,7 +68,14 @@ class TokenContrastTest {
         val tokens = mapOf(
             "sectionLabelColor" to SettingsSheetTokens.sectionLabelColor,
             "modeTabIdleText" to SettingsSheetTokens.modeTabIdleText,
+            "modeTabActiveText" to SettingsSheetTokens.modeTabActiveText,
+            "rowLabelText" to SettingsSheetTokens.rowLabelText,
+            "stepValText" to SettingsSheetTokens.stepValText,
             "chipOffText" to SettingsSheetTokens.chipOffText,
+            "chipOnText" to SettingsSheetTokens.chipOnText,
+            "summaryText" to SettingsSheetTokens.summaryText,
+            "summaryStrong" to SettingsSheetTokens.summaryStrong,
+            "ctaText" to SettingsSheetTokens.ctaText,
         )
         tokens.forEach { (name, color) ->
             val ratio = ratioOver(color, sheetBg)
@@ -64,6 +84,19 @@ class TokenContrastTest {
                 ratio >= 4.5,
             )
         }
+    }
+
+    @Test
+    fun `camera-peek status text meets AA over the dark-scene reference`() {
+        // peekStatusText sits on the peek scrim over the *live camera* (not the
+        // opaque sheet), so it shares the record-chrome scene-variable caveat:
+        // asserted over the dark-scene reference, the common case it's designed
+        // for. Same separate-scrim remediation note as the record-chrome text.
+        val ratio = ratioOver(SettingsSheetTokens.peekStatusText, chromeDarkRef)
+        assertTrue(
+            "peekStatusText must meet 4.5:1 over the dark-scene reference (was ${"%.2f".format(ratio)}:1)",
+            ratio >= 4.5,
+        )
     }
 
     @Test
