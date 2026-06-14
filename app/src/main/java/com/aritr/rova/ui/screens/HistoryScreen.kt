@@ -99,6 +99,7 @@ import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
+import com.aritr.rova.ui.recovery.recoveryViewModelFactory
 import com.aritr.rova.ui.share.safeShareUri
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.warnings.HistoryWarningSheetHost
@@ -135,52 +136,11 @@ fun HistoryScreen(
     // runs anyway, so loadManifest just returns null and the card list
     // stays empty.
     val app = context.applicationContext as RovaApp
+    // Recovery factory relocated to the recovery subsystem (ADR-0030 §2, Slice 3) — the
+    // markTerminated(MULTI_SEGMENT_KEPT) write now lives in ui/recovery/, out of the
+    // checkLibraryNoManifestWrite scope. (This file is itself retired by Slice 3's route-wire.)
     val recoveryViewModel: RecoveryViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                // `videosRoot == null` (storage unavailable at boot)
-                // disables both load AND discard — the scan never ran,
-                // so there is nothing to load, and discardSession on a
-                // missing dir is a no-op anyway. Guarding the discard
-                // lambda the same way avoids a hot-path NullPointer if
-                // sessionStore initialization throws.
-                val sessionStoreAvailable = app.videosRoot != null
-                val loadManifest: (String) -> SessionManifest? = if (sessionStoreAvailable) {
-                    { id -> app.sessionStore.loadManifest(id) }
-                } else {
-                    { _ -> null }
-                }
-                val discardSession: suspend (String) -> Unit = if (sessionStoreAvailable) {
-                    { id -> app.sessionStore.discardSession(id) }
-                } else {
-                    { _ -> }
-                }
-                val markKeptRaw: suspend (String) -> Unit = if (sessionStoreAvailable) {
-                    { id ->
-                        // Recovery-subsystem terminal write (recovery-keep MULTI_SEGMENT_KEPT),
-                        // not Library favorite/rename metadata — see ADR-0030 decision 2.
-                        app.sessionStore.markTerminated( // ADR-0030-allow: recovery-keep-raw
-                            sessionId = id,
-                            terminated = Terminated.MULTI_SEGMENT_KEPT,
-                            stopReason = StopReason.NONE,
-                        )
-                    }
-                } else {
-                    { _ -> }
-                }
-                val startRecoveryMergeFn: (String) -> Unit = { id ->
-                    RovaRecordingService.startRecoveryMerge(context, id)
-                }
-                RecoveryViewModel(
-                    recoveryReport = app.recoveryReport,
-                    loadManifest = loadManifest,
-                    discardSession = discardSession,
-                    markKeptRaw = markKeptRaw,
-                    startRecoveryMergeFn = startRecoveryMergeFn,
-                    mergeOutcome = app.recoveryMergeOutcomeSignal.state,
-                )
-            }
-        }
+        factory = recoveryViewModelFactory(app, context),
     )
     val recoveryUiState by recoveryViewModel.uiState.collectAsStateWithLifecycle()
 
