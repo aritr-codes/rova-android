@@ -1,60 +1,62 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-13.**
+> **As of 2026-06-14.**
 
 ---
 
 ## Where things stand
 
-- **Branch:** `master` — **HEAD `24cdae7`** ("PR-ε: fixed-window + counter-rotating record chrome (ADR-0029 §B″) (#108)").
-- **Open PRs:** zero.
-- **Working tree:** clean. The two planning docs from this session — `docs/BACKLOG.md` and `HANDOFF.md` — are committed, plus a follow-up CLAUDE.md drift-fix (gate count → 39, ADR count → 29).
-- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke is mandatory — emulators fail CameraX video recording.
-- **Static gates:** **39** custom `check*` tasks wired into `preBuild` (measured — see drift note below).
+- **Branch:** `master` — **HEAD `3287916`** ("a11y: panel touch targets to WCAG 2.2 AA (24dp) (#113)").
+  Recent line: `3287916`(#113) → `23fb7e4`(#112) → `97b6b9c`(#111) → `e799c06`(#110) → `24cdae7`(#108).
+- **Open PRs:** zero. (Only an unrelated stale `feat/dualshot-render-threading` branch lingers on origin.)
+- **Working tree:** clean.
+- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke is mandatory — emulators fail CameraX video recording. Device-smoke GO on RZCYA1VBQ2H this session.
+- **Static gates:** **40** custom `check*` tasks wired into `preBuild` (measured; `checkA11yClickableHasRole` was the 40th, #110).
 
-## What this session did
+## What this session did (2026-06-14)
 
-1. **Landed the β/γ/ε stacked merge train** onto master: `9bbe050` (PR-β #106) → `744a99d` (PR-γ #109) → `24cdae7` (PR-ε #108). This completed the rotation-first record-chrome arc (ADR-0029 §B′/§B″) after owner device-GO. Note the merge-train scar: `gh pr merge --delete-branch` auto-**closed** dependent #107 instead of retargeting — recovered by rebasing the pristine branch and reopening as #109. See `memory/feedback_stacked_pr_merge_train.md` for the safe pattern.
-2. **Drafted [`docs/BACKLOG.md`](docs/BACKLOG.md)** — 33 sourced items across 8 themes + a "Top 3 next" callout. Every item traces to an ADR / roadmap / accessibility doc / memory file / measured code fact.
-3. **Codebase-hygiene run** — reclaimed **~477.6 MB** of untracked junk: 88 `gradle_*.log` + stray `nul`, 4 `obs_*.mp4` (409 MB), `obs_frames/` (419 files, 55 MB), 6 `landscape_checkpoint_*.png`, 17 untracked root `.html` mockups, 3 stale merged-PR plan docs. **Protected:** the 2 *tracked* root mockups (`config_strip_mode_mockup.html`, `landscape_record_mockup.html`), `keystore.properties`, and all gitignored tool/build dirs (`.codegraph/`, `.idea/`, `app/build/` — never `git clean -x`'d).
+1. **Preset UI polish + responsive record-chrome sizing (#112, `23fb7e4`).** Brainstorm → spec → plan → subagent-driven:
+   - **Preset popup:** uniform **tile grid** replaces the ragged content-width chip flow on both surfaces (`FloatingSettingsPanel` + `SettingsSheet`); bottom **scroll-fade** discoverability cue; pure `presetTileSummary`.
+   - **Config strip:** slimmer + responsive — `cellSlot` 48→44dp, `settingsCardPaddingV` 7→6dp, slot × new **`ChromeScale`** (device-anchored on `smallestScreenWidthDp`; 1.0 at the 411dp reference device with a ±1dp snap, clamped 0.88–1.15). 48dp touch target preserved by the card's `heightIn(min=48)`. Repeats cell now shows **`∞`** for continuous (was "Until you stop") — `recordRepeatsStepperValue` → `recordRepeatsCompactValue`, shared by strip + every stepper; the wider Settings-tab row keeps `recordRepeatsValue`.
+   - **Floating panel:** side cap × `ChromeScale` — byte-identical (320dp) on the ref device, scales elsewhere.
+   - ADR-0029 §B″3 amended for the 44dp slot + ChromeScale. codex-reviewed + a 4-lens adversarial verify pass. Device-smoke GO.
+2. **ADR-0020 AA touch-target nudge (#113, `3287916`).** The compact panel's two sub-24dp controls (the AA bar is **SC 2.5.8 = 24dp**, not the 48dp Material guideline; the 2026-05-30 audit already documented skipping touch targets at that bar) raised via **touch-padding only**: Edit/Done toggle `v 4→7dp` (~26dp), QualityChip `heightIn(min = 24.dp)`. Everything else already passed AA. Documented in `docs/accessibility/remediation-backlog.md`.
+3. **Build-speed fix** (see the rewritten build-env section below): the per-build cache-wipe "dance" is **obsolete** — warm builds are ~8s vs ~17 min cold. Filed a config-cache gate-refactor optimization (P2) in `docs/BACKLOG.md`.
+4. **Merge train** #112 → rebase a11y `--onto master` (clean) → #113, then deleted the merged `feat/preset-ui-polish` branch.
 
-## ⚠️ Documentation drift — FIXED 2026-06-13 (was P1)
+## Build-environment (UPDATED 2026-06-14 — the "recovery dance" is OBSOLETE)
 
-`CLAUDE.md` says "**28** custom `check*` tasks" (Static-check-gate section) and "the existing **25** checks" (ADR-0020 paragraph); PR-ε memory carried "**36**". **The true count is 39** — measured: 39 unique `tasks.register("check…` in `app/build.gradle.kts`, all 39 wired into `preBuild`. The full alphabetized gate list is inlined in `docs/BACKLOG.md` under "Gate-count documentation recount sweep". ✅ **Done this session:** `CLAUDE.md` corrected — 28→39 + full inline gate list; "20 ADRs (0001–0020)"→"29 ADRs (0001–0029)"; "25 checks"→39. Memory updated. ADR-0020/0022's "25 checks" intentionally **left as-is** (point-in-time-at-authoring counts in immutable decision records — rewriting would corrupt the historical narrative).
+- **Build WARM. Do NOT wipe caches before every build.** The hook that used to corrupt the Kotlin incremental cache — `~/.claude/hooks/kotlin-postedit.ps1`, which spawned `:app:detekt` (not a task here) + `:app:compileDebugKotlin` on every `.kt` save — was **disabled 2026-06-09** (no-op). Just run `./gradlew.bat :app:assembleDebug` (no `--stop`, no `rm`): a small change builds in **~1–3 min** (an UP-TO-DATE warm build ran in **8s** this session) vs ~17 min cold.
+- **Clean only on-demand:** if a build actually fails with a weird kotlinc/MD5/incremental error, then once: `gradlew.bat --stop` + `rm -rf app/build/kotlin app/build/intermediates/built_in_kotlinc`.
+- **Need only the APK?** Run `:app:assembleDebug` alone; run `:app:testDebugUnitTest` separately/less often.
+- `gradle.properties` is well-tuned (parallel, build cache, 4 GB heap). **Config cache is OFF** — the 40 gates capture build-script refs the config cache can't serialize; refactor filed as a P2 build-logic item in `docs/BACKLOG.md`.
+- **Subagent EDIT-ONLY** was a workaround for that now-disabled hook; still a fine batching convention (controller runs builds), but no longer mandatory for cache-safety.
+- **Windows / PowerShell.** Use `gradlew.bat`. The **adb MCP wrapper is broken on Windows** — drive adb via PowerShell directly.
+- **`lintDebug` is RED on pre-existing B5 `VaultAndroidOps` NewApi** (unrelated) — use `:app:assembleDebug` to gate-build.
 
-## Top 3 next candidates (from the backlog)
+## Top next candidates (from the backlog)
 
-1. ✅ **Gate-count recount sweep** — DONE this session (CLAUDE.md fixed); lead candidates are now items 2–3.
-2. **PR-δ FrontBack PiP** — P2, the last unbuilt phase of ADR-0029 (Accepted). `FrontBack` is only an enum + UI refs + the `checkFrontBackCapabilityGated` fence today; no concurrent-camera source under `service/`. ADR already specifies the shape (single-file PiP via CameraX `CompositionSettings`, capability-gated).
-3. **Preset UI polish** — P1, owner called the in-sheet PRESETS section "kinda mess" (device-smoke otherwise PASS); not yet specced → start with brainstorming.
-
-## PR-ε non-blocking follow-ups still open (all KDoc'd, deferred)
-
-Warning-sheet visibility hoist out of `WarningCenter`; thermal-tips sheet portrait-under-lock conversion; `FloatingSettingsPanel` BackHandler disarm during exit animation; per-frame recomposition during the 180ms spin (v2: read spin angle as `State<Float>` inside the `graphicsLayer` lambda); two cosmetic landscape overflow bugs (cold-entry one-spin ~350ms, LOCKED "Landscape" value grazing separators). All in `docs/BACKLOG.md`.
-
-## Build-environment gotchas (carry every session)
-
-- **Broken kotlin-postedit hook** runs gradle per file-save → daemon pileup pins CPU and corrupts the `built_in_kotlinc` incremental cache (MD5 mismatch). **Recovery dance before each build:** `gradlew.bat --stop` → kill stray `java` → delete `app/build/kotlin` + `.gradle/kotlin` (and `built_in_kotlinc` cache dirs).
-- **Subagents are EDIT-ONLY.** The controller (main session) runs **all** gradle, one build per batch.
-- **Windows / PowerShell.** Use `gradlew.bat`. The **adb MCP wrapper is broken on Windows** — drive adb via PowerShell directly. Avoid inline `(... )/1MB` arithmetic piped into `Remove-Item` (the sandbox can misparse `/1MB,2` as a path) — compute sizes into a variable first.
-- **`lintDebug` is RED on pre-existing B5 `VaultAndroidOps` NewApi** (unrelated) — use `:app:assembleDebug` to gate-build, not `lintDebug`, unless specifically chasing lint.
+1. **Build the `checkA11y*` static-gate suite** — P2 (ADR-0020 Proposed). Only `checkA11yAnimationGated` + `checkA11yClickableHasRole` exist today; add semantics-presence / live-region / reduced-motion / touch-target gates per the invariant→`check*`→`preBuild` convention. *(The preset UI polish that used to be the P1 candidate is **DONE** this session via #112/#113.)*
+2. **PR-δ FrontBack PiP** — P2, the last unbuilt phase of ADR-0029 (Accepted). `FrontBack` is only an enum + UI refs + the `checkFrontBackCapabilityGated` fence today; no concurrent-camera source under `service/`. ADR specifies single-file PiP via CameraX `CompositionSettings`, capability-gated.
+3. **PR-ε follow-ups** (all KDoc'd, deferred): warning-sheet visibility hoist out of `WarningCenter`; thermal-tips portrait-under-lock; `FloatingSettingsPanel` BackHandler disarm during exit; per-frame recomposition during the 180ms spin (v2: read spin angle as `State<Float>` inside the `graphicsLayer` lambda); two cosmetic landscape overflow bugs. See `docs/BACKLOG.md`.
+4. **`RovaRecordingService.kt` split** — P2 (largest file; the static-gate suite pins the invariants that must survive the split).
 
 ## Load-bearing rules (don't violate)
 
 - **Never edit a `check*` task to make it green** — fix the source, or amend the ADR + check with explicit owner sign-off. New invariant = ADR clause → new `check*` → wire into `preBuild`.
 - **ADRs are the source of truth.** Touching anything an ADR mentions = amend the ADR clause first, regenerate/extend the matching `check*`, then change code.
-- **codex MCP peer review** (`mcp__codex__codex`) is mandatory for code changes >5 lines, architecture/design, algorithmic logic, security-sensitive, migrations, perf claims. Skip for conversational/status/trivial.
+- **codex MCP peer review** (`mcp__codex__codex`) mandatory for code changes >5 lines, architecture/design, algorithmic logic, security-sensitive, migrations, perf claims. Skip for conversational/status/trivial.
 - **CodeGraph** is initialized — never call `codegraph_explore`/`codegraph_context` from the main session; spawn an Explore agent. Main session may use `codegraph_search`/`callers`/`callees`/`impact`/`node` for targeted lookups only.
 - **JVM unit tests only** (`isReturnDefaultValues = true`); framework-touching code gets a pure-Kotlin sibling (the seam/pure-helper pattern). A new feature lands its tests in the same PR.
-- Untracked `gradle_*.log` in root are ephemeral verification artifacts (this session cleaned them; they regenerate on every build — leave the new ones, don't commit).
+- **Stacked-PR merge train:** merge base WITHOUT `--delete-branch` → rebase dependent `--onto origin/master <old-base>` → re-target/re-push → THEN delete. `--delete-branch` auto-retarget is unreliable (it has auto-closed #107/#95/#75 historically). See `memory/feedback_stacked_pr_merge_train.md`.
+- Untracked `gradle_*.log` in root are ephemeral verification artifacts — leave the new ones, don't commit.
 
 ## Key references
 
-- `CLAUDE.md` — project instructions (note: gate-count numbers are stale, see above).
-- `MEMORY.md` (auto-loaded) — cross-session index; `memory/project_current_state.md` is the running state file; `memory/project_pr_epsilon_rotation_first_chrome.md` covers the just-merged work.
-- `docs/BACKLOG.md` — full task list (this session's output).
-- `docs/adr/` — behavioral invariants. `ROADMAP_v6.md` (reliability), `NEW_UI_BACKEND_REPLAN.md` (UI redesign).
+- `CLAUDE.md` — project instructions (gate count **40**, ADR count **29** — both current).
+- `MEMORY.md` (auto-loaded) — cross-session index; `memory/project_current_state.md` is the running state file; `memory/project_build_env_perf.md` is the corrected build-speed note.
+- `docs/BACKLOG.md` — full task list. `docs/adr/` — behavioral invariants. `ROADMAP_v6.md` (reliability), `NEW_UI_BACKEND_REPLAN.md` (UI redesign).
 
 ---
 
@@ -68,26 +70,28 @@ Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-a
 Orient first: read HANDOFF.md, CLAUDE.md, and the auto-loaded MEMORY.md, then docs/BACKLOG.md.
 Don't re-explore what those already establish.
 
-State: master tip = docs commits on top of PR-ε 24cdae7 (#108), zero open PRs, tree clean.
-Tests green on master; device smoke is mandatory (emulators fail CameraX).
+State: master HEAD = 3287916 (#113 a11y AA touch targets), zero open PRs, tree clean. Tests green
+on master; device smoke is mandatory (emulators fail CameraX). Last session shipped #112 (preset
+tile-grid + responsive ChromeScale sizing + ∞ repeats cell, ADR-0029 §B″3 amended) and #113 (panel
+AA touch targets, SC 2.5.8 = 24dp).
 
 I want to work on: <PICK ONE>
-  1. Build the checkA11y* static-gate suite — P2 (ADR-0020 Proposed): only checkA11yAnimationGated
-     exists today; add semantics-presence / live-region / reduced-motion / touch-target gates per
-     the invariant->check*->preBuild convention. (The gate-count recount sweep that used to be
-     option 1 is already DONE — CLAUDE.md was fixed 2026-06-13.)
-  2. PR-δ FrontBack PiP — P2: build CaptureTopology.FrontBack (two concurrent camera bindings
-     → single-file PiP via CameraX CompositionSettings, capability-gated). Brainstorm → spec →
-     plan → ADR-0029 amendment → subagent-driven build. Last unbuilt phase of the mode/
-     orientation arc.
-  3. Preset UI polish — P1: owner flagged the in-sheet PRESETS section as "kinda mess".
-     Start with brainstorming (no spec yet).
-  4. A PR-ε follow-up (warning-sheet hoist / thermal-tips portrait-under-lock / BackHandler
-     disarm / per-frame-recomposition v2) — see docs/BACKLOG.md "UI Polish" + "Static-Gate".
+  1. Build the checkA11y* static-gate suite — P2 (ADR-0020 Proposed): only checkA11yAnimationGated +
+     checkA11yClickableHasRole exist; add semantics-presence / live-region / reduced-motion /
+     touch-target gates per the invariant->check*->preBuild convention.
+  2. PR-δ FrontBack PiP — P2: build CaptureTopology.FrontBack (two concurrent camera bindings ->
+     single-file PiP via CameraX CompositionSettings, capability-gated). Brainstorm -> spec -> plan
+     -> ADR-0029 amendment -> subagent-driven build. Last unbuilt phase of the mode/orientation arc.
+  3. A PR-ε follow-up (warning-sheet hoist / thermal-tips portrait-under-lock / BackHandler disarm /
+     per-frame-recomposition v2) — see docs/BACKLOG.md "UI Polish" + "Static-Gate".
+  4. RovaRecordingService.kt split — P2 (largest file; gates pin the invariants).
 
-Constraints: subagents are EDIT-ONLY, controller runs all gradle. Build-env recovery dance
-before each build (gradlew --stop → kill java → rm app/build/kotlin + .gradle/kotlin). Use
-assembleDebug to gate-build (lintDebug is RED on pre-existing VaultAndroidOps NewApi). Never
-edit a check* gate to pass — fix source or amend ADR with sign-off. codex-review code changes
->5 lines. Caveman mode if it was on.
+Build FAST: build WARM — just `gradlew.bat :app:assembleDebug` (NO --stop, NO cache wipe). The old
+"recovery dance" is obsolete (the kotlin-postedit hook was disabled 2026-06-09); warm builds are
+seconds-to-minutes. Clean ONLY if a build errors with a kotlinc/MD5 fault. Use assembleDebug to
+gate-build (lintDebug is RED on pre-existing VaultAndroidOps NewApi).
+
+Other constraints: never edit a check* gate to pass — fix source or amend ADR with sign-off.
+codex-review code changes >5 lines. CodeGraph exploration via Explore agent only. Caveman mode +
+Ultracode if they were on.
 ```

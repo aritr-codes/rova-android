@@ -1,7 +1,7 @@
 # Rova — Engineering Backlog
 
 > Single planning artifact enumerating every remaining, deferred, and carried-over task for **Rova** (`com.aritr.rova`).
-> **As of 2026-06-13, master at HEAD `24cdae7`** ("PR-ε: fixed-window + counter-rotating record chrome (ADR-0029 §B″) (#108)"), **zero open PRs**.
+> **As of 2026-06-14, master at HEAD `3287916`** ("a11y: panel touch targets to WCAG 2.2 AA (24dp) (#113)"), **zero open PRs**. **40** custom `check*` gates (measured).
 > This document is a backlog, not a commitment. Every item traces to an ADR, roadmap, accessibility doc, memory file, or a measured code fact. Priority tags: **P1** (next) · **P2** (soon) · **P3** (later) · **Parked**.
 
 ---
@@ -10,9 +10,11 @@
 
 What the memory trail implies is most concrete and ready to pick up:
 
-1. **Gate-count documentation recount sweep** — ✅ DONE 2026-06-13 (Static-Gate / Tech-Debt). CLAUDE.md now corrected; next-most-concrete candidate is **PR-δ FrontBack PiP** (item 2 below). Mechanical, zero-risk, already flagged as a PR-ε follow-up. The true unique `check*` count is **39** (measured), but `CLAUDE.md` says "28" in one place and the PR-ε memory said "36" — docs are stale. *(Source: `memory/project_pr_epsilon_rotation_first_chrome.md` "gate-count docs drift … recount sweep follow-up"; measured below.)*
-2. **PR-δ FrontBack PiP** (Capture/Mode). The last unbuilt phase of the owner-ratified mode/orientation re-architecture (ADR-0029, Accepted). α/β/γ/ε are all merged; δ is the only remaining slice and the ADR already specifies its shape. *(Source: ADR-0029; `memory/project_mode_orientation_replan.md`.)*
-3. **Preset UI polish** (UI Polish). Owner explicitly called the in-sheet PRESETS section "kinda mess" after device-smoke otherwise passed; not yet specced. *(Source: `memory/project_current_state.md`; `memory/project_pr_epsilon_*` and others repeat the "kinda mess" flag.)*
+1. **PR-δ FrontBack PiP** (Capture/Mode). The last unbuilt phase of the owner-ratified mode/orientation re-architecture (ADR-0029, Accepted). α/β/γ/ε are all merged; δ is the only remaining slice and the ADR already specifies its shape. *(Source: ADR-0029; `memory/project_mode_orientation_replan.md`.)*
+2. **Build the `checkA11y*` static-gate suite** (Accessibility). ADR-0020 ("WCAG 2.2 AA by default", Proposed) sketches it but only `checkA11yAnimationGated` + `checkA11yClickableHasRole` exist (the 40th gate). Add semantics-presence / live-region / reduced-motion / touch-target gates via the invariant → `check*` → `preBuild` convention. *(Source: ADR-0020; CLAUDE.md.)*
+3. **`RovaRecordingService.kt` split** (Reliability/Service) **or** a **PR-ε follow-up** (UI Polish — warning-sheet hoist, thermal-tips portrait-under-lock, BackHandler disarm, per-frame-recomposition v2). Both are scoped and low-risk. *(Source: this file's Reliability/Service + UI Polish sections.)*
+
+> **Preset UI polish — ✅ DONE 2026-06-14** via #112 (tile-grid popup + responsive `ChromeScale` strip/panel + `∞` repeats cell, ADR-0029 §B″3 amended) + #113 (panel AA touch targets). The old "kinda mess" PRESETS flag is resolved. See the UI Polish section.
 
 ---
 
@@ -41,7 +43,7 @@ What the memory trail implies is most concrete and ready to pick up:
 ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker findings from the 2026-05-29 audit were remediated and FF-landed on master (`892d551`); the rows below are the **deferred Moderate/Advisory** remainder plus the unbuilt static-gate suite. *(Sources: `docs/adr/0020-wcag-2.2-aa-by-default.md` (Status: Proposed); `docs/accessibility/remediation-backlog.md`; `memory/project_accessibility_wcag_audit.md`.)*
 
 - [ ] **Build the `checkA11y*` static-gate suite** — **P2**
-  ADR-0020 sketches a future `checkA11y*` suite (invariant → `check*` → `preBuild`) but it is unbuilt. Only `checkA11yAnimationGated` exists as a true a11y gate (verified; `checkLocaleConfigNoPseudolocale` is locale-config, not a11y proper). The broader suite (semantics presence, live-region presence, reduced-motion gating, touch-target minimums) remains Proposed. *(Source: ADR-0020; CLAUDE.md "checkA11y* suite still Proposed/unbuilt".)*
+  ADR-0020 sketches a future `checkA11y*` suite (invariant → `check*` → `preBuild`) but it is largely unbuilt. Two a11y gates exist today — `checkA11yAnimationGated` and `checkA11yClickableHasRole` (the 40th gate, #110); `checkLocaleConfigNoPseudolocale` is locale-config, not a11y proper. The broader suite (semantics presence, live-region presence, reduced-motion gating, touch-target minimums) remains Proposed. *(Source: ADR-0020; CLAUDE.md.)*
 
 - [ ] **Touch-target sizing remediation** — **P3**
   Rows 7, 20, 25, 34: camControl 30dp, stepper 27dp, navIconBox 42dp, CTAs/overflow 28–46dp, RecoveryCard CTAs 40dp→48dp, borderline chips/checkboxes/permission chips. Reclassified Advisory-for-AA (≥24dp passes SC 2.5.8) in the 2026-05-30 pass, so deferred. *(Source: `docs/accessibility/remediation-backlog.md` rows 7/20/25/34 + reclassification note.)*
@@ -77,8 +79,8 @@ ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker finding
 
 ## UI Polish
 
-- [ ] **Preset / custom-modes UI polish** — **P1**
-  Owner flagged the in-sheet PRESETS section as "kinda mess" (device-smoke otherwise PASS). A UI-polish slice for the preset chips / "+ Save" / naming dialogs — not yet specced. *(Source: `memory/project_current_state.md`; repeated across `memory/project_pr_epsilon_*` and `MEMORY.md`.)*
+- [x] **Preset / custom-modes UI polish** — ✅ **DONE 2026-06-14** (#112 + #113)
+  Owner had flagged the in-sheet PRESETS section as "kinda mess". Shipped via #112 (`23fb7e4`): uniform **tile-grid** preset popup on both surfaces (`FloatingSettingsPanel` + `SettingsSheet`) with a bottom scroll-fade cue + pure `presetTileSummary`; **responsive `ChromeScale`** config strip (`cellSlot` 48→44dp, slot × device-anchored factor on `smallestScreenWidthDp`) + floating-panel side cap (byte-identical 320dp on the 411dp ref device); `∞` repeats cell for continuous mode. ADR-0029 §B″3 amended. Then #113 (`3287916`) raised the panel's two sub-24dp controls to the AA touch floor (SC 2.5.8 = 24dp) via touch-padding only. Device-smoke GO. *(Custom-modes authoring UI — distinct from preset polish — remains a future Track-A item; not in scope here.)*
 
 - [ ] **PR-ε: warning-sheet visibility hoist out of WarningCenter** — **P2**
   PR-ε v1 deviation: the record-chrome lock currently stays engaged when a warning sheet opens because the warning-sheet visibility flag is not hoisted out of `WarningCenter`. Follow-up: hoist the flag so chrome can unlock for the warning sheet like it does for the tips/settings modals. *(Source: `memory/project_pr_epsilon_rotation_first_chrome.md` "warning-sheet visibility not hoisted → keeps lock when it opens (follow-up: hoist flag out of WarningCenter)".)*
@@ -91,6 +93,40 @@ ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker finding
 
 - [ ] **Liquid Glass landscape re-layout (deferred follow-up)** — **P3**
   The 3rd Liquid Glass Record-home follow-up (landscape re-layout) was deferred to its own PR and folded into the mode/orientation track; revisit after PR-δ. *(Source: `memory/MEMORY.md` liquid-glass entry "3rd follow-up (landscape re-layout) → DEFERRED to own PR, folded into project-mode-orientation-replan".)*
+
+---
+
+## UI/UX Modernization
+
+> **Owner-requested 2026-06-14** — modernization sweep toward a polished, Liquid-Glass-native, modern-video-app feel. These are **new** and not yet ADR-backed; each needs brainstorm → spec (and likely a new ADR or an ADR-0028 amendment) before build. Marked **NEEDS-SPEC**.
+
+- [ ] **Enhanced Library & History UI** — **P2** · **NEEDS-SPEC**
+  Redesign/upgrade the Library and History surfaces to the Liquid Glass language — richer thumbnails, date/session grouping, sort + filter, multi-select / batch actions, polished empty + loading states. Today History has only the nav state-retention fix (#100) and deferred a11y focus rows (23/32); no visual modernization pass exists. *(Source: owner request 2026-06-14; History work in `memory/project_settings_expansion_*`; accessibility rows 23/32.)*
+
+- [ ] **More system-wide themes (extend the 12-theme set)** — **P3** · **NEEDS-SPEC**
+  Add themes beyond the current 12-theme Liquid Glass system (ADR-0028, shipped #80) — new palettes / accent variants, possibly seasonal or a dedicated high-contrast theme (ties into ADR-0020 AA). *(Source: owner request 2026-06-14; builds on ADR-0028 theme system + `memory/project_settings_expansion_b2.md`.)*
+
+- [ ] **Icon modernization for Liquid Glass** — **P3** · **NEEDS-SPEC**
+  Recreate/modernize the in-app icon + glyph set to match the Liquid Glass design language and visual weight. The launcher icon was already rebranded in M5; this is the in-UI icon system (nav, controls, chrome, action glyphs) for consistency. *(Source: owner request 2026-06-14; Liquid Glass track ADR-0028; launcher rebrand in `memory/project_current_state.md` M5 entry.)*
+
+---
+
+## Video / Player / Editing
+
+> **Owner-requested 2026-06-14** alongside the modernization sweep. Player + editing upgrades. Marked **NEEDS-SPEC**.
+
+- [ ] **Rova video-player upgrades** — **P2** · **NEEDS-SPEC**
+  Enhance the in-app Media3 player (shipped `db25405`, `ui/screens/player/`, Media3 pinned 1.4.1) — playback-speed control, scrub thumbnail preview, frame-step, gesture controls (double-tap seek / vertical brightness+volume), background/PiP playback, share affordance, and the deferred A11y timeline semantics (cross-ref Accessibility row 21 — SegmentedTimeline `progressbar` role + per-cell labels). *(Source: owner request 2026-06-14; player in `ui/screens/player/`; accessibility row 21.)*
+
+- [ ] **Expanded video-editing capabilities** — **P2 / Parked** · **cross-ref / NEEDS-SPEC**
+  Owner wants expanded editing. Today only `MediaMuxer`-concat exists (`utils/VideoMerger.kt`); the player's Edit button is a `TODO` snackbar. The full **"In-app video editor (17 tools)" is Parked NO-GO for v1.0** (see Parked section — module larger than `service/` + `data/` combined, needs `media3.transformer`/OpenGL/`MediaCodec`). **Re-scope** as a shippable incremental subset — trim/cut, reorder/delete clips, thumbnail-accurate seek, simple top-level export — rather than the full editor. *(Source: owner request 2026-06-14; see Parked "In-app video editor (17 tools)"; `NEW_UI_BACKEND_REPLAN.md` §5/§7.)*
+
+---
+
+## Modern-app expectations (QoL)
+
+- [ ] **Modern video-app must-haves & QoL bundle** — **P3** · **NEEDS-SPEC**
+  Umbrella for features users reasonably expect from a modern recording/video app, to be split into individually-specced items as prioritized: quick-share, in-Library search, storage usage + management view, additional export/backup targets (cloud/SAF — partial SAF shipped via ADR-0024), home-screen widget / quick-settings-tile capture, richer notification controls, and onboarding/first-run polish. *(Source: owner request 2026-06-14; existing SAF export ADR-0024; notification redesign M5.)*
 
 ---
 
