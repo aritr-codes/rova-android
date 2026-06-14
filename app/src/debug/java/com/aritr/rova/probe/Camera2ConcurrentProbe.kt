@@ -65,10 +65,13 @@ class Camera2ConcurrentProbe(private val context: Context) {
         Log.i(tag, "ATTEMPT-B trying front=$frontId back=$backId")
 
         try {
-            files[0] = File(context.externalCacheDir, "dualsight_probe_front_${System.currentTimeMillis()}.mp4")
-            files[1] = File(context.externalCacheDir, "dualsight_probe_back_${System.currentTimeMillis()}.mp4")
+            val dir = context.externalCacheDir ?: context.cacheDir
+            files[0] = File(dir, "dualsight_probe_front_${System.currentTimeMillis()}.mp4")
+            files[1] = File(dir, "dualsight_probe_back_${System.currentTimeMillis()}.mp4")
             recorders[0] = newRecorder(files[0]!!)
             recorders[1] = newRecorder(files[1]!!)
+            // Watchdog: openCamera may never call back on a stuck HAL — guarantee a verdict.
+            handler.postDelayed({ finish(false, "watchdog: no verdict in 20s (openCamera/session stuck)") }, 20_000)
             // Open BOTH before configuring either (concurrent ordering).
             cm.openCamera(frontId, deviceCallback(0), handler)
             cm.openCamera(backId, deviceCallback(1), handler)

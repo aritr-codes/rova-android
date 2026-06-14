@@ -37,19 +37,48 @@ import java.io.File
  *   - both configs SHARE one UseCaseGroup holding one VideoCapture (single composited encoder)
  *   - front mirror is bind-time: VideoCapture.Builder.setMirrorMode(MIRROR_MODE_ON_FRONT_ONLY)
  *   - CompositionSettings offsets are NDC (center-origin, Y-up, offset-after-scale)
+ *
+ * False-verdict hardening (review round 1):
+ *   - caller MUST invoke this only when the LifecycleOwner is RESUMED (bind in CREATED defers
+ *     startup → premature stop → false negative).
+ *   - CameraX closes CameraDevices asynchronously after unbindAll(); we wait CLOSE_DELAY_MS before
+ *     the next bind / before handing off to attempt B, else openCamera hits ERROR_MAX_CAMERAS_IN_USE
+ *     (a probe artifact, not device truth).
+ *   - a watchdog guarantees a VERDICT line even if Finalize never fires (no silent hang).
  */
 class CameraXConcurrentProbe(private val context: Context, private val owner: LifecycleOwner) {
     private val tag = "DualSightProbe"
     private val main = Handler(Looper.getMainLooper())
+
+    private companion object {
+        const val CLOSE_DELAY_MS = 1500L     // let CameraX finish releasing CameraDevices
+        const val ATTEMPT_A_WATCHDOG_MS = 20_000L
+    }
 
     @SuppressLint("MissingPermission", "RestrictedApi")
     fun run(preview: Preview, onDone: () -> Unit) {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             val provider = future.get()
+            var settled = false
+            var watchdog: Runnable? = null
+            // Drains the camera, then continues after the async close completes.
+            fun release(then: () -> Unit) {
+                try { provider.unbindAll() } catch (_: Throwable) {}
+                main.postDelayed(then, CLOSE_DELAY_MS)
+            }
             try {
                 val videoCapture = bindConcurrent(provider, preview)
                 Log.i(tag, "ATTEMPT-A bind OK")
+
+                watchdog = Runnable {
+                    if (settled) return@Runnable
+                    settled = true
+                    Log.e(tag, "ATTEMPT-A no Finalize in ${ATTEMPT_A_WATCHDOG_MS}ms — probe watchdog")
+                    Log.i(tag, "VERDICT(attemptA) recordSucceeded=false (watchdog timeout)")
+                    release(onDone)
+                }
+                main.postDelayed(watchdog, ATTEMPT_A_WATCHDOG_MS)
 
                 var recording: Recording? = null
                 recording = videoCapture.output
@@ -58,17 +87,18 @@ class CameraXConcurrentProbe(private val context: Context, private val owner: Li
                         when (event) {
                             is VideoRecordEvent.Start -> Log.i(tag, "ATTEMPT-A recording started")
                             is VideoRecordEvent.Finalize -> {
+                                if (settled) return@start
+                                settled = true
+                                watchdog?.let { main.removeCallbacks(it) }
                                 if (event.hasError()) {
                                     Log.e(tag, "ATTEMPT-A FINALIZE error=${event.error} cause=${event.cause}")
                                     Log.i(tag, "VERDICT(attemptA) recordSucceeded=false")
-                                    provider.unbindAll()
-                                    onDone()
+                                    release(onDone)
                                 } else {
                                     Log.i(tag, "ATTEMPT-A file=${event.outputResults.outputUri}")
                                     Log.i(tag, "VERDICT(attemptA) recordSucceeded=true (visually verify PiP + front mirror)")
                                     Log.i(tag, "MIRROR check: open this attempt-A clip; front inset text must read correctly")
-                                    provider.unbindAll()
-                                    runTorture(provider, preview, iterations = 20, onDone = onDone)
+                                    release { runTorture(provider, preview, iterations = 20, onDone = onDone) }
                                 }
                             }
                             else -> {}
@@ -77,17 +107,20 @@ class CameraXConcurrentProbe(private val context: Context, private val owner: Li
 
                 main.postDelayed({ recording?.stop() }, 5_000) // stop after ~5s
             } catch (t: Throwable) {
+                if (settled) return@addListener
+                settled = true
+                watchdog?.let { main.removeCallbacks(it) }
                 Log.e(tag, "ATTEMPT-A bind/record threw", t)
                 Log.i(tag, "VERDICT(attemptA) recordSucceeded=false (exception)")
-                onDone()
+                release(onDone)
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
     /**
-     * Task 6: only runs if attempt A succeeded. Repeats bind→record-2s→unbindAll→rebind `iterations`
-     * times, mimicking Rova's per-clip segment-boundary rebind under accumulated heat. Logs each
-     * iteration and a single VERDICT(torture) failedIter=<first failing iter, or -1>.
+     * Task 6: only runs if attempt A succeeded. Repeats bind→record-2s→unbindAll→(wait close)→rebind
+     * `iterations` times, mimicking Rova's per-clip segment-boundary rebind under accumulated heat.
+     * Logs each iteration and a single VERDICT(torture) failedIter=<first failing iter, or -1>.
      */
     @SuppressLint("MissingPermission", "RestrictedApi")
     private fun runTorture(
@@ -103,6 +136,10 @@ class CameraXConcurrentProbe(private val context: Context, private val owner: Li
             onDone()
             return
         }
+        fun next(ff: Int) {
+            try { provider.unbindAll() } catch (_: Throwable) {}
+            main.postDelayed({ runTorture(provider, preview, iterations, onDone, iter + 1, ff) }, CLOSE_DELAY_MS)
+        }
         try {
             val videoCapture = bindConcurrent(provider, preview)
             Log.i(tag, "TORTURE iter=$iter bind=ok")
@@ -110,17 +147,12 @@ class CameraXConcurrentProbe(private val context: Context, private val owner: Li
             rec = videoCapture.output
                 .prepareRecording(context, tortureOutput(iter))
                 .start(ContextCompat.getMainExecutor(context)) { event ->
-                    if (event is VideoRecordEvent.Finalize) {
-                        provider.unbindAll()
-                        runTorture(provider, preview, iterations, onDone, iter + 1, firstFailed)
-                    }
+                    if (event is VideoRecordEvent.Finalize) next(firstFailed)
                 }
             main.postDelayed({ rec?.stop() }, 2_000)
         } catch (t: Throwable) {
             Log.i(tag, "TORTURE iter=$iter bind=FAIL ${t.javaClass.simpleName}: ${t.message}")
-            try { provider.unbindAll() } catch (_: Throwable) {}
-            val ff = if (firstFailed < 0) iter else firstFailed
-            runTorture(provider, preview, iterations, onDone, iter + 1, ff)
+            next(if (firstFailed < 0) iter else firstFailed)
         }
     }
 
@@ -169,7 +201,7 @@ class CameraXConcurrentProbe(private val context: Context, private val owner: Li
 
     /** Torture clips go to cache (not the gallery) — they only stress the rebind path. */
     private fun tortureOutput(iter: Int): FileOutputOptions {
-        val f = File(context.externalCacheDir, "dualsight_torture_$iter.mp4")
-        return FileOutputOptions.Builder(f).build()
+        val dir = context.externalCacheDir ?: context.cacheDir
+        return FileOutputOptions.Builder(File(dir, "dualsight_torture_$iter.mp4")).build()
     }
 }

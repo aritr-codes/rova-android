@@ -22,11 +22,20 @@ import com.aritr.rova.service.dualsight.LensFacing
 class DualSightProbeActivity : ComponentActivity() {
     private val tag = "DualSightProbe"
     private lateinit var previewView: PreviewView
+    private var started = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         previewView = PreviewView(this)
         setContentView(previewView)
+    }
+
+    // Trigger from onResume (not onCreate): CameraX bindToLifecycle requires the owner STARTED;
+    // binding in CREATED defers startup and yields a false-negative attempt A. Guard once.
+    override fun onResume() {
+        super.onResume()
+        if (started) return
+        started = true
         runQueries()
     }
 
