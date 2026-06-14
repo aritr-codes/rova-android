@@ -1,5 +1,13 @@
 # DualSight (FrontBack PiP) — Design Spec
 
+> ⛔ **STATUS (2026-06-14): DEFERRED / BLOCKED on supported hardware.** This design is sound but
+> cannot be built/verified yet — the probe proved the available device cannot do concurrent
+> front+back capture, and there is no non-concurrent path to simultaneous front+back *video*.
+> This document remains the authoritative *design*; the authoritative *status + next steps* live in
+> `docs/superpowers/plans/2026-06-14-dualsight-delta-feature-DEFERRED.md`, and the *evidence* in
+> `docs/superpowers/specs/2026-06-14-dualsight-probe-results.md`. Do not implement until that plan's
+> resume preconditions are met.
+
 > PR-δ — the last unbuilt phase of ADR-0029 (capture-topology × orientation-policy).
 > Concurrent **front + back** camera capture composited into a **single-file
 > picture-in-picture** clip. Surfaced as the **DualSight** capture mode (third tab
