@@ -1,7 +1,7 @@
 # Rova — Engineering Backlog
 
 > Single planning artifact enumerating every remaining, deferred, and carried-over task for **Rova** (`com.aritr.rova`).
-> **As of 2026-06-14, master at HEAD `3287916`** ("a11y: panel touch targets to WCAG 2.2 AA (24dp) (#113)"), **zero open PRs**. **40** custom `check*` gates (measured).
+> **As of 2026-06-14, master at HEAD `bd6aa0c`** ("a11y: advance checkA11y* suite — TargetSize gate (41st) + contrast gate superseded by TokenContrastTest (#114)"), **zero open PRs**. **41** custom `check*` gates (measured).
 > This document is a backlog, not a commitment. Every item traces to an ADR, roadmap, accessibility doc, memory file, or a measured code fact. Priority tags: **P1** (next) · **P2** (soon) · **P3** (later) · **Parked**.
 
 ---
@@ -10,11 +10,12 @@
 
 What the memory trail implies is most concrete and ready to pick up:
 
-1. **PR-δ FrontBack PiP** (Capture/Mode). The last unbuilt phase of the owner-ratified mode/orientation re-architecture (ADR-0029, Accepted). α/β/γ/ε are all merged; δ is the only remaining slice and the ADR already specifies its shape. *(Source: ADR-0029; `memory/project_mode_orientation_replan.md`.)*
-2. **Build the `checkA11y*` static-gate suite** (Accessibility). ADR-0020 ("WCAG 2.2 AA by default", Proposed) sketches it but only `checkA11yAnimationGated` + `checkA11yClickableHasRole` exist (the 40th gate). Add semantics-presence / live-region / reduced-motion / touch-target gates via the invariant → `check*` → `preBuild` convention. *(Source: ADR-0020; CLAUDE.md.)*
-3. **`RovaRecordingService.kt` split** (Reliability/Service) **or** a **PR-ε follow-up** (UI Polish — warning-sheet hoist, thermal-tips portrait-under-lock, BackHandler disarm, per-frame-recomposition v2). Both are scoped and low-risk. *(Source: this file's Reliability/Service + UI Polish sections.)*
+1. **PR-δ FrontBack PiP — aka DualSight mode** (Capture/Mode) — **the headline / next up**. The last unbuilt phase of the owner-ratified mode/orientation re-architecture (ADR-0029, Accepted). α/β/γ/ε are all merged; δ is the only remaining slice and the ADR already specifies its shape (single-file PiP via CameraX CompositionSettings, capability-gated). *(Source: ADR-0029; `memory/project_mode_orientation_replan.md` decision C.)*
+2. **`RovaRecordingService.kt` split** (Reliability/Service) **or** a **PR-ε follow-up** (UI Polish — warning-sheet hoist, thermal-tips portrait-under-lock, BackHandler disarm, per-frame-recomposition v2). Both scoped and low-risk. *(Source: this file's Reliability/Service + UI Polish sections.)*
+3. **`TokenContrastTest` hardening** (Accessibility/Tech-Debt, P3) — codex follow-up from #114: auto-fail on new uncovered text tokens, centralize background refs, theme-variant coverage. *(Source: this file's Accessibility section.)*
 
-> **Preset UI polish — ✅ DONE 2026-06-14** via #112 (tile-grid popup + responsive `ChromeScale` strip/panel + `∞` repeats cell, ADR-0029 §B″3 amended) + #113 (panel AA touch targets). The old "kinda mess" PRESETS flag is resolved. See the UI Polish section.
+> **`checkA11y*` static-gate suite — ✅ DONE 2026-06-14** via #114: built `checkA11yTargetSizeToken` (41st gate, SC 2.5.8) + superseded `checkA11yNoLowAlphaTextToken` with `TokenContrastTest`. ADR-0020's 4 sketched gates resolved. See the Accessibility section.
+> **Preset UI polish — ✅ DONE 2026-06-14** via #112 + #113. See the UI Polish section.
 
 ---
 
@@ -42,7 +43,7 @@ What the memory trail implies is most concrete and ready to pick up:
 
 ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker findings from the 2026-05-29 audit were remediated and FF-landed on master (`892d551`); the rows below are the **deferred Moderate/Advisory** remainder plus the unbuilt static-gate suite. *(Sources: `docs/adr/0020-wcag-2.2-aa-by-default.md` (Status: Proposed); `docs/accessibility/remediation-backlog.md`; `memory/project_accessibility_wcag_audit.md`.)*
 
-- [~] **Build the `checkA11y*` static-gate suite** — **P2** · **IN PR #114 (the 4 ADR-0020-sketched gates resolved)**
+- [x] **Build the `checkA11y*` static-gate suite** — ✅ **DONE 2026-06-14 (#114, merged `bd6aa0c`) — the 4 ADR-0020-sketched gates resolved**
   ADR-0020 sketched **4** `checkA11y*` gates. Status: `checkA11yAnimationGated` (built #?, 2026-06-03), `checkA11yClickableHasRole` (40th gate, #110), `checkA11yTargetSizeToken` (41st gate, **PR #114**, SC 2.5.8 ≥24dp curated set) — all three **built + wired into `preBuild`**. The 4th, `checkA11yNoLowAlphaTextToken`, was **superseded by `TokenContrastTest`** in PR #114 (audit: contrast source already fully AA-compliant; a static `alpha<0.55` regex is background-blind and would false-fail AA-passing tokens, so contrast is enforced by the JVM test that computes real ratios over each token's surface). `checkLocaleConfigNoPseudolocale` is locale-config, not a11y proper. The original-sketch suite is thus **resolved**; broader *new* invariants (semantics-presence, live-region-presence) remain candidates for future ADR-0020 amendments. *(Source: ADR-0020; CLAUDE.md; PR #114.)*
 
 - [ ] **Harden `TokenContrastTest` (contrast regression-hostility)** — **P3**
