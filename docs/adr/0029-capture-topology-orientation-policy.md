@@ -10,6 +10,22 @@ Date: 2026-06-08
 > promoted to **Accepted** when PR-γ lands. Changes vs the original draft are
 > flagged inline as **[Ratified A/B/C/D]**.
 
+> **Implementation status (2026-06-14): `FrontBack` (DualSight) BUILD phase is DEFERRED / BLOCKED.**
+> PR-α/β/γ/ε (the two-axis model + rotation-first chrome) are merged and Accepted.
+> The final `FrontBack` (DualSight) capture phase — §5's single-file PiP via CameraX
+> `CompositionSettings` — was investigated via a hardware probe and is **blocked pending
+> a device with verified concurrent front+back support** (Pixel 7+/Samsung Director's
+> View class). On the available device (Galaxy A-class, single-ISP) concurrent capture is
+> unsupported at the silicon level (`FEATURE_CAMERA_CONCURRENT=false`,
+> `getConcurrentCameraIds()` empty, `bindToLifecycle` threw `UnsupportedOperationException`),
+> and no non-concurrent path delivers simultaneous front+back *video*. The full investigation —
+> evidence (`…-dualsight-probe-results.md`), the deferred feature plan
+> (`…-dualsight-delta-feature-DEFERRED.md`), the δ0 bump plan, and the preserved capability helper
+> `service/dualsight/ConcurrentCameraCapability.kt` (+ tests) — is **archived in PR #115 (branch
+> `feat/pr-delta-dualsight`)**, not on master. §5's "PR-δ extends the allowlist" clause therefore
+> remains **pending** — `checkFrontBackCapabilityGated` keeps fencing `FrontBack` to its declaration
+> sites; the allowlist extension happens only when the feature is unblocked and built.
+
 ## Context
 
 Rova's recording "MODE" is a single string enum
