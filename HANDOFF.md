@@ -7,7 +7,7 @@
 
 ## Where things stand
 
-- **Branch:** `master` — **HEAD `bd6aa0c`** ("a11y: advance checkA11y* suite — TargetSize gate (41st) + contrast gate superseded by TokenContrastTest (#114)"). **master is unchanged this session.**
+- **Branch:** `master` — **HEAD `47f97f7`** ("docs: post-#114 handoff"), whose last feature/gate commit is **`bd6aa0c` (#114)**. **master is unchanged this session** (the wrap-up doc updates live on the branch / PR #115, not yet on master).
 - **Open PRs:** the DualSight wrap-up is on **`feat/pr-delta-dualsight`** (pushed; a **DRAFT** PR for the docs + preserved capability helper — *not for merge yet*). A throwaway **`probe/dualsight-concurrent-camera`** branch is pushed as evidence only (never merge it). Plus the long-stale unrelated `feat/dualshot-render-threading`.
 - **Working tree:** clean except the ephemeral untracked root `gradle_*.log` (leave them).
 - **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke is mandatory — emulators fail CameraX video recording (device = RZCYA1VBQ2H).
@@ -72,7 +72,8 @@ Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-a
 Orient first: read HANDOFF.md, CLAUDE.md, and the auto-loaded MEMORY.md, then docs/BACKLOG.md
 (see the "UI/UX Modernization" section). Don't re-explore what those already establish.
 
-State: master HEAD = bd6aa0c (#114), unchanged. master has zero open PRs; a DRAFT PR exists on
+State: master HEAD = 47f97f7 (post-#114 handoff doc; last feature commit bd6aa0c = #114), unchanged
+this session. master has zero open PRs; a DRAFT PR exists on
 feat/pr-delta-dualsight (DualSight investigation docs + preserved capability helper — DO NOT merge,
 it is wrap-up only) and a throwaway probe/dualsight-concurrent-camera branch (evidence only, never
 merge). Tests green on master; 41 check* gates; device smoke MANDATORY (emulators fail CameraX
