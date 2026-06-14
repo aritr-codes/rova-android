@@ -2095,6 +2095,107 @@ val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
     }
 }
 
+// ADR-0020 §Decision-1 — checkA11yTargetSizeToken (WCAG 2.2 AA SC 2.5.8 Target
+// Size (Minimum)). An interactive-target SIZE token — the rendered minimum
+// dimension of a tappable control (a button diameter, a tap box, a FAB, a
+// tile) — must be >= 24.dp, the WCAG AA floor. (Material 3's 48dp is a
+// *guideline*, not the AA bar; the 2026-06-13 panel pass reclassified touch
+// targets to the 24dp WCAG minimum — docs/accessibility/remediation-backlog.md.)
+//
+// Design (CURATED set, NOT a blind `*Size`/`*Height` name scan): the token
+// objects mix interactive-target sizes with DECORATIVE/glyph/divider sizes that
+// are legitimately tiny (statusDotSize 6, navIconGlyphSize 20, stopSquareSize
+// 18, handleHeight 4, dividers 2 …). A name-pattern scan would FALSE-FAIL on
+// those — the opposite of the false-pass-safe direction the sibling a11y gates
+// hold. So this gate pins an EXPLICIT, enumerated set of interactive-target
+// size tokens and asserts each >= 24.dp. The set itself is the invariant: a new
+// tappable control's size token is a deliberate addition that extends this set
+// (the ADR clause -> check convention, exactly as a new ADR invariant extends
+// the gate list). The gate still catches the live regression it exists for —
+// lowering an existing pinned token below 24 (e.g. camControlSize -> 20.dp)
+// fails the build.
+//
+// Accepted blind spot (mirrors the sibling gates; fails SAFE toward false-pass):
+// a pinned token that is RENAMED silently drops out of the scan rather than
+// false-failing a legit rename. Opt-out: a token line bearing
+// `// a11y-opt-out: <reason>` (reason required) is skipped — for a control whose
+// 24dp touch floor is met by call-site padding/`heightIn` rather than the token.
+val checkA11yTargetSizeToken = tasks.register("checkA11yTargetSizeToken") {
+    group = "verification"
+    description = "Require interactive-target size tokens >= 24.dp — WCAG 2.2 AA SC 2.5.8 (ADR-0020 §Decision-1)."
+    val themeDir = file("src/main/java/com/aritr/rova/ui/theme")
+    inputs.dir(themeDir).withPropertyName("rovaThemeTokens")
+    doLast {
+        if (!themeDir.exists()) {
+            throw GradleException("checkA11yTargetSizeToken: theme token dir missing: $themeDir")
+        }
+        // Enumerated interactive-target size tokens (bare `val` names; the same
+        // name declared in two token objects — e.g. camControlSize in RovaTokens
+        // and RecordChromeTokens — is checked in both). EXTEND this set when a
+        // new tappable control gets a size token.
+        val interactiveSizeTokens = setOf(
+            "camControlSize",    // cam-ctrl-btn diameter
+            "stepperButtonSize", // stepper +/- button (RovaTokens)
+            "stepBtnSize",       // stepper +/- button (SettingsSheetTokens)
+            "primaryActionSize", // Start FAB
+            "stopActionSize",    // Stop FAB
+            "fabSize",           // record-chrome FAB
+            "navIconBoxSize",    // bottom-nav item tap box
+            "tileMinHeight",     // preset tile
+            // NOT pinned: cellSlot — it is a 44dp VISUAL slot whose 24dp touch
+            // floor is owned by the parent card's `heightIn(min = 48.dp)` at the
+            // call site, not by the token. Pinning a proxy here would assert the
+            // wrong thing; the call-site floor is a separate (future) invariant.
+        )
+        val minTargetDp = 24.0
+        // `val NAME [: Dp] = <number>.dp` — tolerates the optional `: Dp` type.
+        val tokenDecl = Regex("""\bval\s+(\w+)\s*(?::\s*Dp\s*)?=\s*(\d+(?:\.\d+)?)\s*\.dp\b""")
+        val optOut = Regex("""a11y-opt-out:\s*\S""")
+        val offenders = themeDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .flatMap { f ->
+                var inBlock = false // inside a /* … */ (incl. /** KDoc */) block
+                f.readLines().withIndex().mapNotNull inner@{ (idx, line) ->
+                    // Track block-comment state so a commented-out
+                    // `val NAME = N.dp` can NEVER false-fail (trailing marker
+                    // wins; a same-line `/* … */` is skipped by the `/*` prefix
+                    // check below). KDoc inner `*` lines are skipped too.
+                    val wasInBlock = inBlock
+                    val opens = line.lastIndexOf("/*")
+                    val closes = line.lastIndexOf("*/")
+                    if (opens >= 0 || closes >= 0) inBlock = opens > closes
+                    if (wasInBlock) return@inner null
+                    if (optOut.containsMatchIn(line)) return@inner null
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*") ||
+                        trimmed.startsWith("/*")
+                    ) return@inner null
+                    val m = tokenDecl.find(line) ?: return@inner null
+                    if (m.groupValues[1] !in interactiveSizeTokens) return@inner null
+                    if (m.groupValues[2].toDouble() >= minTargetDp) null
+                    else Triple(f, idx + 1, line.trim())
+                }
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, ln, line) ->
+                "  ${f.relativeTo(rootDir)}:$ln: $line"
+            }
+            throw GradleException(
+                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 2.5.8 Target " +
+                    "Size (Minimum)): an interactive-target size token is below " +
+                    "the 24.dp accessibility floor. A tappable control's size " +
+                    "token (button diameter / tap box / FAB / tile) " +
+                    "must be >= 24.dp. (Material 3's 48dp is a guideline; 24dp is " +
+                    "the WCAG AA bar.) Raise the token, or — if the 24dp touch " +
+                    "floor is met by call-site padding/`heightIn` rather than the " +
+                    "token itself — add `// a11y-opt-out: <reason>` (reason " +
+                    "required) on the token line.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 // B5 / ADR-0025 — the core privacy invariant, mechanically enforced:
 // VaultExporter must never reach a public-publish API. A vaulted recording
 // stays app-private; any MediaStore insert / media scan / public-dir write
@@ -2306,6 +2407,7 @@ afterEvaluate {
         dependsOn(checkLocaleConfigNoPseudolocale)
         dependsOn(checkA11yAnimationGated)
         dependsOn(checkA11yClickableHasRole)
+        dependsOn(checkA11yTargetSizeToken)
         dependsOn(checkPresetNoOrientation)
         dependsOn(checkVaultExporterNoPublicPublish)
         dependsOn(checkRecordSurfaceNoBlur)
