@@ -21,6 +21,8 @@ import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.ThumbnailCacheKey
+import com.aritr.rova.ui.library.ThumbnailDiskCache
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -224,6 +226,18 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
     @Volatile private var manifestFactsByKey: Map<String, RowManifestFacts> = emptyMap()
 
+    /**
+     * spec §7 — disk thumbnail cache so cold launches skip MediaMetadataRetriever.
+     * Keyed by [ThumbnailCacheKey] (stableKey + size/mtime/duration invalidators);
+     * stores the WebP-encoded keyframe. 32 MB LRU under `cacheDir/thumbnails`.
+     */
+    private val thumbDiskCache by lazy {
+        ThumbnailDiskCache(
+            File(getApplication<Application>().cacheDir, "thumbnails"),
+            maxBytes = 32L * 1024 * 1024,
+        )
+    }
+
     /** Library grid/list toggle (decision A). Drives [libraryUiState]. */
     private val _viewMode = MutableStateFlow(LibraryViewMode.GRID)
 
@@ -416,6 +430,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             rec.stableKey to factsFor(m, rec)
         }.toMap()
 
+        // spec §7 — per-row disk-cache invalidator: (mtime, size, durationMs). A
+        // changed/replaced artifact at the same key yields a different cache key,
+        // so a stale thumbnail is never served. Duration comes from the facts map
+        // (0 for legacy rows). Built once; reused by the extract closure + prune.
+        val invalidatorByKey: Map<String, Triple<Long, Long, Long>> = recordings.associate { rec ->
+            val size = rec.file?.length() ?: rec.sizeBytes ?: 0L
+            val mtime = rec.effectiveLastModified()
+            val dur = manifestFactsByKey[rec.stableKey]?.segmentDurationsMs?.sum() ?: 0L
+            rec.stableKey to Triple(mtime, size, dur)
+        }
+        fun diskKeyFor(stableKey: String): String? =
+            invalidatorByKey[stableKey]?.let { (mtime, size, dur) ->
+                ThumbnailCacheKey.keyFor(stableKey, size, mtime, dur)
+            }
+
         val initial = recordings.map { rec -> buildItem(rec) }
         // Explicit containsKey: ConcurrentHashMap.contains resolves to
         // containsValue under Kotlin's Map operator overloads, which is
@@ -439,7 +468,24 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             HistoryMetadataLoader.fillMissing(
                 paths = recordings.map { it.stableKey },
                 cache = metadataCache,
-                extract = { key -> VideoMetadataUtils.extractMetadata(app, key) }
+                extract = { key ->
+                    // spec §7 — read the disk cache first; on a hit, recover the
+                    // resolution label from the decoded frame's own dimensions
+                    // (owner adjustment 3 — zero extra storage). On a miss, extract
+                    // via MediaMetadataRetriever and persist the WebP keyframe.
+                    val diskKey = diskKeyFor(key)
+                    val cachedBytes = diskKey?.let { thumbDiskCache.get(it) }
+                    if (cachedBytes != null) {
+                        val bmp = VideoMetadataUtils.decodeThumb(cachedBytes)
+                        bmp to VideoMetadataUtils.resolutionForBitmap(bmp)
+                    } else {
+                        val (bmp, res) = VideoMetadataUtils.extractMetadata(app, key)
+                        if (bmp != null && diskKey != null) {
+                            runCatching { thumbDiskCache.put(diskKey, VideoMetadataUtils.encodeThumb(bmp)) }
+                        }
+                        bmp to res
+                    }
+                }
             )
         }
 
@@ -452,6 +498,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         // Clean stale entries for deleted files
         val currentKeys = recordings.map { it.stableKey }.toSet()
         metadataCache.keys.retainAll(currentKeys)
+
+        // spec §7 — prune the disk cache to the live cache-key space (deleted /
+        // replaced rows). Keyed by ThumbnailCacheKey, not stableKey, so compute the
+        // live cache keys from the same invalidator map.
+        val liveDiskKeys = recordings.mapNotNull { diskKeyFor(it.stableKey) }.toSet()
+        runCatching { thumbDiskCache.removeAllExcept(liveDiskKeys) }
 
         finalItems
     }
