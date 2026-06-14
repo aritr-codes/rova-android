@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
@@ -42,6 +43,7 @@ fun LibraryItemSheet(
     isFavorite: Boolean,
     movable: Boolean,
     playLabel: String,
+    selectLabel: String,
     shareLabel: String,
     favoriteLabel: String,
     unfavoriteLabel: String,
@@ -50,6 +52,7 @@ fun LibraryItemSheet(
     viewSettingsLabel: String,
     deleteLabel: String,
     onPlay: () -> Unit,
+    onSelect: () -> Unit,
     onShare: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
@@ -60,6 +63,7 @@ fun LibraryItemSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         SheetRow(Icons.Filled.PlayArrow, playLabel) { onPlay() }
+        SheetRow(Icons.Filled.Checklist, selectLabel) { onSelect() }
         SheetRow(Icons.Filled.Share, shareLabel) { onShare() }
         SheetRow(
             if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,

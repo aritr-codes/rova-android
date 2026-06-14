@@ -802,4 +802,26 @@
     <string name="library_empty_title">No recordings yet</string>
     <string name="library_empty_body">Your background recordings will appear here.</string>
     <string name="library_empty_cta">Start recording</string>
+    <!-- Slice 3 — selection + batch -->
+    <string name="library_select_count">%1$d selected</string>
+    <string name="library_action_close_selection">Exit selection</string>
+    <string name="library_action_select_all">Select all</string>
+    <string name="library_action_select">Select</string>
+    <string name="library_action_delete">Delete</string>
+    <string name="library_action_vault">Move to vault</string>
+    <string name="library_action_vault_disabled">Vault unavailable for this selection</string>
+    <string name="library_action_rename">Rename</string>
+    <string name="library_action_view_settings">View settings</string>
+    <string name="library_delete_confirm_title">Delete recordings?</string>
+    <string name="library_delete_confirm_body">%1$d recording(s) will be deleted.</string>
+    <string name="library_delete_undo">Undo</string>
+    <string name="library_deleted_count">Deleted %1$d recording(s)</string>
+    <string name="library_delete_failed">Couldn\'t delete %1$d recording(s)</string>
+    <string name="library_vault_batch_result">Moved %1$d, skipped %2$d</string>
+    <string name="library_rename_title">Rename recording</string>
+    <string name="library_rename_hint">Title</string>
+    <string name="library_rename_confirm">Save</string>
+    <string name="library_a11y_selected">Selected</string>
+    <string name="library_a11y_not_selected">Not selected</string>
+    <string name="library_sidecar_write_error">Couldn\'t save that change</string>
 </resources>

@@ -800,4 +800,26 @@
     <string name="library_empty_title">Aún no hay grabaciones</string>
     <string name="library_empty_body">Tus grabaciones en segundo plano aparecerán aquí.</string>
     <string name="library_empty_cta">Empezar a grabar</string>
+    <!-- Slice 3 — selección + acciones por lote -->
+    <string name="library_select_count">%1$d seleccionadas</string>
+    <string name="library_action_close_selection">Salir de la selección</string>
+    <string name="library_action_select_all">Seleccionar todo</string>
+    <string name="library_action_select">Seleccionar</string>
+    <string name="library_action_delete">Eliminar</string>
+    <string name="library_action_vault">Mover a la caja fuerte</string>
+    <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
+    <string name="library_action_rename">Cambiar nombre</string>
+    <string name="library_action_view_settings">Ver ajustes</string>
+    <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
+    <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
+    <string name="library_delete_undo">Deshacer</string>
+    <string name="library_deleted_count">Se eliminaron %1$d grabación(es)</string>
+    <string name="library_delete_failed">No se pudieron eliminar %1$d grabación(es)</string>
+    <string name="library_vault_batch_result">Movidas %1$d, omitidas %2$d</string>
+    <string name="library_rename_title">Cambiar nombre de la grabación</string>
+    <string name="library_rename_hint">Título</string>
+    <string name="library_rename_confirm">Guardar</string>
+    <string name="library_a11y_selected">Seleccionada</string>
+    <string name="library_a11y_not_selected">No seleccionada</string>
+    <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
 </resources>
