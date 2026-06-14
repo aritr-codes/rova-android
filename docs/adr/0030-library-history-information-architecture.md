@@ -25,6 +25,14 @@ Two design decisions need a recorded invariant.
    (`markTerminated`, `appendSegment`, `submitPersistFinalizedSegment`, `setExport*`, `setVault*`,
    `setStopRequested`, `setPendingMoveOut*`). Enforced by `checkLibraryNoManifestWrite`.
 
+   **One sanctioned exception:** the recovery-keep terminal write (`markTerminated(MULTI_SEGMENT_KEPT)`,
+   wired through `RecoveryViewModel.markKeptRaw`) is co-located in `HistoryScreen` because the recovery cards
+   render above the library list, but it is owned by the recovery subsystem (ADR-0005), not by Library
+   metadata. It carries the exact `ADR-0030-allow: recovery-keep-raw` line marker; the gate honours it only on
+   a `markTerminated` call in `HistoryScreen.kt` and fails if that marker appears anywhere else. No other
+   manifest mutation in Library/History code is permitted — favorite/rename/lastPlayedAt go only through the
+   sidecar.
+
 3. **Status badges are exceptional-only.** Cards show no "Complete" badge. `RECOVERED` is surfaced for
    `MULTI_SEGMENT_KEPT`; `INTERRUPTED` for `KILLED_BY_SYSTEM` / `KILLED_FORCE_STOP` or `exportState == FAILED`.
    All other states (including `COMPLETED`, clean `USER_STOPPED`) show no badge.

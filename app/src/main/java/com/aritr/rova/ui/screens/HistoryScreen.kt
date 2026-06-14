@@ -157,7 +157,9 @@ fun HistoryScreen(
                 }
                 val markKeptRaw: suspend (String) -> Unit = if (sessionStoreAvailable) {
                     { id ->
-                        app.sessionStore.markTerminated(
+                        // Recovery-subsystem terminal write (recovery-keep MULTI_SEGMENT_KEPT),
+                        // not Library favorite/rename metadata — see ADR-0030 decision 2.
+                        app.sessionStore.markTerminated( // ADR-0030-allow: recovery-keep-raw
                             sessionId = id,
                             terminated = Terminated.MULTI_SEGMENT_KEPT,
                             stopReason = StopReason.NONE,
