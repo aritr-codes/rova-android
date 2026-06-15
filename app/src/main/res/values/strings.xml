@@ -813,6 +813,11 @@
     <string name="library_empty_title">No recordings yet</string>
     <string name="library_empty_body">Your background recordings will appear here.</string>
     <string name="library_empty_cta">Start recording</string>
+    <string name="library_empty_go_to_record">Go to Record</string>
+    <!-- Polish P4 — distinct search-empty + error states -->
+    <string name="library_search_empty_cta">Clear filters</string>
+    <string name="library_error_title">Couldn\'t load your library</string>
+    <string name="library_error_body">Something went wrong reading your recordings. Pull to retry.</string>
     <!-- Slice 3 — selection + batch -->
     <string name="library_select_count">%1$d selected</string>
     <string name="library_action_close_selection">Exit selection</string>

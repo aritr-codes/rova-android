@@ -811,6 +811,11 @@
     <string name="library_empty_title">Aún no hay grabaciones</string>
     <string name="library_empty_body">Tus grabaciones en segundo plano aparecerán aquí.</string>
     <string name="library_empty_cta">Empezar a grabar</string>
+    <string name="library_empty_go_to_record">Ir a Grabar</string>
+    <!-- Polish P4 — estados distintos de sin-resultados + error -->
+    <string name="library_search_empty_cta">Borrar filtros</string>
+    <string name="library_error_title">No se pudo cargar tu biblioteca</string>
+    <string name="library_error_body">Ocurrió un error al leer tus grabaciones. Desliza para reintentar.</string>
     <!-- Slice 3 — selección + acciones por lote -->
     <string name="library_select_count">%1$d seleccionadas</string>
     <string name="library_action_close_selection">Salir de la selección</string>
