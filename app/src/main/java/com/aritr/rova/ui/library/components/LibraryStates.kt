@@ -30,9 +30,13 @@ fun LibraryLoading(modifier: Modifier = Modifier) {
     }
 }
 
-/** spec §5.5 — re-skinned empty state: theme-native ring illustration + body + CTA. */
+/**
+ * spec §5.5 — re-skinned empty state: theme-native ring illustration + body + optional CTA.
+ * Slice 4: [cta] is nullable so the no-results (filtered/searched-to-nothing) state can omit
+ * the "Start recording" button.
+ */
 @Composable
-fun LibraryEmpty(title: String, body: String, cta: String, onStartRecording: () -> Unit, modifier: Modifier = Modifier) {
+fun LibraryEmpty(title: String, body: String, cta: String? = null, onStartRecording: () -> Unit = {}, modifier: Modifier = Modifier) {
     Column(
         modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -65,6 +69,6 @@ fun LibraryEmpty(title: String, body: String, cta: String, onStartRecording: () 
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
         )
-        Button(onClick = onStartRecording) { Text(cta) }
+        if (cta != null) Button(onClick = onStartRecording) { Text(cta) }
     }
 }

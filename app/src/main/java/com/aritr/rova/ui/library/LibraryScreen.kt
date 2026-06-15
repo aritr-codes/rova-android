@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,10 +58,14 @@ import com.aritr.rova.ui.library.components.LibraryEmpty
 import com.aritr.rova.ui.library.components.LibraryGridCard
 import com.aritr.rova.ui.library.components.LibraryHeroCard
 import com.aritr.rova.ui.library.components.LibraryItemSheet
+import com.aritr.rova.ui.library.components.LibraryFilterChips
 import com.aritr.rova.ui.library.components.LibraryListRow
 import com.aritr.rova.ui.library.components.LibraryLoading
 import com.aritr.rova.ui.library.components.LibraryRenameDialog
+import com.aritr.rova.ui.library.components.LibraryScrubber
+import com.aritr.rova.ui.library.components.LibrarySearchField
 import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
+import com.aritr.rova.ui.library.components.LibrarySortSheet
 import com.aritr.rova.ui.library.components.LibraryTopBar
 import com.aritr.rova.ui.library.components.statusBadgeLabel
 import com.aritr.rova.ui.recovery.RecoveryCardKind
@@ -114,6 +121,15 @@ fun LibraryScreen(
     val items by viewModel.items.collectAsStateWithLifecycle()
     // Hero muted autoplay is gated by reduce-motion (ADR-0020): off → static frame (owner polish #2).
     val reduceMotion = rememberReduceMotion()
+
+    // Slice 4 Discovery — sort/filter from the VM; search/sort-sheet are local UI state; hoisted scroll
+    // state drives the date scrubber.
+    val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    var sortSheetOpen by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
 
     // Recovery header (factory relocated to ui/recovery/ — ADR-0030 §2).
     val recoveryViewModel: RecoveryViewModel = viewModel(factory = recoveryViewModelFactory(app, context))
@@ -265,11 +281,17 @@ fun LibraryScreen(
 
     // ---- derived (pending rows hidden everywhere) ----
     val visibleRows = remember(ui.rows, pending) { pending.visible(ui.rows) }
-    val hero = remember(visibleRows) { LibraryQuery.hero(visibleRows) }
-    val collection = remember(visibleRows, hero) {
-        LibraryQuery.collection(visibleRows, LibrarySort.NEWEST, LibraryFilter(), hero?.stableKey)
+    val hero = remember(visibleRows, filter) { LibraryQuery.heroFor(visibleRows, filter) }
+    val collection = remember(visibleRows, hero, sort, filter) {
+        LibraryQuery.collection(visibleRows, sort, filter, hero?.stableKey)
     }
     val groups = remember(collection, nowMillis) { LibraryDayGrouping.group(collection, nowMillis, locale, tz) }
+    // Scrubber segments: leading = recovery/warnings header (always) + hero (if present).
+    val leadingItemCount = 1 + (if (hero != null) 1 else 0)
+    val scrubberSegments = remember(groups, leadingItemCount) {
+        ScrubberIndex.segments(groups.map { it.label }, groups.map { it.rows.size }, leadingItemCount)
+    }
+    val scrubberRailLabel = stringResource(R.string.library_scrubber_rail_cd)
 
     val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
         val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
@@ -383,6 +405,10 @@ fun LibraryScreen(
                         backLabel = stringResource(R.string.history_back_cd),
                         onOpenVault = onOpenVault,
                         vaultLabel = stringResource(R.string.vault_open_entry_cd),
+                        onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
+                        searchLabel = stringResource(R.string.library_search_open_cd),
+                        onOpenSort = { sortSheetOpen = true },
+                        sortLabel = stringResource(R.string.library_sort_open_cd),
                     )
                 }
             },
@@ -431,74 +457,127 @@ fun LibraryScreen(
                         onStartRecording = onNavigateToRecord,
                     )
                 }
-                ui.viewMode == LibraryViewMode.GRID -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(GRID_COLUMNS),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = com.aritr.rova.ui.library.components.LibraryDimens.screenPadH)
-                        .semantics {
-                            isTraversalGroup = true
-                            collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
-                        },
-                    contentPadding = PaddingValues(bottom = 20.dp),
-                ) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-recovery-warn") { RecoveryAndWarnings() }
-                    if (hero != null) {
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "hero-${hero.stableKey}") { renderHero(hero) }
+                else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                    // Pinned Discovery controls (search field when active + filter chips).
+                    if (searchActive) {
+                        LibrarySearchField(
+                            value = filter.search,
+                            onValueChange = { viewModel.setSearch(it) },
+                            onClear = { viewModel.setSearch("") },
+                        )
                     }
-                    groups.forEach { group ->
-                        item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
-                            LibraryDayHeader(group.label, group.sizeTotalLabel)
-                        }
-                        itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
-                            LibraryGridCard(
-                                row = row,
-                                thumbnail = byKey[row.stableKey]?.thumbnail,
-                                tileDescription = TileSemantics.describe(row, frag),
-                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
-                                plLabel = plLabel,
-                                onClick = { onTileClick(row.stableKey) },
-                                modifier = Modifier.padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter),
-                                itemSemantics = {
-                                    collectionItemInfo = CollectionItemInfo(
-                                        rowIndex = index / GRID_COLUMNS,
-                                        rowSpan = 1,
-                                        columnIndex = index % GRID_COLUMNS,
-                                        columnSpan = 1,
-                                    )
-                                },
-                                isSelectionMode = selection.active,
-                                isSelected = row.stableKey in selection.keys,
-                                onLongClick = { onTileLong(row.stableKey) },
-                                selectedLabel = selectedLabel,
-                                notSelectedLabel = notSelectedLabel,
+                    LibraryFilterChips(
+                        filter = filter,
+                        onAll = { viewModel.clearFilters() },
+                        onToggleFavorites = { viewModel.setFavoritesOnly(!filter.favoritesOnly) },
+                        onTogglePl = {
+                            viewModel.setTopologyFilter(
+                                if (filter.topology == com.aritr.rova.data.CaptureTopology.DualShot) null
+                                else com.aritr.rova.data.CaptureTopology.DualShot,
                             )
-                        }
-                    }
-                }
-                else -> LazyColumn(
-                    Modifier.fillMaxSize().padding(innerPadding),
-                    contentPadding = PaddingValues(bottom = 20.dp),
-                ) {
-                    item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
-                    if (hero != null) {
-                        item(key = "hero-${hero.stableKey}") { renderHero(hero) }
-                    }
-                    groups.forEach { group ->
-                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
-                        items(group.rows, key = { it.stableKey }) { row ->
-                            LibraryListRow(
-                                row = row,
-                                thumbnail = byKey[row.stableKey]?.thumbnail,
-                                tileDescription = TileSemantics.describe(row, frag),
-                                durationFallback = "—",
-                                onClick = { onTileClick(row.stableKey) },
-                                isSelectionMode = selection.active,
-                                isSelected = row.stableKey in selection.keys,
-                                onLongClick = { onTileLong(row.stableKey) },
-                                selectedLabel = selectedLabel,
-                                notSelectedLabel = notSelectedLabel,
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    if (hero == null && collection.isEmpty()) {
+                        // Filtered/searched to nothing (rows exist, none match).
+                        LibraryEmpty(
+                            title = stringResource(R.string.library_search_empty_title),
+                            body = stringResource(R.string.library_search_empty_body),
+                            cta = null,
+                            onStartRecording = {},
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize().weight(1f)) {
+                            if (ui.viewMode == LibraryViewMode.GRID) {
+                                LazyVerticalGrid(
+                                    state = gridState,
+                                    columns = GridCells.Fixed(GRID_COLUMNS),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = com.aritr.rova.ui.library.components.LibraryDimens.screenPadH)
+                                        .semantics {
+                                            isTraversalGroup = true
+                                            collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
+                                        },
+                                    contentPadding = PaddingValues(bottom = 20.dp),
+                                ) {
+                                    item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-recovery-warn") { RecoveryAndWarnings() }
+                                    if (hero != null) {
+                                        item(span = { GridItemSpan(maxLineSpan) }, key = "hero-${hero.stableKey}") { renderHero(hero) }
+                                    }
+                                    groups.forEach { group ->
+                                        item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
+                                            LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                        }
+                                        itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
+                                            LibraryGridCard(
+                                                row = row,
+                                                thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                tileDescription = TileSemantics.describe(row, frag),
+                                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
+                                                plLabel = plLabel,
+                                                onClick = { onTileClick(row.stableKey) },
+                                                modifier = Modifier.padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter),
+                                                itemSemantics = {
+                                                    collectionItemInfo = CollectionItemInfo(
+                                                        rowIndex = index / GRID_COLUMNS,
+                                                        rowSpan = 1,
+                                                        columnIndex = index % GRID_COLUMNS,
+                                                        columnSpan = 1,
+                                                    )
+                                                },
+                                                isSelectionMode = selection.active,
+                                                isSelected = row.stableKey in selection.keys,
+                                                onLongClick = { onTileLong(row.stableKey) },
+                                                selectedLabel = selectedLabel,
+                                                notSelectedLabel = notSelectedLabel,
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(bottom = 20.dp),
+                                ) {
+                                    item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
+                                    if (hero != null) {
+                                        item(key = "hero-${hero.stableKey}") { renderHero(hero) }
+                                    }
+                                    groups.forEach { group ->
+                                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        items(group.rows, key = { it.stableKey }) { row ->
+                                            LibraryListRow(
+                                                row = row,
+                                                thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                tileDescription = TileSemantics.describe(row, frag),
+                                                durationFallback = "—",
+                                                onClick = { onTileClick(row.stableKey) },
+                                                isSelectionMode = selection.active,
+                                                isSelected = row.stableKey in selection.keys,
+                                                onLongClick = { onTileLong(row.stableKey) },
+                                                selectedLabel = selectedLabel,
+                                                notSelectedLabel = notSelectedLabel,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            // Date fast-scroll rail (self-hides when < 2 day groups).
+                            LibraryScrubber(
+                                segments = scrubberSegments,
+                                firstVisibleItemIndex = if (ui.viewMode == LibraryViewMode.GRID)
+                                    gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex,
+                                railLabel = scrubberRailLabel,
+                                onScrollToItemIndex = { idx ->
+                                    coroutineScope.launch {
+                                        if (ui.viewMode == LibraryViewMode.GRID) gridState.scrollToItem(idx)
+                                        else listState.scrollToItem(idx)
+                                    }
+                                },
+                                modifier = Modifier.align(Alignment.CenterEnd),
                             )
                         }
                     }
@@ -602,6 +681,14 @@ fun LibraryScreen(
                 },
                 onDelete = { sheetTarget = null; pendingDeleteConfirm = setOf(row.stableKey) },
                 onDismiss = { sheetTarget = null },
+            )
+        }
+
+        if (sortSheetOpen) {
+            LibrarySortSheet(
+                current = sort,
+                onSelect = { viewModel.setSort(it); sortSheetOpen = false },
+                onDismiss = { sortSheetOpen = false },
             )
         }
 
