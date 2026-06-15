@@ -1,13 +1,13 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-15 (Enhanced Library & History redesign — Slices 1–4 + Discovery follow-ups (4.1/4.2) all built, device-smoke GO. NEXT = Slice 5 a11y close-out.)**
+> **As of 2026-06-15 (Enhanced Library & History redesign — Slices 1–5 ALL built, device-smoke/TalkBack GO. Library reskin FUNCTIONALLY COMPLETE. DualShot hero artifact root-caused (Library-side, H1). NEXT = Library UX/UI polish pass P1–P5.)**
 
 ---
 
 ## Where things stand
 
-- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **57 commits ahead** of `master`, tip `dc1e9ce`. Holds **all of Slices 1 + 2 + 3 + 4 (+ Discovery follow-ups 4.1/4.2)** of the Library/History redesign. Working tree clean (only ephemeral `gradle_*.log` untracked).
+- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **62 commits ahead** of `master`, tip = the docs commit below (Slice-5 code tip `23bee99`). Holds **all of Slices 1 + 2 + 3 + 4 (+ 4.1/4.2) + 5 (a11y)** of the Library/History redesign. Working tree clean (only ephemeral `gradle_*.log` untracked).
 - **master:** `dfd3bd9` (#116 DualSight doc-closeout). **Contains zero Library redesign code.**
 - **Open PRs (pushed, awaiting the end-of-reskin merge train):**
   - **#117 — Slice 1 Foundation** (branch `feat/library-history-foundation`) · OPEN
@@ -29,7 +29,25 @@ Liquid-Glass redesign of the recording-browse surfaces (ADR-0028 + new **ADR-003
 4. **Discovery** ✅ built + owner device-smoke **GO** (2026-06-15) — Sort sheet · Filter chips (All·★Favorites·DualShot) · inline Search · date fast-scroll Scrubber. Pure `LibraryQuery.heroFor` (filter-aware hero) + `ScrubberIndex`; thin VM `_sort`/`_filter` state; `LibraryScreen` query sort/filter/search-driven over `visibleRows`; scrubber codex-hardened (separate live-region node, discrete progress, coalesced scroll). Plan: `docs/superpowers/plans/2026-06-15-library-history-slice4-discovery.md`.
    - **4.1 smoke fixes** ✅ **committed `09c3e5c`** — (#1) **view-mode persists across launches** (`RovaSettings.libraryViewMode`, seeded into `HistoryViewModel._viewMode`); (#3) filter chip **P+L → "DualShot"** (en+es). (#4) confirmed **hero = newest** is intended (no code change — `heroFor` keeps newest regardless of sort; collection is what re-sorts).
    - **4.2 pooled card autoplay** ✅ **committed `dc1e9ce`**, owner device-smoke **GO** (2026-06-15) — owner #2 "all recordings auto-play". Plan: `docs/superpowers/plans/2026-06-15-library-slice4.2-card-autoplay.md`. See "Slice 4.2" below.
-5. **A11y close-out** ⬜ **NEXT** — remediation **rows 21 / 23 / 32** (player `SegmentedTimeline` progressbar + per-cell labels; Library warning-card focus separation + focus restore on player return). Stacked on `feat/library-history-selection`. **See the kickoff prompt at the bottom.**
+5. **A11y close-out** ✅ built + owner TalkBack device-smoke **GO** (2026-06-15) — remediation **rows 21 / 23 / 32**. Player `SegmentedTimeline`: progressbar role (`progressBarRangeInfo`, continuous position/duration) + per-cell `contentDescription` ("Clip N of M, recorded/playing/upcoming") + separate sparse polite live-region. Library: `RecoveryAndWarnings` is its own `isTraversalGroup` (focus separation, HIST-02), `HistoryWarningCard` gains `focusHighlight` (HIST-17), focus restore on player return via `pendingFocusKey` + ON_RESUME observer + new pure `FocusRestorePolicy` (JVM-tested) + `FocusRequester` on each target's own modifier chain (codex fix). 3 commits `32487fd`/`345e74e`/`23bee99`. **Row-23 DELTA:** only the Library-relevant subset closed (focus restore + warning focusable); REC-15/RECOV-09/RECOV-10/NAV-04/SHAR-08/SHAR-16/ONB-06 (other screens) stay OPEN.
+
+**Library reskin is now FUNCTIONALLY COMPLETE.** Next is a **visual polish pass** (P1–P5) — see below.
+
+## DualShot hero thumbnail artifact — ROOT-CAUSED (2026-06-15), fix folds into polish P2
+
+Owner reported a grey horizontal strip on the **hero** card for DualShot recordings (grid tile clean). Full RCA + device disambiguation: `docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`.
+- **Result: Library-side render bug (H1), NOT capture (H2 refuted).** Pulled both DualShot sides of the hero recording from RZCYA1VBQ2H: `ffprobe` → exact 1080×1920 / 1920×1080, SAR 1:1, no rotation (so `computeFitViewport` bakes no letterbox); `ffmpeg` raw frames → **clean, no strip in pixels**. The strip is introduced at render.
+- **Mechanism:** the hero autoplay stacks a static `VideoFrame` (`ContentScale.Crop`) under a transparent ExoPlayer (`RESIZE_MODE_ZOOM`); the two fill identically only at 16:9, so the grid (16:9) is clean but the off-16:9 hero box (~2.27:1) leaks a band. **Fix = Slice P2** (make both layers fill identically / drop static under-layer after first frame / lock hero `aspectRatio`).
+- The separate **owner-deferred** PORTRAIT square-into-9:16 capture stretch (`AspectFitMath.kt:359–366`) is unrelated and stays capture-side (ADR-0009/0010).
+
+## Library UX/UI polish pass — P1–P5 (NEXT, NEEDS per-slice plan)
+
+Audit + design brief: same doc (`docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`). Library is functionally done but reads as a prototype vs the Record screen (hero+grid cards are opaque/skip the glass system; token-sparse + off Record's scale; generic M3 typography not the Inter scale; visual noise; plain states). Stacked slices, each own a11y + JVM tests, en+es, gates green, no push until owner says:
+- **P1** — token foundation: extend `LibraryDimens` to a Record-aligned scale (edge 16, radius 18, pills 11, scrim/divider/selection tokens). Safe refactor, unblocks the rest.
+- **P2** — hero treatment: glass+scrim, `RovaTokens.eyebrow`, one primary CTA (Play), stronger caption scrim, **+ the DualShot hero-layer fix above**.
+- **P3** — grid/list polish: glass-aware cards, thumbnail prominence, soft glass selection ring (drop hard 2dp primary border), tokenized caption scrim.
+- **P4** — discovery bar + states: quieter glass-consistent chips, skeleton/shimmer loading, on-brand empty/search-empty, error/missing-file messaging.
+- **P5** — interaction/motion consistency with Record (press feedback, durations, verify `GlassResolver` alphas == Record's 0.40 fill / 0.07 stroke).
 
 ## Slice 4.2 — pooled muted card autoplay (committed `dc1e9ce`)
 
@@ -77,55 +95,71 @@ Extends the hero's muted autoplay to **visible** grid/list cards, bounded decode
 
 ---
 
-## Fresh-session kickoff prompt — Slice 5 (A11y close-out)
+## Fresh-session kickoff prompt — Library UX/UI polish pass (P1–P5)
 
 Paste this to start the next session:
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
 
-Orient first: read HANDOFF.md, CLAUDE.md, and the auto-loaded MEMORY.md, plus
-memory/project_library_history_redesign.md. Don't re-explore what those establish.
+Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md,
+memory/project_library_history_redesign.md, and the design brief
+docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md (PART B audit + PART C
+roadmap + PART A DualShot RCA). Don't re-explore what those establish.
 
-State: the Enhanced Library & History redesign (Liquid Glass, ADR-0028 + ADR-0030) is IN PROGRESS.
-master is dfd3bd9 (no library code). Slices 1+2+3+4 (+ Discovery follow-ups 4.1 view-mode-persist /
-DualShot-rename and 4.2 pooled card autoplay) all live on the local-only branch
-feat/library-history-selection (57 commits ahead, tip dc1e9ce, NOT pushed). Slice 1 = PR #117 OPEN,
-Slice 2 = PR #118 OPEN (pushed, stacked, awaiting the end-of-reskin merge train). Slices 3/4/4.x are
-committed locally only. Owner directive: NO merge until the full Library reskin is done; keep stacking.
-All of Slices 1–4 are owner device-smoke GO on RZCYA1VBQ2H.
+State: the Enhanced Library & History redesign (Liquid Glass, ADR-0028 + ADR-0030) is FUNCTIONALLY
+COMPLETE — Slices 1–5 (foundation, layout, selection/batch, discovery + 4.1/4.2 autoplay, a11y
+close-out) all built + device/TalkBack GO, on the local-only branch feat/library-history-selection
+(~62 commits ahead of master dfd3bd9, NOT pushed; Slice-1 PR #117 + Slice-2 PR #118 OPEN/stacked).
+Owner directive: NO merge until the WHOLE reskin (including this polish pass) is done; keep stacking
+locally. All device smoke on RZCYA1VBQ2H Android 14.
 
-TASK: Slice 5 — A11y close-out, stacked on feat/library-history-selection. Close the WCAG 2.2 AA
-remediation-backlog rows that the redesign deferred. Read docs/accessibility/remediation-backlog.md
-and confirm the exact wording of rows 21, 23, 32 before planning — then:
-  - Player SegmentedTimeline (ui/screens/player/**): add progressBarRangeInfo semantics to the
-    timeline (current position / duration as a range) + a per-segment-cell contentDescription/label
-    so TalkBack can announce each segment. (This mirrors the discrete-progress pattern already used
-    by LibraryScrubber in Slice 4 — reuse that approach.)
-  - Library warning/recovery card (RecoveryAndWarnings in ui/library/LibraryScreen.kt + the
-    RecoveryCard/warning host): focus SEPARATION (the warning card must not merge its focus/semantics
-    with sibling rows) + focus RESTORE when returning from the player (restore focus to the row that
-    launched playback). Use a FocusRequester/saved-key seam; extract any non-trivial restore logic as
-    a pure-Kotlin helper so it's JVM-testable.
-  - Verify against rows 21/23/32 exactly; if any row's scope differs from the above, follow the
-    backlog wording (it is authoritative) and note the delta.
+TASK: Library UX/UI POLISH PASS, P1–P5, stacked on feat/library-history-selection. The Library is
+functionally done but reads as a prototype next to the Record screen. Raise it to Record's visual
+quality. The audit + design brief + per-slice direction is PART B/C of the brief doc above — follow it.
+Run writing-plans to turn P1–P5 into a per-slice plan BEFORE coding (brainstorm only if the brief
+leaves a real fork). Slices:
+  P1 — token foundation: extend ui/library/components/LibraryDimens.kt to a Record-aligned scale
+       (screenPadH 16, cardRadius 18, heroRadius 20, pillRadius 11, + scrim/divider/selection/empty
+       tokens) and route every Library component through it. Safe refactor; review visual deltas.
+  P2 — hero treatment: glass+scrim depth on LibraryHeroCard, RovaTokens.eyebrow, ONE primary CTA
+       (Play; Favorite/Share subordinate), stronger caption scrim. **ALSO fix the DualShot hero
+       artifact here** — it is a CONFIRMED Library render-layer bug (PART A: source frames are clean,
+       H2 capture-bake refuted). The static VideoFrame (ContentScale.Crop) under the transparent
+       RESIZE_MODE_ZOOM ExoPlayer in LibraryAutoplayVideo diverge in the off-16:9 hero box → grey band.
+       Make both layers fill identically (or drop the static under-layer after the player's first
+       frame, or lock the hero aspectRatio). Confirm with reduce-motion-off on device.
+  P3 — grid/list polish: glass-aware LibraryGridCard/LibraryListRow, thumbnail prominence, soft glass
+       selection ring (replace the hard 2dp primary border), tokenized CaptionBar scrim.
+  P4 — discovery bar + states: quieter glass-consistent chips, skeleton/shimmer loading,
+       on-brand empty + search-empty, error/missing-file messaging.
+  P5 — interaction/motion consistency with Record (press feedback, durations); verify GlassResolver
+       output alphas equal Record's (0.40 fill / 0.07 stroke) and align if not.
+
+Reference = Record screen tokens: ui/theme/RecordChromeTokens.kt, ui/theme/RovaTokens.kt (Inter scale),
+ui/theme/GlassSurface.kt (3-layer glass). Quality bar = the Record home screen.
 
 Pipeline: writing-plans -> subagent-driven build (subagents EDIT-ONLY; controller runs all gradle +
-commits) -> device smoke on RZCYA1VBQ2H (TalkBack ON: confirm timeline announces position+segments,
-warning card reads as its own node, focus returns correctly from the player). New user-facing strings
-go in resources (ADR-0022, en+es). JVM-only tests; framework-touching code gets a pure-Kotlin sibling.
-codex-review code >5 lines / architecture / a11y-semantics logic.
+commits) -> device smoke on RZCYA1VBQ2H per slice (incl. reduce-motion path for P2). New user-facing
+strings in resources (ADR-0022, en+es). JVM-only tests; framework-touching code gets a pure-Kotlin
+sibling. codex-review code >5 lines / architecture / visual-system decisions.
 
 Constraints: never edit a check* gate to pass (fix source, or amend ADR + check with owner sign-off).
 ADR-0030 = Library/History UI never writes SessionManifest (sidecar LibraryMetadataStore only);
 checkLibraryNoManifestWrite enforces it. WCAG 2.2 AA by default (ADR-0020); a11y gates live =
-checkA11yAnimationGated / checkA11yClickableHasRole / checkA11yTargetSizeToken. CodeGraph exploration
-via Explore agent only (never codegraph_explore/codegraph_context from the main session).
+checkA11yAnimationGated / checkA11yClickableHasRole / checkA11yTargetSizeToken; reduce-motion gated
+(rememberReduceMotion). CodeGraph exploration via Explore agent only (never codegraph_explore /
+codegraph_context from the main session).
 
 Build FAST: WARM — just gradlew.bat :app:assembleDebug (NO --stop, NO cache wipe). Gate-build with
-assembleDebug (lintDebug RED on pre-existing VaultAndroidOps NewApi).
+assembleDebug (lintDebug RED on pre-existing VaultAndroidOps NewApi). adb via PowerShell direct
+(adb -s RZCYA1VBQ2H ...; MCP adb wrapper broken on Windows).
 
 Caveman mode + Ultracode are ON. Commit per-slice LOCALLY; push/merge only when the owner asks
-(no merge until the full reskin is done). After Slice 5: the full reskin may be complete — ask the
-owner whether to run the end-of-reskin stacked merge train (see memory/feedback_stacked_pr_merge_train.md).
+(no merge until the full reskin — incl. this polish pass — is done). After P5 the reskin is complete:
+ask the owner whether to run the end-of-reskin stacked merge train
+(see memory/feedback_stacked_pr_merge_train.md).
+
+NOT in scope: the owner-deferred PORTRAIT square-into-9:16 DualShot CAPTURE stretch
+(AspectFitMath.kt:359-366, ADR-0009/0010) — capture-side, separate task, do not touch in the polish pass.
 ```
