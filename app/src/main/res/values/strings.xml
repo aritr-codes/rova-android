@@ -365,6 +365,11 @@
     <string name="player_position_per_clip">%1$s / %2$s per clip</string>
     <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
     <string name="player_clip_n_of_m">Clip %1$d of %2$d</string>
+    <!-- Player timeline accessibility (WCAG row 21) -->
+    <string name="player_timeline_cd">Recording timeline</string>
+    <string name="player_timeline_segment_recorded">Clip %1$d of %2$d, recorded</string>
+    <string name="player_timeline_segment_playing">Clip %1$d of %2$d, now playing</string>
+    <string name="player_timeline_segment_upcoming">Clip %1$d of %2$d, not yet played</string>
     <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
     <string name="player_unavailable_not_available">Recording not available</string>
     <string name="player_unavailable_not_finished">Recording not finished</string>
