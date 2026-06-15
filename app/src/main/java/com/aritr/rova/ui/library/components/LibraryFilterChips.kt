@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -83,13 +84,23 @@ private fun Chip(
     onClick: () -> Unit,
 ) {
     val cd = if (selected) String.format(selTemplate, label) else String.format(unselTemplate, label)
+    // Polish P4 — quieter, glass-consistent: unselected chips are transparent with a glass hairline
+    // edge; selected stays tonal but flat (no elevation) so chips don't compete with the hero/cards.
     FilterChip(
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
+        elevation = FilterChipDefaults.filterChipElevation(elevation = 0.dp),
         colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.Transparent,
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = Color.White.copy(alpha = LibraryDimens.dividerAlpha),
+            selectedBorderColor = Color.Transparent,
         ),
         modifier = Modifier.clearAndSetSemantics {
             this.contentDescription = cd
