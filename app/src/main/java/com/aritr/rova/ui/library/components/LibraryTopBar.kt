@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,10 @@ fun LibraryTopBar(
     backLabel: String = "",
     onOpenVault: (() -> Unit)? = null,
     vaultLabel: String = "",
+    onOpenSearch: (() -> Unit)? = null,
+    searchLabel: String = "",
+    onOpenSort: (() -> Unit)? = null,
+    sortLabel: String = "",
 ) {
     GlassSurface(role = GlassRole.NavBar, modifier = modifier.fillMaxWidth()) {
         Row(
@@ -67,6 +73,24 @@ fun LibraryTopBar(
                     Icon(
                         Icons.Filled.Lock,
                         contentDescription = vaultLabel,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                }
+            }
+            if (onOpenSearch != null) {
+                IconButton(onClick = onOpenSearch) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = searchLabel,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                }
+            }
+            if (onOpenSort != null) {
+                IconButton(onClick = onOpenSort) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Sort,
+                        contentDescription = sortLabel,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )
                 }
