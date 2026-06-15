@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -21,15 +22,17 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 
 /**
- * Hero-only muted autoplay preview (polish pass). Loops the newest recording silently behind a
- * center-cropped surface. The static [fallback] thumbnail renders underneath so there is no black flash
- * before the first frame. ONE ExoPlayer, built per [uri]; released on dispose — when the hero scrolls out
- * of the LazyGrid/Column it is disposed (and released) automatically. Paused on ON_PAUSE, resumed on
- * ON_RESUME. Callers gate this behind reduce-motion (ADR-0020): under reduce-motion render a static
- * [VideoFrame] instead. If [uri] is null, falls back to the static frame.
+ * Muted, looping autoplay preview (Slice 3 hero + Slice 4.2 visible cards). Loops a recording
+ * silently behind a center-cropped surface. The static [fallback] thumbnail renders underneath so
+ * there is no black flash before the first frame. ONE ExoPlayer, built per [uri]; released on
+ * dispose — when the host card/hero scrolls out of the LazyGrid/Column it is disposed (and
+ * released) automatically. Paused on ON_PAUSE, resumed on ON_RESUME. Callers gate this behind
+ * reduce-motion (ADR-0020) and a decoder-safe concurrency cap (AutoplayPolicy): under reduce-motion
+ * (or over cap / off-screen) render a static [VideoFrame] instead. If [uri] is null, falls back to
+ * the static frame.
  */
 @Composable
-fun LibraryHeroVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modifier) {
+fun LibraryAutoplayVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modifier) {
     if (uri == null) {
         VideoFrame(fallback, modifier)
         return
@@ -44,8 +47,13 @@ fun LibraryHeroVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modifier
             setMediaItem(MediaItem.fromUri(uri))
             repeatMode = Player.REPEAT_MODE_ONE
             volume = 0f
+            // Slice 4.2: muting != disabling the audio decoder. Drop the audio track so each muted
+            // preview holds only a video codec (frees scarce hardware audio-decoder instances).
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                .build()
             // Start PAUSED: the DisposableEffect below seeds playback from the real lifecycle state, so a
-            // hero composed while the screen isn't resumed doesn't decode in the background (codex race).
+            // preview composed while the screen isn't resumed doesn't decode in the background (codex race).
             playWhenReady = false
             prepare()
         }

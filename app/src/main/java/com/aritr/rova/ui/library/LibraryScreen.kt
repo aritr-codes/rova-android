@@ -27,6 +27,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -163,6 +164,43 @@ fun LibraryScreen(
     val locale = Locale.getDefault()
     val tz = TimeZone.getDefault()
     val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
+
+    // Slice 4.2 — which cards autoplay: visible-only (≥50% on-screen), capped (decoder-safe,
+    // hero counts against the budget), paused while scrolling, off under reduce-motion.
+    // Keyed on reduceMotion only; viewMode + scroll/layout are snapshot-state read inside.
+    val autoplayKeys: Set<String> by remember(reduceMotion) {
+        derivedStateOf {
+            if (reduceMotion) return@derivedStateOf emptySet()
+            val grid = ui.viewMode == LibraryViewMode.GRID
+            if (if (grid) gridState.isScrollInProgress else listState.isScrollInProgress) {
+                return@derivedStateOf emptySet()
+            }
+            val orderedKeys: List<String>
+            val heroVisible: Boolean
+            if (grid) {
+                val li = gridState.layoutInfo
+                val onScreen = li.visibleItemsInfo.filter {
+                    AutoplayPolicy.isMostlyVisible(it.offset.y, it.size.height, li.viewportStartOffset, li.viewportEndOffset)
+                }
+                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
+                orderedKeys = onScreen.mapNotNull { it.key as? String }
+                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
+            } else {
+                val li = listState.layoutInfo
+                val onScreen = li.visibleItemsInfo.filter {
+                    AutoplayPolicy.isMostlyVisible(it.offset, it.size, li.viewportStartOffset, li.viewportEndOffset)
+                }
+                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
+                orderedKeys = onScreen.mapNotNull { it.key as? String }
+                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
+            }
+            AutoplayPolicy.select(orderedKeys, AutoplayPolicy.cardCap(heroVisible))
+        }
+    }
+
+    // Per-row preview URI (same resolution the hero uses).
+    fun previewUriFor(stableKey: String): android.net.Uri? =
+        byKey[stableKey]?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
 
     // ---- effects ----
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -514,6 +552,8 @@ fun LibraryScreen(
                                             LibraryGridCard(
                                                 row = row,
                                                 thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                previewUri = previewUriFor(row.stableKey),
+                                                autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
                                                 plLabel = plLabel,
@@ -552,6 +592,8 @@ fun LibraryScreen(
                                             LibraryListRow(
                                                 row = row,
                                                 thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                previewUri = previewUriFor(row.stableKey),
+                                                autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 durationFallback = "—",
                                                 onClick = { onTileClick(row.stableKey) },

@@ -48,6 +48,8 @@ import com.aritr.rova.ui.library.LibraryRow
 fun LibraryGridCard(
     row: LibraryRow,
     thumbnail: Bitmap?,
+    previewUri: android.net.Uri? = null,
+    autoplay: Boolean = false,
     tileDescription: String,
     statusLabel: String?,
     plLabel: String,
@@ -77,7 +79,11 @@ fun LibraryGridCard(
                 itemSemantics?.invoke(this)
             },
     ) {
-        VideoFrame(thumbnail, Modifier.fillMaxSize())
+        if (autoplay && previewUri != null) {
+            LibraryAutoplayVideo(previewUri, thumbnail, Modifier.fillMaxSize())
+        } else {
+            VideoFrame(thumbnail, Modifier.fillMaxSize())
+        }
         // Exceptional / P+L badges only outside selection mode (selection owns the top-start slot, and
         // selection should de-clutter — Photos/Gallery convention).
         if (!isSelectionMode) {

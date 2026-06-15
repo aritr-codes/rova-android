@@ -73,7 +73,7 @@ fun LibraryHeroCard(
             .clickable(onClick = onPlay)
             .semantics { role = Role.Button; contentDescription = playDescription }
         if (autoplay && previewUri != null) {
-            LibraryHeroVideo(previewUri, thumbnail, mediaModifier)
+            LibraryAutoplayVideo(previewUri, thumbnail, mediaModifier)
         } else {
             VideoFrame(thumbnail, mediaModifier)
         }

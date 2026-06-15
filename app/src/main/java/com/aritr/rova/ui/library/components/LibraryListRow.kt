@@ -40,6 +40,8 @@ import com.aritr.rova.ui.theme.GlassSurface
 fun LibraryListRow(
     row: LibraryRow,
     thumbnail: Bitmap?,
+    previewUri: android.net.Uri? = null,
+    autoplay: Boolean = false,
     tileDescription: String,
     durationFallback: String,
     onClick: () -> Unit,
@@ -72,10 +74,12 @@ fun LibraryListRow(
                     modifier = Modifier.padding(end = 8.dp),
                 )
             }
-            VideoFrame(
-                thumbnail,
-                Modifier.size(width = 96.dp, height = 54.dp).clip(RoundedCornerShape(8.dp)),
-            )
+            val thumbMod = Modifier.size(width = 96.dp, height = 54.dp).clip(RoundedCornerShape(8.dp))
+            if (autoplay && previewUri != null) {
+                LibraryAutoplayVideo(previewUri, thumbnail, thumbMod)
+            } else {
+                VideoFrame(thumbnail, thumbMod)
+            }
             Column(Modifier.padding(start = 12.dp)) {
                 Text(row.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 val meta = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else durationFallback
