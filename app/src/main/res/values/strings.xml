@@ -802,6 +802,10 @@
     <string name="library_badge_recovered">Recovered</string>
     <string name="library_badge_interrupted">Interrupted</string>
     <string name="library_badge_pl">Portrait plus Landscape</string>
+    <plurals name="library_hero_clip_count">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
     <string name="library_a11y_duration">duration</string>
     <string name="library_day_size_total">%1$s this day</string>
     <string name="library_empty_title">No recordings yet</string>

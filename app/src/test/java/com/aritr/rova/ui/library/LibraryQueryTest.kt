@@ -11,7 +11,7 @@ class LibraryQueryTest {
         key: String, date: Long = 0, dateMillis: Long = date, dur: Long = 0, size: Long = 0,
         topology: CaptureTopology = CaptureTopology.Single,
         favorite: Boolean = false, title: String = key, dateLabel: String = "",
-    ) = LibraryRow(key, title, dateLabel, dateMillis, dur, size, topology, null, favorite)
+    ) = LibraryRow(key, title, dateLabel, dateMillis, dur, size, 1, topology, null, favorite)
 
     private val a = row("a", date = 300, dur = 10, size = 100, title = "Beach run")
     private val b = row("b", date = 200, dur = 50, size = 30, favorite = true, title = "Park")

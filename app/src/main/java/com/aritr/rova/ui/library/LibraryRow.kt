@@ -17,6 +17,12 @@ data class LibraryRow(
     val dateMillis: Long,
     val durationMs: Long,
     val sizeBytes: Long,
+    /**
+     * Number of persisted/playable clips (segments) in the session — the same set the player's
+     * SegmentedTimeline renders. Polish P3 (session identity). 0 for legacy file-scan rows with no
+     * manifest (the clip-count chip then hides; usage aggregation counts such a row as 1 clip).
+     */
+    val clipCount: Int,
     val topology: CaptureTopology,
     val badge: LibraryBadge?,
     val favorite: Boolean,

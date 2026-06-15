@@ -800,6 +800,10 @@
     <string name="library_badge_recovered">Recuperado</string>
     <string name="library_badge_interrupted">Interrumpido</string>
     <string name="library_badge_pl">Vertical y horizontal</string>
+    <plurals name="library_hero_clip_count">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
     <string name="library_a11y_duration">duración</string>
     <string name="library_day_size_total">%1$s este día</string>
     <string name="library_empty_title">Aún no hay grabaciones</string>

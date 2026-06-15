@@ -8,7 +8,7 @@ import org.junit.Test
 class PendingDeleteTest {
     private fun row(k: String) = LibraryRow(
         stableKey = k, title = k, dateLabel = "", dateMillis = 0, durationMs = 0,
-        sizeBytes = 0, topology = com.aritr.rova.data.CaptureTopology.Single, badge = null, favorite = false,
+        sizeBytes = 0, clipCount = 1, topology = com.aritr.rova.data.CaptureTopology.Single, badge = null, favorite = false,
     )
 
     @Test fun visibleRows_hidePendingKeys() {

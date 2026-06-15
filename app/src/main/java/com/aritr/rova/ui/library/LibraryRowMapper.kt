@@ -41,6 +41,9 @@ object LibraryRowMapper {
             dateMillis = input.dateMillis,
             durationMs = durationMs,
             sizeBytes = input.sizeBytes,
+            // Raw size (NOT the coerced segmentCount above): legacy rows with no manifest → 0 so the
+            // clip-count chip hides; the persisted-segment list = exactly the player's playable clips.
+            clipCount = input.segmentDurationsMs.size,
             topology = CaptureTopology.fromPersisted(input.topologyPersisted),
             badge = StatusBadgePolicy.badgeFor(input.terminated, input.exportState),
             favorite = input.favorite,

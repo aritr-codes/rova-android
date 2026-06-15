@@ -18,7 +18,7 @@ class LibraryDayGroupingTest {
     }
 
     private fun row(key: String, date: Long, size: Long) =
-        LibraryRow(key, key, "", date, 0, size, CaptureTopology.Single, null, false)
+        LibraryRow(key, key, "", date, 0, size, 1, CaptureTopology.Single, null, false)
 
     @Test fun `buckets by day in input order with per-day size totals`() {
         val now = millis(2026, Calendar.JUNE, 14)

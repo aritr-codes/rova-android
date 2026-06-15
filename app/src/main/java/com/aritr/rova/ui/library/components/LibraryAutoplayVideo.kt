@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -59,6 +62,13 @@ fun LibraryAutoplayVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modi
         }
     }
 
+    // DualShot grey-strip fix (polish P2): the static VideoFrame (Crop) under-layer and the PlayerView
+    // (ZOOM) fill identically only at 16:9; in the off-16:9 hero box they diverge and leak a grey band.
+    // The under-layer only masks the transparent shutter before the first decoded frame — once a frame
+    // renders, drop it (HeroUnderlayPolicy) so there is nothing to leak. Keyed on [uri] so a recycled
+    // host (pooled card) doesn't inherit a stale true (HeroUnderlayPolicy, JVM-tested).
+    var firstFrameRendered by remember(uri) { mutableStateOf(false) }
+
     DisposableEffect(lifecycleOwner, player) {
         // Drive playback off one lifecycle-derived flag instead of imperative play()/pause() (codex).
         val observer = LifecycleEventObserver { _, event ->
@@ -68,25 +78,36 @@ fun LibraryAutoplayVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modi
                 else -> Unit
             }
         }
+        // Flip the under-layer gate once the player has a real frame on screen. Re-fires harmlessly
+        // under REPEAT_MODE_ONE (monotonic set per media item).
+        val frameListener = object : Player.Listener {
+            override fun onRenderedFirstFrame() { firstFrameRendered = true }
+        }
+        player.addListener(frameListener)
         // Seed: ON_RESUME won't re-fire if we're already resumed at first composition.
         player.playWhenReady = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            player.removeListener(frameListener)
             player.release()
         }
     }
 
     Box(modifier) {
-        // Static frame underneath: shown until the first video frame renders (shutter is transparent).
-        VideoFrame(fallback, Modifier.fillMaxSize())
+        // Static frame underneath: masks the transparent shutter only until the first frame renders,
+        // then dropped (see HeroUnderlayPolicy) so the Crop-vs-ZOOM divergence can't leak a band.
+        if (com.aritr.rova.ui.library.HeroUnderlayPolicy.showStaticUnderlay(firstFrameRendered)) {
+            VideoFrame(fallback, Modifier.fillMaxSize())
+        }
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     useController = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     setShutterBackgroundColor(AndroidColor.TRANSPARENT)
-                    setKeepContentOnPlayerReset(true)
+                    // No setKeepContentOnPlayerReset: the player is fresh per [uri] (no reset to bridge),
+                    // and keeping a stale last frame on reuse is worse than the static under-layer (codex P2).
                     this.player = player
                 }
             },
