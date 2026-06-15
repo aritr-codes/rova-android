@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Vibration
@@ -144,6 +145,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
     val cameraGuidesEnabled by settingsViewModel.cameraGuidesEnabled.collectAsStateWithLifecycle()
+    val libraryCardPreview by settingsViewModel.libraryCardPreview.collectAsStateWithLifecycle()
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
     val resolution by settingsViewModel.resolution.collectAsStateWithLifecycle()
@@ -368,6 +370,16 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     supporting = stringResource(R.string.settings_camera_guides_supporting),
                     checked = cameraGuidesEnabled,
                     onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
+                )
+            }
+
+            SettingsSection(label = stringResource(R.string.settings_section_library)) {
+                SettingsRow(
+                    icon = Icons.Default.Movie,
+                    label = stringResource(R.string.settings_library_card_preview_title),
+                    supporting = stringResource(R.string.settings_library_card_preview_summary),
+                    checked = libraryCardPreview,
+                    onCheckedChange = { settingsViewModel.libraryCardPreview.value = it }
                 )
             }
 

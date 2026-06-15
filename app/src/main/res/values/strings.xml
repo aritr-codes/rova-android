@@ -386,6 +386,9 @@
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_recording_defaults">Recording defaults</string>
     <string name="settings_section_recording_behavior">Recording behavior</string>
+    <string name="settings_section_library">Library</string>
+    <string name="settings_library_card_preview_title">Preview recordings while browsing</string>
+    <string name="settings_library_card_preview_summary">Autoplay muted previews on library cards. Off by default to save battery.</string>
     <string name="settings_section_alerts">Alerts</string>
     <string name="settings_section_notifications">Notifications</string>
     <string name="settings_section_storage">Storage</string>
