@@ -5,7 +5,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
@@ -30,8 +33,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.library.LibraryRow
+import com.aritr.rova.ui.library.SmartTitle
 
 /**
  * spec §5.1 — opaque 2-column grid tile. Thumbnail plane + mandatory duration pill
@@ -68,8 +73,21 @@ fun LibraryGridCard(
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(shape)
+            // Permanent glass-consistent hairline frame (matches the glass surfaces' 1dp white edge —
+            // NOT glass/blur over the thumbnail, spec §9).
+            .border(LibraryDimens.cardEdgeWidth, Color.White.copy(alpha = LibraryDimens.dividerAlpha), shape)
+            // Selection: soft glass-consistent ring (replaces the hard 2dp primary border). The check
+            // chip is the authoritative selected-state carrier; this ring reinforces.
             .then(
-                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier,
+                if (isSelected) {
+                    Modifier.border(
+                        LibraryDimens.selectionEdgeWidth,
+                        Color.White.copy(alpha = LibraryDimens.selectionEdgeAlpha),
+                        shape,
+                    )
+                } else {
+                    Modifier
+                },
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
@@ -84,18 +102,31 @@ fun LibraryGridCard(
         } else {
             VideoFrame(thumbnail, Modifier.fillMaxSize())
         }
-        // Exceptional / P+L badges only outside selection mode (selection owns the top-start slot, and
-        // selection should de-clutter — Photos/Gallery convention).
+        // Session-identity overlays only outside selection mode (selection de-clutters — Photos/Gallery
+        // convention): clip-count chip (TopStart, >1), status + P+L (TopEnd), duration badge (BottomEnd).
         if (!isSelectionMode) {
-            if (statusLabel != null) {
-                OverlayPill(statusLabel, Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (row.clipCount > 1) {
+                OverlayPill(
+                    pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount),
+                    Modifier.align(Alignment.TopStart).padding(6.dp),
+                )
             }
-            if (row.topology == CaptureTopology.DualShot) {
-                OverlayPill(plLabel, Modifier.align(Alignment.TopEnd).padding(6.dp))
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (statusLabel != null) OverlayPill(statusLabel)
+                if (row.topology == CaptureTopology.DualShot) OverlayPill(plLabel)
+            }
+            if (row.durationMs > 0) {
+                OverlayPill(
+                    SmartTitle.durationLabel(row.durationMs),
+                    Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                )
             }
         }
-        // Single caption (date · clips · duration via the title) over a gradient scrim — the redundant
-        // duration pill is gone (polish pass).
+        // Caption = the session title over a gradient scrim (bottom-start; duration badge sits at the
+        // bottom-end). The title already encodes the session via SmartTitle.
         CaptionBar(row.title, Modifier.align(Alignment.BottomStart).fillMaxWidth())
         if (isSelectionMode) {
             // Lighter selection (Photos/Gallery): keep the frame bright, lean on a ring + filled check on a
