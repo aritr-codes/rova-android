@@ -332,6 +332,15 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("prefer_front_camera", false)
         set(value) = prefs.edit { putBoolean("prefer_front_camera", value) }
 
+    /**
+     * Polish P7 — opt-in muted autoplay PREVIEW for Library grid/list cards. Default OFF: scroll-triggered
+     * card autoplay is a known anti-pattern (battery/distraction/false-intent); the hero showcase autoplays
+     * regardless. Reduce-motion still suppresses ALL card preview when this is on.
+     */
+    var libraryCardPreview: Boolean
+        get() = prefs.getBoolean("library_card_preview", false)
+        set(value) = prefs.edit { putBoolean("library_card_preview", value) }
+
     // Slice 4.1 — last Library view mode (Grid/List). Backed up (a genuine UI preference,
     // like themeMode). Stored as the LibraryViewMode name; the UI layer coerces unknown/missing
     // to GRID (this layer stays ui-agnostic — raw String, default "GRID").
