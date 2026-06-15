@@ -1,5 +1,7 @@
 # Library — Slice 4.2: Pooled Card Autoplay Implementation Plan
 
+> **STATUS: ✅ DONE — committed `dc1e9ce`, build + 42 gates + JVM tests GREEN, codex clean (2 passes), owner device-smoke GO 2026-06-15.** Codex-reconciled before build: cap counts the hero (`MAX_CONCURRENT=3` total), audio track disabled (not just muted), ≥50% visible-fraction gate, prefix-filtered keys. v2 deferred = pause-while-scrolling + debounced-release pool. Next = Slice 5 (a11y close-out).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Extend muted autoplay from the hero to grid/list **cards** (owner smoke #2), bounded to be decoder-safe: only **visible** cards autoplay, capped to a small concurrency limit, paused while scrolling, and gated by reduce-motion (off → static frames, like the hero today).
