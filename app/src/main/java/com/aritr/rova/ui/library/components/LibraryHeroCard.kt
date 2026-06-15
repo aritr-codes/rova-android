@@ -2,9 +2,11 @@ package com.aritr.rova.ui.library.components
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -23,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.RovaAnimations.pressScale
 import com.aritr.rova.ui.library.HeroMetaFormatter
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SmartTitle
@@ -80,11 +84,14 @@ fun LibraryHeroCard(
     // Title is the WHEN (day · time); meta is the WHAT (clips · duration · size) — no repetition.
     val metaLine = HeroMetaFormatter.format(clipCountLabel, durationLabel, sizeLabel)
     val isPlayingPreview = autoplay && previewUri != null
+    val interactionSource = remember { MutableInteractionSource() }
 
     Box(
         modifier
             .fillMaxWidth()
             .padding(horizontal = LibraryDimens.screenPadH, vertical = LibraryDimens.cardPadV)
+            // Whole-card press feedback driven by the media Play target (reduce-motion gated).
+            .pressScale(interactionSource)
             .height(LibraryDimens.heroHeight)
             .clip(RoundedCornerShape(LibraryDimens.heroRadius))
             .border(
@@ -97,7 +104,11 @@ fun LibraryHeroCard(
         val mediaModifier = Modifier
             .matchParentSize()
             .then(if (mediaFocusRequester != null) Modifier.focusRequester(mediaFocusRequester) else Modifier)
-            .clickable(onClick = onPlay)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onPlay,
+            )
             .semantics { role = Role.Button; contentDescription = playDescription }
         if (isPlayingPreview) {
             LibraryAutoplayVideo(previewUri, thumbnail, mediaModifier)

@@ -2,8 +2,10 @@ package com.aritr.rova.ui.library.components
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.data.CaptureTopology
+import com.aritr.rova.ui.components.RovaAnimations.pressScale
 import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SessionCaption
@@ -66,12 +70,19 @@ fun LibraryListRow(
     selectedLabel: String = "",
     notSelectedLabel: String = "",
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     GlassSurface(
         role = GlassRole.Card,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = LibraryDimens.screenPadH, vertical = LibraryDimens.cardPadV)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .pressScale(interactionSource)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .semantics {
                 role = Role.Button
                 contentDescription = tileDescription
