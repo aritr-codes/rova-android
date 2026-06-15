@@ -255,6 +255,18 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     )
 
     /**
+     * Polish P7 — mirrors [RovaSettings.libraryCardPreview] (default OFF) into [libraryUiState] so the
+     * screen can gate card autoplay. [refreshCardPreview] re-reads the pref on resume because the
+     * bottom-nav keeps [com.aritr.rova.ui.library.LibraryScreen] composed across tab switches, so a
+     * Settings toggle would otherwise not be picked up until process recreation.
+     */
+    private val _cardPreview = MutableStateFlow(settings.libraryCardPreview)
+
+    fun refreshCardPreview() {
+        _cardPreview.value = settings.libraryCardPreview
+    }
+
+    /**
      * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
      * Single-writer contract: [toggleFavorite] is the only production writer today.
      * Any FUTURE sidecar mutation (rename / lastPlayedAt / prune) MUST also bump
@@ -297,7 +309,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _viewMode, _sidecarRevision) { rows, loaded, mode, _ ->
+        combine(items, hasLoaded, _viewMode, _sidecarRevision, _cardPreview) { rows, loaded, mode, _, cardPreview ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
@@ -308,6 +320,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 viewMode = mode,
                 hasLoaded = loaded,
                 usage = UsageAggregator.aggregate(mapped),
+                cardPreview = cardPreview,
             )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)

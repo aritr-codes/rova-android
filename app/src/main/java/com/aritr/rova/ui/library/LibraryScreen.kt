@@ -181,12 +181,12 @@ fun LibraryScreen(
     val tz = TimeZone.getDefault()
     val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
 
-    // Slice 4.2 — which cards autoplay: visible-only (≥50% on-screen), capped (decoder-safe,
-    // hero counts against the budget), paused while scrolling, off under reduce-motion.
-    // Keyed on reduceMotion only; viewMode + scroll/layout are snapshot-state read inside.
-    val autoplayKeys: Set<String> by remember(reduceMotion) {
+    // Slice 4.2 / Polish P7 — which cards autoplay: OFF by default (cards are static posters); only
+    // when the opt-in Setting (ui.cardPreview) is on do visible-only (≥50%), capped, non-scrolling,
+    // non-reduce-motion cards preview. The hero is unaffected (it autoplays regardless, see renderHero).
+    val autoplayKeys: Set<String> by remember(reduceMotion, ui.cardPreview) {
         derivedStateOf {
-            if (reduceMotion) return@derivedStateOf emptySet()
+            if (reduceMotion || !ui.cardPreview) return@derivedStateOf emptySet()
             val grid = ui.viewMode == LibraryViewMode.GRID
             if (if (grid) gridState.isScrollInProgress else listState.isScrollInProgress) {
                 return@derivedStateOf emptySet()
@@ -361,6 +361,8 @@ fun LibraryScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            // P7 — pick up a Settings card-preview toggle when returning to the kept-composed Library tab.
+            viewModel.refreshCardPreview()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
             val index = FocusRestorePolicy.targetItemIndex(key, currentHeroKey, currentGroupKeys)
             if (index == null) {
