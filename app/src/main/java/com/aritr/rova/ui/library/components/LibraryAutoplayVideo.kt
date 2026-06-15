@@ -21,8 +21,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.aritr.rova.R
 
 /**
  * Muted, looping autoplay preview (Slice 3 hero + Slice 4.2 visible cards). Loops a recording
@@ -62,11 +62,12 @@ fun LibraryAutoplayVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modi
         }
     }
 
-    // DualShot grey-strip fix (polish P2): the static VideoFrame (Crop) under-layer and the PlayerView
-    // (ZOOM) fill identically only at 16:9; in the off-16:9 hero box they diverge and leak a grey band.
-    // The under-layer only masks the transparent shutter before the first decoded frame — once a frame
-    // renders, drop it (HeroUnderlayPolicy) so there is nothing to leak. Keyed on [uri] so a recycled
-    // host (pooled card) doesn't inherit a stale true (HeroUnderlayPolicy, JVM-tested).
+    // The static VideoFrame under-layer masks the transparent shutter so there is no black flash before
+    // the first decoded frame; once a frame renders, drop it (HeroUnderlayPolicy). Keyed on [uri] so a
+    // recycled host (pooled card) doesn't inherit a stale true (HeroUnderlayPolicy, JVM-tested).
+    // NB: the real DualShot grey-strip / partial-frame-bleed was NOT this under-layer (P2's theory) — it
+    // was the default SurfaceView overlay leaking a cold-launch first-frame strip, fixed by rendering to
+    // a TextureView (R.layout.library_autoplay_preview). The under-layer is purely anti-flash now.
     var firstFrameRendered by remember(uri) { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner, player) {
@@ -102,9 +103,15 @@ fun LibraryAutoplayVideo(uri: Uri?, fallback: Bitmap?, modifier: Modifier = Modi
         }
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                // Inflate (not `PlayerView(ctx)`) so the surface is a TextureView — see
+                // R.layout.library_autoplay_preview. SurfaceView's overlay layer ignores the Compose
+                // RoundedCornerShape clip AND leaks a cold-launch first-frame strip on this device
+                // class (DualShot grey-strip RCA); TextureView composites through the GPU, honoring the
+                // host clip and the codec crop rect. surface_type can only be set via XML attr, not a
+                // PlayerView setter — hence the layout. resize_mode/use_controller live in the XML too.
+                val view = android.view.LayoutInflater.from(ctx)
+                    .inflate(R.layout.library_autoplay_preview, null) as PlayerView
+                view.apply {
                     setShutterBackgroundColor(AndroidColor.TRANSPARENT)
                     // No setKeepContentOnPlayerReset: the player is fresh per [uri] (no reset to bridge),
                     // and keeping a stale last frame on reuse is worse than the static under-layer (codex P2).
