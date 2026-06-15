@@ -13,4 +13,9 @@ data class LibraryUiState(
     val rows: List<LibraryRow> = emptyList(),
     val viewMode: LibraryViewMode = LibraryViewMode.GRID,
     val hasLoaded: Boolean = false,
+    /**
+     * Aggregated footprint over [rows] (the FULL library, not the filtered view) — drives the usage
+     * summary line (Polish P6). Pure in-memory fold via [UsageAggregator]; no extra disk read.
+     */
+    val usage: UsageSummary = UsageSummary(0, 0, 0),
 )

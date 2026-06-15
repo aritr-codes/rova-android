@@ -65,6 +65,7 @@ import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
 import com.aritr.rova.ui.library.components.LibraryEmpty
 import com.aritr.rova.ui.library.components.LibrarySearchEmpty
+import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryGridCard
 import com.aritr.rova.ui.library.components.LibraryHeroCard
 import com.aritr.rova.ui.library.components.LibraryItemSheet
@@ -551,6 +552,9 @@ fun LibraryScreen(
                     LibraryEmpty(onGoToRecord = onNavigateToRecord)
                 }
                 else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                    // P6 storage/usage footprint — directly under the top bar, above the discovery bar
+                    // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
+                    LibraryUsageLine(ui.usage)
                     // Pinned Discovery controls (search field when active + filter chips).
                     if (searchActive) {
                         LibrarySearchField(

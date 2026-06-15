@@ -24,6 +24,7 @@ import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.UsageAggregator
 import com.aritr.rova.ui.library.ThumbnailCacheKey
 import com.aritr.rova.ui.library.ThumbnailDiskCache
 import com.aritr.rova.utils.RovaLog
@@ -301,7 +302,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
             val mapped = rows.map { item -> toLibraryRow(item, snapshot[item.stableKey], locale, tz) }
-            LibraryUiState(rows = mapped, viewMode = mode, hasLoaded = loaded)
+            // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
+            LibraryUiState(
+                rows = mapped,
+                viewMode = mode,
+                hasLoaded = loaded,
+                usage = UsageAggregator.aggregate(mapped),
+            )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)
             // and maps the list — keep it off the Main collecting context (codex review).
