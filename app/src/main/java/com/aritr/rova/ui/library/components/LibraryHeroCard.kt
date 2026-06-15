@@ -24,6 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -54,6 +56,7 @@ fun LibraryHeroCard(
     modifier: Modifier = Modifier,
     previewUri: Uri? = null,
     autoplay: Boolean = false,
+    mediaFocusRequester: FocusRequester? = null,
 ) {
     Column(
         modifier
@@ -70,6 +73,7 @@ fun LibraryHeroCard(
             .fillMaxWidth()
             .height(LibraryDimens.heroHeight)
             .clip(RoundedCornerShape(LibraryDimens.heroRadius))
+            .then(if (mediaFocusRequester != null) Modifier.focusRequester(mediaFocusRequester) else Modifier)
             .clickable(onClick = onPlay)
             .semantics { role = Role.Button; contentDescription = playDescription }
         if (autoplay && previewUri != null) {

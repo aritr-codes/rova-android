@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.theme.RovaWarnings
 
 /**
@@ -81,6 +82,7 @@ private fun HistoryWarningCard(
             .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.10f))
             .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
+            .focusHighlight(RoundedCornerShape(8.dp))
             .clickable(onClickLabel = stringResource(R.string.warning_view_action_label), role = Role.Button, onClick = onClick)
             .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

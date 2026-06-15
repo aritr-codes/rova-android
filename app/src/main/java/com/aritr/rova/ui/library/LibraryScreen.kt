@@ -32,10 +32,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +52,9 @@ import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.R
@@ -88,6 +96,7 @@ import com.aritr.rova.data.SessionConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -131,6 +140,11 @@ fun LibraryScreen(
     var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
+
+    // Slice 5 (remediation row 23) — focus restore: remember the row that launched playback so focus
+    // returns to it after popBackStack() from the player. Saveable so it survives process death.
+    var pendingFocusKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val rowFocusRequester = remember { FocusRequester() }
 
     // Recovery header (factory relocated to ui/recovery/ — ADR-0030 §2).
     val recoveryViewModel: RecoveryViewModel = viewModel(factory = recoveryViewModelFactory(app, context))
@@ -268,10 +282,12 @@ fun LibraryScreen(
         val item = byKey[stableKey] ?: return
         val sid = item.sessionId
         if (sid != null) {
+            pendingFocusKey = stableKey // restore focus here on return (row 23)
             onOpenPlayer(sid, item.side)
         } else {
             // Legacy file-only row (no manifest): keep the PreviewActivity path.
             item.file?.let { f ->
+                pendingFocusKey = stableKey // restore focus here on return (row 23)
                 val intent = Intent(context, PreviewActivity::class.java).apply {
                     putExtra("VIDEO_PATH", f.absolutePath)
                     item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
@@ -331,6 +347,39 @@ fun LibraryScreen(
     }
     val scrubberRailLabel = stringResource(R.string.library_scrubber_rail_cd)
 
+    // Slice 5 (remediation row 23) — focus restore on return from the player. ON_RESUME also fires on
+    // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
+    // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
+    val currentHeroKey by rememberUpdatedState(hero?.stableKey)
+    val currentGroupKeys by rememberUpdatedState(groups.map { g -> g.rows.map { it.stableKey } })
+    val currentViewMode by rememberUpdatedState(ui.viewMode)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            val key = pendingFocusKey ?: return@LifecycleEventObserver
+            val index = FocusRestorePolicy.targetItemIndex(key, currentHeroKey, currentGroupKeys)
+            if (index == null) {
+                pendingFocusKey = null
+                return@LifecycleEventObserver
+            }
+            coroutineScope.launch {
+                if (currentViewMode == LibraryViewMode.GRID) {
+                    gridState.scrollToItem(index)
+                    snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                } else {
+                    listState.scrollToItem(index)
+                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                }
+                withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
+                runCatching { rowFocusRequester.requestFocus() }
+                pendingFocusKey = null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
         val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
         if (card?.kind == RecoveryCardKind.KILLED_BY_SYSTEM) {
@@ -351,19 +400,23 @@ fun LibraryScreen(
 
     @Composable
     fun RecoveryAndWarnings() {
-        HistoryWarningStrip(
-            warningIds = historyWarnings,
-            onDismiss = { warningVm?.dismissOnHistoryStrip(it) },
-            onOpenSheet = { sheetWarningId = it },
-        )
-        if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
-            RecoveryCardList(
-                state = recoveryUiState,
-                onDiscard = { recoveryViewModel.dismiss(it) },
-                vendorHelpSlotFor = vendorHelpSlotFor,
-                onMerge = { recoveryViewModel.merge(it) },
-                onKeepRaw = { recoveryViewModel.keepRaw(it) },
+        // Focus SEPARATION (remediation row 32 / HIST-02): the recovery + warning host is its own
+        // traversal group so it does not merge focus/semantics with the sibling library rows.
+        Column(modifier = Modifier.semantics { isTraversalGroup = true }) {
+            HistoryWarningStrip(
+                warningIds = historyWarnings,
+                onDismiss = { warningVm?.dismissOnHistoryStrip(it) },
+                onOpenSheet = { sheetWarningId = it },
             )
+            if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
+                RecoveryCardList(
+                    state = recoveryUiState,
+                    onDiscard = { recoveryViewModel.dismiss(it) },
+                    vendorHelpSlotFor = vendorHelpSlotFor,
+                    onMerge = { recoveryViewModel.merge(it) },
+                    onKeepRaw = { recoveryViewModel.keepRaw(it) },
+                )
+            }
         }
     }
 
@@ -384,6 +437,7 @@ fun LibraryScreen(
             onShare = { byKey[row.stableKey]?.let { shareItems(listOf(it)) } },
             previewUri = previewUri,
             autoplay = !reduceMotion,
+            mediaFocusRequester = if (row.stableKey == pendingFocusKey) rowFocusRequester else null,
         )
     }
 
@@ -558,7 +612,9 @@ fun LibraryScreen(
                                                 statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
                                                 plLabel = plLabel,
                                                 onClick = { onTileClick(row.stableKey) },
-                                                modifier = Modifier.padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter),
+                                                modifier = Modifier
+                                                    .padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter)
+                                                    .then(if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier),
                                                 itemSemantics = {
                                                     collectionItemInfo = CollectionItemInfo(
                                                         rowIndex = index / GRID_COLUMNS,
@@ -597,6 +653,7 @@ fun LibraryScreen(
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 durationFallback = "—",
                                                 onClick = { onTileClick(row.stableKey) },
+                                                modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
                                                 isSelectionMode = selection.active,
                                                 isSelected = row.stableKey in selection.keys,
                                                 onLongClick = { onTileLong(row.stableKey) },
