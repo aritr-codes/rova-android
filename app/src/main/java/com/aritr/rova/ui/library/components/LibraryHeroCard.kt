@@ -42,6 +42,7 @@ import com.aritr.rova.R
 import com.aritr.rova.ui.library.HeroMetaFormatter
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SmartTitle
+import com.aritr.rova.ui.library.StorageFormat
 import com.aritr.rova.ui.theme.RovaTokens
 
 /**
@@ -75,7 +76,9 @@ fun LibraryHeroCard(
     val clipCountLabel =
         if (row.clipCount > 0) pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount) else ""
     val durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else ""
-    val metaLine = HeroMetaFormatter.format(row.dateLabel, "", clipCountLabel, durationLabel)
+    val sizeLabel = if (row.sizeBytes > 0) StorageFormat.size(row.sizeBytes, java.util.Locale.getDefault()) else ""
+    // Title is the WHEN (day · time); meta is the WHAT (clips · duration · size) — no repetition.
+    val metaLine = HeroMetaFormatter.format(clipCountLabel, durationLabel, sizeLabel)
     val isPlayingPreview = autoplay && previewUri != null
 
     Box(

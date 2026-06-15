@@ -131,7 +131,6 @@ fun LibraryListRow(
                     if (row.clipCount > 1) pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount) else ""
                 val durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else durationFallback
                 val meta = SessionCaption.listMeta(
-                    time = row.dateLabel,
                     clipCountLabel = clipLabel,
                     durationLabel = durationLabel,
                     sizeLabel = StorageFormat.size(row.sizeBytes, Locale.getDefault()),

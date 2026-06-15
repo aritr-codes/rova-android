@@ -37,8 +37,7 @@ object LibraryRowMapper {
 
     fun map(input: Input, locale: Locale, tz: TimeZone): LibraryRow {
         val durationMs = input.segmentDurationsMs.sum()
-        val segmentCount = input.segmentDurationsMs.size.coerceAtLeast(1)
-        val derived = SmartTitle.derive(input.startedAtMillis, segmentCount, durationMs, locale, tz)
+        val derived = SmartTitle.derive(input.startedAtMillis, locale, tz)
         val title = input.customTitle?.takeIf { it.isNotBlank() } ?: derived
         return LibraryRow(
             stableKey = input.stableKey,
