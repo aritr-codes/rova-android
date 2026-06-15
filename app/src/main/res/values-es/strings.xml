@@ -816,6 +816,16 @@
     <string name="library_search_empty_cta">Borrar filtros</string>
     <string name="library_error_title">No se pudo cargar tu biblioteca</string>
     <string name="library_error_body">Ocurrió un error al leer tus grabaciones. Desliza para reintentar.</string>
+    <!-- Polish P6 — resumen de almacenamiento/uso -->
+    <plurals name="library_usage_sessions">
+        <item quantity="one">%d sesión</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
+    <plurals name="library_usage_clips">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="library_usage_cd">Espacio de la biblioteca: %1$s</string>
     <!-- Slice 3 — selección + acciones por lote -->
     <string name="library_select_count">%1$d seleccionadas</string>
     <string name="library_action_close_selection">Salir de la selección</string>

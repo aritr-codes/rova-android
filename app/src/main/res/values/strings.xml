@@ -818,6 +818,16 @@
     <string name="library_search_empty_cta">Clear filters</string>
     <string name="library_error_title">Couldn\'t load your library</string>
     <string name="library_error_body">Something went wrong reading your recordings. Pull to retry.</string>
+    <!-- Polish P6 — storage/usage summary line -->
+    <plurals name="library_usage_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="library_usage_clips">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="library_usage_cd">Library footprint: %1$s</string>
     <!-- Slice 3 — selection + batch -->
     <string name="library_select_count">%1$d selected</string>
     <string name="library_action_close_selection">Exit selection</string>
