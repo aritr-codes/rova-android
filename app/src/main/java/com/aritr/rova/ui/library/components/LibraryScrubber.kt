@@ -127,6 +127,7 @@ fun LibraryScrubber(
                     )
                     setProgress { target ->
                         val seg = target.roundToInt().coerceIn(0, n - 1)
+                        lastScrolledSeg = seg // keep coalescing state consistent with the AT path
                         onScrollToItemIndex(segments[seg].startItemIndex)
                         true
                     }

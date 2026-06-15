@@ -127,7 +127,7 @@ fun LibraryScreen(
     val sort by viewModel.sort.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     var searchActive by rememberSaveable { mutableStateOf(false) }
-    var sortSheetOpen by remember { mutableStateOf(false) }
+    var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
 
@@ -285,7 +285,7 @@ fun LibraryScreen(
     val collection = remember(visibleRows, hero, sort, filter) {
         LibraryQuery.collection(visibleRows, sort, filter, hero?.stableKey)
     }
-    val groups = remember(collection, nowMillis) { LibraryDayGrouping.group(collection, nowMillis, locale, tz) }
+    val groups = remember(collection, nowMillis, locale, tz) { LibraryDayGrouping.group(collection, nowMillis, locale, tz) }
     // Scrubber segments: leading = recovery/warnings header (always) + hero (if present).
     val leadingItemCount = 1 + (if (hero != null) 1 else 0)
     val scrubberSegments = remember(groups, leadingItemCount) {
@@ -468,7 +468,7 @@ fun LibraryScreen(
                     }
                     LibraryFilterChips(
                         filter = filter,
-                        onAll = { viewModel.clearFilters() },
+                        onAll = { viewModel.clearFilters(); searchActive = false },
                         onToggleFavorites = { viewModel.setFavoritesOnly(!filter.favoritesOnly) },
                         onTogglePl = {
                             viewModel.setTopologyFilter(
