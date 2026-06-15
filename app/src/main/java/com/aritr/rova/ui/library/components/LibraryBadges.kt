@@ -40,7 +40,7 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
         modifier
             .clearAndSetSemantics {}
             .background(scrimColor, RoundedCornerShape(LibraryDimens.pillRadius))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = LibraryDimens.badgePadH, vertical = LibraryDimens.badgePadV),
     ) {
         Text(
             text = text,
@@ -69,7 +69,7 @@ fun CaptionBar(text: String, modifier: Modifier = Modifier) {
         modifier
             .clearAndSetSemantics {}
             .background(captionScrimBrush)
-            .padding(start = 8.dp, end = 8.dp, top = 18.dp, bottom = 6.dp),
+            .padding(start = LibraryDimens.captionPadH, end = LibraryDimens.captionPadH, top = LibraryDimens.captionPadTop, bottom = LibraryDimens.captionPadBottom),
     ) {
         Text(
             text = text,

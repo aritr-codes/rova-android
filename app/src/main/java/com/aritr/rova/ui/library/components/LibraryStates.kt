@@ -46,7 +46,7 @@ fun LibraryEmpty(title: String, body: String, cta: String? = null, onStartRecord
             Modifier
                 .size(96.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = LibraryDimens.emptyIconAlpha)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

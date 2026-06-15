@@ -56,7 +56,7 @@ fun LibraryListRow(
         role = GlassRole.Card,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp)
+            .padding(horizontal = LibraryDimens.screenPadH, vertical = LibraryDimens.cardPadV)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .semantics {
                 role = Role.Button

@@ -103,7 +103,7 @@ fun LibraryGridCard(
             Box(
                 Modifier
                     .align(Alignment.TopStart)
-                    .padding(6.dp)
+                    .padding(LibraryDimens.cardPadV)
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.32f)),
