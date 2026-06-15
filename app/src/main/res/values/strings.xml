@@ -824,4 +824,24 @@
     <string name="library_a11y_selected">Selected</string>
     <string name="library_a11y_not_selected">Not selected</string>
     <string name="library_sidecar_write_error">Couldn\'t save that change</string>
+    <!-- Library Discovery (Slice 4) -->
+    <string name="library_sort_title">Sort</string>
+    <string name="library_sort_newest">Newest first</string>
+    <string name="library_sort_oldest">Oldest first</string>
+    <string name="library_sort_longest">Longest</string>
+    <string name="library_sort_largest">Largest</string>
+    <string name="library_sort_open_cd">Sort</string>
+    <string name="library_sort_current_cd">Current sort: %1$s</string>
+    <string name="library_filter_all">All</string>
+    <string name="library_filter_favorites">Favorites</string>
+    <string name="library_filter_pl">P+L</string>
+    <string name="library_filter_selected_cd">%1$s, selected</string>
+    <string name="library_filter_not_selected_cd">%1$s</string>
+    <string name="library_search_open_cd">Search</string>
+    <string name="library_search_close_cd">Close search</string>
+    <string name="library_search_clear_cd">Clear search</string>
+    <string name="library_search_hint">Search recordings</string>
+    <string name="library_search_empty_title">No matches</string>
+    <string name="library_search_empty_body">Try a different name or date.</string>
+    <string name="library_scrubber_rail_cd">Scroll by day</string>
 </resources>

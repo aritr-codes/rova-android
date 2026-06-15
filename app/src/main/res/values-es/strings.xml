@@ -822,4 +822,24 @@
     <string name="library_a11y_selected">Seleccionada</string>
     <string name="library_a11y_not_selected">No seleccionada</string>
     <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
+    <!-- Library Discovery (Slice 4) -->
+    <string name="library_sort_title">Ordenar</string>
+    <string name="library_sort_newest">Más recientes primero</string>
+    <string name="library_sort_oldest">Más antiguos primero</string>
+    <string name="library_sort_longest">Más largos</string>
+    <string name="library_sort_largest">Más grandes</string>
+    <string name="library_sort_open_cd">Ordenar</string>
+    <string name="library_sort_current_cd">Orden actual: %1$s</string>
+    <string name="library_filter_all">Todos</string>
+    <string name="library_filter_favorites">Favoritos</string>
+    <string name="library_filter_pl">P+L</string>
+    <string name="library_filter_selected_cd">%1$s, seleccionado</string>
+    <string name="library_filter_not_selected_cd">%1$s</string>
+    <string name="library_search_open_cd">Buscar</string>
+    <string name="library_search_close_cd">Cerrar búsqueda</string>
+    <string name="library_search_clear_cd">Borrar búsqueda</string>
+    <string name="library_search_hint">Buscar grabaciones</string>
+    <string name="library_search_empty_title">Sin resultados</string>
+    <string name="library_search_empty_body">Prueba con otro nombre o fecha.</string>
+    <string name="library_scrubber_rail_cd">Desplazar por día</string>
 </resources>
