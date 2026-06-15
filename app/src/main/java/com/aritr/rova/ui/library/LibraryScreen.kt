@@ -64,6 +64,7 @@ import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
 import com.aritr.rova.ui.library.components.LibraryEmpty
+import com.aritr.rova.ui.library.components.LibrarySearchEmpty
 import com.aritr.rova.ui.library.components.LibraryGridCard
 import com.aritr.rova.ui.library.components.LibraryHeroCard
 import com.aritr.rova.ui.library.components.LibraryItemSheet
@@ -533,6 +534,9 @@ fun LibraryScreen(
             },
         ) { innerPadding ->
             when {
+                // Body state taxonomy mirrors LibraryStatePolicy (Loading / Empty / SearchEmpty /
+                // Content); the inline branch keeps the structural nesting (shared discovery chips +
+                // RecoveryAndWarnings) the pure resolver can't express. See LibraryStatePolicy.
                 !ui.hasLoaded -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
                 ui.rows.isEmpty() -> Column(
                     Modifier
@@ -544,12 +548,7 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     RecoveryAndWarnings()
-                    LibraryEmpty(
-                        title = stringResource(R.string.library_empty_title),
-                        body = stringResource(R.string.library_empty_body),
-                        cta = stringResource(R.string.library_empty_cta),
-                        onStartRecording = onNavigateToRecord,
-                    )
+                    LibraryEmpty(onGoToRecord = onNavigateToRecord)
                 }
                 else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
                     // Pinned Discovery controls (search field when active + filter chips).
@@ -573,12 +572,10 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                     if (hero == null && collection.isEmpty()) {
-                        // Filtered/searched to nothing (rows exist, none match).
-                        LibraryEmpty(
-                            title = stringResource(R.string.library_search_empty_title),
-                            body = stringResource(R.string.library_search_empty_body),
-                            cta = null,
-                            onStartRecording = {},
+                        // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
+                        // pinned above so the user can clear/adjust; the body offers Clear filters too.
+                        LibrarySearchEmpty(
+                            onClearFilters = { viewModel.clearFilters(); searchActive = false },
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else {
