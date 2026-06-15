@@ -15,6 +15,8 @@ object TileSemantics {
         val recoveredWord: String,
         val interruptedWord: String,
         val dualWord: String,
+        val portraitWord: String = "",
+        val landscapeWord: String = "",
     )
 
     fun describe(row: LibraryRow, f: Fragments): String = buildString {
@@ -26,6 +28,12 @@ object TileSemantics {
             null -> {}
         }
         if (row.topology == CaptureTopology.DualShot) append(", ").append(f.dualWord)
+        // Orientation glyph is decorative on the tile — speak it here so it is not lost to TalkBack.
+        when (row.orientation) {
+            LibraryOrientation.PORTRAIT -> if (f.portraitWord.isNotBlank()) append(", ").append(f.portraitWord)
+            LibraryOrientation.LANDSCAPE -> if (f.landscapeWord.isNotBlank()) append(", ").append(f.landscapeWord)
+            null -> {}
+        }
     }
 
     private fun durationSpeech(ms: Long): String {

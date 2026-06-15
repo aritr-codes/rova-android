@@ -329,6 +329,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 exportState = facts?.exportState ?: com.aritr.rova.data.ExportState.FINALIZED,
                 customTitle = meta?.customTitle,
                 favorite = meta?.favorite ?: false,
+                side = item.side,
+                thumbWidthPx = item.thumbnail?.width ?: 0,
+                thumbHeightPx = item.thumbnail?.height ?: 0,
             ),
             locale, tz,
         )

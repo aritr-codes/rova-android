@@ -1,8 +1,10 @@
 package com.aritr.rova.ui.library.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,6 +49,32 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
             color = captionTextColor,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/**
+ * Orientation cue on the same structural scrim chip as [OverlayPill] — a drawn frame glyph: a tall
+ * rounded rectangle for PORTRAIT, a wide one for LANDSCAPE. Drawn (not a Material icon) so it needs no
+ * icon dependency and reads as an unambiguous aspect-ratio frame. Decorative: semantics cleared (the
+ * orientation word is spoken via the merged tile description).
+ */
+@Composable
+fun OrientationFramePill(orientation: com.aritr.rova.ui.library.LibraryOrientation, modifier: Modifier = Modifier) {
+    val (w, h) = when (orientation) {
+        com.aritr.rova.ui.library.LibraryOrientation.PORTRAIT -> 10.dp to 14.dp
+        com.aritr.rova.ui.library.LibraryOrientation.LANDSCAPE -> 14.dp to 10.dp
+    }
+    Box(
+        modifier
+            .clearAndSetSemantics {}
+            .background(scrimColor, RoundedCornerShape(LibraryDimens.pillRadius))
+            .padding(horizontal = LibraryDimens.badgePadH, vertical = LibraryDimens.badgePadV),
+    ) {
+        Box(
+            Modifier
+                .size(width = w, height = h)
+                .border(1.5.dp, captionTextColor, RoundedCornerShape(2.dp)),
         )
     }
 }

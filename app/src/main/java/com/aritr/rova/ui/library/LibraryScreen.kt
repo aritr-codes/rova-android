@@ -245,6 +245,8 @@ fun LibraryScreen(
         recoveredWord = stringResource(R.string.library_badge_recovered),
         interruptedWord = stringResource(R.string.library_badge_interrupted),
         dualWord = stringResource(R.string.library_badge_pl),
+        portraitWord = stringResource(R.string.library_orientation_portrait),
+        landscapeWord = stringResource(R.string.library_orientation_landscape),
     )
     val recoveredLabel = stringResource(R.string.library_badge_recovered)
     val interruptedLabel = stringResource(R.string.library_badge_interrupted)
@@ -652,6 +654,7 @@ fun LibraryScreen(
                                                 autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 durationFallback = "—",
+                                                dualShotLabel = plLabel,
                                                 onClick = { onTileClick(row.stableKey) },
                                                 modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
                                                 isSelectionMode = selection.active,

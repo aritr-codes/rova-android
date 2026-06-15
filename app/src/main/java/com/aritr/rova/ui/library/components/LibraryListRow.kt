@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SessionCaption
@@ -55,6 +57,7 @@ fun LibraryListRow(
     autoplay: Boolean = false,
     tileDescription: String,
     durationFallback: String,
+    dualShotLabel: String = "",
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isSelectionMode: Boolean = false,
@@ -91,6 +94,14 @@ fun LibraryListRow(
                     LibraryAutoplayVideo(previewUri, thumbnail, Modifier.fillMaxSize())
                 } else {
                     VideoFrame(thumbnail, Modifier.fillMaxSize())
+                }
+                // Standard → orientation glyph only; DualShot → "DualShot" label + glyph (owner request).
+                Row(
+                    Modifier.align(Alignment.TopStart).padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    if (row.topology == CaptureTopology.DualShot) OverlayPill(dualShotLabel)
+                    row.orientation?.let { OrientationFramePill(it) }
                 }
                 if (row.durationMs > 0) {
                     OverlayPill(

@@ -111,12 +111,15 @@ fun LibraryGridCard(
                     Modifier.align(Alignment.TopStart).padding(6.dp),
                 )
             }
+            // Standard recording → orientation glyph only; DualShot → "DualShot" label + glyph (the
+            // label is the special-mode indicator, orientation is the secondary cue). Owner request.
             Row(
                 Modifier.align(Alignment.TopEnd).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (statusLabel != null) OverlayPill(statusLabel)
                 if (row.topology == CaptureTopology.DualShot) OverlayPill(plLabel)
+                row.orientation?.let { OrientationFramePill(it) }
             }
             if (row.durationMs > 0) {
                 OverlayPill(

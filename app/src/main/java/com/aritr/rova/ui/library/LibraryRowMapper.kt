@@ -3,6 +3,7 @@ package com.aritr.rova.ui.library
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.Terminated
+import com.aritr.rova.service.dualrecord.VideoSide
 import java.util.Locale
 import java.util.TimeZone
 
@@ -27,6 +28,11 @@ object LibraryRowMapper {
         val exportState: ExportState,
         val customTitle: String?,
         val favorite: Boolean,
+        /** DualShot per-side discriminator (null for single-mode/legacy) — authoritative orientation. */
+        val side: VideoSide? = null,
+        /** Decoded thumbnail pixel size (rotation-corrected) — orientation source for single-mode rows. */
+        val thumbWidthPx: Int = 0,
+        val thumbHeightPx: Int = 0,
     )
 
     fun map(input: Input, locale: Locale, tz: TimeZone): LibraryRow {
@@ -47,6 +53,7 @@ object LibraryRowMapper {
             topology = CaptureTopology.fromPersisted(input.topologyPersisted),
             badge = StatusBadgePolicy.badgeFor(input.terminated, input.exportState),
             favorite = input.favorite,
+            orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
         )
     }
 }

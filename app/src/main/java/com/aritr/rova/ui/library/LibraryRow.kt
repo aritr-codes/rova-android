@@ -26,6 +26,12 @@ data class LibraryRow(
     val topology: CaptureTopology,
     val badge: LibraryBadge?,
     val favorite: Boolean,
+    /**
+     * Orientation this tile represents — drives the orientation glyph (owner request, 2026-06-15).
+     * DualShot rows resolve it from their per-side discriminator; single-mode rows from the video
+     * resolution. null = no verdict (square / legacy / SAF) → the card renders no glyph.
+     */
+    val orientation: LibraryOrientation? = null,
 )
 
 /** Sort options for the Library (decision C). */
