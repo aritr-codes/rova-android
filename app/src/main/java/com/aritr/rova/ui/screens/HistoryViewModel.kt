@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
@@ -16,9 +17,11 @@ import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.service.export.VaultMoverBuilder
+import com.aritr.rova.ui.library.LibraryFilter
 import com.aritr.rova.ui.library.LibraryMetadataEntry
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.LibraryRowMapper
+import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.LibraryViewMode
 import com.aritr.rova.ui.library.ThumbnailCacheKey
@@ -248,6 +251,24 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * this, or `libraryUiState` will serve a stale snapshot.
      */
     private val _sidecarRevision = MutableStateFlow(0)
+
+    /**
+     * Slice 4 (spec §5.4) — Discovery sort + filter/search state. Thin reactive
+     * holders; the pure [LibraryQuery] does the work and the Screen reads these into
+     * its query call. `_filter.search` carries the live search query (folded into the
+     * one filter object so the query call takes a single facet bundle).
+     */
+    private val _sort = MutableStateFlow(LibrarySort.NEWEST)
+    val sort: StateFlow<LibrarySort> = _sort.asStateFlow()
+
+    private val _filter = MutableStateFlow(LibraryFilter())
+    val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
+
+    fun setSort(value: LibrarySort) { _sort.value = value }
+    fun setSearch(query: String) { _filter.update { it.copy(search = query) } }
+    fun setFavoritesOnly(only: Boolean) { _filter.update { it.copy(favoritesOnly = only) } }
+    fun setTopologyFilter(topology: CaptureTopology?) { _filter.update { it.copy(topology = topology) } }
+    fun clearFilters() { _filter.value = LibraryFilter() }
 
     /**
      * Non-blocking one-shot signal that a sidecar write failed (owner adjustment 2).
