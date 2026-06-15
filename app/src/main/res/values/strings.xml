@@ -801,7 +801,7 @@
     <string name="library_view_list">List view</string>
     <string name="library_badge_recovered">Recovered</string>
     <string name="library_badge_interrupted">Interrupted</string>
-    <string name="library_badge_pl">Portrait plus Landscape</string>
+    <string name="library_badge_pl">DualShot</string>
     <plurals name="library_hero_clip_count">
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>

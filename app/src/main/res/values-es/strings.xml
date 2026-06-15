@@ -799,7 +799,7 @@
     <string name="library_view_list">Vista de lista</string>
     <string name="library_badge_recovered">Recuperado</string>
     <string name="library_badge_interrupted">Interrumpido</string>
-    <string name="library_badge_pl">Vertical y horizontal</string>
+    <string name="library_badge_pl">DualShot</string>
     <plurals name="library_hero_clip_count">
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
