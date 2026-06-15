@@ -241,8 +241,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    /** Library grid/list toggle (decision A). Drives [libraryUiState]. */
-    private val _viewMode = MutableStateFlow(LibraryViewMode.GRID)
+    /** Slice 4.1 — RovaSettings seam for persisting the Library view mode across launches. */
+    private val settings = RovaSettings(getApplication())
+
+    /**
+     * Library grid/list toggle (decision A). Drives [libraryUiState]. Seeded from the persisted
+     * [RovaSettings.libraryViewMode] (Slice 4.1, fixes "resets to Grid every launch") and
+     * re-persisted in [setViewMode]; unknown/missing coerces to GRID.
+     */
+    private val _viewMode = MutableStateFlow(
+        runCatching { LibraryViewMode.valueOf(settings.libraryViewMode) }.getOrDefault(LibraryViewMode.GRID),
+    )
 
     /**
      * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
@@ -325,7 +334,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun setViewMode(mode: LibraryViewMode) { _viewMode.value = mode }
+    fun setViewMode(mode: LibraryViewMode) {
+        _viewMode.value = mode
+        settings.libraryViewMode = mode.name // persist across launches (Slice 4.1)
+    }
 
     /**
      * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI

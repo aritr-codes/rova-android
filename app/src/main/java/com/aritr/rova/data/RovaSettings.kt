@@ -332,6 +332,13 @@ class RovaSettings(context: Context) {
         get() = prefs.getBoolean("prefer_front_camera", false)
         set(value) = prefs.edit { putBoolean("prefer_front_camera", value) }
 
+    // Slice 4.1 — last Library view mode (Grid/List). Backed up (a genuine UI preference,
+    // like themeMode). Stored as the LibraryViewMode name; the UI layer coerces unknown/missing
+    // to GRID (this layer stays ui-agnostic — raw String, default "GRID").
+    var libraryViewMode: String
+        get() = prefs.getString("library_view_mode", "GRID") ?: "GRID"
+        set(value) = prefs.edit { putString("library_view_mode", value) }
+
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"
