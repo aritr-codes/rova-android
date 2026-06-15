@@ -1,13 +1,13 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-14 (Enhanced Library & History redesign — Slice 3 + visual polish built; break for the day).**
+> **As of 2026-06-15 (Enhanced Library & History redesign — Slice 4 Discovery built + installed; PENDING owner device smoke).**
 
 ---
 
 ## Where things stand
 
-- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, 40 commits ahead of `master`. Holds **all of Slices 1 + 2 + 3** of the Library/History redesign. On top of it sits the **uncommitted visual polish pass** (10 modified + 2 new files — see below).
+- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **54 commits ahead** of `master`. Holds **all of Slices 1 + 2 + 3 + 4** of the Library/History redesign. The Slice-3 visual polish pass is **committed** (`b12bb5f`); Slice 4 Discovery is committed (12 commits, tip `a9188dc`). Working tree clean (only ephemeral `gradle_*.log` untracked).
 - **master:** `dfd3bd9` (#116 DualSight doc-closeout). **Contains zero Library redesign code.**
 - **Open PRs (pushed, awaiting the merge train):**
   - **#117 — Slice 1 Foundation** (branch `feat/library-history-foundation`) · OPEN
@@ -26,19 +26,19 @@ Liquid-Glass redesign of the recording-browse surfaces (ADR-0028 + new **ADR-003
 1. **Foundation** ✅ built — sidecar `LibraryMetadataStore` (favorite/rename, NEVER `SessionManifest`), pure helpers, 42nd gate. **PR #117 OPEN.**
 2. **Layout** ✅ built — hero+grid/list, glass cards, badges, day grouping, a11y. **PR #118 OPEN.**
 3. **Selection + batch + route-wire** ✅ built — `SelectionReducer`/`PendingDelete` pure helpers, deferred-delete UNDO (codex-hardened), glass selection/batch bars + item sheet, `LibraryScreen` is now the **route orchestrator**, `HistoryScreen` RETIRED (`LibraryRow`/`VideoThumbnail` extracted to `ui/screens/LibraryRow.kt` for VaultScreen), route swapped `"history"`→`LibraryScreen`. Recovery-keep manifest write relocated to `ui/recovery/RecoveryViewModelFactory.kt` (Option A) → gate is exception-free. **Branch `feat/library-history-selection`, local only.**
-   - **+ Visual polish pass (P1–P10)** on top, **uncommitted** — see next section.
-4. **Discovery** ⬜ NEXT — sort/filter/search UI + player scrubber.
-5. **A11y close-out** ⬜ — remediation rows 21/23/32.
+   - **+ Visual polish pass (P1–P10)** — **committed `b12bb5f`** (owner re-smoke GO 2026-06-15).
+4. **Discovery** ✅ built (2026-06-15) — Sort sheet · Filter chips (All·★Favorites·P+L) · inline Search · date fast-scroll Scrubber. New pure `LibraryQuery.heroFor` (filter-aware hero) + `ScrubberIndex`; thin VM `_sort`/`_filter` state; `LibraryScreen` query now sort/filter/search-driven over `visibleRows`; scrubber codex-hardened (separate live-region node, discrete progress, coalesced scroll). Build + 42 gates + JVM suite GREEN; codex + code-reviewer clean (0 critical, 0 ADR-0030). Debug APK installed on RZCYA1VBQ2H. **PENDING owner device smoke** (checklist = `docs/superpowers/plans/2026-06-15-library-history-slice4-discovery.md` Task 12).
+5. **A11y close-out** ⬜ NEXT — remediation rows 21/23/32 (player `SegmentedTimeline` progressbar + per-cell labels; History warning-card focus separation + focus restore on player return).
 
-## Polish pass (uncommitted) — what's in the working tree
+## Polish pass (committed `b12bb5f`) — what it contains
 
-Owner asked for a dedicated visual polish pass on Slice 3 before pushing ("feels like a working prototype rather than the approved redesign"). Done, mapped to 10 priorities. Build GREEN (42 gates), JVM tests GREEN, APK installed on RZCYA1VBQ2H. **Not committed yet** (owner hasn't said commit; pending owner visual re-smoke).
+Owner asked for a dedicated visual polish pass on Slice 3 ("feels like a working prototype rather than the approved redesign"). Done, mapped to 10 priorities; **committed `b12bb5f`** after owner re-smoke GO (2026-06-15).
 
 - **New:** `ui/library/components/LibraryDimens.kt` (shared radius/padding/icon tokens, P1/P9), `ui/library/components/LibraryHeroVideo.kt` (hero-only muted autoplay, ONE ExoPlayer, lifecycle-gated, reduce-motion-gated, codex-reviewed — 4 lifecycle/perf fixes folded: app-context, start-paused+seed-from-lifecycle, `onRelease` detach, single derived `playWhenReady`).
 - **Modified (10):** `LibraryScreen.kt` (autoplay wire + LibraryDimens paddings), `LibraryHeroCard.kt` (shorter hero 176dp + unified action chip group), `LibraryTopBar.kt`/`LibrarySelectionTopBar.kt` (tighter, statusBarsPadding), `LibraryBatchBar.kt` (labelled actions, not icon-only), `LibraryDayHeader.kt` (lighter section label, not toolbar), `LibraryBadges.kt` (gradient caption scrim), `LibraryGridCard.kt` (radius/scrim, lighter selection ring+check), `LibraryListRow.kt` (padding/shape), `LibraryStates.kt` (ring empty-state).
 - **codex residual (acceptable for one hero, noted to owner):** offscreen-prefetch-buffer playback, no `onPlayerError` listener, not hoisted to a VM/controller.
 
-**NEXT for the resuming session:** await owner visual re-smoke verdict on the installed APK → then **Slice 4 (Discovery)**, stacked on `feat/library-history-selection`. Do NOT push/merge until the full reskin is done.
+**NEXT for the resuming session:** await owner device-smoke verdict on Slice 4 (Discovery) installed on RZCYA1VBQ2H → then **Slice 5 (A11y close-out, rows 21/23/32)**, stacked on `feat/library-history-selection`. Do NOT push/merge until the full reskin is done.
 
 ## Release build (for sharing a tester APK)
 
