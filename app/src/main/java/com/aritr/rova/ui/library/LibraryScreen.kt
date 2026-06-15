@@ -101,6 +101,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.pluralStringResource
 import java.util.Locale
 import java.util.TimeZone
 
@@ -758,9 +759,24 @@ fun LibraryScreen(
 
         sheetTarget?.let { row ->
             val item = byKey[row.stableKey]
+            // P8 — session-identity header: title (WHEN) + meta (clips · duration · size), reusing the
+            // same pure SessionCaption the list row renders (no new formatter, no manifest read).
+            val sheetClipLabel = if (row.clipCount > 1) {
+                pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
+            } else {
+                ""
+            }
+            val sheetMeta = SessionCaption.listMeta(
+                clipCountLabel = sheetClipLabel,
+                durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else "",
+                sizeLabel = StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+            )
             LibraryItemSheet(
                 isFavorite = row.favorite,
                 movable = row.topology != com.aritr.rova.data.CaptureTopology.DualShot && item?.sessionId != null,
+                headerTitle = row.title,
+                headerMeta = sheetMeta,
+                headerThumbnail = item?.thumbnail,
                 playLabel = stringResource(R.string.library_action_play),
                 selectLabel = stringResource(R.string.library_action_select),
                 shareLabel = shareLabel,
