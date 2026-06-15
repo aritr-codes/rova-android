@@ -724,12 +724,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * filename); every other row sums the session's segments.
      */
     private fun factsFor(m: SessionManifest, rec: ResolvedRecording): RowManifestFacts {
-        val durations = if (rec.segmentIndex != null) {
-            val seg = m.segments.firstOrNull { it.filename == rec.file?.name }
-            listOf(seg?.durationMs ?: 0L)
-        } else {
-            m.segments.map { it.durationMs }
-        }
+        // A DualShot per-side row must count only its own side's segments — a DualShot capture writes a
+        // portrait AND a landscape segment per loop, so summing all segments reported N×2 clips and a
+        // doubled duration (SessionDurations, JVM-tested).
+        val durations = SessionDurations.forRow(
+            segments = m.segments,
+            isPerSegment = rec.segmentIndex != null,
+            segmentFilename = rec.file?.name,
+            side = rec.side,
+        )
         return RowManifestFacts(
             startedAt = m.startedAt,
             segmentDurationsMs = durations,
