@@ -150,17 +150,19 @@ The **`SemanticIcon` tint seam** is the single entry-point the theme engine driv
 
 | Tier | Work | When |
 |---|---|---|
-| **P0** (before theme engine) | Resolve chrome-baked collisions (Settings→gear · Sort→state-free · Library→stack · Warning/Notifications split · Record action/nav/stop). Introduce the **`SemanticIcon` tint seam** replacing the 20 raw-alpha sites. **Lock status colors** to `RovaSemantics`. | next |
+| **P0** (before theme engine) | Resolve chrome-baked collisions (Settings→gear · Sort→state-free · Library→stack · Warning/Notifications split · Record action/nav/stop). Introduce the **`SemanticIcon` tint seam** replacing the 20 raw-alpha sites. **Lock status colors** to `RovaSemantics`. | **LANDED 2026-06-16** |
 | **P1** (with theme engine) | Author bespoke brand glyphs (DualShot, Vault, Recovery, DualSight, Background-record, Merge) into `RovaGlyphs`. Wire the duotone accent channel + glass-chip active container to the palette. | with engine |
 | **P2** (future) | Animated states (processing/merging) + reduce-motion fallbacks. Secondary concepts (Loop/Interval, Segment count, Waiting). Onboarding illustration refresh. | later |
 
 **Why P0 is load-bearing:** the theme engine drives icon color through the seam. If the seam and the concept→glyph collisions aren't fixed first, the engine bakes in raw alphas and ambiguous glyphs that are expensive to unwind.
 
 ### New invariants → gates (follow invariant → `check*` → preBuild)
-- `checkSemanticIconNoRawAlpha` (P0): no `Color.White.copy(alpha=…)` / hardcoded tint on `Icon(...)` outside the `SemanticIcon` seam.
-- `checkStatusColorLocked` (P0): status glyphs pull from `RovaSemantics`, never a per-call color.
+- `checkSemanticIconNoRawAlpha` (P0, **BUILT**): no raw `Color` literal on a `tint =` argument outside the `SemanticIcon` seam.
+- `checkStatusColorLocked` (P0, **BUILT**): no `.copy(...)` on a `RovaSemantics` color (status colors stay exact + locked).
 - `checkRovaGlyphHome` (P1): bespoke `ImageVector`s declared only in `RovaGlyphs` (subsumes the `RecordChromeIcons.kt` allowance in `checkRecordSurfaceNoBlur`).
 Exact gate shapes are finalized in the implementation plan, not here.
+
+> **P0 landed 2026-06-16** (`docs/superpowers/plans/2026-06-16-icon-system-p0.md`). The audit's "20 raw-alpha sites" was corrected by an authoritative grep to **~22 sites across 8 files** — the real offender shape is `tint = <raw Color>` (incl. full `Color.White` + conditionals). PreviewActivity (×4) and RovaCardComponents (×1) were added; SettingsScreen/Onboarding/Vault had **no** icon-tint offenders (their `Color.White.copy` hits are tokens/scrims/illustrations). The gate also surfaced one more site (`LibrarySortSheet` check). **Collision resolution** shipped as the `RovaIcons` alias map (one concept→one glyph) + the Warning-status/Notifications-setting split; the **bespoke redraws** (8-spoke gear, stacked-frames Library, ring+core record-nav, bespoke amber triangle) author **no new vectors in P0** and stay P1 (ADR-0031 §8). The size-token registry (§10) was **not** in P0 scope. Flash-ON yellow is a hardware-state indicator kept outside the seam via the gate's opt-out hatch.
 
 ---
 

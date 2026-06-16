@@ -1,6 +1,6 @@
 # ADR-0031: In-app icon &amp; glyph system — outlined-default duotone, semantic tint seam, locked status
 
-Status: **Proposed** (2026-06-16) — design approved; sets a standing requirement, gated implementation deferred to P0/P1
+Status: **Accepted** (2026-06-16) — design approved; **P0 landed 2026-06-16** (`SemanticIcon` seam + status-color lock + `RovaIcons` collision map + gates `checkSemanticIconNoRawAlpha` §4 / `checkStatusColorLocked` §3); P1/P2 remain deferred
 Refines: ADR-0028 §9 ("Icons — separate later PR"). Reuses ADR-0028 §3 (locked `RovaSemantics`), ADR-0020 (WCAG 2.2 AA), ADR-0022 (strings in resources).
 Design spec: `docs/superpowers/specs/2026-06-16-icon-glyph-system-design.md`. Visual exploration: `.superpowers/brainstorm/…/board-3-semantic.html`.
 
@@ -30,8 +30,8 @@ This is a presentation-only program. No reliability/behavior change. Delivered f
 
 ## Enforcement (new gates, finalized in the P0/P1 plans — follow invariant → `check*` → preBuild)
 
-- `checkSemanticIconNoRawAlpha` (P0): no `Color.White.copy(alpha=…)` / hardcoded tint applied to `Icon(...)` outside the `SemanticIcon` seam.
-- `checkStatusColorLocked` (P0): status glyphs pull color only from `RovaSemantics`.
+- `checkSemanticIconNoRawAlpha` (P0, **BUILT 2026-06-16**, §4): forbids a raw `Color` literal on any `tint =` argument outside `ui/components/SemanticIcon.kt`; keyed on the `tint =` argument over a 3-line window (catches wrapped/conditional tints); `// semanticicon-opt-out: <reason>` hatch for genuinely non-themed glyphs (e.g. the flash-ON hardware-state indicator).
+- `checkStatusColorLocked` (P0, **BUILT 2026-06-16**, §3): forbids any `.copy(...)` on a `RovaSemantics.<member>` (no per-call alpha/channel mutation of a locked status color). The status→`RovaSemantics` mapping itself is covered by `SemanticIconSpecTest` (JVM).
 - `checkRovaGlyphHome` (P1): bespoke `ImageVector`s declared only in `RovaGlyphs` (subsumes the `RecordChromeIcons.kt` allowance in `checkRecordSurfaceNoBlur`).
 - Reused: `checkA11yTargetSizeToken` (≥24dp), `checkA11yAnimationGated` (reduce-motion), `checkNoHardcodedUiStrings` (en+es), `ThemeContrastTest`/`ContrastMath` for glyph+chip ratios.
 
