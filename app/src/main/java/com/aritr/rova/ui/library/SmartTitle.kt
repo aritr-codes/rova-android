@@ -6,23 +6,23 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * ADR-0030 — derives the default Library title for a session that has no
- * user [LibraryMetadataEntry.customTitle]. Pure: takes manifest-derived
- * primitives, returns a string. Format: `EEE · h:mm a · N clip(s) · <dur>`.
+ * ADR-0030 — derives the default Library title (session "name") for a session that has no user
+ * [LibraryMetadataEntry.customTitle]. Pure: takes manifest-derived primitives, returns a string.
+ *
+ * Format: `EEE · h:mm a` (e.g. `Mon · 12:34 PM`) — a concise WHEN. The clip count, duration, and size
+ * are the session's WHAT and live in the separate meta line ([SessionCaption] / [HeroMetaFormatter]) so
+ * the title and meta don't repeat each other (owner polish, 2026-06-15).
  */
 object SmartTitle {
 
     fun derive(
         startedAtMillis: Long,
-        segmentCount: Int,
-        totalDurationMs: Long,
         locale: Locale,
         tz: TimeZone,
     ): String {
         val day = SimpleDateFormat("EEE", locale).apply { timeZone = tz }.format(Date(startedAtMillis))
         val time = SimpleDateFormat("h:mm a", locale).apply { timeZone = tz }.format(Date(startedAtMillis))
-        val clips = if (segmentCount == 1) "1 clip" else "$segmentCount clips"
-        return "$day · $time · $clips · ${formatDuration(totalDurationMs)}"
+        return "$day · $time"
     }
 
     /** Public m/s duration label (`12m`, `1m 30s`, `42s`) — shared by cards + semantics. */

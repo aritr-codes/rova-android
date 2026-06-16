@@ -15,7 +15,7 @@ import org.junit.Test
 class LibraryQueryHeroDedupTest {
 
     private fun row(key: String, date: Long) =
-        LibraryRow(key, key, "", date, 0, 0, CaptureTopology.Single, null, false)
+        LibraryRow(key, key, "", date, 0, 0, 1, CaptureTopology.Single, null, false)
 
     @Test fun `hero is excluded from the collection — single representation`() {
         val rows = listOf(row("c", 300), row("b", 200), row("a", 100)) // newest first

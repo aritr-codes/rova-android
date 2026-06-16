@@ -11,7 +11,7 @@ class TileSemanticsTest {
         dur: Long = 12 * 60_000L,
         topology: CaptureTopology = CaptureTopology.Single,
         badge: LibraryBadge? = null,
-    ) = LibraryRow("k", title, "", 0, dur, 0, topology, badge, false)
+    ) = LibraryRow("k", title, "", 0, dur, 0, 1, topology, badge, false)
 
     private val frag = TileSemantics.Fragments(
         durationWord = "duration", recoveredWord = "Recovered", interruptedWord = "Interrupted",

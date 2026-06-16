@@ -1,18 +1,48 @@
 package com.aritr.rova.ui.library
 
+import android.content.Intent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
@@ -21,64 +51,208 @@ import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.R
+import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
+import com.aritr.rova.ui.library.components.LibraryDualShotEmpty
 import com.aritr.rova.ui.library.components.LibraryEmpty
+import com.aritr.rova.ui.library.components.LibraryFavoritesEmpty
+import com.aritr.rova.ui.library.components.LibraryFilteredEmpty
+import com.aritr.rova.ui.library.components.LibrarySearchEmpty
+import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryGridCard
 import com.aritr.rova.ui.library.components.LibraryHeroCard
+import com.aritr.rova.ui.library.components.LibraryItemSheet
+import com.aritr.rova.ui.library.components.LibraryFilterChips
 import com.aritr.rova.ui.library.components.LibraryListRow
 import com.aritr.rova.ui.library.components.LibraryLoading
+import com.aritr.rova.ui.library.components.LibraryRenameDialog
+import com.aritr.rova.ui.library.components.LibraryScrubber
+import com.aritr.rova.ui.library.components.LibrarySearchField
+import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
+import com.aritr.rova.ui.library.components.LibrarySortSheet
 import com.aritr.rova.ui.library.components.LibraryTopBar
 import com.aritr.rova.ui.library.components.statusBadgeLabel
+import com.aritr.rova.ui.recovery.RecoveryCardKind
+import com.aritr.rova.ui.recovery.RecoveryCardList
+import com.aritr.rova.ui.recovery.RecoveryViewModel
+import com.aritr.rova.ui.recovery.VendorGuidanceIntents
+import com.aritr.rova.ui.recovery.recoveryViewModelFactory
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
+import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.screens.HistoryViewModel
+import com.aritr.rova.ui.screens.LibrarySessionConfigDialog
+import com.aritr.rova.ui.share.safeShareUri
+import com.aritr.rova.ui.warnings.HistoryWarningSheetHost
+import com.aritr.rova.ui.warnings.HistoryWarningStrip
+import com.aritr.rova.ui.warnings.WarningId
+import com.aritr.rova.ui.warnings.WarningScreen
+import com.aritr.rova.ui.warnings.buildWarningCenterViewModel
+import com.aritr.rova.ui.screens.RetentionCleanupNotices
+import com.aritr.rova.data.SessionConfig
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.pluralStringResource
 import java.util.Locale
 import java.util.TimeZone
 
 private const val GRID_COLUMNS = 2
 
 /**
- * spec §5 — redesigned Library browse surface (hero + grid/list, day-grouped,
- * glass chrome). Pure layout over [HistoryViewModel.libraryUiState]; all derived
- * values come from the tested pure helpers (LibraryQuery / LibraryDayGrouping /
- * TileSemantics). The thumbnail bitmap + nav identity are sourced from the VM's
- * [HistoryViewModel.items] (matched by stableKey). Recovery cards + warning strip
- * are rendered by the caller (retained header — see Task 13).
+ * spec §5 — redesigned Library route surface (hero + grid/list, day-grouped, glass chrome) PLUS the
+ * Slice 3 management layer: long-press multi-select, glass contextual top bar + bottom batch bar
+ * (Share/Vault/Favorite/Delete), Snackbar-UNDO deferred delete, per-item sheet (incl. Rename), and the
+ * ported recovery-card header + warning strip. Replaces `HistoryScreen` on the `"history"` route.
  *
- * Hero invariant (owner adjustment 1): the newest recording renders in EXACTLY one
- * place — `collection` is built with `hero?.stableKey`, so LibraryQuery.collection
- * drops the hero from the day-grouped list. Pinned by LibraryQueryHeroDedupTest.
+ * Hero invariant (owner adj. 1): `collection` is built with `hero?.stableKey`, so the newest recording
+ * renders in exactly one place. Deferred-delete (owner + codex): rows pending delete are hidden via
+ * [PendingDelete]; the real delete commits only on the Snackbar owner (timeout/swipe), UNDO cancels,
+ * screen-dispose abandons (files untouched, rows reappear next load). No manifest writes here (ADR-0030).
  */
 @Composable
 fun LibraryScreen(
     viewModel: HistoryViewModel = viewModel(),
-    onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
-    onShare: (stableKey: String) -> Unit = {},
     onNavigateToRecord: () -> Unit = {},
+    onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
+    onOpenVault: () -> Unit = {},
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as RovaApp
+
     val ui by viewModel.libraryUiState.collectAsStateWithLifecycle()
     val items by viewModel.items.collectAsStateWithLifecycle()
-    // reduce-motion seam wired per ADR-0020: this v1 grid/list adds NO item-
-    // placement animation, so there is nothing to gate yet. If any animate* is
-    // added to a tile later, wrap it `if (!reduceMotion) …` (checkA11yAnimationGated
-    // only fires on present animations).
-    @Suppress("UNUSED_VARIABLE")
+    // Hero muted autoplay is gated by reduce-motion (ADR-0020): off → static frame (owner polish #2).
     val reduceMotion = rememberReduceMotion()
 
+    // Slice 4 Discovery — sort/filter from the VM; search/sort-sheet are local UI state; hoisted scroll
+    // state drives the date scrubber.
+    val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
+
+    // Slice 5 (remediation row 23) — focus restore: remember the row that launched playback so focus
+    // returns to it after popBackStack() from the player. Saveable so it survives process death.
+    var pendingFocusKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val rowFocusRequester = remember { FocusRequester() }
+
+    // Recovery header (factory relocated to ui/recovery/ — ADR-0030 §2).
+    val recoveryViewModel: RecoveryViewModel = viewModel(factory = recoveryViewModelFactory(app, context))
+    val recoveryUiState by recoveryViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Warning strip.
+    val warningVm = remember(app) { buildWarningCenterViewModel(app) }
+    val historyWarnings by (warningVm?.activeWarningsFor(WarningScreen.History) ?: MutableStateFlow(emptyList()))
+        .collectAsStateWithLifecycle()
+    val pendingCantMergeSessionId by (warningVm?.pendingCantMergeSessionId ?: MutableStateFlow(null))
+        .collectAsStateWithLifecycle()
+    var sheetWarningId by remember { mutableStateOf<WarningId?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Selection + deferred-delete state.
+    var selection by remember { mutableStateOf(SelectionState()) }
+    var pending by remember { mutableStateOf(PendingDelete.NONE) }
+    var pendingJob by remember { mutableStateOf<Job?>(null) }
+
+    // Dialog / sheet targets.
+    var viewSettingsConfig by remember { mutableStateOf<SessionConfig?>(null) }
+    var pendingMoveToVaultSessionId by remember { mutableStateOf<String?>(null) }
+    var renameTarget by remember { mutableStateOf<LibraryRow?>(null) }
+    var sheetTarget by remember { mutableStateOf<LibraryRow?>(null) }
+    var pendingDeleteConfirm by remember { mutableStateOf<Set<String>?>(null) }
+
     val byKey = remember(items) { items.associateBy { it.stableKey } }
+    val rowByKey = remember(ui.rows) { ui.rows.associateBy { it.stableKey } }
     val locale = Locale.getDefault()
     val tz = TimeZone.getDefault()
     val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
 
+    // Slice 4.2 / Polish P7 — which cards autoplay: OFF by default (cards are static posters); only
+    // when the opt-in Setting (ui.cardPreview) is on do visible-only (≥50%), capped, non-scrolling,
+    // non-reduce-motion cards preview. The hero is unaffected (it autoplays regardless, see renderHero).
+    val autoplayKeys: Set<String> by remember(reduceMotion, ui.cardPreview) {
+        derivedStateOf {
+            if (reduceMotion || !ui.cardPreview) return@derivedStateOf emptySet()
+            val grid = ui.viewMode == LibraryViewMode.GRID
+            if (if (grid) gridState.isScrollInProgress else listState.isScrollInProgress) {
+                return@derivedStateOf emptySet()
+            }
+            val orderedKeys: List<String>
+            val heroVisible: Boolean
+            if (grid) {
+                val li = gridState.layoutInfo
+                val onScreen = li.visibleItemsInfo.filter {
+                    AutoplayPolicy.isMostlyVisible(it.offset.y, it.size.height, li.viewportStartOffset, li.viewportEndOffset)
+                }
+                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
+                orderedKeys = onScreen.mapNotNull { it.key as? String }
+                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
+            } else {
+                val li = listState.layoutInfo
+                val onScreen = li.visibleItemsInfo.filter {
+                    AutoplayPolicy.isMostlyVisible(it.offset, it.size, li.viewportStartOffset, li.viewportEndOffset)
+                }
+                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
+                orderedKeys = onScreen.mapNotNull { it.key as? String }
+                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
+            }
+            AutoplayPolicy.select(orderedKeys, AutoplayPolicy.cardCap(heroVisible))
+        }
+    }
+
+    // Per-row preview URI (same resolution the hero uses).
+    fun previewUriFor(stableKey: String): android.net.Uri? =
+        byKey[stableKey]?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
+
+    // ---- effects ----
+    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(viewModel) {
+        viewModel.retentionNotices.collect { notice ->
+            RetentionCleanupNotices.message(notice)?.let { snackbarHostState.showSnackbar(it) }
+        }
+    }
+    LaunchedEffect(items) {
+        selection = SelectionReducer.reconcile(selection, items.map { it.stableKey }.toSet())
+    }
+    val sidecarErr by viewModel.sidecarWriteError.collectAsStateWithLifecycle()
+    val sidecarErrMsg = stringResource(R.string.library_sidecar_write_error)
+    LaunchedEffect(sidecarErr) {
+        if (sidecarErr > 0) snackbarHostState.showSnackbar(sidecarErrMsg)
+    }
+    // Abandon any pending delete on dispose — never commit an irreversible op outside the snackbar owner.
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingJob?.cancel()
+            pending = PendingDelete.NONE
+        }
+    }
+
+    // ---- labels ----
     val frag = TileSemantics.Fragments(
         durationWord = stringResource(R.string.library_a11y_duration),
         recoveredWord = stringResource(R.string.library_badge_recovered),
         interruptedWord = stringResource(R.string.library_badge_interrupted),
         dualWord = stringResource(R.string.library_badge_pl),
+        portraitWord = stringResource(R.string.library_orientation_portrait),
+        landscapeWord = stringResource(R.string.library_orientation_landscape),
     )
     val recoveredLabel = stringResource(R.string.library_badge_recovered)
     val interruptedLabel = stringResource(R.string.library_badge_interrupted)
@@ -87,26 +261,182 @@ fun LibraryScreen(
     val favoriteLabel = stringResource(R.string.library_action_favorite)
     val unfavoriteLabel = stringResource(R.string.library_action_unfavorite)
     val shareLabel = stringResource(R.string.library_action_share)
+    val selectedLabel = stringResource(R.string.library_a11y_selected)
+    val notSelectedLabel = stringResource(R.string.library_a11y_not_selected)
+    val shareNoApp = stringResource(R.string.history_share_no_app)
+    val deleteUndoLabel = stringResource(R.string.library_delete_undo)
 
-    val hero = remember(ui.rows) { LibraryQuery.hero(ui.rows) }
-    val collection = remember(ui.rows) {
-        LibraryQuery.collection(ui.rows, LibrarySort.NEWEST, LibraryFilter(), hero?.stableKey)
-    }
-    val groups = remember(collection, nowMillis) {
-        LibraryDayGrouping.group(collection, nowMillis, locale, tz)
+    // ---- share helper (no manifest writes; reuses ShareUriResolver) ----
+    fun shareItems(targets: List<com.aritr.rova.ui.screens.VideoItem>) {
+        val uris = ArrayList<android.net.Uri>()
+        targets.forEach { item -> safeShareUri(context, item.file, item.shareUri)?.let { uris.add(it) } }
+        if (uris.isEmpty()) {
+            coroutineScope.launch { snackbarHostState.showSnackbar(shareNoApp) }
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "video/mp4"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            context.startActivity(Intent.createChooser(intent, context.getString(R.string.history_share_chooser_title)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            coroutineScope.launch { snackbarHostState.showSnackbar(shareNoApp) }
+        }
     }
 
     fun play(stableKey: String) {
         val item = byKey[stableKey] ?: return
-        val sid = item.sessionId ?: return
-        onOpenPlayer(sid, item.side)
+        val sid = item.sessionId
+        if (sid != null) {
+            pendingFocusKey = stableKey // restore focus here on return (row 23)
+            onOpenPlayer(sid, item.side)
+        } else {
+            // Legacy file-only row (no manifest): keep the PreviewActivity path.
+            item.file?.let { f ->
+                pendingFocusKey = stableKey // restore focus here on return (row 23)
+                val intent = Intent(context, PreviewActivity::class.java).apply {
+                    putExtra("VIDEO_PATH", f.absolutePath)
+                    item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
+                }
+                context.startActivity(intent)
+            }
+        }
+    }
+
+    // ---- deferred-delete owner coroutine (owner + codex) ----
+    fun startDeferredDelete(keys: Set<String>) {
+        if (keys.isEmpty()) return
+        // Commit any batch whose snackbar is still showing (stock showSnackbar QUEUES rather than
+        // replaces — codex): dismissing it resolves the prior job Dismissed → it commits now.
+        snackbarHostState.currentSnackbarData?.dismiss()
+        pending = PendingDelete(pending.keys + keys)
+        selection = SelectionReducer.removeAll(selection, keys)
+        pendingJob = coroutineScope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(R.string.library_deleted_count, keys.size),
+                actionLabel = deleteUndoLabel,
+                duration = SnackbarDuration.Short,
+            )
+            when (result) {
+                // UNDO → un-hide (rows still in ui.rows reappear); abandon the delete.
+                SnackbarResult.ActionPerformed -> pending = pending.restore(keys)
+                SnackbarResult.Dismissed -> {
+                    // Timeout/swipe = decided commit. NonCancellable so a screen-dispose mid-delete can't
+                    // half-delete (the still-showing-snackbar abandon path is the cancel of showSnackbar
+                    // ABOVE, which never reaches here). deleteItemsKeyed refreshes items internally.
+                    val targets = viewModel.itemsForKeys(keys)
+                    val failed = withContext(NonCancellable) { viewModel.deleteItemsKeyed(targets) }
+                    // Drop the WHOLE batch from pending: succeeded keys are gone from ui.rows, failed keys
+                    // remain there and reappear once un-hidden — no stale-key leak (codex #1).
+                    pending = pending.restore(keys)
+                    if (failed.isNotEmpty()) {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.library_delete_failed, failed.size),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- derived (pending rows hidden everywhere) ----
+    val visibleRows = remember(ui.rows, pending) { pending.visible(ui.rows) }
+    val hero = remember(visibleRows, filter) { LibraryQuery.heroFor(visibleRows, filter) }
+    val collection = remember(visibleRows, hero, sort, filter) {
+        LibraryQuery.collection(visibleRows, sort, filter, hero?.stableKey)
+    }
+    val groups = remember(collection, sort, nowMillis, locale, tz) { LibraryDayGrouping.groupForSort(collection, sort, nowMillis, locale, tz) }
+    // Scrubber segments: leading = recovery/warnings header (always) + hero (if present).
+    val leadingItemCount = 1 + (if (hero != null) 1 else 0)
+    val scrubberSegments = remember(groups, leadingItemCount) {
+        ScrubberIndex.segments(groups.map { it.label }, groups.map { it.rows.size }, leadingItemCount)
+    }
+    val scrubberRailLabel = stringResource(R.string.library_scrubber_rail_cd)
+
+    // Slice 5 (remediation row 23) — focus restore on return from the player. ON_RESUME also fires on
+    // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
+    // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
+    val currentHeroKey by rememberUpdatedState(hero?.stableKey)
+    val currentGroupKeys by rememberUpdatedState(groups.map { g -> g.rows.map { it.stableKey } })
+    val currentViewMode by rememberUpdatedState(ui.viewMode)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            // P7 — pick up a Settings card-preview toggle when returning to the kept-composed Library tab.
+            viewModel.refreshCardPreview()
+            val key = pendingFocusKey ?: return@LifecycleEventObserver
+            val index = FocusRestorePolicy.targetItemIndex(key, currentHeroKey, currentGroupKeys)
+            if (index == null) {
+                pendingFocusKey = null
+                return@LifecycleEventObserver
+            }
+            coroutineScope.launch {
+                if (currentViewMode == LibraryViewMode.GRID) {
+                    gridState.scrollToItem(index)
+                    snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                } else {
+                    listState.scrollToItem(index)
+                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                }
+                withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
+                runCatching { rowFocusRequester.requestFocus() }
+                pendingFocusKey = null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val vendorHelpSlotFor: (String) -> (@Composable () -> Unit)? = { sessionId ->
+        val card = recoveryUiState.cards.firstOrNull { it.sessionId == sessionId }
+        if (card?.kind == RecoveryCardKind.KILLED_BY_SYSTEM) {
+            {
+                androidx.compose.material3.OutlinedButton(onClick = {
+                    VendorGuidanceIntents.resolveForCurrent(context)?.let { intent ->
+                        try {
+                            context.startActivity(intent)
+                        } catch (_: android.content.ActivityNotFoundException) {
+                        }
+                    }
+                }) { androidx.compose.material3.Text(stringResource(R.string.history_recovery_open_device_settings)) }
+            }
+        } else {
+            null
+        }
+    }
+
+    @Composable
+    fun RecoveryAndWarnings() {
+        // Focus SEPARATION (remediation row 32 / HIST-02): the recovery + warning host is its own
+        // traversal group so it does not merge focus/semantics with the sibling library rows.
+        Column(modifier = Modifier.semantics { isTraversalGroup = true }) {
+            HistoryWarningStrip(
+                warningIds = historyWarnings,
+                onDismiss = { warningVm?.dismissOnHistoryStrip(it) },
+                onOpenSheet = { sheetWarningId = it },
+            )
+            if (recoveryUiState.cards.isNotEmpty() || recoveryUiState.hiddenCount > 0) {
+                RecoveryCardList(
+                    state = recoveryUiState,
+                    onDiscard = { recoveryViewModel.dismiss(it) },
+                    vendorHelpSlotFor = vendorHelpSlotFor,
+                    onMerge = { recoveryViewModel.merge(it) },
+                    onKeepRaw = { recoveryViewModel.keepRaw(it) },
+                )
+            }
+        }
     }
 
     @Composable
     fun renderHero(row: LibraryRow) {
+        val item = byKey[row.stableKey]
+        val previewUri = item?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
         LibraryHeroCard(
             row = row,
-            thumbnail = byKey[row.stableKey]?.thumbnail,
+            thumbnail = item?.thumbnail,
             eyebrow = eyebrow,
             playDescription = TileSemantics.describe(row, frag),
             favoriteLabel = favoriteLabel,
@@ -114,87 +444,403 @@ fun LibraryScreen(
             shareLabel = shareLabel,
             onPlay = { play(row.stableKey) },
             onFavorite = { viewModel.toggleFavorite(row.stableKey) },
-            onShare = { onShare(row.stableKey) },
+            onShare = { byKey[row.stableKey]?.let { shareItems(listOf(it)) } },
+            previewUri = previewUri,
+            autoplay = !reduceMotion,
+            mediaFocusRequester = if (row.stableKey == pendingFocusKey) rowFocusRequester else null,
         )
     }
 
-    Column(modifier.fillMaxSize()) {
-        LibraryTopBar(
-            title = stringResource(R.string.history_title),
-            viewMode = ui.viewMode,
-            gridLabel = stringResource(R.string.library_view_grid),
-            listLabel = stringResource(R.string.library_view_list),
-            onToggleView = {
-                viewModel.setViewMode(
-                    if (ui.viewMode == LibraryViewMode.GRID) LibraryViewMode.LIST else LibraryViewMode.GRID,
-                )
-            },
-        )
+    // tile interaction: tap toggles in select mode else plays. Long-press toggles in select mode,
+    // else opens the per-item sheet (§5.3) — which carries a "Select" entry to start multi-select.
+    fun onTileClick(key: String) {
+        selection = if (selection.active) SelectionReducer.toggle(selection, key) else { play(key); selection }
+    }
+    fun onTileLong(key: String) {
+        if (selection.active) selection = SelectionReducer.toggle(selection, key)
+        else sheetTarget = rowByKey[key]
+    }
 
-        when {
-            !ui.hasLoaded -> LibraryLoading(Modifier.fillMaxSize())
-            ui.rows.isEmpty() -> LibraryEmpty(
-                title = stringResource(R.string.library_empty_title),
-                body = stringResource(R.string.library_empty_body),
-                cta = stringResource(R.string.library_empty_cta),
-                onStartRecording = onNavigateToRecord,
-            )
-            ui.viewMode == LibraryViewMode.GRID -> LazyVerticalGrid(
-                columns = GridCells.Fixed(GRID_COLUMNS),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp)
-                    .semantics {
-                        isTraversalGroup = true
-                        collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
-                    },
-            ) {
-                if (hero != null) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { renderHero(hero) }
+    val movableSelectedExists = remember(selection, byKey) {
+        selection.keys.any { (ui.rows.firstOrNull { r -> r.stableKey == it }?.topology) != com.aritr.rova.data.CaptureTopology.DualShot }
+    }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            // M1 (Theme Foundation) — the screen background is the active theme's own brush, so a tint pack
+            // restyles it from one layer (replaces the former inline colorScheme gradient). Owner-ratified.
+            .background(LocalGlassEnvironment.current.palette.background),
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                if (selection.active) {
+                    LibrarySelectionTopBar(
+                        countLabel = stringResource(R.string.library_select_count, selection.count),
+                        closeLabel = stringResource(R.string.library_action_close_selection),
+                        selectAllLabel = stringResource(R.string.library_action_select_all),
+                        onClose = { selection = SelectionReducer.clear(selection) },
+                        onSelectAll = {
+                            selection = SelectionReducer.selectAll(selection, visibleRows.map { it.stableKey })
+                        },
+                    )
+                } else {
+                    LibraryTopBar(
+                        title = stringResource(R.string.history_title),
+                        viewMode = ui.viewMode,
+                        gridLabel = stringResource(R.string.library_view_grid),
+                        listLabel = stringResource(R.string.library_view_list),
+                        onToggleView = {
+                            viewModel.setViewMode(
+                                if (ui.viewMode == LibraryViewMode.GRID) LibraryViewMode.LIST else LibraryViewMode.GRID,
+                            )
+                        },
+                        onBack = onBack,
+                        backLabel = stringResource(R.string.history_back_cd),
+                        onOpenVault = onOpenVault,
+                        vaultLabel = stringResource(R.string.vault_open_entry_cd),
+                        onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
+                        searchLabel = stringResource(R.string.library_search_open_cd),
+                        onOpenSort = { sortSheetOpen = true },
+                        sortLabel = stringResource(R.string.library_sort_open_cd),
+                    )
                 }
-                groups.forEach { group ->
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
-                        LibraryDayHeader(group.label, group.sizeTotalLabel)
-                    }
-                    itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
-                        LibraryGridCard(
-                            row = row,
-                            thumbnail = byKey[row.stableKey]?.thumbnail,
-                            tileDescription = TileSemantics.describe(row, frag),
-                            statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
-                            plLabel = plLabel,
-                            onClick = { play(row.stableKey) },
-                            modifier = Modifier.padding(4.dp),
-                            itemSemantics = {
-                                collectionItemInfo = CollectionItemInfo(
-                                    rowIndex = index / GRID_COLUMNS,
-                                    rowSpan = 1,
-                                    columnIndex = index % GRID_COLUMNS,
-                                    columnSpan = 1,
-                                )
-                            },
+            },
+            bottomBar = {
+                if (selection.active) {
+                    LibraryBatchBar(
+                        shareLabel = shareLabel,
+                        vaultLabel = stringResource(R.string.library_action_vault),
+                        vaultDisabledLabel = stringResource(R.string.library_action_vault_disabled),
+                        favoriteLabel = favoriteLabel,
+                        deleteLabel = stringResource(R.string.library_action_delete),
+                        vaultEnabled = movableSelectedExists,
+                        onShare = { shareItems(viewModel.itemsForKeys(selection.keys)) },
+                        onVault = { pendingMoveToVaultSessionId = "__batch__" },
+                        onFavorite = {
+                            // Batch favorite = mark all selected as favorited (skip already-favorited).
+                            val keys = selection.keys
+                            keys.forEach { k ->
+                                if (ui.rows.firstOrNull { it.stableKey == k }?.favorite == false) {
+                                    viewModel.toggleFavorite(k)
+                                }
+                            }
+                            selection = SelectionReducer.clear(selection)
+                        },
+                        onDelete = { pendingDeleteConfirm = selection.keys },
+                    )
+                }
+            },
+        ) { innerPadding ->
+            when {
+                // Body state taxonomy mirrors LibraryStatePolicy (Loading / Empty / SearchEmpty /
+                // Content); the inline branch keeps the structural nesting (shared discovery chips +
+                // RecoveryAndWarnings) the pure resolver can't express. See LibraryStatePolicy.
+                !ui.hasLoaded -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
+                ui.rows.isEmpty() -> Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    RecoveryAndWarnings()
+                    LibraryEmpty(onGoToRecord = onNavigateToRecord)
+                }
+                else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                    // P6 storage/usage footprint — directly under the top bar, above the discovery bar
+                    // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
+                    LibraryUsageLine(ui.usage)
+                    // Pinned Discovery controls (search field when active + filter chips).
+                    if (searchActive) {
+                        LibrarySearchField(
+                            value = filter.search,
+                            onValueChange = { viewModel.setSearch(it) },
+                            onClear = { viewModel.setSearch("") },
                         )
+                    }
+                    LibraryFilterChips(
+                        filter = filter,
+                        onAll = { viewModel.clearFilters(); searchActive = false },
+                        onToggleFavorites = { viewModel.setFavoritesOnly(!filter.favoritesOnly) },
+                        onTogglePl = {
+                            viewModel.setTopologyFilter(
+                                if (filter.topology == com.aritr.rova.data.CaptureTopology.DualShot) null
+                                else com.aritr.rova.data.CaptureTopology.DualShot,
+                            )
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    if (hero == null && collection.isEmpty()) {
+                        // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
+                        // pinned above so the user can clear/adjust; the body offers Clear filters too.
+                        // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
+                        // always showing search wording for a filter that carries no search.
+                        val onClearFilters: () -> Unit = { viewModel.clearFilters(); searchActive = false }
+                        when (
+                            FilteredEmptyPolicy.resolve(
+                                hasSearch = filter.search.isNotBlank(),
+                                favoritesOnly = filter.favoritesOnly,
+                                isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
+                            )
+                        ) {
+                            FilteredEmptyKind.Favorites ->
+                                LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.DualShot ->
+                                LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.Search ->
+                                LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.Generic ->
+                                LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                        }
+                    } else {
+                        Box(Modifier.fillMaxSize().weight(1f)) {
+                            if (ui.viewMode == LibraryViewMode.GRID) {
+                                LazyVerticalGrid(
+                                    state = gridState,
+                                    columns = GridCells.Fixed(GRID_COLUMNS),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = com.aritr.rova.ui.library.components.LibraryDimens.screenPadH)
+                                        .semantics {
+                                            isTraversalGroup = true
+                                            collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
+                                        },
+                                    contentPadding = PaddingValues(bottom = 20.dp),
+                                ) {
+                                    item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-recovery-warn") { RecoveryAndWarnings() }
+                                    if (hero != null) {
+                                        item(span = { GridItemSpan(maxLineSpan) }, key = "hero-${hero.stableKey}") { renderHero(hero) }
+                                    }
+                                    groups.forEach { group ->
+                                        // Header suppressed for non-chronological sorts (label = "" →
+                                        // flat list, LibraryDayGrouping.groupForSort). Date sorts keep it.
+                                        if (group.label.isNotEmpty()) {
+                                            item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
+                                                LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                            }
+                                        }
+                                        itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
+                                            LibraryGridCard(
+                                                row = row,
+                                                thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                previewUri = previewUriFor(row.stableKey),
+                                                autoplay = row.stableKey in autoplayKeys,
+                                                tileDescription = TileSemantics.describe(row, frag),
+                                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
+                                                plLabel = plLabel,
+                                                onClick = { onTileClick(row.stableKey) },
+                                                modifier = Modifier
+                                                    .padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter)
+                                                    .then(if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier),
+                                                itemSemantics = {
+                                                    collectionItemInfo = CollectionItemInfo(
+                                                        rowIndex = index / GRID_COLUMNS,
+                                                        rowSpan = 1,
+                                                        columnIndex = index % GRID_COLUMNS,
+                                                        columnSpan = 1,
+                                                    )
+                                                },
+                                                isSelectionMode = selection.active,
+                                                isSelected = row.stableKey in selection.keys,
+                                                onLongClick = { onTileLong(row.stableKey) },
+                                                selectedLabel = selectedLabel,
+                                                notSelectedLabel = notSelectedLabel,
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(bottom = 20.dp),
+                                ) {
+                                    item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
+                                    if (hero != null) {
+                                        item(key = "hero-${hero.stableKey}") { renderHero(hero) }
+                                    }
+                                    groups.forEach { group ->
+                                        if (group.label.isNotEmpty()) {
+                                            item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        }
+                                        items(group.rows, key = { it.stableKey }) { row ->
+                                            LibraryListRow(
+                                                row = row,
+                                                thumbnail = byKey[row.stableKey]?.thumbnail,
+                                                previewUri = previewUriFor(row.stableKey),
+                                                autoplay = row.stableKey in autoplayKeys,
+                                                tileDescription = TileSemantics.describe(row, frag),
+                                                durationFallback = "—",
+                                                dualShotLabel = plLabel,
+                                                onClick = { onTileClick(row.stableKey) },
+                                                modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
+                                                isSelectionMode = selection.active,
+                                                isSelected = row.stableKey in selection.keys,
+                                                onLongClick = { onTileLong(row.stableKey) },
+                                                selectedLabel = selectedLabel,
+                                                notSelectedLabel = notSelectedLabel,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            // Date fast-scroll rail (self-hides when < 2 day groups).
+                            LibraryScrubber(
+                                segments = scrubberSegments,
+                                firstVisibleItemIndex = if (ui.viewMode == LibraryViewMode.GRID)
+                                    gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex,
+                                railLabel = scrubberRailLabel,
+                                onScrollToItemIndex = { idx ->
+                                    coroutineScope.launch {
+                                        if (ui.viewMode == LibraryViewMode.GRID) gridState.scrollToItem(idx)
+                                        else listState.scrollToItem(idx)
+                                    }
+                                },
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                            )
+                        }
                     }
                 }
             }
-            else -> LazyColumn(Modifier.fillMaxSize()) {
-                if (hero != null) {
-                    item(key = "hero-${hero.stableKey}") { renderHero(hero) }
-                }
-                groups.forEach { group ->
-                    item(key = "hdr-${group.label}") {
-                        LibraryDayHeader(group.label, group.sizeTotalLabel)
+        }
+
+        // ---- dialogs / sheets ----
+        viewSettingsConfig?.let { cfg ->
+            LibrarySessionConfigDialog(config = cfg, onDismiss = { viewSettingsConfig = null })
+        }
+
+        pendingMoveToVaultSessionId?.let { sid ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { pendingMoveToVaultSessionId = null },
+                title = { androidx.compose.material3.Text(stringResource(R.string.vault_move_in)) },
+                text = { androidx.compose.material3.Text(stringResource(R.string.vault_share_leaves_warning)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        pendingMoveToVaultSessionId = null
+                        if (sid == "__batch__") {
+                            val keys = selection.keys
+                            selection = SelectionReducer.clear(selection)
+                            coroutineScope.launch {
+                                val res = viewModel.batchMoveToVault(keys)
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.library_vault_batch_result, res.moved, res.skipped),
+                                )
+                            }
+                        } else {
+                            coroutineScope.launch { viewModel.moveToVault(sid) }
+                        }
+                    }) { androidx.compose.material3.Text(stringResource(R.string.vault_move_in)) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { pendingMoveToVaultSessionId = null }) {
+                        androidx.compose.material3.Text(stringResource(R.string.dialog_cancel))
                     }
-                    items(group.rows, key = { it.stableKey }) { row ->
-                        LibraryListRow(
-                            row = row,
-                            thumbnail = byKey[row.stableKey]?.thumbnail,
-                            tileDescription = TileSemantics.describe(row, frag),
-                            durationFallback = "—",
-                            onClick = { play(row.stableKey) },
-                        )
+                },
+            )
+        }
+
+        pendingDeleteConfirm?.let { keys ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { pendingDeleteConfirm = null },
+                title = { androidx.compose.material3.Text(stringResource(R.string.library_delete_confirm_title)) },
+                text = { androidx.compose.material3.Text(stringResource(R.string.library_delete_confirm_body, keys.size)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        pendingDeleteConfirm = null
+                        startDeferredDelete(keys)
+                    }) { androidx.compose.material3.Text(stringResource(R.string.library_action_delete)) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { pendingDeleteConfirm = null }) {
+                        androidx.compose.material3.Text(stringResource(R.string.dialog_cancel))
                     }
-                }
+                },
+            )
+        }
+
+        renameTarget?.let { row ->
+            LibraryRenameDialog(
+                currentTitle = row.title,
+                titleLabel = stringResource(R.string.library_rename_title),
+                fieldHint = stringResource(R.string.library_rename_hint),
+                confirmLabel = stringResource(R.string.library_rename_confirm),
+                cancelLabel = stringResource(R.string.dialog_cancel),
+                onRename = { viewModel.renameSession(row.stableKey, it) },
+                onDismiss = { renameTarget = null },
+            )
+        }
+
+        sheetTarget?.let { row ->
+            val item = byKey[row.stableKey]
+            // P8 — session-identity header: title (WHEN) + meta (clips · duration · size), reusing the
+            // same pure SessionCaption the list row renders (no new formatter, no manifest read).
+            val sheetClipLabel = if (row.clipCount > 1) {
+                pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
+            } else {
+                ""
+            }
+            val sheetMeta = SessionCaption.listMeta(
+                clipCountLabel = sheetClipLabel,
+                durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else "",
+                sizeLabel = StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+            )
+            LibraryItemSheet(
+                isFavorite = row.favorite,
+                movable = row.topology != com.aritr.rova.data.CaptureTopology.DualShot && item?.sessionId != null,
+                headerTitle = row.title,
+                headerMeta = sheetMeta,
+                headerThumbnail = item?.thumbnail,
+                playLabel = stringResource(R.string.library_action_play),
+                selectLabel = stringResource(R.string.library_action_select),
+                shareLabel = shareLabel,
+                favoriteLabel = favoriteLabel,
+                unfavoriteLabel = unfavoriteLabel,
+                renameLabel = stringResource(R.string.library_action_rename),
+                vaultLabel = stringResource(R.string.library_action_vault),
+                viewSettingsLabel = stringResource(R.string.library_action_view_settings),
+                deleteLabel = stringResource(R.string.library_action_delete),
+                onPlay = { sheetTarget = null; play(row.stableKey) },
+                onSelect = { sheetTarget = null; selection = SelectionReducer.enter(SelectionState(), row.stableKey) },
+                onShare = { sheetTarget = null; item?.let { shareItems(listOf(it)) } },
+                onToggleFavorite = { sheetTarget = null; viewModel.toggleFavorite(row.stableKey) },
+                onRename = { sheetTarget = null; renameTarget = row },
+                onMoveToVault = { sheetTarget = null; pendingMoveToVaultSessionId = item?.sessionId },
+                onViewSettings = {
+                    sheetTarget = null
+                    coroutineScope.launch {
+                        val cfg = viewModel.loadSessionConfig(item?.sessionId)
+                        if (cfg != null) viewSettingsConfig = cfg
+                        else snackbarHostState.showSnackbar(context.getString(R.string.history_settings_unavailable))
+                    }
+                },
+                onDelete = { sheetTarget = null; pendingDeleteConfirm = setOf(row.stableKey) },
+                onDismiss = { sheetTarget = null },
+            )
+        }
+
+        if (sortSheetOpen) {
+            LibrarySortSheet(
+                current = sort,
+                onSelect = { viewModel.setSort(it); sortSheetOpen = false },
+                onDismiss = { sortSheetOpen = false },
+            )
+        }
+
+        sheetWarningId?.let { id ->
+            if (warningVm != null) {
+                HistoryWarningSheetHost(
+                    id = id,
+                    vm = warningVm,
+                    pendingCantMergeSessionId = pendingCantMergeSessionId,
+                    onKeepRawFromSheet = { recoveryViewModel.keepRaw(it) },
+                    onDiscardFromSheet = { recoveryViewModel.dismiss(it) },
+                    onDismiss = { sheetWarningId = null },
+                )
             }
         }
     }

@@ -1,131 +1,170 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-14 (DualSight investigation wrap-up).**
+> **As of 2026-06-16 — Enhanced Library & History redesign is COMPLETE: Slices 1–5 + polish P1–P8 + Theme-Foundation M1–M3 + M1/M2 UX refine + stabilization (sort-crash fix) ALL built, device/TalkBack GO, local-only. Library is reference-ready for the Liquid Glass theme engine. Stabilization closeout done (Issue A sort crash FIXED `e0f359a`; Issue B blue-dot identified = scrubber thumb, keep). NEXT SESSION = Icon & Glyph System Redesign (NOT the theme engine). Merge train: owner-gated, see below.**
 
 ---
 
 ## Where things stand
 
-- **Branch:** `master` — last feature/gate commit **`bd6aa0c` (#114)**; tip is the **DualSight doc-closeout** merge (this session — tracking-doc honesty only, no DualSight code).
-- **Open PRs / branches:** the DualSight investigation is **archived in PR #115** (DRAFT, branch `feat/pr-delta-dualsight` — design spec, probe evidence, δ0 + deferred plans, preserved capability helper; **kept as the archival record, not for merge**). The throwaway **`probe/dualsight-concurrent-camera`** branch is pushed as evidence only (**never merge**). Plus the long-stale unrelated `feat/dualshot-render-threading`. **DualSight is considered closed until concurrent-camera hardware is available.**
-- **Working tree:** clean except the ephemeral untracked root `gradle_*.log` (leave them).
-- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke is mandatory — emulators fail CameraX video recording (device = RZCYA1VBQ2H).
-- **Static gates:** **41** custom `check*` tasks wired into `preBuild`.
+- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **~91 commits ahead** of `master`, tip = sort-crash fix `e0f359a`. Holds Slices 1+2+3 (+polish P1–P10) +4 (+4.1/4.2) +5 (a11y) + polish pass **P1–P8** + **Theme-Foundation M1–M3** + **M1/M2 UX refine** + **stabilization fix**. Working tree clean (only ephemeral `gradle_*.log` + an untracked polish plan doc).
+- **master:** `dfd3bd9` (#116 DualSight doc-closeout). **Contains zero Library redesign code.**
+- **Open PRs (pushed, awaiting the end-of-reskin merge train):**
+  - **#117 — Slice 1 Foundation** (branch `feat/library-history-foundation`) · OPEN — covers Slice 1 only.
+  - **#118 — Slice 2 Layout** (branch `feat/library-history-layout`, stacked on #117) · OPEN — covers Slice 2 only.
+  - **#115 — DualSight investigation** (DRAFT, archival only — **never merge**, blocked on concurrent-camera hardware; see `memory/project_pr_delta_dualsight_probe.md`).
+  - **NOTE:** #117/#118 cover only Slices 1–2 (~early commits). The other ~88 commits (Slices 3–5 + polish + theme + refine + stabilization) are on **no pushed branch** — the merge train must account for them (see "Merge train" below).
+- **Owner directive (now satisfiable):** NO merge until the FULL reskin is done. **The full reskin — incl. polish, theme foundation, and stabilization — is now DONE.** The end-of-reskin merge train is unblocked pending owner confirmation of strategy + device smoke (see below).
+- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), GREEN on this branch. Real-device smoke is mandatory — emulators fail CameraX recording (device = RZCYA1VBQ2H, Android 14). **The sort-crash fix `e0f359a` is build+gate+JVM verified but NOT yet device-smoked.**
+- **Static gates:** **42** custom `check*` tasks (the 42nd is `checkLibraryNoManifestWrite`, ADR-0030). All green on this branch.
 
-## What this session did (2026-06-14) — DualSight investigation + decision
+## Library & History redesign — IN PROGRESS (this is the current work)
 
-**Outcome: DualSight (PR-δ FrontBack PiP) is DEFERRED / BLOCKED. Nothing merged to master.**
+Liquid-Glass redesign of the recording-browse surfaces (ADR-0028 + new **ADR-0030**). Owner-approved via brainstorming → spec → plan. Full record: `memory/project_library_history_redesign.md`. Docs: spec `docs/superpowers/specs/2026-06-14-enhanced-library-history-design.md`, slice plans under `docs/superpowers/plans/`, `docs/adr/0030-*.md`.
 
-1. **Brainstormed → spec'd → planned PR-δ** (DualSight = concurrent front+back single-file PiP via CameraX `CompositionSettings`). Found CameraX 1.4.2 can't do it (needs 1.5.0+), so structured it as δ-probe → δ0 (bump) → δ (feature).
-2. **Built + ran a hardware probe** (throwaway branch, CameraX bumped 1.5.3 locally, debug-only `DualSightProbeActivity` with capability queries + real-record attempt A (CameraX) + attempt B (raw Camera2) + rebind-torture). **On-device verdict (RZCYA1VBQ2H, Galaxy A-class): FAIL — hardware truth.** `FEATURE_CAMERA_CONCURRENT=false`, `getConcurrentCameraIds()` empty, `availableConcurrentCameraInfos` empty, `bindToLifecycle` threw `UnsupportedOperationException("Concurrent camera is not supported")`. Three independent layers agree; not a probe artifact.
-3. **Analysis: no non-concurrent path to simultaneous front+back *video*** (rapid-switch <3fps; sequential/BeReal = photos = different feature; LOGICAL_MULTI_CAMERA same-direction-only; no Camera2 bypass). codex-concurred. Owner ruled out a photo fallback.
-4. **Decision review (DualSight assumed never ships):** the **δ0 CameraX 1.5.3 bump stands on its own** as *low-urgency reliability hygiene* → **merge later** (after regression smoke), not now, not never. Honest recalibration: the rotation-on-recreate fix is largely self-defended; the real pillar is the SurfaceProcessor-shutdown crash fix (DualShot path).
-5. **Wrap-up:** DualSight deferred everywhere (ADR-0029 §5 status note, spec banner, BACKLOG, deferred plan); δ0 plan written (codex-hardened smoke checklist); capability helper `ConcurrentCameraCapability` + 6 tests preserved on `feat/pr-delta-dualsight`.
+**Slice status (stacked, 1 PR each at the end):**
+1. **Foundation** ✅ built — sidecar `LibraryMetadataStore` (favorite/rename, NEVER `SessionManifest`), pure helpers, 42nd gate. **PR #117 OPEN.**
+2. **Layout** ✅ built — hero+grid/list, glass cards, badges, day grouping, a11y. **PR #118 OPEN.**
+3. **Selection + batch + route-wire** ✅ built — `SelectionReducer`/`PendingDelete` pure helpers, deferred-delete UNDO (codex-hardened), glass selection/batch bars + item sheet, `LibraryScreen` is the **route orchestrator**, `HistoryScreen` RETIRED (`LibraryRow`/`VideoThumbnail` → `ui/screens/LibraryRow.kt` for VaultScreen), route `"history"`→`LibraryScreen`. Recovery-keep manifest write relocated to `ui/recovery/RecoveryViewModelFactory.kt` (Option A) → gate exception-free. **committed.**
+   - **+ Visual polish pass (P1–P10)** — **committed `b12bb5f`**, owner re-smoke **GO** 2026-06-15.
+4. **Discovery** ✅ built + owner device-smoke **GO** (2026-06-15) — Sort sheet · Filter chips (All·★Favorites·DualShot) · inline Search · date fast-scroll Scrubber. Pure `LibraryQuery.heroFor` (filter-aware hero) + `ScrubberIndex`; thin VM `_sort`/`_filter` state; `LibraryScreen` query sort/filter/search-driven over `visibleRows`; scrubber codex-hardened (separate live-region node, discrete progress, coalesced scroll). Plan: `docs/superpowers/plans/2026-06-15-library-history-slice4-discovery.md`.
+   - **4.1 smoke fixes** ✅ **committed `09c3e5c`** — (#1) **view-mode persists across launches** (`RovaSettings.libraryViewMode`, seeded into `HistoryViewModel._viewMode`); (#3) filter chip **P+L → "DualShot"** (en+es). (#4) confirmed **hero = newest** is intended (no code change — `heroFor` keeps newest regardless of sort; collection is what re-sorts).
+   - **4.2 pooled card autoplay** ✅ **committed `dc1e9ce`**, owner device-smoke **GO** (2026-06-15) — owner #2 "all recordings auto-play". Plan: `docs/superpowers/plans/2026-06-15-library-slice4.2-card-autoplay.md`. See "Slice 4.2" below.
+5. **A11y close-out** ✅ built + owner TalkBack device-smoke **GO** (2026-06-15) — remediation **rows 21 / 23 / 32**. Player `SegmentedTimeline`: progressbar role (`progressBarRangeInfo`, continuous position/duration) + per-cell `contentDescription` ("Clip N of M, recorded/playing/upcoming") + separate sparse polite live-region. Library: `RecoveryAndWarnings` is its own `isTraversalGroup` (focus separation, HIST-02), `HistoryWarningCard` gains `focusHighlight` (HIST-17), focus restore on player return via `pendingFocusKey` + ON_RESUME observer + new pure `FocusRestorePolicy` (JVM-tested) + `FocusRequester` on each target's own modifier chain (codex fix). 3 commits `32487fd`/`345e74e`/`23bee99`. **Row-23 DELTA:** only the Library-relevant subset closed (focus restore + warning focusable); REC-15/RECOV-09/RECOV-10/NAV-04/SHAR-08/SHAR-16/ONB-06 (other screens) stay OPEN.
 
-**Key artifacts — archived in PR #115 (branch `feat/pr-delta-dualsight`), NOT on master:**
-- `docs/superpowers/specs/2026-06-14-dualsight-frontback-pip-design.md` — design (banner: DEFERRED).
-- `docs/superpowers/specs/2026-06-14-dualsight-probe-results.md` — **authoritative evidence** (+ `gradle_dualsight_probe.log`).
-- `docs/superpowers/plans/2026-06-14-delta0-camerax-1.5.3-bump.md` — δ0 bump plan (merge-later).
-- `docs/superpowers/plans/2026-06-14-dualsight-delta-feature-DEFERRED.md` — δ feature plan (BLOCKED + resume preconditions).
-- `app/src/main/java/com/aritr/rova/service/dualsight/ConcurrentCameraCapability.kt` + test — preserved keeper (dormant; deliberately **not** merged to master).
+**Library reskin is COMPLETE** — functional (Slices 1–5) + visual polish (P1–P8) + theme-foundation seam (M1–M3) + UX refine (M1/M2) + stabilization. Reference-ready for the theme engine. See the polish/theme/stabilization records in `memory/project_library_history_redesign.md`.
+
+## DualShot hero thumbnail artifact — ROOT-CAUSED (2026-06-15), fix folds into polish P2
+
+Owner reported a grey horizontal strip on the **hero** card for DualShot recordings (grid tile clean). Full RCA + device disambiguation: `docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`.
+- **Result: Library-side render bug (H1), NOT capture (H2 refuted).** Pulled both DualShot sides of the hero recording from RZCYA1VBQ2H: `ffprobe` → exact 1080×1920 / 1920×1080, SAR 1:1, no rotation (so `computeFitViewport` bakes no letterbox); `ffmpeg` raw frames → **clean, no strip in pixels**. The strip is introduced at render.
+- **Mechanism:** the hero autoplay stacks a static `VideoFrame` (`ContentScale.Crop`) under a transparent ExoPlayer (`RESIZE_MODE_ZOOM`); the two fill identically only at 16:9, so the grid (16:9) is clean but the off-16:9 hero box (~2.27:1) leaks a band. **Fix = Slice P2** (make both layers fill identically / drop static under-layer after first frame / lock hero `aspectRatio`).
+- The separate **owner-deferred** PORTRAIT square-into-9:16 capture stretch (`AspectFitMath.kt:359–366`) is unrelated and stays capture-side (ADR-0009/0010).
+
+## Library UX/UI polish pass — P1–P8 ✅ DONE (2026-06-15/16, device-smoked)
+
+Audit + design brief: `docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`. All slices built + 42-gates + JVM green + device-smoked on RZCYA1VBQ2H, committed local-only. Summary (full detail in `memory/project_library_history_redesign.md`):
+- **P1** tokens (`LibraryDimens` Record-scale) · **P2** hero showcase overlay + **DualShot grey-strip FIXED via TextureView** (`surface_type=texture_view`, owner "completely gone") · **P3** grid/list glass + session identity (`clipCount`+`SessionCaption`+orientation badges on all tiles; DualShot N×2 clip/duration bug fixed via `SessionDurations.forRow`) · **P4** states (pure `LibraryStatePolicy`, skeleton shimmer, quiet empties, flat glass chips) · **P5** motion (pure `PressFeedback` + `RovaAnimations.pressScale`) · **P6** usage line (`UsageAggregator`/`StorageSummaryFormatter`) · **P7** card-autoplay demoted to opt-in `RovaSettings.libraryCardPreview` default OFF (hero autoplay untouched; reseed ON_RESUME) · **P8** floating Brave-style item sheet (transparent ModalBottomSheet + inner elevated Surface, nav-bar insets).
+
+## Theme Foundation M1–M3 ✅ DONE + M1/M2 UX refine ✅ DONE + Stabilization ✅ DONE (2026-06-16)
+
+- **Theme Foundation (M1–M3, commits `91b598e`→`d0cb386`, device GO):** `LibraryColors`/`LibraryColorSpec` seam — identity edges + `palette.background` retint per theme; overlay-over-media (scrim/pill/ring + status) LOCKED via CaptionScrim/RovaSemantics; `FloatingGlassSheet` (shadow-wrap + GlassResolver BottomSheet near-opaque branch) theme-enables the item sheet; UX-B sheet grouping (Primary/Secondary/Danger red Delete). UX-A visible-Select-entry DEFERRED (needs a SelectionReducer arch change). **Library = the reference screen for the glass tint engine.**
+- **M1/M2 UX refine (commit `fec1f8a`):** filter multi-select cue (leading ✓ on additive Favorites/DualShot toggles; `All` gap-isolated) + educational empty states (pure `FilteredEmptyPolicy` → Favorites/DualShot/Generic/Search copy) + usage-line demote (labelMedium→Small, AA-safe). **M3a (drop orientation glyph on DualShot tiles) was evaluated and REJECTED** — DualShot rows are per-SIDE, so the glyph is authoritative side-identity (`OrientationResolver`); codex + code proved the premise wrong.
+- **Stabilization (commit `e0f359a`):** **Issue A sort crash (Largest/Longest) FIXED** — `LibraryDayGrouping.groupForSort` gates day-grouping by `LibrarySort.isChronological`; size/duration sorts render flat (one header-less bucket) so day labels can't recur → no duplicate LazyList keys. +5 regression tests incl the no-duplicate-labels invariant. **Issue B "blue dot" = `LibraryScrubber` thumb** (24dp primary CircleShape, the date-rail drag handle; intentional, a11y-wired) — KEEP; rest-state refinement is a deferred B-item.
+
+## Slice 4.2 — pooled muted card autoplay (committed `dc1e9ce`)
+
+Extends the hero's muted autoplay to **visible** grid/list cards, bounded decoder-safe per **two codex passes**:
+- **`ui/library/AutoplayPolicy.kt`** (pure, JVM-tested `AutoplayPolicyTest`): `MAX_CONCURRENT = 3` total players **including the hero** (`cardCap(heroVisible) = 3 − heroVisible`); `select()` = first-N in viewport order; `isMostlyVisible(top,size,vpStart,vpEnd, ≥0.5)` so an edge-sliver card can't claim a decoder.
+- **Renamed** `LibraryHeroVideo.kt` → **`LibraryAutoplayVideo.kt`** (now reused by hero + cards) and **disabled the audio track** — `trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)`. codex: `volume = 0f` mutes output but leaves the audio **decoder** allocated; disabling the track frees scarce hardware audio-codec instances.
+- **`LibraryGridCard` / `LibraryListRow`** gained `previewUri: Uri?` + `autoplay: Boolean`; autoplay → the shared player, else the static `VideoFrame` (= the reduce-motion path too).
+- **`LibraryScreen`** computes `autoplayKeys` via `derivedStateOf` (keyed on `reduceMotion`; `ui.viewMode` + `gridState/listState.layoutInfo` read **inside** as snapshot state → recomputes on scroll/settle): visible-only, ≥50% on-screen, hero counted, `emptySet` while scrolling or reduce-motion. Card keys **prefix-filtered** (`!startsWith("hdr-")/"hero-"`), not via a Map.
+- **Decoder-safe reality (owner-acknowledged):** "all recordings auto-play" resolves to **≤3 videos at once** (hero + 2 cards, or 3 cards when hero off-screen), not literally every card. `MAX_CONCURRENT` is one-line tunable (drop to 2 if any device shows codec errors).
+- **v2 note (deferred):** current shape releases players on scroll-start, re-creates on settle (one batch/gesture, ≤3 players — tolerable). codex's preferred **pause-while-scrolling + debounced-release pool** is the refinement if settle-churn shows on device. Black-flash is already covered (static `VideoFrame` sits under the transparent-shutter `AndroidView`).
 
 ## Build-environment (the "recovery dance" is OBSOLETE)
 
-- **Build WARM. Do NOT wipe caches before every build.** The `kotlin-postedit.ps1` hook that corrupted the Kotlin incremental cache was **disabled 2026-06-09**. Just `gradlew.bat :app:assembleDebug` (no `--stop`, no `rm`): warm ~1–3 min (UP-TO-DATE ~8s) vs ~17 min cold. A clean 1.5.3 `assembleDebug` ran ~5 min this session.
+- **Build WARM. Do NOT wipe caches before every build.** The `kotlin-postedit.ps1` hook that corrupted the incremental cache was **disabled 2026-06-09**. Just `gradlew.bat :app:assembleDebug` (no `--stop`, no `rm`): warm ~1–3 min (UP-TO-DATE ~8s) vs ~17 min cold. Last full Slice-4.2 gate build = 11m25s.
 - **Clean only on-demand** on a real kotlinc/MD5 fault: `gradlew.bat --stop` + `rm -rf app/build/kotlin app/build/intermediates/built_in_kotlinc`.
-- `gradle.properties` well-tuned. **Config cache is OFF** (the 41 gates capture build-script refs; refactor filed P2 in BACKLOG).
-- **Windows / PowerShell.** Use `gradlew.bat`. **adb MCP wrapper broken on Windows — drive adb via PowerShell directly** (it works fine that way; install/grant/launch/logcat all ran clean this session).
+- `gradle.properties` well-tuned. **Config cache is OFF** (the 42 gates capture build-script refs; refactor filed P2 in BACKLOG).
+- **Windows / PowerShell.** Use `gradlew.bat`. **adb MCP wrapper broken on Windows — drive adb via PowerShell directly** (`adb -s RZCYA1VBQ2H install -r app/build/outputs/apk/debug/app-debug.apk`).
 - **`lintDebug` is RED on pre-existing B5 `VaultAndroidOps` NewApi** (unrelated) — gate-build with `:app:assembleDebug`.
 
-## Top next candidates (from the backlog)
+## Release build (for sharing a tester APK)
 
-1. **Enhanced Library & History UI** — **P2 · NEEDS-SPEC · the headline / next up** (selected this session as the highest-value DualSight-independent task on current hardware). The surfaces where users browse all recordings have had no visual modernization pass. Liquid-Glass redesign: thumbnails, date/session grouping, sort + filter, multi-select / batch actions, polished empty + loading states; folds in deferred a11y focus rows (23/32). Full pipeline: brainstorm → spec → plan → build → device smoke.
-2. **Rova video-player upgrades** (P2, NEEDS-SPEC) **or** **`RovaRecordingService.kt` split** (P2 tech-debt). Player = high-engagement Media3 surface (speed control, scrub thumbnails, gestures, a11y timeline row 21). Service split = highest-leverage refactor (largest file; gates pin invariants), no user value, regression-smoke after.
-3. **δ0 CameraX 1.5.3 bump** (P3, merge-later) — standalone reliability bump, plan ready (`docs/superpowers/plans/2026-06-14-delta0-camerax-1.5.3-bump.md`); execute its regression smoke next time there's device time.
+- **No merge required.** Gradle builds the **working tree**, not master. The `feat/library-history-selection` tree = Slices 1+2+3+4(+4.x) = the full current redesign. Build straight from it.
+- **Command:** `gradlew.bat :app:assembleRelease` → `app/build/outputs/apk/release/app-release.apk`. **Signed** via `keystore.properties` (configured locally).
+- **Release ≠ debug behavior:** release has `isMinifyEnabled = true` + `isShrinkResources = true` (R8/ProGuard) and pseudolocales OFF. The hero **and now card** ExoPlayer autoplay path must be **smoke-tested on the RELEASE build specifically** (media3 ships consumer ProGuard rules, but R8 + new Compose/Media3 paths warrant a real check) before handing it to a tester. (Slice-3 hero release path was reported smoked clean; the Slice-4.2 multi-player path has only been debug-smoked.)
 
 ## Load-bearing rules (don't violate)
 
-- **Never edit a `check*` task to make it green** — fix the source, or amend the ADR + check with explicit owner sign-off. (The `checkFrontBackCapabilityGated` allowlist extension is sanctioned **only** when DualSight is actually built, paired with an ADR-0029 §5 amendment — that is still pending/blocked.)
+- **Never edit a `check*` task to make it green** — fix the source, or amend the ADR + check with explicit owner sign-off.
 - **ADRs are the source of truth.** Touching anything an ADR mentions = amend the ADR clause first, regenerate/extend the matching `check*`, then change code.
+- **`checkLibraryNoManifestWrite` (ADR-0030):** Library/History UI (`ui/library/**` + History/Library screens) NEVER writes `SessionManifest`. Library metadata lives in the sidecar `LibraryMetadataStore`. The recovery-keep `markTerminated` write lives in `ui/recovery/` (out of gate scope).
 - **codex MCP peer review** (`mcp__codex__codex`) mandatory for code changes >5 lines, architecture/design, algorithmic logic, security-sensitive, migrations, perf claims. Skip for conversational/status/trivial.
 - **CodeGraph** is initialized — never call `codegraph_explore`/`codegraph_context` from the main session; spawn an Explore agent. Main session may use `codegraph_search`/`callers`/`callees`/`impact`/`node` for targeted lookups only.
 - **JVM unit tests only** (`isReturnDefaultValues = true`); framework-touching code gets a pure-Kotlin sibling (seam/pure-helper pattern). A new feature lands its tests in the same PR.
-- **Stacked-PR merge train:** merge base WITHOUT `--delete-branch` → rebase dependent `--onto origin/master <old-base>` → re-target/re-push → THEN delete. See `memory/feedback_stacked_pr_merge_train.md`.
-- Untracked `gradle_*.log` in root are ephemeral — leave them, don't commit (the **committed** `gradle_dualsight_probe.log` on the DualSight branch is a deliberate evidence exception).
+- **New user-facing strings go in resources** (ADR-0022) in **both** `values/strings.xml` and `values-es/strings.xml`. `checkNoHardcodedUiStrings` enforces it.
+- **WCAG 2.2 AA by default** (ADR-0020). Three a11y gates live: `checkA11yAnimationGated`, `checkA11yClickableHasRole`, `checkA11yTargetSizeToken` (SC 2.5.8 = ≥24dp, not Material 48dp). Token contrast is covered by `TokenContrastTest` (JVM), NOT a static gate.
+- **Stacked-PR merge train:** merge base WITHOUT `--delete-branch` → rebase dependent `--onto origin/master <old-base>` → re-target/re-push → THEN delete. See `memory/feedback_stacked_pr_merge_train.md`. (This matters when the whole Library train finally merges.)
+- **Commit/push only when the owner asks.** (On this branch the working agreement is: commit per-slice **locally**; never push/merge until the full reskin is done.) Untracked `gradle_*.log` in root are ephemeral — leave them, don't commit.
+- **Subagents EDIT-ONLY; the controller runs all gradle + commits** (post-edit daemon pileup pins CPU otherwise).
 
 ## Key references
 
-- `CLAUDE.md` — project instructions (gate count **41**, ADR count **29**).
-- `MEMORY.md` (auto-loaded) — cross-session index; `memory/project_current_state.md` running state; `memory/project_pr_delta_dualsight_probe.md` is the DualSight investigation record; `memory/project_build_env_perf.md` build-speed note.
-- `docs/BACKLOG.md` — full task list. `docs/adr/` — behavioral invariants. `ROADMAP_v6.md` (reliability), `NEW_UI_BACKEND_REPLAN.md` (UI redesign).
+- `CLAUDE.md` — project instructions. **NOTE:** CLAUDE.md still says "41 gates / 29 ADRs"; on the Library branch it is **42 gates** (`checkLibraryNoManifestWrite`) and **30 ADRs** (ADR-0030). CLAUDE.md updates when the train merges to master.
+- `MEMORY.md` (auto-loaded) — cross-session index; `memory/project_library_history_redesign.md` = the redesign record; `memory/project_current_state.md` running state; `memory/project_build_env_perf.md` build-speed note.
+- `docs/accessibility/` — WCAG 2.2 AA audit + **`remediation-backlog.md`** (the source for Slice 5 rows 21/23/32). `docs/adr/` — behavioral invariants. `docs/BACKLOG.md` — full task list. `ROADMAP_v6.md` (reliability), `NEW_UI_BACKEND_REPLAN.md` (UI redesign).
 
 ---
 
-## Fresh-session kickoff prompt
+## Fresh-session kickoff prompt — Icon & Glyph System Redesign
 
-Paste this to start the next session:
+Paste this to start the next session. **This is a DESIGN/SPEC session, not implementation** — establish the system first; build later.
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
 
-Orient first: read HANDOFF.md, CLAUDE.md, and the auto-loaded MEMORY.md, then docs/BACKLOG.md
-(see the "UI/UX Modernization" section). Don't re-explore what those already establish.
+Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, and
+memory/project_library_history_redesign.md (Library is the reference screen for the coming glass
+tint engine). Don't re-explore what those establish.
 
-State: master's last feature/gate commit is bd6aa0c (#114); the tip is this session's DualSight
-doc-closeout merge (tracking-doc honesty only — no DualSight code on master). DualSight (PR-δ
-FrontBack PiP) is CLOSED/DEFERRED — blocked pending concurrent-camera hardware; its full investigation
-(spec, probe evidence, δ0 + deferred plans, preserved capability helper) is archived in PR #115
-(branch feat/pr-delta-dualsight, DRAFT, do NOT merge) + the throwaway probe/dualsight-concurrent-camera
-branch (evidence only). Do NOT pick DualSight up. Tests green on master; 41 check* gates; device smoke
-MANDATORY (emulators fail CameraX recording; device = RZCYA1VBQ2H).
+State: the Enhanced Library & History redesign (Liquid Glass, ADR-0028 + ADR-0030) is COMPLETE —
+Slices 1-5 + polish P1-P8 + Theme-Foundation M1-M3 + M1/M2 UX refine + stabilization (sort-crash
+fix), all built + device/TalkBack GO, local-only on feat/library-history-selection (~91 commits
+ahead of master dfd3bd9; S1 PR #117 + S2 PR #118 OPEN/stacked, cover Slices 1-2 only). The
+end-of-reskin merge train is owner-gated (confirm status before assuming it ran).
 
-TASK: Enhanced Library & History UI — the highest-value next feature (owner-requested 2026-06-14,
-NEEDS-SPEC). The Library and History surfaces (where users browse all their recordings) have had no
-visual modernization pass — only the #100 nav state-retention fix and deferred a11y focus rows.
+TASK: ICON & GLYPH SYSTEM REDESIGN — a foundational design system pass, NOT the Liquid Glass theme
+engine (that is the session AFTER). Goal: one coherent, theme-engine-ready in-app icon/glyph system.
+This is NEEDS-SPEC: run brainstorming -> spec -> (then writing-plans for a later build). Do NOT start
+implementing glyphs this session beyond illustrative samples.
 
-Objective: redesign Library + History to the Liquid Glass design language (ADR-0028, the shipped
-12-theme system) — richer thumbnails, date/session grouping, sort + filter, multi-select / batch
-actions (delete/share/export/vault), and polished empty + loading states. Fold in the deferred a11y
-focus rows (23/32: focus order/restore/focusable gaps, History warning-card overlapping focus) and,
-where the player timeline is touched, a11y row 21 (SegmentedTimeline progressbar role + per-cell
-labels).
+Establish and document (target = a new ADR + a spec under docs/superpowers/specs/):
+  1. ICON PHILOSOPHY — the core stance (e.g. outlined-by-default vs filled-for-active; stroke weight;
+     corner/terminal style; optical vs metric sizing; level of bespoke-ness).
+  2. GLYPH LANGUAGE — geometry rules (grid, stroke width, corner radius, keylines, padding) so future
+     custom glyphs are drawably consistent with each other and with the brand.
+  3. CONSISTENCY RULES — when Filled vs Outlined vs Rounded; a single icon-size scale; a single
+     tint/color contract (semantic, theme-engine-driven — NOT raw per-call-site alpha).
+  4. SEMANTIC ICON->ACTION MAPPING — one canonical glyph per concept (play, share, favorite, delete,
+     vault/lock, settings, search, filter, sort, grid/list, flash, flip-camera, front/rear, record,
+     stop, recovered, interrupted, etc.) so the same action never shows two different icons.
+  5. FUTURE COMPATIBILITY WITH THE LIQUID GLASS THEME ENGINE — icons must tint/contrast correctly over
+     arbitrary glass surfaces and per-theme palettes; define the icon color seam alongside the existing
+     GlassRole / RovaSemantics / LibraryColors model (overlay-over-media glyphs are contrast-locked,
+     chrome glyphs retint per theme — mirror the Library M1-M3 identity-vs-locked split).
 
-Before proposing screens, analyze how leading media/gallery apps (Google Photos, Instagram drafts,
-CapCut projects, YouTube Studio, etc.) organize large recording collections and identify transferable
-patterns that fit Rova's Liquid Glass design language.
+CURRENT STATE (measured 2026-06-16 — the problem to solve):
+  - TWO disjoint icon systems: Record chrome = 8 BESPOKE ImageVectors in
+    ui/screens/RecordChromeIcons.kt (flashBolt/flipCamera/cameraFront/cameraRear/library/settings/
+    chevronUp/fabPlay, mockup-exact, neutral-fill-tinted-at-call-site) vs the rest of the app =
+    androidx.compose.material.icons.
+  - Material usage is itself INCONSISTENT: Icons.Filled dominates Library primary actions, Icons.Outlined
+    only for secondary/empty-state (StarBorder, RadioButtonUnchecked, ErrorOutline, VideoLibrary,
+    SearchOff, Splitscreen), and Icons.Default (~50+ distinct) sprawls across Settings/Preview.
+  - The material-icons set is effectively PINNED — some glyphs are absent (CropPortrait/Landscape),
+    which already forced custom-drawn pills (OrientationFramePill in the Library). Decide build-your-own
+    vs pinned-Material, and a home for custom vectors (RecordChromeIcons is the current precedent).
+  - SIZING is fragmented: RecordChromeTokens (navIconGlyphSize 20 / camControlSize 30 / fabSize 56 /
+    stopSquareSize 18) + LibraryDimens (actionIcon 20 / navIcon 22) + inline Modifier.size(14/22/30) +
+    FilterChipDefaults.IconSize. No central icon-size registry.
+  - TINT is raw at every call site (MaterialTheme.colorScheme / LocalContentColor / Color.White.copy
+    (alpha=...) / RecordChromeTokens.navIcon / LibraryColors.overlayText). No semantic SemanticIcon wrapper.
+  Onboarding illustrations are Canvas-drawn (separate concern). Launcher/mipmap brand icon = OUT of scope
+  (in-UI system only; it was already rebranded in M5).
 
-Current state to build on: HistoryScreen + HistoryViewModel (ui/screens/), the Library/History
-surfaces; theme system in ui/theme/ (RovaTokens, the 12 Liquid Glass themes, ADR-0028); shared chrome
-in ui/components/. Recordings come from SessionStore/SessionManifest (data/); export via the tiered
-exporters (service/export/) + SAF (ADR-0024) + vault (ADR-0025, B5). Player is ui/screens/player/
-(Media3 1.4.1). This is a feature, NOT a mechanical edit.
+Reference files: ui/screens/RecordChromeIcons.kt, ui/theme/RecordChromeTokens.kt, ui/theme/RovaTokens.kt,
+ui/theme/GlassSurface.kt (GlassRole/GlassResolver), ui/theme/RovaSemantics, ui/library/LibraryColors.kt
++ LibraryColorSpec (the identity-vs-locked color seam to mirror), ui/library/components/LibraryDimens.kt.
 
-Pipeline: superpowers:brainstorming (HARD GATE — do the leading-apps pattern analysis above, then
-present a design and get owner approval before any code) -> spec (docs/superpowers/specs/) ->
-writing-plans -> subagent-driven build -> device smoke on
-RZCYA1VBQ2H. A new feature lands its tests in the same PR (JVM-only; framework-touching code gets a
-pure-Kotlin sibling per the seam/pure-helper pattern, isReturnDefaultValues=true). If the redesign
-needs new user-facing strings, they go in resources (ADR-0022, en+es) — checkNoHardcodedUiStrings
-will enforce it.
+Constraints: ADRs are source-of-truth — a new icon system likely needs a new ADR (and may amend
+ADR-0028); if it introduces a static invariant, follow invariant -> check* gate -> preBuild. Never edit
+a check* gate to pass. WCAG 2.2 AA by default (ADR-0020) — non-text contrast for meaningful glyphs.
+New user-facing strings in resources en+es (ADR-0022). codex-review architecture/visual-system decisions.
+CodeGraph exploration via an Explore agent only (never codegraph_explore/_context from the main session).
+Caveman mode + Ultracode ON. Local-only; push/merge only when the owner asks.
 
-Constraints: never edit a check* gate to pass (fix source or amend ADR+check with owner sign-off).
-ADRs are source of truth — amend the relevant ADR (likely an ADR-0028 amendment or a new ADR for the
-Library/History redesign) before/with the build. codex-review code changes >5 lines / architecture /
-any non-trivial UI-state logic. CodeGraph exploration via Explore agent only (.codegraph/ exists).
-Accessibility is WCAG 2.2 AA by default (ADR-0020) for all new/changed UI.
-
-Build FAST: WARM — just `gradlew.bat :app:assembleDebug` (NO --stop, NO cache wipe; recovery dance
-obsolete). Gate-build with assembleDebug (lintDebug is RED on pre-existing VaultAndroidOps NewApi).
-
-Success criteria: a Liquid-Glass-native Library/History with grouping + sort/filter + multi-select
-batch actions + polished empty/loading states, informed by the leading-apps pattern analysis; the
-deferred a11y focus rows addressed for these surfaces; all new logic JVM-tested; assembleDebug + all
-41 gates green; device-smoke GO on RZCYA1VBQ2H. Brainstorm + owner design approval BEFORE writing code.
-
-Key refs: docs/BACKLOG.md "UI/UX Modernization" (Enhanced Library & History UI); ADR-0028 (Liquid
-Glass + 12-theme system); ADR-0020 (WCAG AA); docs/accessibility/remediation-backlog.md rows 21/23/32;
-ui/screens/ (History), ui/screens/player/, ui/theme/, data/ (SessionStore/SessionManifest).
-memory/project_settings_expansion_b1.md + _b2.md (History/theme precedent). Caveman mode + Ultracode
-if they were on.
+NOT in scope this session: implementing the full glyph set, the Liquid Glass theme engine itself, the
+launcher/brand icon, and the owner-deferred PORTRAIT square-into-9:16 DualShot CAPTURE stretch.
 ```

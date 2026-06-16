@@ -43,7 +43,8 @@ class LibraryRowMapperTest {
 
     @Test fun `derives title from SmartTitle when no custom title`() {
         val row = LibraryRowMapper.map(input(segmentDurationsMs = listOf(60_000L, 60_000L)), locale, tz)
-        assertEquals("Sun · 2:32 PM · 2 clips · 2m", row.title)
+        // Title is the concise day·time "name"; clips/duration moved to the meta line (owner polish).
+        assertEquals("Sun · 2:32 PM", row.title)
     }
 
     @Test fun `custom title overrides derived`() {

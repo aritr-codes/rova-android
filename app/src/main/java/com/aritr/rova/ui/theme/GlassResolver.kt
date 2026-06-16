@@ -44,7 +44,21 @@ object GlassResolver {
             )
         }
 
-        val blurAllowed = env.apiLevel >= 31   // reduceTransparency + RecordChrome already handled above
+        // Floating modal surfaces (BottomSheet / Dialog) — M2 (2026-06-16): a card that floats over the
+        // live, scrolling library must read as a SOLID surface, not a translucent slab the content bleeds
+        // through. Near-opaque palette-tinted fill (so it joins the theme identity) + NO blur (GlassSurface's
+        // blur can't sample what's behind it anyway). The cast shadow lives on the FloatingGlassSheet wrapper.
+        if (role == GlassRole.BottomSheet || role == GlassRole.Dialog) {
+            return GlassMaterial(
+                fill = p.glassTint.atLeastAlpha(0.95f),
+                blurRadius = 0.dp,
+                edge = p.edge,
+                edgeTop = p.edgeTop,
+                scrim = null,
+            )
+        }
+
+        val blurAllowed = env.apiLevel >= 31   // reduceTransparency + RecordChrome + modal sheets handled above
 
         return if (blurAllowed) {
             GlassMaterial(

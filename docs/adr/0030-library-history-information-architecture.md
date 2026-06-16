@@ -1,6 +1,7 @@
 # ADR-0030: Library/History information architecture
 
 Status: Accepted (2026-06-14)
+Amended 2026-06-14 (Slice 3): recovery-keep terminal write relocated to `ui/recovery/RecoveryViewModelFactory.kt`; `checkLibraryNoManifestWrite` exception machinery removed — gate is now exception-free (Option A, owner + codex).
 
 ## Context
 The Library/History surface (browse all recordings) is being redesigned to the Liquid Glass language. The
@@ -25,13 +26,18 @@ Two design decisions need a recorded invariant.
    (`markTerminated`, `appendSegment`, `submitPersistFinalizedSegment`, `setExport*`, `setVault*`,
    `setStopRequested`, `setPendingMoveOut*`). Enforced by `checkLibraryNoManifestWrite`.
 
-   **One sanctioned exception:** the recovery-keep terminal write (`markTerminated(MULTI_SEGMENT_KEPT)`,
-   wired through `RecoveryViewModel.markKeptRaw`) is co-located in `HistoryScreen` because the recovery cards
-   render above the library list, but it is owned by the recovery subsystem (ADR-0005), not by Library
-   metadata. It carries the exact `ADR-0030-allow: recovery-keep-raw` line marker; the gate honours it only on
-   a `markTerminated` call in `HistoryScreen.kt` and fails if that marker appears anywhere else. No other
-   manifest mutation in Library/History code is permitted — favorite/rename/lastPlayedAt go only through the
-   sidecar.
+   **Recovery-keep terminal write lives in the recovery subsystem (amended Slice 3).** The recovery-keep
+   action (`markTerminated(MULTI_SEGMENT_KEPT)`, wired through `RecoveryViewModel.markKeptRaw`) is constructed
+   in `ui/recovery/RecoveryViewModelFactory.kt` — its principled home (recovery subsystem, ADR-0005), outside
+   the `ui/library/` + History/Library-screen scope that `checkLibraryNoManifestWrite` guards. No in-scope
+   exception marker is needed; the gate now asserts **zero** manifest-mutating `SessionStore` calls in
+   Library/History UI code, full stop. Only recovery-owned terminal-repair writes are permitted outside this
+   gate — favorite, rename (`customTitle`), and `lastPlayedAt` go **only** through `LibraryMetadataStore`
+   regardless of which file calls them. `ui/recovery/` is not a general manifest-write location.
+
+   (History: before Slice 3 this write was co-located in `HistoryScreen.kt` behind an `ADR-0030-allow:
+   recovery-keep-raw` marker that the gate honoured only in that file. The redesign retired `HistoryScreen.kt`
+   and moved the recovery factory to its proper subsystem, letting the gate drop the marker loophole.)
 
 3. **Status badges are exceptional-only.** Cards show no "Complete" badge. `RECOVERED` is surfaced for
    `MULTI_SEGMENT_KEPT`; `INTERRUPTED` for `KILLED_BY_SYSTEM` / `KILLED_FORCE_STOP` or `exportState == FAILED`.

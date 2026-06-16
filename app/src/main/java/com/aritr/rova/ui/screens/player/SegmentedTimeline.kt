@@ -7,12 +7,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.R
 
 /**
  * Phase 2.5 — segmented clip-timeline strip (read-only) used at the
@@ -41,49 +51,67 @@ internal fun SegmentedTimeline(
     modifier: Modifier = Modifier
 ) {
     val state = SegmentedTimelineMath.compute(segmentDurationsMs, positionMs)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(3.dp)
-    ) {
-        state.cells.forEachIndexed { index, cell ->
-            val cellModifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(2.dp))
-            when (cell) {
-                is SegmentedTimelineMath.Cell.Done -> {
-                    Box(
-                        modifier = cellModifier.background(
-                            Color.White.copy(alpha = 0.55f)
-                        )
+    val totalDurationMs = segmentDurationsMs.sum().coerceAtLeast(1L)
+    val timelineCd = stringResource(R.string.player_timeline_cd)
+    val recordedTmpl = stringResource(R.string.player_timeline_segment_recorded)
+    val playingTmpl = stringResource(R.string.player_timeline_segment_playing)
+    val upcomingTmpl = stringResource(R.string.player_timeline_segment_upcoming)
+    val total = state.totalClips
+    Box(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .semantics {
+                    isTraversalGroup = true
+                    contentDescription = timelineCd
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = positionMs.toFloat().coerceIn(0f, totalDurationMs.toFloat()),
+                        range = 0f..totalDurationMs.toFloat(),
+                        steps = 0,
                     )
                 }
-                is SegmentedTimelineMath.Cell.Upcoming -> {
-                    Box(
-                        modifier = cellModifier.background(
-                            Color.White.copy(alpha = 0.18f)
-                        )
-                    )
+        ) {
+            state.cells.forEachIndexed { index, cell ->
+                val cellLabel = when (cell) {
+                    is SegmentedTimelineMath.Cell.Done -> recordedTmpl.format(index + 1, total)
+                    is SegmentedTimelineMath.Cell.Current -> playingTmpl.format(index + 1, total)
+                    is SegmentedTimelineMath.Cell.Upcoming -> upcomingTmpl.format(index + 1, total)
                 }
-                is SegmentedTimelineMath.Cell.Current -> {
-                    Box(
-                        modifier = cellModifier.background(
-                            Color.White.copy(alpha = 0.18f)
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(cell.fillFraction.coerceIn(0f, 1f))
-                                .background(Color.White.copy(alpha = 0.90f))
-                        )
+                val cellModifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp))
+                    .semantics { contentDescription = cellLabel }
+                when (cell) {
+                    is SegmentedTimelineMath.Cell.Done -> {
+                        Box(modifier = cellModifier.background(Color.White.copy(alpha = 0.55f)))
+                    }
+                    is SegmentedTimelineMath.Cell.Upcoming -> {
+                        Box(modifier = cellModifier.background(Color.White.copy(alpha = 0.18f)))
+                    }
+                    is SegmentedTimelineMath.Cell.Current -> {
+                        Box(modifier = cellModifier.background(Color.White.copy(alpha = 0.18f))) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(cell.fillFraction.coerceIn(0f, 1f))
+                                    .background(Color.White.copy(alpha = 0.90f))
+                            )
+                        }
                     }
                 }
-            }
-            if (index != state.cells.lastIndex) {
-                Box(modifier = Modifier.padding(horizontal = 1.5.dp))
+                if (index != state.cells.lastIndex) {
+                    Box(modifier = Modifier.padding(horizontal = 1.5.dp))
+                }
             }
         }
+        val clipAnnounce = stringResource(R.string.player_clip_n_of_m, state.currentClipIndex, state.totalClips)
+        Box(
+            Modifier.size(1.dp).semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = clipAnnounce
+            }
+        )
     }
 }

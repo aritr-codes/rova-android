@@ -24,7 +24,7 @@ import androidx.navigation.navArgument
 import com.aritr.rova.InitialTab
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.service.dualrecord.VideoSide
-import com.aritr.rova.ui.screens.HistoryScreen
+import com.aritr.rova.ui.library.LibraryScreen
 import com.aritr.rova.ui.screens.RecordScreen
 import com.aritr.rova.ui.screens.SettingsScreen
 import com.aritr.rova.ui.screens.SettingsViewModel
@@ -163,7 +163,7 @@ fun MainScreen(
                         launchKeyguard = { intent -> activity.startActivity(intent) },
                     )
                 }
-                HistoryScreen(
+                LibraryScreen(
                     onNavigateToRecord = {
                         // Nav-retention fix — symmetric save/restore so the
                         // History tab's state is saved on the way back to

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Autoplay preview surface for the Library (hero + grid + list).
+
+  surface_type=texture_view is LOAD-BEARING (Library polish, DualShot grey-strip RCA):
+  PlayerView's default SurfaceView renders on a separate hardware-overlay layer that
+  (a) is NOT clipped by the Compose RoundedCornerShape host, and (b) on this device class
+  leaks a transient strip / partial-frame bleed on cold-launch first-frame composition.
+  A TextureView composites through the GPU like any view — it honors the host clip and the
+  codec crop rect, eliminating the band. (It is also faithfully captured by `adb screencap`,
+  so the fix is device-verifiable.) Heavier per preview than an overlay, but bounded by
+  AutoplayPolicy.MAX_CONCURRENT — do NOT lift that cap.
+
+  resize_mode=zoom = center-crop fill (matches the static VideoFrame ContentScale.Crop).
+  use_controller=false / shutter transparent: chrome-less muted preview behind the card.
+-->
+<androidx.media3.ui.PlayerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:surface_type="texture_view"
+    app:use_controller="false"
+    app:resize_mode="zoom"
+    app:shutter_background_color="@android:color/transparent" />

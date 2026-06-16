@@ -365,6 +365,11 @@
     <string name="player_position_per_clip">%1$s / %2$s per clip</string>
     <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
     <string name="player_clip_n_of_m">Clip %1$d of %2$d</string>
+    <!-- Player timeline accessibility (WCAG row 21) -->
+    <string name="player_timeline_cd">Recording timeline</string>
+    <string name="player_timeline_segment_recorded">Clip %1$d of %2$d, recorded</string>
+    <string name="player_timeline_segment_playing">Clip %1$d of %2$d, now playing</string>
+    <string name="player_timeline_segment_upcoming">Clip %1$d of %2$d, not yet played</string>
     <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
     <string name="player_unavailable_not_available">Recording not available</string>
     <string name="player_unavailable_not_finished">Recording not finished</string>
@@ -381,6 +386,9 @@
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_recording_defaults">Recording defaults</string>
     <string name="settings_section_recording_behavior">Recording behavior</string>
+    <string name="settings_section_library">Library</string>
+    <string name="settings_library_card_preview_title">Preview recordings while browsing</string>
+    <string name="settings_library_card_preview_summary">Autoplay muted previews on library cards. Off by default to save battery.</string>
     <string name="settings_section_alerts">Alerts</string>
     <string name="settings_section_notifications">Notifications</string>
     <string name="settings_section_storage">Storage</string>
@@ -796,10 +804,79 @@
     <string name="library_view_list">List view</string>
     <string name="library_badge_recovered">Recovered</string>
     <string name="library_badge_interrupted">Interrupted</string>
-    <string name="library_badge_pl">Portrait plus Landscape</string>
+    <string name="library_badge_pl">DualShot</string>
+    <string name="library_orientation_portrait">Portrait</string>
+    <string name="library_orientation_landscape">Landscape</string>
+    <plurals name="library_hero_clip_count">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
     <string name="library_a11y_duration">duration</string>
     <string name="library_day_size_total">%1$s this day</string>
     <string name="library_empty_title">No recordings yet</string>
     <string name="library_empty_body">Your background recordings will appear here.</string>
     <string name="library_empty_cta">Start recording</string>
+    <string name="library_empty_go_to_record">Go to Record</string>
+    <!-- Polish P4 — distinct search-empty + error states -->
+    <string name="library_search_empty_cta">Clear filters</string>
+    <string name="library_error_title">Couldn\'t load your library</string>
+    <string name="library_error_body">Something went wrong reading your recordings. Pull to retry.</string>
+    <!-- Polish P6 — storage/usage summary line -->
+    <plurals name="library_usage_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="library_usage_clips">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="library_usage_cd">Library footprint: %1$s</string>
+    <!-- Slice 3 — selection + batch -->
+    <string name="library_select_count">%1$d selected</string>
+    <string name="library_action_close_selection">Exit selection</string>
+    <string name="library_action_select_all">Select all</string>
+    <string name="library_action_select">Select</string>
+    <string name="library_action_delete">Delete</string>
+    <string name="library_action_vault">Move to vault</string>
+    <string name="library_action_vault_disabled">Vault unavailable for this selection</string>
+    <string name="library_action_rename">Rename</string>
+    <string name="library_action_view_settings">View settings</string>
+    <string name="library_delete_confirm_title">Delete recordings?</string>
+    <string name="library_delete_confirm_body">%1$d recording(s) will be deleted.</string>
+    <string name="library_delete_undo">Undo</string>
+    <string name="library_deleted_count">Deleted %1$d recording(s)</string>
+    <string name="library_delete_failed">Couldn\'t delete %1$d recording(s)</string>
+    <string name="library_vault_batch_result">Moved %1$d, skipped %2$d</string>
+    <string name="library_rename_title">Rename recording</string>
+    <string name="library_rename_hint">Title</string>
+    <string name="library_rename_confirm">Save</string>
+    <string name="library_a11y_selected">Selected</string>
+    <string name="library_a11y_not_selected">Not selected</string>
+    <string name="library_sidecar_write_error">Couldn\'t save that change</string>
+    <!-- Library Discovery (Slice 4) -->
+    <string name="library_sort_title">Sort</string>
+    <string name="library_sort_newest">Newest first</string>
+    <string name="library_sort_oldest">Oldest first</string>
+    <string name="library_sort_longest">Longest</string>
+    <string name="library_sort_largest">Largest</string>
+    <string name="library_sort_open_cd">Sort</string>
+    <string name="library_sort_current_cd">Current sort: %1$s</string>
+    <string name="library_filter_all">All</string>
+    <string name="library_filter_favorites">Favorites</string>
+    <string name="library_filter_pl">DualShot</string>
+    <string name="library_filter_selected_cd">%1$s, selected</string>
+    <string name="library_filter_not_selected_cd">%1$s</string>
+    <string name="library_search_open_cd">Search</string>
+    <string name="library_search_close_cd">Close search</string>
+    <string name="library_search_clear_cd">Clear search</string>
+    <string name="library_search_hint">Search recordings</string>
+    <string name="library_search_empty_title">No matches</string>
+    <string name="library_search_empty_body">Try a different name or date.</string>
+    <string name="library_favorites_empty_title">No favorites yet</string>
+    <string name="library_favorites_empty_body">Tap the star on any recording to keep it here.</string>
+    <string name="library_dualshot_empty_title">No DualShot recordings yet</string>
+    <string name="library_dualshot_empty_body">DualShot captures two framings at once.</string>
+    <string name="library_filtered_empty_title">No matches</string>
+    <string name="library_filtered_empty_body">Clear a filter to see more recordings.</string>
+    <string name="library_scrubber_rail_cd">Scroll by day</string>
 </resources>

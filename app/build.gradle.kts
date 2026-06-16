@@ -1830,7 +1830,11 @@ val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
 // regex (`\bname\s*\(`) so a forbidden call survives reformatting (e.g. `name (`).
 val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") {
     group = "verification"
-    description = "Library/History code must not call SessionManifest-mutating SessionStore APIs (ADR-0030)."
+    // Exception-free since Slice 3 (ADR-0030 §2 amendment): the lone sanctioned write (recovery-keep
+    // markTerminated) relocated to ui/recovery/RecoveryViewModelFactory.kt — out of scope — so this gate now
+    // asserts ZERO manifest mutations in Library/History UI, full stop. Recovery-owned writes belong in
+    // ui/recovery/ (ADR-0005), never here.
+    description = "Library/History UI must not call SessionManifest-mutating SessionStore APIs (ADR-0030 §2)."
     // Method names (no paren) of every SessionManifest-mutating SessionStore API.
     val forbidden = listOf(
         "markTerminated", "appendSegment", "submitPersistFinalizedSegment",
@@ -1846,10 +1850,8 @@ val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") 
         "writeManifestAtomic",
     )
     val callRegex = Regex("\\b(${forbidden.joinToString("|")})\\s*\\(")
-    val allowMarker = "ADR-0030-allow: recovery-keep-raw"
     doLast {
         val offenders = mutableListOf<String>()
-        val allowMarks = mutableListOf<String>()
         fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
             val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
             val inScope = rel.startsWith("ui/library/") ||
@@ -1858,28 +1860,16 @@ val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") 
             f.readLines().forEachIndexed { i, line ->
                 val t = line.trimStart()
                 if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                val marked = line.contains(allowMarker)
-                if (marked) allowMarks += "$rel:${i + 1}: ${line.trim()}"
-                // Match only the code before an inline `//` so a commented-out
-                // example call (e.g. `x // markTerminated(`) cannot false-fail.
+                // Match only the code before an inline `//` so a commented-out example call
+                // (e.g. `x // markTerminated(`) cannot false-fail.
                 val code = line.substringBefore("//")
-                if (callRegex.containsMatchIn(code) && !marked) offenders += "$rel:${i + 1}: ${line.trim()}"
+                if (callRegex.containsMatchIn(code)) offenders += "$rel:${i + 1}: ${line.trim()}"
             }
-        }
-        // The marker is reserved for the single sanctioned recovery-keep write.
-        val stray = allowMarks.filterNot {
-            it.substringBefore(':') == "ui/screens/HistoryScreen.kt" && it.contains("markTerminated")
-        }
-        if (stray.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0030: stray '$allowMarker' marker(s) — reserved for the single recovery-keep " +
-                    "markTerminated write in HistoryScreen.kt:\n" + stray.joinToString("\n")
-            )
         }
         if (offenders.isNotEmpty()) {
             throw GradleException(
-                "ADR-0030: Library/History must not mutate SessionManifest — use LibraryMetadataStore:\n" +
-                    offenders.joinToString("\n")
+                "ADR-0030 §2: Library/History UI must not mutate SessionManifest — use LibraryMetadataStore " +
+                    "(recovery-owned writes belong in ui/recovery/):\n" + offenders.joinToString("\n")
             )
         }
     }

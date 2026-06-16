@@ -17,13 +17,35 @@ data class LibraryRow(
     val dateMillis: Long,
     val durationMs: Long,
     val sizeBytes: Long,
+    /**
+     * Number of persisted/playable clips (segments) in the session — the same set the player's
+     * SegmentedTimeline renders. Polish P3 (session identity). 0 for legacy file-scan rows with no
+     * manifest (the clip-count chip then hides; usage aggregation counts such a row as 1 clip).
+     */
+    val clipCount: Int,
     val topology: CaptureTopology,
     val badge: LibraryBadge?,
     val favorite: Boolean,
+    /**
+     * Orientation this tile represents — drives the orientation glyph (owner request, 2026-06-15).
+     * DualShot rows resolve it from their per-side discriminator; single-mode rows from the video
+     * resolution. null = no verdict (square / legacy / SAF) → the card renders no glyph.
+     */
+    val orientation: LibraryOrientation? = null,
 )
 
 /** Sort options for the Library (decision C). */
-enum class LibrarySort { NEWEST, OLDEST, LONGEST, LARGEST }
+enum class LibrarySort {
+    NEWEST, OLDEST, LONGEST, LARGEST;
+
+    /**
+     * Date-ordered sorts get day-grouped headers ("Today" / "Yesterday" / date); size- and
+     * duration-ordered sorts render as one flat, header-less list. Day headers are a chronological
+     * affordance — under LONGEST/LARGEST same-day rows are NOT contiguous, so per-day buckets would
+     * both read wrong and (fatally) collide LazyList keys. See [LibraryDayGrouping.groupForSort].
+     */
+    val isChronological: Boolean get() = this == NEWEST || this == OLDEST
+}
 
 /**
  * Filter facets (decision C). [topology] null = any. [search] blank = no search.

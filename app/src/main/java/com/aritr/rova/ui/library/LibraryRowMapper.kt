@@ -3,6 +3,7 @@ package com.aritr.rova.ui.library
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.Terminated
+import com.aritr.rova.service.dualrecord.VideoSide
 import java.util.Locale
 import java.util.TimeZone
 
@@ -27,12 +28,16 @@ object LibraryRowMapper {
         val exportState: ExportState,
         val customTitle: String?,
         val favorite: Boolean,
+        /** DualShot per-side discriminator (null for single-mode/legacy) — authoritative orientation. */
+        val side: VideoSide? = null,
+        /** Decoded thumbnail pixel size (rotation-corrected) — orientation source for single-mode rows. */
+        val thumbWidthPx: Int = 0,
+        val thumbHeightPx: Int = 0,
     )
 
     fun map(input: Input, locale: Locale, tz: TimeZone): LibraryRow {
         val durationMs = input.segmentDurationsMs.sum()
-        val segmentCount = input.segmentDurationsMs.size.coerceAtLeast(1)
-        val derived = SmartTitle.derive(input.startedAtMillis, segmentCount, durationMs, locale, tz)
+        val derived = SmartTitle.derive(input.startedAtMillis, locale, tz)
         val title = input.customTitle?.takeIf { it.isNotBlank() } ?: derived
         return LibraryRow(
             stableKey = input.stableKey,
@@ -41,9 +46,13 @@ object LibraryRowMapper {
             dateMillis = input.dateMillis,
             durationMs = durationMs,
             sizeBytes = input.sizeBytes,
+            // Raw size (NOT the coerced segmentCount above): legacy rows with no manifest → 0 so the
+            // clip-count chip hides; the persisted-segment list = exactly the player's playable clips.
+            clipCount = input.segmentDurationsMs.size,
             topology = CaptureTopology.fromPersisted(input.topologyPersisted),
             badge = StatusBadgePolicy.badgeFor(input.terminated, input.exportState),
             favorite = input.favorite,
+            orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
         )
     }
 }

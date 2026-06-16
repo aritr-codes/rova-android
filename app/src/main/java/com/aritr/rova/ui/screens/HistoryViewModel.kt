@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aritr.rova.RovaApp
+import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.RovaSettings
 import com.aritr.rova.data.SessionConfig
@@ -16,11 +17,14 @@ import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.service.export.VaultMoverBuilder
+import com.aritr.rova.ui.library.LibraryFilter
 import com.aritr.rova.ui.library.LibraryMetadataEntry
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.LibraryRowMapper
+import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.UsageAggregator
 import com.aritr.rova.ui.library.ThumbnailCacheKey
 import com.aritr.rova.ui.library.ThumbnailDiskCache
 import com.aritr.rova.utils.RovaLog
@@ -238,8 +242,29 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    /** Library grid/list toggle (decision A). Drives [libraryUiState]. */
-    private val _viewMode = MutableStateFlow(LibraryViewMode.GRID)
+    /** Slice 4.1 — RovaSettings seam for persisting the Library view mode across launches. */
+    private val settings = RovaSettings(getApplication())
+
+    /**
+     * Library grid/list toggle (decision A). Drives [libraryUiState]. Seeded from the persisted
+     * [RovaSettings.libraryViewMode] (Slice 4.1, fixes "resets to Grid every launch") and
+     * re-persisted in [setViewMode]; unknown/missing coerces to GRID.
+     */
+    private val _viewMode = MutableStateFlow(
+        runCatching { LibraryViewMode.valueOf(settings.libraryViewMode) }.getOrDefault(LibraryViewMode.GRID),
+    )
+
+    /**
+     * Polish P7 — mirrors [RovaSettings.libraryCardPreview] (default OFF) into [libraryUiState] so the
+     * screen can gate card autoplay. [refreshCardPreview] re-reads the pref on resume because the
+     * bottom-nav keeps [com.aritr.rova.ui.library.LibraryScreen] composed across tab switches, so a
+     * Settings toggle would otherwise not be picked up until process recreation.
+     */
+    private val _cardPreview = MutableStateFlow(settings.libraryCardPreview)
+
+    fun refreshCardPreview() {
+        _cardPreview.value = settings.libraryCardPreview
+    }
 
     /**
      * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
@@ -248,6 +273,24 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * this, or `libraryUiState` will serve a stale snapshot.
      */
     private val _sidecarRevision = MutableStateFlow(0)
+
+    /**
+     * Slice 4 (spec §5.4) — Discovery sort + filter/search state. Thin reactive
+     * holders; the pure [LibraryQuery] does the work and the Screen reads these into
+     * its query call. `_filter.search` carries the live search query (folded into the
+     * one filter object so the query call takes a single facet bundle).
+     */
+    private val _sort = MutableStateFlow(LibrarySort.NEWEST)
+    val sort: StateFlow<LibrarySort> = _sort.asStateFlow()
+
+    private val _filter = MutableStateFlow(LibraryFilter())
+    val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
+
+    fun setSort(value: LibrarySort) { _sort.value = value }
+    fun setSearch(query: String) { _filter.update { it.copy(search = query) } }
+    fun setFavoritesOnly(only: Boolean) { _filter.update { it.copy(favoritesOnly = only) } }
+    fun setTopologyFilter(topology: CaptureTopology?) { _filter.update { it.copy(topology = topology) } }
+    fun clearFilters() { _filter.value = LibraryFilter() }
 
     /**
      * Non-blocking one-shot signal that a sidecar write failed (owner adjustment 2).
@@ -266,12 +309,19 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _viewMode, _sidecarRevision) { rows, loaded, mode, _ ->
+        combine(items, hasLoaded, _viewMode, _sidecarRevision, _cardPreview) { rows, loaded, mode, _, cardPreview ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
             val mapped = rows.map { item -> toLibraryRow(item, snapshot[item.stableKey], locale, tz) }
-            LibraryUiState(rows = mapped, viewMode = mode, hasLoaded = loaded)
+            // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
+            LibraryUiState(
+                rows = mapped,
+                viewMode = mode,
+                hasLoaded = loaded,
+                usage = UsageAggregator.aggregate(mapped),
+                cardPreview = cardPreview,
+            )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)
             // and maps the list — keep it off the Main collecting context (codex review).
@@ -299,12 +349,18 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 exportState = facts?.exportState ?: com.aritr.rova.data.ExportState.FINALIZED,
                 customTitle = meta?.customTitle,
                 favorite = meta?.favorite ?: false,
+                side = item.side,
+                thumbWidthPx = item.thumbnail?.width ?: 0,
+                thumbHeightPx = item.thumbnail?.height ?: 0,
             ),
             locale, tz,
         )
     }
 
-    fun setViewMode(mode: LibraryViewMode) { _viewMode.value = mode }
+    fun setViewMode(mode: LibraryViewMode) {
+        _viewMode.value = mode
+        settings.libraryViewMode = mode.name // persist across launches (Slice 4.1)
+    }
 
     /**
      * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI
@@ -325,6 +381,50 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 _sidecarWriteError.update { it + 1 } // UI unchanged; surface a non-blocking notice
             }
         }
+    }
+
+    /**
+     * Slice 3 — rename = sidecar `customTitle` write (ADR-0030: NEVER the manifest). Same
+     * non-optimistic failure model as [toggleFavorite]; a blank title clears the custom name
+     * (the row falls back to [SmartTitle]). Off-main.
+     */
+    fun renameSession(stableKey: String, newTitle: String) {
+        val store = libraryStore ?: return
+        val trimmed = newTitle.trim()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                store.update(stableKey) { it.copy(customTitle = trimmed.ifBlank { null }) }
+                _sidecarRevision.update { it + 1 }
+            } catch (t: Throwable) {
+                RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
+                _sidecarWriteError.update { it + 1 }
+            }
+        }
+    }
+
+    /** Slice 3 — resolve selected stableKeys to concrete [VideoItem]s (batch share/delete need the artifacts). */
+    fun itemsForKeys(keys: Set<String>): List<VideoItem> {
+        val byKey = items.value.associateBy { it.stableKey }
+        return keys.mapNotNull { byKey[it] }
+    }
+
+    /** Result of a batch Vault move: [moved] succeeded, [skipped] were non-movable (P+L) or failed. */
+    data class VaultBatchResult(val moved: Int, val skipped: Int)
+
+    /**
+     * Slice 3 — batch Vault move. Each selected session is moved via [moveToVault], which self-gates on
+     * [VaultMoverBuilder.isSingleModeMovable] (P+L not movable, ADR-0009/0025) and is fail-closed, so a
+     * row-level pre-filter is not required for safety. [refresh] fires inside each move; the now-VAULTED
+     * rows drop out of the PUBLIC-only listing.
+     */
+    suspend fun batchMoveToVault(keys: Set<String>): VaultBatchResult {
+        val byKey = items.value.associateBy { it.stableKey }
+        var moved = 0
+        for (k in keys) {
+            val sid = byKey[k]?.sessionId ?: continue
+            if (moveToVault(sid)) moved++
+        }
+        return VaultBatchResult(moved = moved, skipped = keys.size - moved)
     }
 
     /**
@@ -644,12 +744,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * filename); every other row sums the session's segments.
      */
     private fun factsFor(m: SessionManifest, rec: ResolvedRecording): RowManifestFacts {
-        val durations = if (rec.segmentIndex != null) {
-            val seg = m.segments.firstOrNull { it.filename == rec.file?.name }
-            listOf(seg?.durationMs ?: 0L)
-        } else {
-            m.segments.map { it.durationMs }
-        }
+        // A DualShot per-side row must count only its own side's segments — a DualShot capture writes a
+        // portrait AND a landscape segment per loop, so summing all segments reported N×2 clips and a
+        // doubled duration (SessionDurations, JVM-tested).
+        val durations = SessionDurations.forRow(
+            segments = m.segments,
+            isPerSegment = rec.segmentIndex != null,
+            segmentFilename = rec.file?.name,
+            side = rec.side,
+        )
         return RowManifestFacts(
             startedAt = m.startedAt,
             segmentDurationsMs = durations,
@@ -923,9 +1026,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * with the canonical `shareUri` (already plumbed by the share
      * fixes) closes that gap.
      */
-    suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult =
+    suspend fun deleteItems(items: Collection<VideoItem>): DeleteResult {
+        val total = items.size
+        val failedKeys = deleteItemsKeyed(items)
+        return DeleteResult(deleted = total - failedKeys.size, failed = failedKeys.size)
+    }
+
+    /**
+     * Slice 3 — keyed delete used by the deferred-delete Snackbar-UNDO flow. Returns the set of
+     * [VideoItem.stableKey]s whose delete FAILED, so the screen can restore exactly those rows to the
+     * library while the truly-deleted rows drop out via the [refresh] that fires here. [deleteItems]
+     * delegates to this and reduces to counts for legacy callers.
+     */
+    suspend fun deleteItemsKeyed(items: Collection<VideoItem>): Set<String> =
         withContext(Dispatchers.IO) {
-            if (items.isEmpty()) return@withContext DeleteResult(0, 0)
+            if (items.isEmpty()) return@withContext emptySet()
             val app = getApplication<Application>()
             val resolver = app.contentResolver
             // Same access pattern as `refresh()`: read sessionStore via
@@ -947,13 +1062,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             )
-            var deleted = 0
-            var failed = 0
+            val failed = mutableSetOf<String>()
             items.forEach { item ->
-                if (deleter.delete(item)) deleted++ else failed++
+                if (!deleter.delete(item)) failed += item.stableKey
             }
             refresh()
-            DeleteResult(deleted = deleted, failed = failed)
+            failed
         }
 
     /**

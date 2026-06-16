@@ -2,15 +2,16 @@ package com.aritr.rova.ui.library
 
 import com.aritr.rova.data.CaptureTopology
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LibraryQueryTest {
 
     private fun row(
-        key: String, date: Long, dur: Long = 0, size: Long = 0,
+        key: String, date: Long = 0, dateMillis: Long = date, dur: Long = 0, size: Long = 0,
         topology: CaptureTopology = CaptureTopology.Single,
         favorite: Boolean = false, title: String = key, dateLabel: String = "",
-    ) = LibraryRow(key, title, dateLabel, date, dur, size, topology, null, favorite)
+    ) = LibraryRow(key, title, dateLabel, dateMillis, dur, size, 1, topology, null, favorite)
 
     private val a = row("a", date = 300, dur = 10, size = 100, title = "Beach run")
     private val b = row("b", date = 200, dur = 50, size = 30, favorite = true, title = "Park")
@@ -59,5 +60,40 @@ class LibraryQueryTest {
     @Test fun `search matches title case-insensitively`() {
         val out = LibraryQuery.collection(all, LibrarySort.NEWEST, LibraryFilter(search = "beach"), heroKey = null)
         assertEquals(listOf("a"), out.map { it.stableKey })
+    }
+
+    @Test
+    fun heroFor_picksNewestMatchingFilter_notNewestOverall() {
+        val rows = listOf(
+            row(key = "a", dateMillis = 300, favorite = false),
+            row(key = "b", dateMillis = 200, favorite = true),
+            row(key = "c", dateMillis = 100, favorite = true),
+        )
+        val hero = LibraryQuery.heroFor(rows, LibraryFilter(favoritesOnly = true))
+        assertEquals("b", hero?.stableKey) // newest favorite, not "a" (newer but not favorite)
+    }
+
+    @Test
+    fun heroFor_respectsTopologyAndSearch() {
+        val rows = listOf(
+            row(key = "p1", dateMillis = 300, topology = CaptureTopology.Single, title = "Beach"),
+            row(key = "d1", dateMillis = 250, topology = CaptureTopology.DualShot, title = "Beach"),
+            row(key = "d2", dateMillis = 200, topology = CaptureTopology.DualShot, title = "Park"),
+        )
+        val hero = LibraryQuery.heroFor(rows, LibraryFilter(topology = CaptureTopology.DualShot, search = "beach"))
+        assertEquals("d1", hero?.stableKey)
+    }
+
+    @Test
+    fun heroFor_emptyWhenNoMatch() {
+        val rows = listOf(row(key = "a", dateMillis = 100, favorite = false))
+        assertNull(LibraryQuery.heroFor(rows, LibraryFilter(favoritesOnly = true)))
+    }
+
+    @Test
+    fun heroFor_ignoresSortOrder_alwaysNewest() {
+        val rows = listOf(row(key = "a", dateMillis = 100), row(key = "b", dateMillis = 300))
+        // heroFor takes no sort arg — hero is always the newest match
+        assertEquals("b", LibraryQuery.heroFor(rows, LibraryFilter())?.stableKey)
     }
 }

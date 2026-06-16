@@ -363,6 +363,11 @@
     <string name="player_position_per_clip">%1$s / %2$s por clip</string>
     <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
     <string name="player_clip_n_of_m">Clip %1$d de %2$d</string>
+    <!-- Player timeline accessibility (WCAG row 21) -->
+    <string name="player_timeline_cd">Línea de tiempo de grabación</string>
+    <string name="player_timeline_segment_recorded">Clip %1$d de %2$d, grabado</string>
+    <string name="player_timeline_segment_playing">Clip %1$d de %2$d, reproduciéndose</string>
+    <string name="player_timeline_segment_upcoming">Clip %1$d de %2$d, sin reproducir</string>
     <!-- Player Unavailable-state reasons (B3 i18n task 5b) -->
     <string name="player_unavailable_not_available">Grabación no disponible</string>
     <string name="player_unavailable_not_finished">Grabación sin terminar</string>
@@ -379,6 +384,9 @@
     <string name="settings_section_appearance">Apariencia</string>
     <string name="settings_section_recording_defaults">Valores predeterminados de grabación</string>
     <string name="settings_section_recording_behavior">Comportamiento de grabación</string>
+    <string name="settings_section_library">Biblioteca</string>
+    <string name="settings_library_card_preview_title">Previsualizar grabaciones al explorar</string>
+    <string name="settings_library_card_preview_summary">Reproduce vistas previas silenciadas en las tarjetas. Desactivado por defecto para ahorrar batería.</string>
     <string name="settings_section_alerts">Alertas</string>
     <string name="settings_section_notifications">Notificaciones</string>
     <string name="settings_section_storage">Almacenamiento</string>
@@ -794,10 +802,79 @@
     <string name="library_view_list">Vista de lista</string>
     <string name="library_badge_recovered">Recuperado</string>
     <string name="library_badge_interrupted">Interrumpido</string>
-    <string name="library_badge_pl">Vertical y horizontal</string>
+    <string name="library_badge_pl">DualShot</string>
+    <string name="library_orientation_portrait">Vertical</string>
+    <string name="library_orientation_landscape">Horizontal</string>
+    <plurals name="library_hero_clip_count">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
     <string name="library_a11y_duration">duración</string>
     <string name="library_day_size_total">%1$s este día</string>
     <string name="library_empty_title">Aún no hay grabaciones</string>
     <string name="library_empty_body">Tus grabaciones en segundo plano aparecerán aquí.</string>
     <string name="library_empty_cta">Empezar a grabar</string>
+    <string name="library_empty_go_to_record">Ir a Grabar</string>
+    <!-- Polish P4 — estados distintos de sin-resultados + error -->
+    <string name="library_search_empty_cta">Borrar filtros</string>
+    <string name="library_error_title">No se pudo cargar tu biblioteca</string>
+    <string name="library_error_body">Ocurrió un error al leer tus grabaciones. Desliza para reintentar.</string>
+    <!-- Polish P6 — resumen de almacenamiento/uso -->
+    <plurals name="library_usage_sessions">
+        <item quantity="one">%d sesión</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
+    <plurals name="library_usage_clips">
+        <item quantity="one">%d clip</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="library_usage_cd">Espacio de la biblioteca: %1$s</string>
+    <!-- Slice 3 — selección + acciones por lote -->
+    <string name="library_select_count">%1$d seleccionadas</string>
+    <string name="library_action_close_selection">Salir de la selección</string>
+    <string name="library_action_select_all">Seleccionar todo</string>
+    <string name="library_action_select">Seleccionar</string>
+    <string name="library_action_delete">Eliminar</string>
+    <string name="library_action_vault">Mover a la caja fuerte</string>
+    <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
+    <string name="library_action_rename">Cambiar nombre</string>
+    <string name="library_action_view_settings">Ver ajustes</string>
+    <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
+    <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
+    <string name="library_delete_undo">Deshacer</string>
+    <string name="library_deleted_count">Se eliminaron %1$d grabación(es)</string>
+    <string name="library_delete_failed">No se pudieron eliminar %1$d grabación(es)</string>
+    <string name="library_vault_batch_result">Movidas %1$d, omitidas %2$d</string>
+    <string name="library_rename_title">Cambiar nombre de la grabación</string>
+    <string name="library_rename_hint">Título</string>
+    <string name="library_rename_confirm">Guardar</string>
+    <string name="library_a11y_selected">Seleccionada</string>
+    <string name="library_a11y_not_selected">No seleccionada</string>
+    <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
+    <!-- Library Discovery (Slice 4) -->
+    <string name="library_sort_title">Ordenar</string>
+    <string name="library_sort_newest">Más recientes primero</string>
+    <string name="library_sort_oldest">Más antiguos primero</string>
+    <string name="library_sort_longest">Más largos</string>
+    <string name="library_sort_largest">Más grandes</string>
+    <string name="library_sort_open_cd">Ordenar</string>
+    <string name="library_sort_current_cd">Orden actual: %1$s</string>
+    <string name="library_filter_all">Todos</string>
+    <string name="library_filter_favorites">Favoritos</string>
+    <string name="library_filter_pl">DualShot</string>
+    <string name="library_filter_selected_cd">%1$s, seleccionado</string>
+    <string name="library_filter_not_selected_cd">%1$s</string>
+    <string name="library_search_open_cd">Buscar</string>
+    <string name="library_search_close_cd">Cerrar búsqueda</string>
+    <string name="library_search_clear_cd">Borrar búsqueda</string>
+    <string name="library_search_hint">Buscar grabaciones</string>
+    <string name="library_search_empty_title">Sin resultados</string>
+    <string name="library_search_empty_body">Prueba con otro nombre o fecha.</string>
+    <string name="library_favorites_empty_title">Aún no hay favoritos</string>
+    <string name="library_favorites_empty_body">Toca la estrella en cualquier grabación para guardarla aquí.</string>
+    <string name="library_dualshot_empty_title">Aún no hay grabaciones DualShot</string>
+    <string name="library_dualshot_empty_body">DualShot captura dos encuadres a la vez.</string>
+    <string name="library_filtered_empty_title">Sin resultados</string>
+    <string name="library_filtered_empty_body">Borra un filtro para ver más grabaciones.</string>
+    <string name="library_scrubber_rail_cd">Desplazar por día</string>
 </resources>

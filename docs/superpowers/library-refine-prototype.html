@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rova Library — Structure & Hierarchy Review (Current vs Refined)</title>
+<style>
+  /* ----------------------------------------------------------------
+     NEUTRAL grayscale only. This prototype compares STRUCTURE,
+     HIERARCHY, DENSITY, and INTERACTION — not color or theme.
+     Every surface is gray; the real app supplies the glass palette.
+  ---------------------------------------------------------------- */
+  :root{
+    --bg:#15171a; --surface:#202327; --surface2:#2a2e33; --line:rgba(255,255,255,.10);
+    --line-strong:rgba(255,255,255,.22); --txt:#f2f3f5; --dim:#a8acb2; --faint:#7a7e84;
+    --thumb1:#3a3f45; --thumb2:#4a5057; --danger:#d98a8a; --accentRing:rgba(255,255,255,.35);
+    --pill:rgba(0,0,0,.55); --selected:#566; --radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{background:#0c0d0f;color:var(--txt);padding:28px 16px 80px;line-height:1.4}
+  h1{font-size:22px;font-weight:700;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:24px;max-width:880px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:28px;font-size:12px;color:var(--dim)}
+  .legend b{color:var(--txt)}
+  .tagM1{color:#bcd}.tagM2{color:#cdb}.tagM3{color:#dcb}
+
+  .stateBlock{margin-bottom:46px}
+  .stateTitle{font-size:15px;font-weight:600;letter-spacing:.02em;margin-bottom:14px;
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .pair{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+  .col{flex:1 1 320px;min-width:300px;max-width:420px}
+  .colLabel{font-size:11px;letter-spacing:.10em;text-transform:uppercase;color:var(--faint);
+    margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .colLabel .dot{width:8px;height:8px;border-radius:50%}
+  .dot.cur{background:#777}.dot.ref{background:#cdd}
+
+  /* phone frame */
+  .phone{background:var(--bg);border:1px solid var(--line);border-radius:30px;overflow:hidden;
+    box-shadow:0 14px 40px rgba(0,0,0,.5)}
+  .status{height:30px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;font-size:10px;color:var(--faint)}
+
+  /* top bar */
+  .bar{display:flex;align-items:center;gap:2px;padding:6px 8px;background:var(--surface);
+    border-bottom:1px solid var(--line)}
+  .bar .title{flex:1;font-size:19px;font-weight:600;padding-left:8px}
+  .icn{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:var(--dim);position:relative}
+  .icn.ghost{opacity:.55}
+  .icn small{position:absolute;bottom:1px;font-size:7px;color:var(--faint);letter-spacing:.02em}
+
+  /* usage line */
+  .usage{padding:8px 16px 6px;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .usage.demoted{padding:4px 16px 2px;font-size:11px;color:var(--faint)}
+
+  /* filter chips */
+  .chips{display:flex;gap:8px;padding:8px 14px 12px;flex-wrap:wrap}
+  .chip{font-size:12.5px;padding:6px 14px;border-radius:16px;border:1px solid var(--line-strong);
+    color:var(--dim);display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .chip.sel{background:var(--surface2);color:var(--txt);border-color:transparent}
+  .chip .ck{font-size:11px;line-height:1}
+  .chip.allgap{margin-right:10px;position:relative}
+  .chip.allgap::after{content:"";position:absolute;right:-10px;top:18%;height:64%;
+    width:1px;background:var(--line)}
+
+  /* hero */
+  .hero{margin:6px 16px 10px;height:172px;border-radius:20px;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,var(--thumb1),var(--thumb2))}
+  .hero.refined{height:184px}
+  .hero .scrim{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.62),transparent 62%)}
+  .hero .play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:50px;height:50px;
+    border-radius:50%;background:rgba(0,0,0,.34);display:flex;align-items:center;justify-content:center;font-size:22px}
+  .hero .star{position:absolute;top:8px;right:10px;font-size:18px;opacity:.92}
+  .hero .ident{position:absolute;left:14px;bottom:12px;right:14px}
+  .hero .eyebrow{font-size:9.5px;letter-spacing:.16em;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase}
+  .hero .htitle{font-size:21px;font-weight:600;margin-top:2px}
+  .hero .hmeta{font-size:11.5px;color:rgba(255,255,255,.85);font-variant-numeric:tabular-nums;margin-top:2px}
+  .hero .corner{position:absolute;top:9px;left:11px;font-size:9px;letter-spacing:.14em;
+    color:rgba(255,255,255,.7);text-transform:uppercase;font-weight:700;background:rgba(0,0,0,.4);
+    padding:3px 7px;border-radius:8px;display:none}
+  .hero.refined .corner{display:block}
+  .hero.refined .eyebrow{display:none}
+
+  /* day header */
+  .day{display:flex;justify-content:space-between;align-items:baseline;padding:8px 16px 6px;
+    font-size:13px;font-weight:600}
+  .day .sz{font-size:11px;color:var(--faint);font-weight:400;font-variant-numeric:tabular-nums}
+
+  /* grid */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 16px 14px}
+  .tile{aspect-ratio:16/9;border-radius:14px;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,var(--thumb1),var(--thumb2));border:1px solid var(--line)}
+  .tile .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 6px;font-size:11px;
+    background:linear-gradient(to top,rgba(0,0,0,.6),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pillTL{position:absolute;top:6px;left:6px;background:var(--pill);font-size:9px;font-weight:600;
+    padding:2px 7px;border-radius:9px}
+  .pillBR{position:absolute;bottom:6px;right:6px;background:var(--pill);font-size:9px;font-weight:600;
+    padding:2px 7px;border-radius:9px}
+  .pillTR{position:absolute;top:6px;right:6px;display:flex;gap:4px}
+  .pillTR .p{background:var(--pill);font-size:9px;font-weight:600;padding:2px 7px;border-radius:9px;
+    display:flex;align-items:center}
+  .ori{display:inline-block;border:1.5px solid rgba(255,255,255,.85);border-radius:2px}
+  .ori.port{width:9px;height:13px}.ori.land{width:13px;height:9px}
+
+  /* selection mode */
+  .selbar{display:flex;align-items:center;gap:4px;padding:6px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .selbar .ct{flex:1;font-size:16px;font-weight:600;padding-left:8px}
+  .tile.selON{outline:1.5px solid var(--accentRing);outline-offset:-1.5px}
+  .check{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;
+    background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;font-size:13px}
+  .check.on{background:#cdd;color:#222}
+  .check.off{border:1.5px solid rgba(255,255,255,.8)}
+
+  /* batch bar */
+  .batch{display:flex;padding:8px 8px;background:var(--surface);border-top:1px solid var(--line);align-items:center}
+  .bAct{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--dim)}
+  .bAct .g{font-size:17px}
+  .batch.refined .sep{width:1px;align-self:stretch;background:var(--line);margin:4px 6px}
+  .batch.refined .bAct.del{flex:0 0 76px}
+  .bAct.del{color:var(--danger)}
+
+  /* empty state */
+  .empty{padding:54px 30px;text-align:center}
+  .empty .ring{width:84px;height:84px;border-radius:50%;background:var(--surface2);margin:0 auto 18px;
+    display:flex;align-items:center;justify-content:center;font-size:34px;color:var(--dim)}
+  .empty .et{font-size:18px;font-weight:600;margin-bottom:6px}
+  .empty .eb{font-size:13px;color:var(--dim);margin-bottom:16px}
+  .empty .ecta{font-size:13px;color:#bcd;font-weight:600}
+  .empty .star-inline{display:inline-block;background:var(--surface2);border-radius:6px;padding:0 5px}
+
+  /* item sheet */
+  .sheetWrap{padding:18px 14px;background:repeating-linear-gradient(45deg,#101113,#101113 10px,#0d0e10 10px,#0d0e10 20px)}
+  .sheet{background:var(--surface);border:1px solid var(--line);border-radius:26px;overflow:hidden;
+    box-shadow:0 12px 30px rgba(0,0,0,.55)}
+  .sheet .handle{width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.25);margin:10px auto 6px}
+  .sheet .shead{display:flex;gap:12px;align-items:center;padding:8px 20px 12px}
+  .sheet .sthumb{width:60px;height:38px;border-radius:9px;background:linear-gradient(135deg,var(--thumb1),var(--thumb2))}
+  .sheet .stitle{font-size:14px;font-weight:600}
+  .sheet .smeta{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .srow{display:flex;align-items:center;gap:18px;padding:0 24px;height:46px;font-size:14.5px}
+  .srow .g{width:22px;text-align:center;font-size:16px;color:var(--dim)}
+  .srow.primary{height:50px;font-weight:600}
+  .srow.primary .g{color:var(--txt)}
+  .srow.danger{color:var(--danger)}.srow.danger .g{color:var(--danger)}
+  .sdiv{height:1px;background:var(--line);margin:6px 0}
+  .grouplbl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:8px 24px 2px}
+
+  /* annotations */
+  .notes{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .notes h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+  .note{font-size:12.5px;color:var(--dim);margin-bottom:9px;padding-left:22px;position:relative}
+  .note:last-child{margin-bottom:0}
+  .note .badge{position:absolute;left:0;top:0;font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;
+    background:var(--surface2)}
+  .note b{color:var(--txt)}
+  .verdict{margin-top:30px;background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;padding:18px 20px}
+  .verdict h3{font-size:14px;margin-bottom:12px}
+  .verdict table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .verdict td,.verdict th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .verdict th{color:var(--faint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .pillv{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--surface2);white-space:nowrap}
+  @media(max-width:720px){.pair{flex-direction:column}.col{max-width:100%}}
+</style>
+</head>
+<body>
+
+<h1>Rova Library — Structure &amp; Hierarchy Review</h1>
+<p class="sub">Neutral grayscale prototype. Compares <b>Current</b> vs <b>Refined (M1 + M2 + M3a)</b> on structure, density, and interaction only — color/glass/theme are deliberately stripped. Annotations under each state explain every proposed change and answer the five evaluation questions.</p>
+<div class="legend">
+  <span class="tagM1"><b>M1</b> — additive-filter affordance</span>
+  <span class="tagM2"><b>M2</b> — educational empty states</span>
+  <span class="tagM3"><b>M3a</b> — orientation glyph density</span>
+  <span><b>Cur</b> = current build &nbsp;|&nbsp; <b>Ref</b> = recommended</span>
+</div>
+
+<!-- ============================ STATE 1: DEFAULT ============================ -->
+<div class="stateBlock">
+  <div class="stateTitle">1 · Default Library</div>
+  <div class="pair">
+
+    <!-- CURRENT -->
+    <div class="col">
+      <div class="colLabel"><span class="dot cur"></span>Current</div>
+      <div class="phone">
+        <div class="status"><span>11:44</span><span>R ▦ 93%</span></div>
+        <div class="bar">
+          <span class="icn">‹</span><span class="title">Library</span>
+          <span class="icn">🔒</span><span class="icn">🔍</span><span class="icn">⇅</span><span class="icn">▦</span>
+        </div>
+        <div class="usage">9 sessions · 42 clips · 350.5 MB</div>
+        <div class="chips">
+          <span class="chip sel">All</span>
+          <span class="chip sel">Favorites</span>
+          <span class="chip sel">DualShot</span>
+        </div>
+        <div class="hero">
+          <div class="scrim"></div><div class="play">▶</div><div class="star">☆</div>
+          <div class="ident">
+            <div class="eyebrow">Latest recording</div>
+            <div class="htitle">Tue · 7:29 am</div>
+            <div class="hmeta">4 clips · 19s · 43.5 MB</div>
+          </div>
+        </div>
+        <div class="day"><span>Today</span><span class="sz">62.0 MB</span></div>
+        <div class="grid">
+          <div class="tile"><span class="pillTL">6 clips</span>
+            <div class="pillTR"><span class="p"><i class="ori port"></i></span></div>
+            <span class="pillBR">29s</span><div class="cap">Tue · 7:28 am</div></div>
+          <div class="tile" style="opacity:.35"></div>
+        </div>
+        <div class="day"><span>Yesterday</span><span class="sz">245.0 MB</span></div>
+        <div class="grid">
+          <div class="tile">
+            <div class="pillTR"><span class="p">DualShot</span><span class="p"><i class="ori land"></i></span></div>
+            <span class="pillBR">5s</span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile">
+            <div class="pillTR"><span class="p">DualShot</span><span class="p"><i class="ori port"></i></span></div>
+            <span class="pillBR">5s</span><div class="cap">Mon · 6:31 pm</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REFINED -->
+    <div class="col">
+      <div class="colLabel"><span class="dot ref"></span>Refined</div>
+      <div class="phone">
+        <div class="status"><span>11:44</span><span>R ▦ 93%</span></div>
+        <div class="bar">
+          <span class="icn">‹</span><span class="title">Library</span>
+          <span class="icn">🔍<small>SEARCH</small></span><span class="icn">⇅<small>SORT</small></span>
+          <span class="icn">▦<small>VIEW</small></span><span class="icn ghost">🔒<small>VAULT</small></span>
+        </div>
+        <div class="usage demoted">9 sessions · 42 clips · 350.5 MB</div>
+        <div class="chips">
+          <span class="chip sel allgap">All</span>
+          <span class="chip sel"><span class="ck">✓</span>Favorites</span>
+          <span class="chip sel"><span class="ck">✓</span>DualShot</span>
+        </div>
+        <div class="hero refined">
+          <div class="corner">Latest</div>
+          <div class="scrim"></div><div class="play">▶</div><div class="star">☆</div>
+          <div class="ident">
+            <div class="htitle">Tue · 7:29 am</div>
+            <div class="hmeta">4 clips · 19s · 43.5 MB</div>
+          </div>
+        </div>
+        <div class="day"><span>Today</span><span class="sz">62.0 MB</span></div>
+        <div class="grid">
+          <div class="tile"><span class="pillTL">6 clips</span>
+            <div class="pillTR"><span class="p"><i class="ori port"></i></span></div>
+            <span class="pillBR">29s</span><div class="cap">Tue · 7:28 am</div></div>
+          <div class="tile" style="opacity:.35"></div>
+        </div>
+        <div class="day"><span>Yesterday</span><span class="sz">245.0 MB</span></div>
+        <div class="grid">
+          <!-- M3a: DualShot tiles drop the orientation glyph (label carries the mode; glyph ambiguous on P+L) -->
+          <div class="tile">
+            <div class="pillTR"><span class="p">DualShot</span></div>
+            <span class="pillBR">5s</span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile">
+            <div class="pillTR"><span class="p">DualShot</span></div>
+            <span class="pillBR">5s</span><div class="cap">Mon · 6:31 pm</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>Annotations — Default state</h4>
+    <div class="note"><span class="badge tagM1">M1</span><b>Filter affordance.</b> Active additive toggles (Favorites, DualShot) gain a leading <b>✓</b>; <b>All</b> stays check-less and is separated by a hairline gap. The asymmetry breaks the "segmented tab bar" read — it now says <i>All = reset, the other two = stackable</i>. Two checks max, only on chips you activated → no noise.</div>
+    <div class="note"><span class="badge tagM3">M3a</span><b>Tile density.</b> Orientation glyph is removed <i>only on DualShot tiles</i> (P+L is both framings — the glyph is ambiguous there, and these are the exact tiles that stacked 3 TopEnd pills). Single-mode tiles keep the glyph: the tile is locked 16:9, so the thumbnail never reveals source orientation — the glyph is the <i>only</i> orientation signal and earns its place for scanning.</div>
+    <div class="note"><span class="badge">USAGE</span><b>Usage-line placement.</b> Kept (footprint/prune value is real) but <i>demoted</i> one weight step so it reads as a quiet caption under the title, not a content row competing with the hero. Day headers already carry per-section size, so the global line is a summary, not a peer.</div>
+    <div class="note"><span class="badge">ACTIONS</span><b>Action hierarchy.</b> Top bar reordered to expected frequency: <b>Search → Sort → View</b> promoted; low-use <b>Vault</b> demoted to the trailing slot and dimmed. Labels shown here only to expose the order — the app stays icon-only.</div>
+    <div class="note"><span class="badge">HERO</span><b>Hero refinement.</b> "LATEST RECORDING" eyebrow (3 lines of identity) compressed to a single small <b>"Latest"</b> corner tag + a slightly taller frame. Frees vertical space, lets the title lead, and widens the hero/tile distinction once M3a lightens the tiles.</div>
+  </div>
+</div>
+
+<!-- ============================ STATE 2: FAVORITES EMPTY ============================ -->
+<div class="stateBlock">
+  <div class="stateTitle">2 · Favorites filter — empty</div>
+  <div class="pair">
+    <div class="col">
+      <div class="colLabel"><span class="dot cur"></span>Current</div>
+      <div class="phone">
+        <div class="status"><span>11:45</span><span>R ▦ 93%</span></div>
+        <div class="bar"><span class="icn">‹</span><span class="title">Library</span>
+          <span class="icn">🔒</span><span class="icn">🔍</span><span class="icn">⇅</span><span class="icn">▦</span></div>
+        <div class="usage">9 sessions · 42 clips · 350.5 MB</div>
+        <div class="chips"><span class="chip">All</span><span class="chip sel">Favorites</span><span class="chip">DualShot</span></div>
+        <div class="empty">
+          <div class="ring">🔍</div>
+          <div class="et">No matches</div>
+          <div class="eb">Try a different name or date.</div>
+          <div class="ecta">Clear filters</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colLabel"><span class="dot ref"></span>Refined</div>
+      <div class="phone">
+        <div class="status"><span>11:45</span><span>R ▦ 93%</span></div>
+        <div class="bar"><span class="icn">🔍</span><span class="title">Library</span>
+          <span class="icn">🔍</span><span class="icn">⇅</span><span class="icn">▦</span><span class="icn ghost">🔒</span></div>
+        <div class="usage demoted">9 sessions · 42 clips · 350.5 MB</div>
+        <div class="chips"><span class="chip allgap">All</span><span class="chip sel"><span class="ck">✓</span>Favorites</span><span class="chip">DualShot</span></div>
+        <div class="empty">
+          <div class="ring">☆</div>
+          <div class="et">No favorites yet</div>
+          <div class="eb">Tap <span class="star-inline">☆</span> on any recording to keep it here.</div>
+          <div class="ecta">Clear filters</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h4>Annotations — Empty state</h4>
+    <div class="note"><span class="badge tagM2">M2</span><b>From "absence" to discovery.</b> Current shows search copy ("Try a different name or date") for a filter that carries no search — wrong instruction. Refined teaches the gesture: a star icon, "No favorites yet," and <i>how</i> to create one. This is the only place Favoriting is taught anywhere in the app.</div>
+    <div class="note"><span class="badge tagM2">M2</span><b>DualShot variant</b> (not shown): "No DualShot recordings yet — DualShot captures two framings at once," with an optional quiet link to Record. Educational but lighter, since the loop completes in the camera, not here.</div>
+  </div>
+</div>
+
+<!-- ============================ STATE 3: SELECTION MODE ============================ -->
+<div class="stateBlock">
+  <div class="stateTitle">3 · Selection mode</div>
+  <div class="pair">
+    <div class="col">
+      <div class="colLabel"><span class="dot cur"></span>Current</div>
+      <div class="phone">
+        <div class="status"><span>11:45</span><span>R ▦ 93%</span></div>
+        <div class="selbar"><span class="icn">✕</span><span class="ct">5 selected</span><span class="icn">▣</span></div>
+        <div class="chips"><span class="chip sel">All</span><span class="chip">Favorites</span><span class="chip">DualShot</span></div>
+        <div class="grid">
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">Tue · 7:28 am</div></div>
+          <div class="tile" style="opacity:.35"></div>
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile"><span class="check off"></span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile"><span class="check off"></span><div class="cap">Mon · 12:34 pm</div></div>
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">test clip</div></div>
+        </div>
+        <div class="batch">
+          <div class="bAct"><span class="g">⤴</span>Share</div>
+          <div class="bAct"><span class="g">🔒</span>Vault</div>
+          <div class="bAct"><span class="g">★</span>Favorite</div>
+          <div class="bAct del"><span class="g">🗑</span>Delete</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colLabel"><span class="dot ref"></span>Refined</div>
+      <div class="phone">
+        <div class="status"><span>11:45</span><span>R ▦ 93%</span></div>
+        <div class="selbar"><span class="icn">✕</span><span class="ct">5 selected</span><span class="icn">▣</span></div>
+        <div class="chips"><span class="chip sel allgap">All</span><span class="chip">Favorites</span><span class="chip">DualShot</span></div>
+        <div class="grid">
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">Tue · 7:28 am</div></div>
+          <div class="tile" style="opacity:.35"></div>
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile"><span class="check off"></span><div class="cap">Mon · 6:31 pm</div></div>
+          <div class="tile"><span class="check off"></span><div class="cap">Mon · 12:34 pm</div></div>
+          <div class="tile selON"><span class="check on">✓</span><div class="cap">test clip</div></div>
+        </div>
+        <!-- Delete isolated with a separator, mirroring the sheet's danger quarantine (B-item, previewed) -->
+        <div class="batch refined">
+          <div class="bAct"><span class="g">⤴</span>Share</div>
+          <div class="bAct"><span class="g">🔒</span>Vault</div>
+          <div class="bAct"><span class="g">★</span>Favorite</div>
+          <div class="sep"></div>
+          <div class="bAct del"><span class="g">🗑</span>Delete</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h4>Annotations — Selection mode</h4>
+    <div class="note"><span class="badge">SEL</span>Top bar (✕ / "N selected" live count / select-all) and per-tile check indicators are <b>kept as-is</b> — they already follow the Photos/Gallery convention and read clearly.</div>
+    <div class="note"><span class="badge">B-item</span><b>Delete isolation (preview only).</b> Refined batch bar separates Delete behind a hairline so danger treatment matches the item sheet's quarantine. Lower blast-radius mis-taps. Flagged <b>B (later)</b> — the confirm dialog already backstops it, so it shouldn't gate the theme engine.</div>
+  </div>
+</div>
+
+<!-- ============================ STATE 4: ITEM SHEET ============================ -->
+<div class="stateBlock">
+  <div class="stateTitle">4 · Item sheet (long-press / overflow)</div>
+  <div class="pair">
+    <div class="col">
+      <div class="colLabel"><span class="dot cur"></span>Current</div>
+      <div class="phone">
+        <div class="sheetWrap">
+          <div class="sheet">
+            <div class="handle"></div>
+            <div class="shead"><div class="sthumb"></div><div><div class="stitle">Mon · 12:34 pm</div><div class="smeta">6 clips · 30s · 29.2 MB</div></div></div>
+            <div class="sdiv"></div>
+            <div class="srow"><span class="g">▶</span>Play</div>
+            <div class="srow"><span class="g">⤴</span>Share</div>
+            <div class="sdiv"></div>
+            <div class="srow"><span class="g">☑</span>Select</div>
+            <div class="srow"><span class="g">☆</span>Favorite</div>
+            <div class="srow"><span class="g">✎</span>Rename</div>
+            <div class="srow"><span class="g">⚙</span>View settings</div>
+            <div class="sdiv"></div>
+            <div class="srow danger"><span class="g">🗑</span>Delete</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colLabel"><span class="dot ref"></span>Refined</div>
+      <div class="phone">
+        <div class="sheetWrap">
+          <div class="sheet">
+            <div class="handle"></div>
+            <div class="shead"><div class="sthumb"></div><div><div class="stitle">Mon · 12:34 pm</div><div class="smeta">6 clips · 30s · 29.2 MB</div></div></div>
+            <div class="sdiv"></div>
+            <div class="srow primary"><span class="g">▶</span>Play</div>
+            <div class="srow"><span class="g">⤴</span>Share</div>
+            <div class="sdiv"></div>
+            <div class="srow"><span class="g">☑</span>Select</div>
+            <div class="srow"><span class="g">☆</span>Favorite</div>
+            <div class="srow"><span class="g">✎</span>Rename</div>
+            <div class="srow"><span class="g">⚙</span>View settings</div>
+            <div class="sdiv"></div>
+            <div class="srow danger"><span class="g">🗑</span>Delete</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h4>Annotations — Item sheet</h4>
+    <div class="note"><span class="badge">KEEP</span><b>Three-zone grouping (Primary / Secondary / Danger) is retained</b> — it already works. Delete is quarantined behind a divider.</div>
+    <div class="note"><span class="badge">SELECT</span><b>Select stays in the sheet by design, not inertia.</b> It is categorically a mode-switch, not an item action, and its correct home is a top-bar "Select" — but that's blocked by the selection-architecture constraint (idle "active-but-empty" can't be represented). Removing it now strands discoverability (only other entry is long-press). Verdict: <b>C — reject moving it</b> until that arch work happens.</div>
+    <div class="note"><span class="badge">PLAY</span><b>Play emphasis (optional).</b> Refined gives Play a slightly heavier row so the one-tap dominant action leads by weight, not just position. Hierarchy only, no restyle. <b>B (later)</b> — hold if it risks the clean grouping.</div>
+  </div>
+</div>
+
+<!-- ============================ EVALUATION VERDICT ============================ -->
+<div class="verdict">
+  <h3>Evaluation — does each change earn its place?</h3>
+  <table>
+    <tr><th>Question</th><th>Prototype shows</th><th>Verdict</th></tr>
+    <tr><td><b>Does M1 improve filter clarity?</b></td><td>Yes. The ✓-on-toggles + gapped All visibly breaks the tab-bar read; "two are on" becomes self-evident. Minimal added marks.</td><td><span class="pillv">A · ship</span></td></tr>
+    <tr><td><b>Does M3a improve tile readability?</b></td><td>Yes, surgically. DualShot tiles drop from 2 pills to 1 and lose the ambiguous glyph; single-mode tiles keep orientation (the only signal of it). Cleaner where redundant, informative where not.</td><td><span class="pillv">A · ship</span></td></tr>
+    <tr><td><b>Should the usage line move?</b></td><td>Not move — demote. Kept under the title as a quiet caption; day headers carry the per-section detail. Removing it loses prune value; promoting it competes with the hero.</td><td><span class="pillv">A · demote</span></td></tr>
+    <tr><td><b>Should action hierarchy change?</b></td><td>Yes. Search/Sort/View promoted, Vault demoted + dimmed to match real frequency. Low cost, clear win.</td><td><span class="pillv">B · later</span></td></tr>
+    <tr><td><b>Hero — further refinement?</b></td><td>Light touch only: trade the 3-line eyebrow for a small "Latest" tag + taller frame. Already distinct; M3a widens the gap for free. No structural change.</td><td><span class="pillv">B · optional</span></td></tr>
+  </table>
+  <p style="font-size:12px;color:var(--dim);margin-top:14px"><b>Smallest set that maximizes quality:</b> ship <b>M1 + M2 + M3a</b> (all A). Usage-line demote rides along with M1 (same top-section edit, near-zero cost). Top-bar reorder, hero tag, Play emphasis, and Delete isolation are <b>B</b> — worth doing, but should not gate the theme engine. Item-sheet Select move is <b>C</b> — blocked by arch, reject for now.</p>
+</div>
+
+</body>
+</html>
