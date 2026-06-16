@@ -1,9 +1,8 @@
 package com.aritr.rova.ui.theme
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RovaIconsTest {
@@ -13,18 +12,21 @@ class RovaIconsTest {
     }
 
     @Test fun notifications_setting_is_not_a_status() {
-        assertEquals(null, RovaIcons.NotificationsSetting.status)
+        assertNull(RovaIcons.NotificationsSetting.status)
     }
 
     @Test fun library_and_play_are_distinct_glyphs() {
-        assertNotEquals(RovaIcons.Library.glyph, RovaIcons.Play.glyph)
+        assertNotEquals(RovaIcons.Library.outline, RovaIcons.Play.glyph)
     }
 
     @Test fun settings_and_view_are_distinct_glyphs() {
-        assertNotEquals(RovaIcons.Settings.glyph, RovaIcons.View.glyph)
+        assertNotEquals(RovaIcons.Settings.outline, RovaIcons.View.glyph)
     }
 
-    @Test fun sort_resolves_to_a_state_free_material_glyph() {
-        assertEquals(Icons.AutoMirrored.Filled.Sort, RovaIcons.Sort.glyph)
+    @Test fun bespoke_concepts_resolve_to_RovaGlyphs() {
+        assertEquals(RovaGlyphs.Library, RovaIcons.Library)
+        assertEquals(RovaGlyphs.Settings, RovaIcons.Settings)
+        assertEquals(RovaGlyphs.Sort, RovaIcons.Sort)
+        assertEquals(RovaGlyphs.Record, RovaIcons.Record)
     }
 }
