@@ -1816,6 +1816,75 @@ val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
     }
 }
 
+// ADR-0030 gate (42nd) — Library/History UI must never mutate a SessionManifest.
+// Favorite/rename/lastPlayedAt go only through LibraryMetadataStore (sidecar),
+// so the terminal-state write race is impossible. Forbid the manifest-mutating
+// SessionStore setters in any ui/library or ui/screens History source. Read-only
+// APIs (loadManifest/listSessionIds) and discardSession (file delete, not a
+// manifest write) are allowed. Comment/KDoc lines are skipped. A line carrying the
+// exact `ADR-0030-allow: recovery-keep-raw` marker is exempt — reserved for the ONE
+// recovery-subsystem terminal write (recovery-keep MULTI_SEGMENT_KEPT) co-located in
+// HistoryScreen but owned by the recovery flow (ADR-0005), not Library metadata. The
+// gate asserts that marker appears exactly once, in HistoryScreen.kt, on a
+// markTerminated call — a stray marker anywhere else is itself a failure. Matching is
+// regex (`\bname\s*\(`) so a forbidden call survives reformatting (e.g. `name (`).
+val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") {
+    group = "verification"
+    description = "Library/History code must not call SessionManifest-mutating SessionStore APIs (ADR-0030)."
+    // Method names (no paren) of every SessionManifest-mutating SessionStore API.
+    val forbidden = listOf(
+        "markTerminated", "appendSegment", "submitPersistFinalizedSegment",
+        "setExportPending", "setExportPrivateTarget", "setExportCopying",
+        "setExportSafPrivateTemp", "setExportSafTarget", "setExportFinalized",
+        "setExportFailed", "setMediaScanCompleted", "incrementSafTransientRetry",
+        "setExportPendingForSide", "setExportPrivateTargetForSide",
+        "setExportSafPrivateTempForSide", "setExportSafTargetForSide",
+        "setExportFinalizedForSide", "setMediaScanCompletedForSide",
+        "setVaultFinalized", "setVaultFinalizedForSide", "setVaultState",
+        "setVaultMovedOut", "setVaultStateVaultedAndClearPublic",
+        "setPendingMoveOutTier1", "setPendingMoveOutPreQ", "setStopRequested",
+        "writeManifestAtomic",
+    )
+    val callRegex = Regex("\\b(${forbidden.joinToString("|")})\\s*\\(")
+    val allowMarker = "ADR-0030-allow: recovery-keep-raw"
+    doLast {
+        val offenders = mutableListOf<String>()
+        val allowMarks = mutableListOf<String>()
+        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
+            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
+            val inScope = rel.startsWith("ui/library/") ||
+                (rel.startsWith("ui/screens/") && (rel.contains("History") || rel.contains("Library")))
+            if (!inScope) return@forEach
+            f.readLines().forEachIndexed { i, line ->
+                val t = line.trimStart()
+                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
+                val marked = line.contains(allowMarker)
+                if (marked) allowMarks += "$rel:${i + 1}: ${line.trim()}"
+                // Match only the code before an inline `//` so a commented-out
+                // example call (e.g. `x // markTerminated(`) cannot false-fail.
+                val code = line.substringBefore("//")
+                if (callRegex.containsMatchIn(code) && !marked) offenders += "$rel:${i + 1}: ${line.trim()}"
+            }
+        }
+        // The marker is reserved for the single sanctioned recovery-keep write.
+        val stray = allowMarks.filterNot {
+            it.substringBefore(':') == "ui/screens/HistoryScreen.kt" && it.contains("markTerminated")
+        }
+        if (stray.isNotEmpty()) {
+            throw GradleException(
+                "ADR-0030: stray '$allowMarker' marker(s) — reserved for the single recovery-keep " +
+                    "markTerminated write in HistoryScreen.kt:\n" + stray.joinToString("\n")
+            )
+        }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "ADR-0030: Library/History must not mutate SessionManifest — use LibraryMetadataStore:\n" +
+                    offenders.joinToString("\n")
+            )
+        }
+    }
+}
+
 // ADR-0029 PR-γ gate 1 — live capture paths must not branch on the legacy
 // orientation-carrying mode strings; read-compat sites are allowlisted (§6).
 // Comment/KDoc lines are skipped: documenting a legacy value is legal,
@@ -2409,6 +2478,7 @@ afterEvaluate {
         dependsOn(checkA11yClickableHasRole)
         dependsOn(checkA11yTargetSizeToken)
         dependsOn(checkPresetNoOrientation)
+        dependsOn(checkLibraryNoManifestWrite)
         dependsOn(checkVaultExporterNoPublicPublish)
         dependsOn(checkRecordSurfaceNoBlur)
         dependsOn(checkGlassSurfaceRoleUsage)
