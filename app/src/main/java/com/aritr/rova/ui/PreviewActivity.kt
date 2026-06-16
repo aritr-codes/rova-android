@@ -60,7 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.share.safeShareUri
+import com.aritr.rova.ui.theme.IconRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -195,7 +197,7 @@ fun PreviewScreen(
                 title = { Text(stringResource(R.string.preview_title), color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.preview_back_cd), tint = Color.White)
+                        SemanticIcon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.preview_back_cd), role = IconRole.Default)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.5f))
@@ -325,17 +327,17 @@ fun BottomControls(
     ) {
         // REPLAY
         IconButton(onClick = { videoView.seekTo(0); videoView.start() }) {
-            Icon(Icons.Default.Replay, contentDescription = stringResource(R.string.preview_replay_cd), tint = Color.White)
+            SemanticIcon(Icons.Default.Replay, contentDescription = stringResource(R.string.preview_replay_cd), role = IconRole.Default)
         }
 
         // SAVE
         IconButton(onClick = onSave) {
-            Icon(Icons.Default.Download, contentDescription = stringResource(R.string.preview_save_cd), tint = Color.White)
+            SemanticIcon(Icons.Default.Download, contentDescription = stringResource(R.string.preview_save_cd), role = IconRole.Default)
         }
 
         // SHARE
         IconButton(onClick = onShare) {
-            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.preview_share_cd), tint = Color.White)
+            SemanticIcon(Icons.Default.Share, contentDescription = stringResource(R.string.preview_share_cd), role = IconRole.Default)
         }
     }
 }
