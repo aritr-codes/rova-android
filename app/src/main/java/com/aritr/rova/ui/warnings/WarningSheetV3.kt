@@ -50,6 +50,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -428,10 +430,10 @@ private fun OverflowMenu(
             onClick = { menuOpen = true },
             modifier = Modifier.size(RovaWarningsV3.overflowButtonSize),
         ) {
-            Icon(
+            SemanticIcon(
                 imageVector = Icons.Default.MoreHoriz,
                 contentDescription = stringResource(R.string.warning_more_actions_cd),
-                tint = Color.White.copy(alpha = 0.30f),
+                role = IconRole.Disabled,
             )
         }
         DropdownMenu(
