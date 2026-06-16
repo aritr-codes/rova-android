@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Lock
@@ -20,9 +19,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.LibraryViewMode
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * spec §9 — glass top bar with a grid/list toggle. The toggle icon shows the mode you'll switch TO.
@@ -88,9 +90,10 @@ fun LibraryTopBar(
             }
             if (onOpenSort != null) {
                 IconButton(onClick = onOpenSort) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Sort,
+                    SemanticIcon(
+                        glyph = RovaIcons.Sort,
                         contentDescription = sortLabel,
+                        role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )
                 }
