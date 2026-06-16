@@ -32,7 +32,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -46,6 +45,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.library.rememberLibraryColors
+import com.aritr.rova.ui.theme.FloatingGlassSheet
 
 /**
  * spec §5.3 / Polish P8 — per-item context sheet (overflow / long-press outside select mode):
@@ -88,6 +89,7 @@ fun LibraryItemSheet(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val libraryColors = rememberLibraryColors()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Transparent, // we paint our own floating card
@@ -95,7 +97,8 @@ fun LibraryItemSheet(
         dragHandle = null, // floating card → no attached handle
         shape = RectangleShape, // visible rounding is on the inner Surface
     ) {
-        Surface(
+        // M2 — a floating glass card (palette-tinted, role=BottomSheet) that still casts a real shadow.
+        FloatingGlassSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentWidth(Alignment.CenterHorizontally) // center the capped card on wide screens
@@ -105,8 +108,6 @@ fun LibraryItemSheet(
                 .padding(bottom = LibraryDimens.sheetEdgeGap),
             shape = RoundedCornerShape(LibraryDimens.sheetCornerRadius),
             shadowElevation = LibraryDimens.sheetElevation,
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 Box(
@@ -118,18 +119,25 @@ fun LibraryItemSheet(
                         .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)),
                 )
                 SheetHeader(headerThumbnail, headerTitle, headerMeta)
-                HorizontalDivider(color = Color.White.copy(alpha = LibraryDimens.dividerAlpha))
+                HorizontalDivider(color = libraryColors.cardEdge)
+                // UX-B — grouped by intent: Primary (do-the-thing) · Secondary (manage) · Danger (destructive),
+                // separated by hairlines so Delete is visually quarantined from the safe actions.
+                // ── Primary ──
                 SheetRow(Icons.Filled.PlayArrow, playLabel) { onPlay() }
-                SheetRow(Icons.Filled.Checklist, selectLabel) { onSelect() }
                 SheetRow(Icons.Filled.Share, shareLabel) { onShare() }
+                HorizontalDivider(color = libraryColors.cardEdge)
+                // ── Secondary ──
+                SheetRow(Icons.Filled.Checklist, selectLabel) { onSelect() }
                 SheetRow(
                     if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
                     if (isFavorite) unfavoriteLabel else favoriteLabel,
                 ) { onToggleFavorite() }
                 SheetRow(Icons.Filled.Edit, renameLabel) { onRename() }
-                if (movable) SheetRow(Icons.Filled.Lock, vaultLabel) { onMoveToVault() }
                 SheetRow(Icons.Filled.Settings, viewSettingsLabel) { onViewSettings() }
-                SheetRow(Icons.Filled.Delete, deleteLabel) { onDelete() }
+                if (movable) SheetRow(Icons.Filled.Lock, vaultLabel) { onMoveToVault() }
+                HorizontalDivider(color = libraryColors.cardEdge)
+                // ── Danger ──
+                SheetRow(Icons.Filled.Delete, deleteLabel, danger = true) { onDelete() }
             }
         }
     }
@@ -169,7 +177,11 @@ private fun SheetHeader(thumbnail: android.graphics.Bitmap?, title: String, meta
 }
 
 @Composable
-private fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun SheetRow(icon: ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+    // Explicit content colour: the floating sheet is a GlassSurface (no Material Surface to seed
+    // LocalContentColor), so rows must state their own colour. Danger (Delete) reads in the error tint.
+    val contentColor =
+        if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     Row(
         Modifier
             .fillMaxWidth()
@@ -180,8 +192,8 @@ private fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
-        Icon(icon, contentDescription = null)
+        Icon(icon, contentDescription = null, tint = contentColor)
         Spacer(Modifier.width(20.dp))
-        Text(label)
+        Text(label, color = contentColor)
     }
 }

@@ -13,19 +13,35 @@ class GlassResolverTest {
 
     @Test
     fun `api31 non-record non-reduced gets real blur and no scrim`() {
-        val m = GlassResolver.resolve(env(31, false), GlassRole.BottomSheet)
+        // Card is the generic blur-path role (BottomSheet/Dialog now have a dedicated near-opaque branch).
+        val m = GlassResolver.resolve(env(31, false), GlassRole.Card)
         assertTrue("expected blur > 0", m.blurRadius.value > 0f)
         assertNull(m.scrim)
     }
 
     @Test
     fun `api30 forces zero blur and a heavier fill`() {
-        val m = GlassResolver.resolve(env(30, false), GlassRole.BottomSheet)
+        val m = GlassResolver.resolve(env(30, false), GlassRole.Card)
         assertEquals(0f, m.blurRadius.value, 0f)
         // Pins FALLBACK_ALPHA = 0.86; threshold 0.855 tolerates Compose Color's
         // 8-bit alpha quantization (0.86 round-trips to ~0.8588) while still
         // catching any real lowering of the constant (e.g. 0.82 -> ~0.8196).
         assertTrue("fallback fill must be ~0.86 alpha", m.fill.alpha >= 0.855f)
+    }
+
+    @Test
+    fun `bottomSheet is a near-opaque palette-tinted floating surface, never blurred`() {
+        // M2 — a modal sheet over the scrolling library: solid (content must not bleed through), no blur,
+        // tinted by the palette (joins the theme identity), edges from the palette. True on every API level.
+        for (api in intArrayOf(30, 34)) {
+            val m = GlassResolver.resolve(env(api, false), GlassRole.BottomSheet)
+            assertEquals("no blur on api $api", 0f, m.blurRadius.value, 0f)
+            // Pins atLeastAlpha(0.95); 0.948 tolerates Compose Color's 8-bit alpha quantization
+            // (0.95 round-trips to ~0.949) while still catching any real lowering of the floor.
+            assertTrue("near-opaque fill on api $api was ${m.fill.alpha}", m.fill.alpha >= 0.948f)
+            assertEquals(aurora.edge, m.edge)
+            assertNull(m.scrim)
+        }
     }
 
     @Test
