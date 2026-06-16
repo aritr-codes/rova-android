@@ -1,21 +1,22 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-15 (Enhanced Library & History redesign — Slices 1–5 ALL built, device-smoke/TalkBack GO. Library reskin FUNCTIONALLY COMPLETE. DualShot hero artifact root-caused (Library-side, H1). NEXT = Library UX/UI polish pass P1–P5.)**
+> **As of 2026-06-16 — Enhanced Library & History redesign is COMPLETE: Slices 1–5 + polish P1–P8 + Theme-Foundation M1–M3 + M1/M2 UX refine + stabilization (sort-crash fix) ALL built, device/TalkBack GO, local-only. Library is reference-ready for the Liquid Glass theme engine. Stabilization closeout done (Issue A sort crash FIXED `e0f359a`; Issue B blue-dot identified = scrubber thumb, keep). NEXT SESSION = Icon & Glyph System Redesign (NOT the theme engine). Merge train: owner-gated, see below.**
 
 ---
 
 ## Where things stand
 
-- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **62 commits ahead** of `master`, tip = the docs commit below (Slice-5 code tip `23bee99`). Holds **all of Slices 1 + 2 + 3 + 4 (+ 4.1/4.2) + 5 (a11y)** of the Library/History redesign. Working tree clean (only ephemeral `gradle_*.log` untracked).
+- **Active branch:** `feat/library-history-selection` — **local only, NOT pushed**, **~91 commits ahead** of `master`, tip = sort-crash fix `e0f359a`. Holds Slices 1+2+3 (+polish P1–P10) +4 (+4.1/4.2) +5 (a11y) + polish pass **P1–P8** + **Theme-Foundation M1–M3** + **M1/M2 UX refine** + **stabilization fix**. Working tree clean (only ephemeral `gradle_*.log` + an untracked polish plan doc).
 - **master:** `dfd3bd9` (#116 DualSight doc-closeout). **Contains zero Library redesign code.**
 - **Open PRs (pushed, awaiting the end-of-reskin merge train):**
-  - **#117 — Slice 1 Foundation** (branch `feat/library-history-foundation`) · OPEN
-  - **#118 — Slice 2 Layout** (branch `feat/library-history-layout`, stacked on #117) · OPEN
+  - **#117 — Slice 1 Foundation** (branch `feat/library-history-foundation`) · OPEN — covers Slice 1 only.
+  - **#118 — Slice 2 Layout** (branch `feat/library-history-layout`, stacked on #117) · OPEN — covers Slice 2 only.
   - **#115 — DualSight investigation** (DRAFT, archival only — **never merge**, blocked on concurrent-camera hardware; see `memory/project_pr_delta_dualsight_probe.md`).
-- **Owner directive:** **NO merge of any Library slice until the FULL Library reskin is done.** Keep stacking slices; merge the whole train at the end. Slices 3/4/4.x stay unpushed; #117/#118 stay open.
-- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), GREEN on this branch. Real-device smoke is mandatory — emulators fail CameraX recording (device = RZCYA1VBQ2H, Android 14).
-- **Static gates:** **42** custom `check*` tasks (the 42nd is `checkLibraryNoManifestWrite`, ADR-0030). All green on this branch. Slice 4/4.x added **no** new gates (autoplay is a runtime policy, not a static invariant).
+  - **NOTE:** #117/#118 cover only Slices 1–2 (~early commits). The other ~88 commits (Slices 3–5 + polish + theme + refine + stabilization) are on **no pushed branch** — the merge train must account for them (see "Merge train" below).
+- **Owner directive (now satisfiable):** NO merge until the FULL reskin is done. **The full reskin — incl. polish, theme foundation, and stabilization — is now DONE.** The end-of-reskin merge train is unblocked pending owner confirmation of strategy + device smoke (see below).
+- **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), GREEN on this branch. Real-device smoke is mandatory — emulators fail CameraX recording (device = RZCYA1VBQ2H, Android 14). **The sort-crash fix `e0f359a` is build+gate+JVM verified but NOT yet device-smoked.**
+- **Static gates:** **42** custom `check*` tasks (the 42nd is `checkLibraryNoManifestWrite`, ADR-0030). All green on this branch.
 
 ## Library & History redesign — IN PROGRESS (this is the current work)
 
@@ -31,7 +32,7 @@ Liquid-Glass redesign of the recording-browse surfaces (ADR-0028 + new **ADR-003
    - **4.2 pooled card autoplay** ✅ **committed `dc1e9ce`**, owner device-smoke **GO** (2026-06-15) — owner #2 "all recordings auto-play". Plan: `docs/superpowers/plans/2026-06-15-library-slice4.2-card-autoplay.md`. See "Slice 4.2" below.
 5. **A11y close-out** ✅ built + owner TalkBack device-smoke **GO** (2026-06-15) — remediation **rows 21 / 23 / 32**. Player `SegmentedTimeline`: progressbar role (`progressBarRangeInfo`, continuous position/duration) + per-cell `contentDescription` ("Clip N of M, recorded/playing/upcoming") + separate sparse polite live-region. Library: `RecoveryAndWarnings` is its own `isTraversalGroup` (focus separation, HIST-02), `HistoryWarningCard` gains `focusHighlight` (HIST-17), focus restore on player return via `pendingFocusKey` + ON_RESUME observer + new pure `FocusRestorePolicy` (JVM-tested) + `FocusRequester` on each target's own modifier chain (codex fix). 3 commits `32487fd`/`345e74e`/`23bee99`. **Row-23 DELTA:** only the Library-relevant subset closed (focus restore + warning focusable); REC-15/RECOV-09/RECOV-10/NAV-04/SHAR-08/SHAR-16/ONB-06 (other screens) stay OPEN.
 
-**Library reskin is now FUNCTIONALLY COMPLETE.** Next is a **visual polish pass** (P1–P5) — see below.
+**Library reskin is COMPLETE** — functional (Slices 1–5) + visual polish (P1–P8) + theme-foundation seam (M1–M3) + UX refine (M1/M2) + stabilization. Reference-ready for the theme engine. See the polish/theme/stabilization records in `memory/project_library_history_redesign.md`.
 
 ## DualShot hero thumbnail artifact — ROOT-CAUSED (2026-06-15), fix folds into polish P2
 
@@ -40,14 +41,16 @@ Owner reported a grey horizontal strip on the **hero** card for DualShot recordi
 - **Mechanism:** the hero autoplay stacks a static `VideoFrame` (`ContentScale.Crop`) under a transparent ExoPlayer (`RESIZE_MODE_ZOOM`); the two fill identically only at 16:9, so the grid (16:9) is clean but the off-16:9 hero box (~2.27:1) leaks a band. **Fix = Slice P2** (make both layers fill identically / drop static under-layer after first frame / lock hero `aspectRatio`).
 - The separate **owner-deferred** PORTRAIT square-into-9:16 capture stretch (`AspectFitMath.kt:359–366`) is unrelated and stays capture-side (ADR-0009/0010).
 
-## Library UX/UI polish pass — P1–P5 (NEXT, NEEDS per-slice plan)
+## Library UX/UI polish pass — P1–P8 ✅ DONE (2026-06-15/16, device-smoked)
 
-Audit + design brief: same doc (`docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`). Library is functionally done but reads as a prototype vs the Record screen (hero+grid cards are opaque/skip the glass system; token-sparse + off Record's scale; generic M3 typography not the Inter scale; visual noise; plain states). Stacked slices, each own a11y + JVM tests, en+es, gates green, no push until owner says:
-- **P1** — token foundation: extend `LibraryDimens` to a Record-aligned scale (edge 16, radius 18, pills 11, scrim/divider/selection tokens). Safe refactor, unblocks the rest.
-- **P2** — hero treatment: glass+scrim, `RovaTokens.eyebrow`, one primary CTA (Play), stronger caption scrim, **+ the DualShot hero-layer fix above**.
-- **P3** — grid/list polish: glass-aware cards, thumbnail prominence, soft glass selection ring (drop hard 2dp primary border), tokenized caption scrim.
-- **P4** — discovery bar + states: quieter glass-consistent chips, skeleton/shimmer loading, on-brand empty/search-empty, error/missing-file messaging.
-- **P5** — interaction/motion consistency with Record (press feedback, durations, verify `GlassResolver` alphas == Record's 0.40 fill / 0.07 stroke).
+Audit + design brief: `docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md`. All slices built + 42-gates + JVM green + device-smoked on RZCYA1VBQ2H, committed local-only. Summary (full detail in `memory/project_library_history_redesign.md`):
+- **P1** tokens (`LibraryDimens` Record-scale) · **P2** hero showcase overlay + **DualShot grey-strip FIXED via TextureView** (`surface_type=texture_view`, owner "completely gone") · **P3** grid/list glass + session identity (`clipCount`+`SessionCaption`+orientation badges on all tiles; DualShot N×2 clip/duration bug fixed via `SessionDurations.forRow`) · **P4** states (pure `LibraryStatePolicy`, skeleton shimmer, quiet empties, flat glass chips) · **P5** motion (pure `PressFeedback` + `RovaAnimations.pressScale`) · **P6** usage line (`UsageAggregator`/`StorageSummaryFormatter`) · **P7** card-autoplay demoted to opt-in `RovaSettings.libraryCardPreview` default OFF (hero autoplay untouched; reseed ON_RESUME) · **P8** floating Brave-style item sheet (transparent ModalBottomSheet + inner elevated Surface, nav-bar insets).
+
+## Theme Foundation M1–M3 ✅ DONE + M1/M2 UX refine ✅ DONE + Stabilization ✅ DONE (2026-06-16)
+
+- **Theme Foundation (M1–M3, commits `91b598e`→`d0cb386`, device GO):** `LibraryColors`/`LibraryColorSpec` seam — identity edges + `palette.background` retint per theme; overlay-over-media (scrim/pill/ring + status) LOCKED via CaptionScrim/RovaSemantics; `FloatingGlassSheet` (shadow-wrap + GlassResolver BottomSheet near-opaque branch) theme-enables the item sheet; UX-B sheet grouping (Primary/Secondary/Danger red Delete). UX-A visible-Select-entry DEFERRED (needs a SelectionReducer arch change). **Library = the reference screen for the glass tint engine.**
+- **M1/M2 UX refine (commit `fec1f8a`):** filter multi-select cue (leading ✓ on additive Favorites/DualShot toggles; `All` gap-isolated) + educational empty states (pure `FilteredEmptyPolicy` → Favorites/DualShot/Generic/Search copy) + usage-line demote (labelMedium→Small, AA-safe). **M3a (drop orientation glyph on DualShot tiles) was evaluated and REJECTED** — DualShot rows are per-SIDE, so the glyph is authoritative side-identity (`OrientationResolver`); codex + code proved the premise wrong.
+- **Stabilization (commit `e0f359a`):** **Issue A sort crash (Largest/Longest) FIXED** — `LibraryDayGrouping.groupForSort` gates day-grouping by `LibrarySort.isChronological`; size/duration sorts render flat (one header-less bucket) so day labels can't recur → no duplicate LazyList keys. +5 regression tests incl the no-duplicate-labels invariant. **Issue B "blue dot" = `LibraryScrubber` thumb** (24dp primary CircleShape, the date-rail drag handle; intentional, a11y-wired) — KEEP; rest-state refinement is a deferred B-item.
 
 ## Slice 4.2 — pooled muted card autoplay (committed `dc1e9ce`)
 
