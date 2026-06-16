@@ -98,71 +98,73 @@ Extends the hero's muted autoplay to **visible** grid/list cards, bounded decode
 
 ---
 
-## Fresh-session kickoff prompt — Library UX/UI polish pass (P1–P5)
+## Fresh-session kickoff prompt — Icon & Glyph System Redesign
 
-Paste this to start the next session:
+Paste this to start the next session. **This is a DESIGN/SPEC session, not implementation** — establish the system first; build later.
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
 
-Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md,
-memory/project_library_history_redesign.md, and the design brief
-docs/superpowers/specs/2026-06-15-library-dualshot-rca-and-polish-brief.md (PART B audit + PART C
-roadmap + PART A DualShot RCA). Don't re-explore what those establish.
+Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, and
+memory/project_library_history_redesign.md (Library is the reference screen for the coming glass
+tint engine). Don't re-explore what those establish.
 
-State: the Enhanced Library & History redesign (Liquid Glass, ADR-0028 + ADR-0030) is FUNCTIONALLY
-COMPLETE — Slices 1–5 (foundation, layout, selection/batch, discovery + 4.1/4.2 autoplay, a11y
-close-out) all built + device/TalkBack GO, on the local-only branch feat/library-history-selection
-(~62 commits ahead of master dfd3bd9, NOT pushed; Slice-1 PR #117 + Slice-2 PR #118 OPEN/stacked).
-Owner directive: NO merge until the WHOLE reskin (including this polish pass) is done; keep stacking
-locally. All device smoke on RZCYA1VBQ2H Android 14.
+State: the Enhanced Library & History redesign (Liquid Glass, ADR-0028 + ADR-0030) is COMPLETE —
+Slices 1-5 + polish P1-P8 + Theme-Foundation M1-M3 + M1/M2 UX refine + stabilization (sort-crash
+fix), all built + device/TalkBack GO, local-only on feat/library-history-selection (~91 commits
+ahead of master dfd3bd9; S1 PR #117 + S2 PR #118 OPEN/stacked, cover Slices 1-2 only). The
+end-of-reskin merge train is owner-gated (confirm status before assuming it ran).
 
-TASK: Library UX/UI POLISH PASS, P1–P5, stacked on feat/library-history-selection. The Library is
-functionally done but reads as a prototype next to the Record screen. Raise it to Record's visual
-quality. The audit + design brief + per-slice direction is PART B/C of the brief doc above — follow it.
-Run writing-plans to turn P1–P5 into a per-slice plan BEFORE coding (brainstorm only if the brief
-leaves a real fork). Slices:
-  P1 — token foundation: extend ui/library/components/LibraryDimens.kt to a Record-aligned scale
-       (screenPadH 16, cardRadius 18, heroRadius 20, pillRadius 11, + scrim/divider/selection/empty
-       tokens) and route every Library component through it. Safe refactor; review visual deltas.
-  P2 — hero treatment: glass+scrim depth on LibraryHeroCard, RovaTokens.eyebrow, ONE primary CTA
-       (Play; Favorite/Share subordinate), stronger caption scrim. **ALSO fix the DualShot hero
-       artifact here** — it is a CONFIRMED Library render-layer bug (PART A: source frames are clean,
-       H2 capture-bake refuted). The static VideoFrame (ContentScale.Crop) under the transparent
-       RESIZE_MODE_ZOOM ExoPlayer in LibraryAutoplayVideo diverge in the off-16:9 hero box → grey band.
-       Make both layers fill identically (or drop the static under-layer after the player's first
-       frame, or lock the hero aspectRatio). Confirm with reduce-motion-off on device.
-  P3 — grid/list polish: glass-aware LibraryGridCard/LibraryListRow, thumbnail prominence, soft glass
-       selection ring (replace the hard 2dp primary border), tokenized CaptionBar scrim.
-  P4 — discovery bar + states: quieter glass-consistent chips, skeleton/shimmer loading,
-       on-brand empty + search-empty, error/missing-file messaging.
-  P5 — interaction/motion consistency with Record (press feedback, durations); verify GlassResolver
-       output alphas equal Record's (0.40 fill / 0.07 stroke) and align if not.
+TASK: ICON & GLYPH SYSTEM REDESIGN — a foundational design system pass, NOT the Liquid Glass theme
+engine (that is the session AFTER). Goal: one coherent, theme-engine-ready in-app icon/glyph system.
+This is NEEDS-SPEC: run brainstorming -> spec -> (then writing-plans for a later build). Do NOT start
+implementing glyphs this session beyond illustrative samples.
 
-Reference = Record screen tokens: ui/theme/RecordChromeTokens.kt, ui/theme/RovaTokens.kt (Inter scale),
-ui/theme/GlassSurface.kt (3-layer glass). Quality bar = the Record home screen.
+Establish and document (target = a new ADR + a spec under docs/superpowers/specs/):
+  1. ICON PHILOSOPHY — the core stance (e.g. outlined-by-default vs filled-for-active; stroke weight;
+     corner/terminal style; optical vs metric sizing; level of bespoke-ness).
+  2. GLYPH LANGUAGE — geometry rules (grid, stroke width, corner radius, keylines, padding) so future
+     custom glyphs are drawably consistent with each other and with the brand.
+  3. CONSISTENCY RULES — when Filled vs Outlined vs Rounded; a single icon-size scale; a single
+     tint/color contract (semantic, theme-engine-driven — NOT raw per-call-site alpha).
+  4. SEMANTIC ICON->ACTION MAPPING — one canonical glyph per concept (play, share, favorite, delete,
+     vault/lock, settings, search, filter, sort, grid/list, flash, flip-camera, front/rear, record,
+     stop, recovered, interrupted, etc.) so the same action never shows two different icons.
+  5. FUTURE COMPATIBILITY WITH THE LIQUID GLASS THEME ENGINE — icons must tint/contrast correctly over
+     arbitrary glass surfaces and per-theme palettes; define the icon color seam alongside the existing
+     GlassRole / RovaSemantics / LibraryColors model (overlay-over-media glyphs are contrast-locked,
+     chrome glyphs retint per theme — mirror the Library M1-M3 identity-vs-locked split).
 
-Pipeline: writing-plans -> subagent-driven build (subagents EDIT-ONLY; controller runs all gradle +
-commits) -> device smoke on RZCYA1VBQ2H per slice (incl. reduce-motion path for P2). New user-facing
-strings in resources (ADR-0022, en+es). JVM-only tests; framework-touching code gets a pure-Kotlin
-sibling. codex-review code >5 lines / architecture / visual-system decisions.
+CURRENT STATE (measured 2026-06-16 — the problem to solve):
+  - TWO disjoint icon systems: Record chrome = 8 BESPOKE ImageVectors in
+    ui/screens/RecordChromeIcons.kt (flashBolt/flipCamera/cameraFront/cameraRear/library/settings/
+    chevronUp/fabPlay, mockup-exact, neutral-fill-tinted-at-call-site) vs the rest of the app =
+    androidx.compose.material.icons.
+  - Material usage is itself INCONSISTENT: Icons.Filled dominates Library primary actions, Icons.Outlined
+    only for secondary/empty-state (StarBorder, RadioButtonUnchecked, ErrorOutline, VideoLibrary,
+    SearchOff, Splitscreen), and Icons.Default (~50+ distinct) sprawls across Settings/Preview.
+  - The material-icons set is effectively PINNED — some glyphs are absent (CropPortrait/Landscape),
+    which already forced custom-drawn pills (OrientationFramePill in the Library). Decide build-your-own
+    vs pinned-Material, and a home for custom vectors (RecordChromeIcons is the current precedent).
+  - SIZING is fragmented: RecordChromeTokens (navIconGlyphSize 20 / camControlSize 30 / fabSize 56 /
+    stopSquareSize 18) + LibraryDimens (actionIcon 20 / navIcon 22) + inline Modifier.size(14/22/30) +
+    FilterChipDefaults.IconSize. No central icon-size registry.
+  - TINT is raw at every call site (MaterialTheme.colorScheme / LocalContentColor / Color.White.copy
+    (alpha=...) / RecordChromeTokens.navIcon / LibraryColors.overlayText). No semantic SemanticIcon wrapper.
+  Onboarding illustrations are Canvas-drawn (separate concern). Launcher/mipmap brand icon = OUT of scope
+  (in-UI system only; it was already rebranded in M5).
 
-Constraints: never edit a check* gate to pass (fix source, or amend ADR + check with owner sign-off).
-ADR-0030 = Library/History UI never writes SessionManifest (sidecar LibraryMetadataStore only);
-checkLibraryNoManifestWrite enforces it. WCAG 2.2 AA by default (ADR-0020); a11y gates live =
-checkA11yAnimationGated / checkA11yClickableHasRole / checkA11yTargetSizeToken; reduce-motion gated
-(rememberReduceMotion). CodeGraph exploration via Explore agent only (never codegraph_explore /
-codegraph_context from the main session).
+Reference files: ui/screens/RecordChromeIcons.kt, ui/theme/RecordChromeTokens.kt, ui/theme/RovaTokens.kt,
+ui/theme/GlassSurface.kt (GlassRole/GlassResolver), ui/theme/RovaSemantics, ui/library/LibraryColors.kt
++ LibraryColorSpec (the identity-vs-locked color seam to mirror), ui/library/components/LibraryDimens.kt.
 
-Build FAST: WARM — just gradlew.bat :app:assembleDebug (NO --stop, NO cache wipe). Gate-build with
-assembleDebug (lintDebug RED on pre-existing VaultAndroidOps NewApi). adb via PowerShell direct
-(adb -s RZCYA1VBQ2H ...; MCP adb wrapper broken on Windows).
+Constraints: ADRs are source-of-truth — a new icon system likely needs a new ADR (and may amend
+ADR-0028); if it introduces a static invariant, follow invariant -> check* gate -> preBuild. Never edit
+a check* gate to pass. WCAG 2.2 AA by default (ADR-0020) — non-text contrast for meaningful glyphs.
+New user-facing strings in resources en+es (ADR-0022). codex-review architecture/visual-system decisions.
+CodeGraph exploration via an Explore agent only (never codegraph_explore/_context from the main session).
+Caveman mode + Ultracode ON. Local-only; push/merge only when the owner asks.
 
-Caveman mode + Ultracode are ON. Commit per-slice LOCALLY; push/merge only when the owner asks
-(no merge until the full reskin — incl. this polish pass — is done). After P5 the reskin is complete:
-ask the owner whether to run the end-of-reskin stacked merge train
-(see memory/feedback_stacked_pr_merge_train.md).
-
-NOT in scope: the owner-deferred PORTRAIT square-into-9:16 DualShot CAPTURE stretch
-(AspectFitMath.kt:359-366, ADR-0009/0010) — capture-side, separate task, do not touch in the polish pass.
+NOT in scope this session: implementing the full glyph set, the Liquid Glass theme engine itself, the
+launcher/brand icon, and the owner-deferred PORTRAIT square-into-9:16 DualShot CAPTURE stretch.
 ```
