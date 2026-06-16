@@ -48,16 +48,13 @@ object LibraryDimens {
     val captionPadTop = 18.dp
     val captionPadBottom = 8.dp
 
-    /** Hairline divider / glass-edge alpha on cards (matches glass-system edge ~0.09; use 0.07 for hairlines). */
-    val dividerAlpha = 0.07f
-    /** Soft selection-ring alpha (replaces the hard 2dp primary border). */
-    val selectionEdgeAlpha = 0.30f
+    // Edge / scrim COLOURS moved to the theme layer (M1, 2026-06-16): hairline edges now come from the
+    // active palette (LibraryColors.cardEdge), and the selection-ring / hero-scrim / overlay alphas are
+    // locked tokens in LibraryColorSpec (CaptionScrim-backed). Only stroke widths stay here.
     /** Selection-ring stroke width. */
     val selectionEdgeWidth = 1.5.dp
     /** Card frame edge stroke width (glass-consistent 1dp). */
     val cardEdgeWidth = 1.dp
-    /** Hero bottom-scrim peak alpha (over bright footage, AA on white worst-case backed by CaptionScrim/ContrastMath). */
-    val heroScrimAlpha = 0.62f
     /** Empty-state icon ring alpha (was hardcoded 0.4f). */
     val emptyIconAlpha = 0.40f
 
