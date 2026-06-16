@@ -41,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -84,6 +83,7 @@ import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import com.aritr.rova.ui.recovery.recoveryViewModelFactory
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.screens.HistoryViewModel
 import com.aritr.rova.ui.screens.LibrarySessionConfigDialog
@@ -465,15 +465,9 @@ fun LibraryScreen(
     Box(
         modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.24f),
-                        MaterialTheme.colorScheme.background,
-                    ),
-                ),
-            ),
+            // M1 (Theme Foundation) — the screen background is the active theme's own brush, so a tint pack
+            // restyles it from one layer (replaces the former inline colorScheme gradient). Owner-ratified.
+            .background(LocalGlassEnvironment.current.palette.background),
     ) {
         Scaffold(
             containerColor = Color.Transparent,

@@ -31,8 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -47,6 +45,7 @@ import com.aritr.rova.ui.library.HeroMetaFormatter
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SmartTitle
 import com.aritr.rova.ui.library.StorageFormat
+import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.RovaTokens
 
 /**
@@ -85,6 +84,7 @@ fun LibraryHeroCard(
     val metaLine = HeroMetaFormatter.format(clipCountLabel, durationLabel, sizeLabel)
     val isPlayingPreview = autoplay && previewUri != null
     val interactionSource = remember { MutableInteractionSource() }
+    val libraryColors = rememberLibraryColors()
 
     Box(
         modifier
@@ -96,7 +96,7 @@ fun LibraryHeroCard(
             .clip(RoundedCornerShape(LibraryDimens.heroRadius))
             .border(
                 width = LibraryDimens.cardEdgeWidth,
-                color = Color.White.copy(alpha = LibraryDimens.dividerAlpha),
+                color = libraryColors.heroEdge,
                 shape = RoundedCornerShape(LibraryDimens.heroRadius),
             ),
     ) {
@@ -122,12 +122,7 @@ fun LibraryHeroCard(
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .fillMaxHeight(0.6f)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = LibraryDimens.heroScrimAlpha),
-                    ),
-                ),
+                .background(libraryColors.heroScrim),
         )
 
         // 3) The one subordinate quick-action — Favorite (ghost star, top-right). Share + everything else
@@ -137,9 +132,9 @@ fun LibraryHeroCard(
             modifier = Modifier.align(Alignment.TopEnd).padding(LibraryDimens.cardPadV),
         ) {
             if (row.favorite) {
-                Icon(Icons.Filled.Star, contentDescription = unfavoriteLabel, tint = Color.White)
+                Icon(Icons.Filled.Star, contentDescription = unfavoriteLabel, tint = libraryColors.overlayText)
             } else {
-                Icon(Icons.Outlined.StarBorder, contentDescription = favoriteLabel, tint = Color.White)
+                Icon(Icons.Outlined.StarBorder, contentDescription = favoriteLabel, tint = libraryColors.overlayText)
             }
         }
 
@@ -151,11 +146,11 @@ fun LibraryHeroCard(
                     .align(Alignment.Center)
                     .size(52.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.34f))
+                    .background(libraryColors.playGlyphScrim)
                     .clearAndSetSemantics {},
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = libraryColors.overlayText, modifier = Modifier.size(30.dp))
             }
         }
 
@@ -166,11 +161,11 @@ fun LibraryHeroCard(
                 .align(Alignment.BottomStart)
                 .padding(LibraryDimens.captionPadH),
         ) {
-            Text(eyebrow.uppercase(), style = RovaTokens.eyebrow, color = Color.White.copy(alpha = 0.85f))
+            Text(eyebrow.uppercase(), style = RovaTokens.eyebrow, color = libraryColors.overlayText.copy(alpha = 0.85f))
             Text(
                 row.title,
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = libraryColors.overlayText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -178,7 +173,7 @@ fun LibraryHeroCard(
                 Text(
                     metaLine,
                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = libraryColors.overlayText.copy(alpha = 0.85f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

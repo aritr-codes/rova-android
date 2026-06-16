@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -38,11 +37,11 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.components.RovaAnimations.pressScale
-import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SessionCaption
 import com.aritr.rova.ui.library.SmartTitle
 import com.aritr.rova.ui.library.StorageFormat
+import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import java.util.Locale
@@ -71,6 +70,7 @@ fun LibraryListRow(
     notSelectedLabel: String = "",
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val libraryColors = rememberLibraryColors()
     GlassSurface(
         role = GlassRole.Card,
         modifier = modifier
@@ -123,7 +123,7 @@ fun LibraryListRow(
             }
             Column(Modifier.padding(start = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    statusDotColor(row.badge)?.let { dot ->
+                    libraryColors.statusDot(row.badge)?.let { dot ->
                         Box(
                             Modifier
                                 .padding(end = 6.dp)
@@ -152,12 +152,3 @@ fun LibraryListRow(
     }
 }
 
-/**
- * Status dot tint for the session row — quiet at-a-glance state without opening (the badge label is
- * still carried by the merged tile semantics, so colour is not the only signal). null = no dot.
- */
-private fun statusDotColor(badge: LibraryBadge?): Color? = when (badge) {
-    LibraryBadge.RECOVERED -> Color(0xFF6FE3A1)
-    LibraryBadge.INTERRUPTED -> Color(0xFFE3B566)
-    null -> null
-}

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.library.LibraryFilter
+import com.aritr.rova.ui.library.rememberLibraryColors
 
 /**
  * spec §5.4 — Library filter chips (data-backed deviation from stale spec wording:
@@ -84,6 +85,8 @@ private fun Chip(
     onClick: () -> Unit,
 ) {
     val cd = if (selected) String.format(selTemplate, label) else String.format(unselTemplate, label)
+    // M1 (Theme Foundation) — the hairline edge is the active theme's edge token (was Color.White@0.07).
+    val chipEdge = rememberLibraryColors().chipEdge
     // Polish P4 — quieter, glass-consistent: unselected chips are transparent with a glass hairline
     // edge; selected stays tonal but flat (no elevation) so chips don't compete with the hero/cards.
     FilterChip(
@@ -99,7 +102,7 @@ private fun Chip(
         border = FilterChipDefaults.filterChipBorder(
             enabled = true,
             selected = selected,
-            borderColor = Color.White.copy(alpha = LibraryDimens.dividerAlpha),
+            borderColor = chipEdge,
             selectedBorderColor = Color.Transparent,
         ),
         modifier = Modifier.clearAndSetSemantics {

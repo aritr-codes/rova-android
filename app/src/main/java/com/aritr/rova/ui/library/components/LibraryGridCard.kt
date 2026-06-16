@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
@@ -41,6 +40,7 @@ import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.components.RovaAnimations.pressScale
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SmartTitle
+import com.aritr.rova.ui.library.rememberLibraryColors
 
 /**
  * spec §5.1 — opaque 2-column grid tile. Thumbnail plane + mandatory duration pill
@@ -73,6 +73,7 @@ fun LibraryGridCard(
 ) {
     val shape = RoundedCornerShape(LibraryDimens.cardRadius)
     val interactionSource = remember { MutableInteractionSource() }
+    val libraryColors = rememberLibraryColors()
     Box(
         modifier
             // Record-consistent press feedback on the tile surface (inside the gutter padding the caller
@@ -83,14 +84,14 @@ fun LibraryGridCard(
             .clip(shape)
             // Permanent glass-consistent hairline frame (matches the glass surfaces' 1dp white edge —
             // NOT glass/blur over the thumbnail, spec §9).
-            .border(LibraryDimens.cardEdgeWidth, Color.White.copy(alpha = LibraryDimens.dividerAlpha), shape)
+            .border(LibraryDimens.cardEdgeWidth, libraryColors.cardEdge, shape)
             // Selection: soft glass-consistent ring (replaces the hard 2dp primary border). The check
             // chip is the authoritative selected-state carrier; this ring reinforces.
             .then(
                 if (isSelected) {
                     Modifier.border(
                         LibraryDimens.selectionEdgeWidth,
-                        Color.White.copy(alpha = LibraryDimens.selectionEdgeAlpha),
+                        libraryColors.selectionRing,
                         shape,
                     )
                 } else {
@@ -153,13 +154,13 @@ fun LibraryGridCard(
                     .padding(LibraryDimens.cardPadV)
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.32f)),
+                    .background(libraryColors.checkChipScrim),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
                     contentDescription = null,
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else libraryColors.overlayText,
                     modifier = Modifier.size(22.dp),
                 )
             }
