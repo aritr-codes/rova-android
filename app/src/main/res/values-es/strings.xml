@@ -870,5 +870,11 @@
     <string name="library_search_hint">Buscar grabaciones</string>
     <string name="library_search_empty_title">Sin resultados</string>
     <string name="library_search_empty_body">Prueba con otro nombre o fecha.</string>
+    <string name="library_favorites_empty_title">Aún no hay favoritos</string>
+    <string name="library_favorites_empty_body">Toca la estrella en cualquier grabación para guardarla aquí.</string>
+    <string name="library_dualshot_empty_title">Aún no hay grabaciones DualShot</string>
+    <string name="library_dualshot_empty_body">DualShot captura dos encuadres a la vez.</string>
+    <string name="library_filtered_empty_title">Sin resultados</string>
+    <string name="library_filtered_empty_body">Borra un filtro para ver más grabaciones.</string>
     <string name="library_scrubber_rail_cd">Desplazar por día</string>
 </resources>

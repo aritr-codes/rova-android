@@ -132,6 +132,12 @@ fun LibraryGridCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (statusLabel != null) OverlayPill(statusLabel)
+                // M3a was REVERTED (2026-06-16): a DualShot session fans into per-SIDE rows, so the
+                // orientation glyph is the side's authoritative identity (OrientationResolver §1) — the
+                // one cue distinguishing the two side-tiles of a session — NOT an ambiguous "both
+                // framings" badge. Dropping it lost real info AND diverged from LibraryListRow, which
+                // keeps it. The only crowding (status + DualShot + orientation) is the rare exceptional-
+                // badge case, not worth destroying side identity. Keep both pills.
                 if (row.topology == CaptureTopology.DualShot) OverlayPill(plLabel)
                 row.orientation?.let { OrientationFramePill(it) }
             }

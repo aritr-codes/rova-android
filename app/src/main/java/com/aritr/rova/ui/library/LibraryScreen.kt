@@ -62,7 +62,10 @@ import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
+import com.aritr.rova.ui.library.components.LibraryDualShotEmpty
 import com.aritr.rova.ui.library.components.LibraryEmpty
+import com.aritr.rova.ui.library.components.LibraryFavoritesEmpty
+import com.aritr.rova.ui.library.components.LibraryFilteredEmpty
 import com.aritr.rova.ui.library.components.LibrarySearchEmpty
 import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryGridCard
@@ -575,10 +578,25 @@ fun LibraryScreen(
                     if (hero == null && collection.isEmpty()) {
                         // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
                         // pinned above so the user can clear/adjust; the body offers Clear filters too.
-                        LibrarySearchEmpty(
-                            onClearFilters = { viewModel.clearFilters(); searchActive = false },
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                        // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
+                        // always showing search wording for a filter that carries no search.
+                        val onClearFilters: () -> Unit = { viewModel.clearFilters(); searchActive = false }
+                        when (
+                            FilteredEmptyPolicy.resolve(
+                                hasSearch = filter.search.isNotBlank(),
+                                favoritesOnly = filter.favoritesOnly,
+                                isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
+                            )
+                        ) {
+                            FilteredEmptyKind.Favorites ->
+                                LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.DualShot ->
+                                LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.Search ->
+                                LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
+                            FilteredEmptyKind.Generic ->
+                                LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                        }
                     } else {
                         Box(Modifier.fillMaxSize().weight(1f)) {
                             if (ui.viewMode == LibraryViewMode.GRID) {

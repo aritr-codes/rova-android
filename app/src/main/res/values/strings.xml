@@ -872,5 +872,11 @@
     <string name="library_search_hint">Search recordings</string>
     <string name="library_search_empty_title">No matches</string>
     <string name="library_search_empty_body">Try a different name or date.</string>
+    <string name="library_favorites_empty_title">No favorites yet</string>
+    <string name="library_favorites_empty_body">Tap the star on any recording to keep it here.</string>
+    <string name="library_dualshot_empty_title">No DualShot recordings yet</string>
+    <string name="library_dualshot_empty_body">DualShot captures two framings at once.</string>
+    <string name="library_filtered_empty_title">No matches</string>
+    <string name="library_filtered_empty_body">Clear a filter to see more recordings.</string>
     <string name="library_scrubber_rail_cd">Scroll by day</string>
 </resources>

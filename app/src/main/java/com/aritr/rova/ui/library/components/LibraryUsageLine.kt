@@ -21,6 +21,10 @@ import java.util.Locale
  * Lets the user judge footprint and prune. Text-only (no fill-bar): a background recorder has no fixed
  * storage cap, so a % with no denominator would be fabricated. Tabular figures avoid width jitter; the
  * merged contentDescription gives TalkBack a single labelled read (the parts alone are ambiguous).
+ *
+ * M1/demote (2026-06-16) — stepped down from labelMedium to labelSmall + tighter padding so it reads as
+ * a quiet caption under the title, not a content row competing with the hero. Contrast is unchanged
+ * (still onSurfaceVariant) — the demote is in TYPE SIZE, not alpha, so it stays WCAG 2.2 AA.
  */
 @Composable
 fun LibraryUsageLine(usage: UsageSummary, modifier: Modifier = Modifier) {
@@ -31,10 +35,10 @@ fun LibraryUsageLine(usage: UsageSummary, modifier: Modifier = Modifier) {
     val cd = stringResource(R.string.library_usage_cd, text)
     Text(
         text = text,
-        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
-            .padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp)
+            .padding(horizontal = LibraryDimens.screenPadH, vertical = 2.dp)
             .semantics { contentDescription = cd },
     )
 }

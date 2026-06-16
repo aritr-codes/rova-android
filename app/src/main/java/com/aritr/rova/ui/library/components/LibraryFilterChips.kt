@@ -3,8 +3,13 @@ package com.aritr.rova.ui.library.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +33,11 @@ import com.aritr.rova.ui.library.rememberLibraryColors
  * only P+L). All · ★ Favorites · P+L. Favorites + P+L are independent toggles
  * (Checkbox role); All resets both (Button role). Selected state is never color-only —
  * each chip's selected flag + contentDescription carry it (WCAG 2.2 AA).
+ *
+ * M1 (2026-06-16) — additive-filter affordance: the two ADDITIVE toggles show a leading ✓ when
+ * selected (Material multi-select cue), while [All] never does and is separated by a hairline gap.
+ * That asymmetry breaks the "single-select tab bar" read — the row now says *All = reset, the other
+ * two = stackable*. The check is decorative (semantics are cleared + carried by contentDescription).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -54,7 +64,10 @@ fun LibraryFilterChips(
             role = Role.Button,
             selTemplate = selTemplate,
             unselTemplate = unselTemplate,
+            // Reset chip: no selected ✓, plus a hairline gap separating it from the additive toggles.
+            showCheckWhenSelected = false,
             onClick = onAll,
+            modifier = Modifier.padding(end = 8.dp),
         )
         Chip(
             label = stringResource(R.string.library_filter_favorites),
@@ -62,6 +75,7 @@ fun LibraryFilterChips(
             role = Role.Checkbox,
             selTemplate = selTemplate,
             unselTemplate = unselTemplate,
+            showCheckWhenSelected = true,
             onClick = onToggleFavorites,
         )
         Chip(
@@ -70,6 +84,7 @@ fun LibraryFilterChips(
             role = Role.Checkbox,
             selTemplate = selTemplate,
             unselTemplate = unselTemplate,
+            showCheckWhenSelected = true,
             onClick = onTogglePl,
         )
     }
@@ -82,7 +97,9 @@ private fun Chip(
     role: Role,
     selTemplate: String,
     unselTemplate: String,
+    showCheckWhenSelected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val cd = if (selected) String.format(selTemplate, label) else String.format(unselTemplate, label)
     // M1 (Theme Foundation) — the hairline edge is the active theme's edge token (was Color.White@0.07).
@@ -93,6 +110,13 @@ private fun Chip(
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
+        // M1 — leading ✓ on a selected ADDITIVE toggle only (multi-select cue). Decorative: the chip's
+        // semantics are cleared below and the selected state is spoken via contentDescription.
+        leadingIcon = if (selected && showCheckWhenSelected) {
+            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+        } else {
+            null
+        },
         elevation = FilterChipDefaults.filterChipElevation(elevation = 0.dp),
         colors = FilterChipDefaults.filterChipColors(
             containerColor = Color.Transparent,
@@ -105,7 +129,7 @@ private fun Chip(
             borderColor = chipEdge,
             selectedBorderColor = Color.Transparent,
         ),
-        modifier = Modifier.clearAndSetSemantics {
+        modifier = modifier.clearAndSetSemantics {
             this.contentDescription = cd
             this.role = role
             this.selected = selected

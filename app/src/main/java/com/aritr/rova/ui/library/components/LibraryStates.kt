@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material.icons.outlined.Splitscreen
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -129,6 +131,62 @@ fun LibrarySearchEmpty(onClearFilters: () -> Unit, modifier: Modifier = Modifier
         icon = Icons.Outlined.SearchOff,
         title = stringResource(R.string.library_search_empty_title),
         body = stringResource(R.string.library_search_empty_body),
+        modifier = modifier,
+        action = {
+            TextButton(onClick = onClearFilters) {
+                Text(stringResource(R.string.library_search_empty_cta))
+            }
+        },
+    )
+
+/**
+ * M2 — Favorites filter matched nothing. Educational, not "absence": teaches the star gesture (the only
+ * place Favoriting is surfaced anywhere in the app), so an empty Favorites tab becomes feature discovery.
+ */
+@Composable
+fun LibraryFavoritesEmpty(onClearFilters: () -> Unit, modifier: Modifier = Modifier) =
+    LibraryStateScaffold(
+        icon = Icons.Outlined.StarBorder,
+        title = stringResource(R.string.library_favorites_empty_title),
+        body = stringResource(R.string.library_favorites_empty_body),
+        modifier = modifier,
+        action = {
+            TextButton(onClick = onClearFilters) {
+                Text(stringResource(R.string.library_search_empty_cta))
+            }
+        },
+    )
+
+/**
+ * M2 — DualShot filter matched nothing. Educational: explains what DualShot is. Lighter than Favorites —
+ * the create loop completes in the camera, not here — so it informs without a record CTA (Clear filters
+ * keeps the user in Library).
+ */
+@Composable
+fun LibraryDualShotEmpty(onClearFilters: () -> Unit, modifier: Modifier = Modifier) =
+    LibraryStateScaffold(
+        icon = Icons.Outlined.Splitscreen,
+        title = stringResource(R.string.library_dualshot_empty_title),
+        body = stringResource(R.string.library_dualshot_empty_body),
+        modifier = modifier,
+        action = {
+            TextButton(onClick = onClearFilters) {
+                Text(stringResource(R.string.library_search_empty_cta))
+            }
+        },
+    )
+
+/**
+ * M2 — a multi-facet miss (e.g. Favorites AND DualShot) with no text query. There's no single facet to
+ * teach, so the copy is neutral and action-oriented ("Clear a filter…") rather than the search wording —
+ * which would be false here (no search is active). Routed from [FilteredEmptyKind.Generic].
+ */
+@Composable
+fun LibraryFilteredEmpty(onClearFilters: () -> Unit, modifier: Modifier = Modifier) =
+    LibraryStateScaffold(
+        icon = Icons.Outlined.SearchOff,
+        title = stringResource(R.string.library_filtered_empty_title),
+        body = stringResource(R.string.library_filtered_empty_body),
         modifier = modifier,
         action = {
             TextButton(onClick = onClearFilters) {
