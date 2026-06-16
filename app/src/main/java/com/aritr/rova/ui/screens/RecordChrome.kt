@@ -73,6 +73,8 @@ import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RecordChromeTokens
+import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SemanticIconSpec
 import com.aritr.rova.ui.components.RecordHudFormatters
@@ -687,11 +689,11 @@ fun RecordBottomNav(
     // landscape top→bottom rail so Library/FAB/Settings keep their spatial relation
     // (acceptance — muscle memory).
     val library: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary, spinDegrees = spinDegrees)
+        NavItem(glyph = RovaIcons.Library, label = stringResource(R.string.record_nav_library), enabled = !navItemsLocked, onClick = onLibrary, spinDegrees = spinDegrees)
     }
     val fab: @Composable () -> Unit = { RecordFab(state = fabState, onClick = onFabClick, spinDegrees = spinDegrees) }
     val settings: @Composable () -> Unit = {
-        NavItem(icon = RecordChromeIcons.settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings, spinDegrees = spinDegrees)
+        NavItem(glyph = RovaIcons.Settings, label = stringResource(R.string.record_nav_settings), enabled = !navItemsLocked, onClick = onSettings, spinDegrees = spinDegrees)
     }
     if (sense == null) {
         // PORTRAIT — Slice B gradient brush bottom bar. The outer Box paints the brush
@@ -738,7 +740,7 @@ fun RecordBottomNav(
 }
 
 @Composable
-internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: () -> Float = { 0f }) {
+internal fun NavItem(glyph: RovaGlyph, label: String, enabled: Boolean, onClick: () -> Unit, spinDegrees: () -> Float = { 0f }) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecordChromeTokens.navItemGap),
@@ -759,12 +761,11 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
         ) {
             // PR-ε (spec §5): glyph spins inside the stable square icon box
             // (square = rotation-invariant; clickable stays on the Column).
-            val palette = LocalGlassEnvironment.current.palette
             SpinningBox(degrees = spinDegrees) {
-                Icon(
-                    icon,
+                SemanticIcon(
+                    glyph = glyph,
                     contentDescription = label,
-                    tint = if (enabled) RecordChromeTokens.navIcon else SemanticIconSpec.tint(palette, IconRole.Disabled),
+                    role = if (enabled) IconRole.Default else IconRole.Disabled,
                     modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
                 )
             }
@@ -823,8 +824,8 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: 
                             .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
                             .background(RecordChromeTokens.stopSquare),
                     )
-                    RecordFabState.Start -> SemanticIcon(RecordChromeIcons.fabPlay, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(22.dp))
-                    RecordFabState.Disabled -> SemanticIcon(RecordChromeIcons.fabPlay, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(22.dp))
+                    RecordFabState.Start -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(22.dp))
+                    RecordFabState.Disabled -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(22.dp))
                 }
             }
         }
