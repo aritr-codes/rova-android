@@ -16,18 +16,32 @@ import com.aritr.rova.data.SessionManifest
 import com.aritr.rova.data.SessionStore
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.service.export.VaultMoverBuilder
+import com.aritr.rova.ui.library.LibraryMetadataEntry
+import com.aritr.rova.ui.library.LibraryRow
+import com.aritr.rova.ui.library.LibraryRowMapper
+import com.aritr.rova.ui.library.LibraryUiState
+import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.ThumbnailCacheKey
+import com.aritr.rova.ui.library.ThumbnailDiskCache
 import com.aritr.rova.utils.RovaLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
+import java.util.TimeZone
 
 data class VideoItem(
     /**
@@ -186,6 +200,134 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val metadataCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Bitmap?, String>>()
 
     /**
+     * Per-row session facts captured during the load pass (ADR-0030, Slice 2) so
+     * the Library row model (duration / topology / badge / startedAt) is derived
+     * without a second manifest walk. Keyed by [VideoItem.stableKey]. Legacy
+     * file-scan rows have no manifest → absent → mapped with neutral defaults
+     * (no badge, no duration). Assigned BEFORE [_items] emits in [loadItemsList],
+     * so within a single load pass the rows the UI sees have matching facts.
+     *
+     * Eventual-consistency note: this field and [_items] are separate values, so a
+     * recompute triggered by another input (e.g. [_sidecarRevision]) between a
+     * facts assignment and the next [_items] emit — or two overlapping refreshes —
+     * can briefly map a stale row against newer facts. Because facts key on
+     * `stableKey`, a mismatch only yields neutral defaults (a missing duration/badge
+     * for one frame), never wrong data, and self-heals on the following [_items]
+     * emit. This is acceptable for a derived display flow; do NOT treat it as an
+     * atomic rows+facts snapshot.
+     */
+    private data class RowManifestFacts(
+        val startedAt: Long,
+        val segmentDurationsMs: List<Long>,
+        val topologyPersisted: String,
+        val terminated: com.aritr.rova.data.Terminated?,
+        val exportState: com.aritr.rova.data.ExportState,
+    )
+
+    @Volatile private var manifestFactsByKey: Map<String, RowManifestFacts> = emptyMap()
+
+    /**
+     * spec §7 — disk thumbnail cache so cold launches skip MediaMetadataRetriever.
+     * Keyed by [ThumbnailCacheKey] (stableKey + size/mtime/duration invalidators);
+     * stores the WebP-encoded keyframe. 32 MB LRU under `cacheDir/thumbnails`.
+     */
+    private val thumbDiskCache by lazy {
+        ThumbnailDiskCache(
+            File(getApplication<Application>().cacheDir, "thumbnails"),
+            maxBytes = 32L * 1024 * 1024,
+        )
+    }
+
+    /** Library grid/list toggle (decision A). Drives [libraryUiState]. */
+    private val _viewMode = MutableStateFlow(LibraryViewMode.GRID)
+
+    /**
+     * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
+     * Single-writer contract: [toggleFavorite] is the only production writer today.
+     * Any FUTURE sidecar mutation (rename / lastPlayedAt / prune) MUST also bump
+     * this, or `libraryUiState` will serve a stale snapshot.
+     */
+    private val _sidecarRevision = MutableStateFlow(0)
+
+    /**
+     * Non-blocking one-shot signal that a sidecar write failed (owner adjustment 2).
+     * Monotonic counter — each failure increments it so a screen collecting it can
+     * surface a transient notice without blocking. 0 = nothing to show.
+     */
+    private val _sidecarWriteError = MutableStateFlow(0)
+    val sidecarWriteError: StateFlow<Int> = _sidecarWriteError.asStateFlow()
+
+    private val libraryStore get() = (getApplication() as? RovaApp)?.libraryMetadataStore
+
+    /**
+     * Derived Library state (ADR-0030 / spec §5): joins [items] + captured
+     * [manifestFactsByKey] + the sidecar snapshot into [LibraryRow]s via
+     * [LibraryRowMapper]. Recomputes when items, the view mode, or the sidecar
+     * revision changes. Mapping is pure CPU work over in-memory snapshots.
+     */
+    val libraryUiState: StateFlow<LibraryUiState> =
+        combine(items, hasLoaded, _viewMode, _sidecarRevision) { rows, loaded, mode, _ ->
+            val snapshot = libraryStore?.snapshot() ?: emptyMap()
+            val locale = Locale.getDefault()
+            val tz = TimeZone.getDefault()
+            val mapped = rows.map { item -> toLibraryRow(item, snapshot[item.stableKey], locale, tz) }
+            LibraryUiState(rows = mapped, viewMode = mode, hasLoaded = loaded)
+        }
+            // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)
+            // and maps the list — keep it off the Main collecting context (codex review).
+            .flowOn(Dispatchers.IO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
+    private fun toLibraryRow(
+        item: VideoItem,
+        meta: LibraryMetadataEntry?,
+        locale: Locale,
+        tz: TimeZone,
+    ): LibraryRow {
+        val facts = manifestFactsByKey[item.stableKey]
+        val dateMillis = item.effectiveLastModified()
+        return LibraryRowMapper.map(
+            LibraryRowMapper.Input(
+                stableKey = item.stableKey,
+                startedAtMillis = facts?.startedAt ?: dateMillis,
+                dateMillis = dateMillis,
+                dateLabel = HistoryRowFormatters.formatPrimaryDateTime(dateMillis, locale, tz),
+                sizeBytes = item.effectiveSize(),
+                segmentDurationsMs = facts?.segmentDurationsMs ?: emptyList(),
+                topologyPersisted = facts?.topologyPersisted ?: "Single",
+                terminated = facts?.terminated,
+                exportState = facts?.exportState ?: com.aritr.rova.data.ExportState.FINALIZED,
+                customTitle = meta?.customTitle,
+                favorite = meta?.favorite ?: false,
+            ),
+            locale, tz,
+        )
+    }
+
+    fun setViewMode(mode: LibraryViewMode) { _viewMode.value = mode }
+
+    /**
+     * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI
+     * is NON-optimistic (owner adjustment 2): the star reflects the sidecar
+     * snapshot, and only flips after a SUCCESSFUL [LibraryMetadataStore.update]
+     * bumps [_sidecarRevision] and triggers a recompute. On failure we never
+     * optimistically flipped, so there is no desync to roll back — we log and raise
+     * a non-blocking error signal. Off-main.
+     */
+    fun toggleFavorite(stableKey: String) {
+        val store = libraryStore ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                store.update(stableKey) { it.copy(favorite = !it.favorite) }
+                _sidecarRevision.update { it + 1 } // success → recompute reads the new snapshot
+            } catch (t: Throwable) {
+                RovaLog.e("HistoryViewModel.toggleFavorite: sidecar write failed for $stableKey", t)
+                _sidecarWriteError.update { it + 1 } // UI unchanged; surface a non-blocking notice
+            }
+        }
+    }
+
+    /**
      * Phase 1.7 commit-7 NO-GO patch round 2 — manifest-driven listing.
      * Successful exports no longer leave a file under
      * `videos/<sessionId>/Rova_*.mp4`; the artifact lives in
@@ -253,8 +395,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val sessionStore = rovaApp?.let { runCatching { it.sessionStore }.getOrNull() }
         val resolver: ContentResolver = app.contentResolver
 
+        val visibleManifests = if (sessionStore != null) {
+            visibleFinalizedManifests(sessionStore)
+        } else {
+            emptyList()
+        }
         val manifestArtifacts = if (sessionStore != null) {
-            manifestDrivenArtifacts(sessionStore, resolver)
+            manifestDrivenArtifacts(visibleManifests, sessionStore, resolver)
         } else {
             emptyList()
         }
@@ -271,6 +418,32 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val recordings = (manifestArtifacts + legacyArtifacts)
             .filter { seen.add(it.stableKey) }
             .sortedByDescending { it.effectiveLastModified() }
+
+        // ADR-0030 (Slice 2) — capture per-row manifest facts BEFORE the first
+        // emit so the derived libraryUiState reads facts consistent with the rows.
+        // Legacy rows (no sessionId / no manifest) are simply absent → neutral
+        // defaults in toLibraryRow. No second disk walk: reuses visibleManifests.
+        val manifestBySession = visibleManifests.associateBy { it.sessionId }
+        manifestFactsByKey = recordings.mapNotNull { rec ->
+            val sid = rec.sessionId ?: return@mapNotNull null
+            val m = manifestBySession[sid] ?: return@mapNotNull null
+            rec.stableKey to factsFor(m, rec)
+        }.toMap()
+
+        // spec §7 — per-row disk-cache invalidator: (mtime, size, durationMs). A
+        // changed/replaced artifact at the same key yields a different cache key,
+        // so a stale thumbnail is never served. Duration comes from the facts map
+        // (0 for legacy rows). Built once; reused by the extract closure + prune.
+        val invalidatorByKey: Map<String, Triple<Long, Long, Long>> = recordings.associate { rec ->
+            val size = rec.file?.length() ?: rec.sizeBytes ?: 0L
+            val mtime = rec.effectiveLastModified()
+            val dur = manifestFactsByKey[rec.stableKey]?.segmentDurationsMs?.sum() ?: 0L
+            rec.stableKey to Triple(mtime, size, dur)
+        }
+        fun diskKeyFor(stableKey: String): String? =
+            invalidatorByKey[stableKey]?.let { (mtime, size, dur) ->
+                ThumbnailCacheKey.keyFor(stableKey, size, mtime, dur)
+            }
 
         val initial = recordings.map { rec -> buildItem(rec) }
         // Explicit containsKey: ConcurrentHashMap.contains resolves to
@@ -295,7 +468,24 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             HistoryMetadataLoader.fillMissing(
                 paths = recordings.map { it.stableKey },
                 cache = metadataCache,
-                extract = { key -> VideoMetadataUtils.extractMetadata(app, key) }
+                extract = { key ->
+                    // spec §7 — read the disk cache first; on a hit, recover the
+                    // resolution label from the decoded frame's own dimensions
+                    // (owner adjustment 3 — zero extra storage). On a miss, extract
+                    // via MediaMetadataRetriever and persist the WebP keyframe.
+                    val diskKey = diskKeyFor(key)
+                    val cachedBytes = diskKey?.let { thumbDiskCache.get(it) }
+                    if (cachedBytes != null) {
+                        val bmp = VideoMetadataUtils.decodeThumb(cachedBytes)
+                        bmp to VideoMetadataUtils.resolutionForBitmap(bmp)
+                    } else {
+                        val (bmp, res) = VideoMetadataUtils.extractMetadata(app, key)
+                        if (bmp != null && diskKey != null) {
+                            runCatching { thumbDiskCache.put(diskKey, VideoMetadataUtils.encodeThumb(bmp)) }
+                        }
+                        bmp to res
+                    }
+                }
             )
         }
 
@@ -308,6 +498,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         // Clean stale entries for deleted files
         val currentKeys = recordings.map { it.stableKey }.toSet()
         metadataCache.keys.retainAll(currentKeys)
+
+        // spec §7 — prune the disk cache to the live cache-key space (deleted /
+        // replaced rows). Keyed by ThumbnailCacheKey, not stableKey, so compute the
+        // live cache keys from the same invalidator map.
+        val liveDiskKeys = recordings.mapNotNull { diskKeyFor(it.stableKey) }.toSet()
+        runCatching { thumbDiskCache.removeAllExcept(liveDiskKeys) }
 
         finalItems
     }
@@ -420,10 +616,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         fun effectiveLastModified(): Long = file?.lastModified() ?: modifiedAtMillis ?: 0L
     }
 
-    private fun manifestDrivenArtifacts(
-        sessionStore: SessionStore,
-        resolver: ContentResolver
-    ): List<ResolvedRecording> {
+    /**
+     * Loads every on-disk manifest, keeps FINALIZED + Library-visible (PUBLIC)
+     * ones. Extracted (Slice 2) so the same visible-manifest list feeds both the
+     * artifact resolution AND the per-row [RowManifestFacts] capture without a
+     * second disk walk — see [loadItemsList].
+     */
+    private fun visibleFinalizedManifests(sessionStore: SessionStore): List<SessionManifest> {
         val manifests: List<SessionManifest> = sessionStore.listSessionIds()
             .mapNotNull { sid ->
                 runCatching { sessionStore.loadManifest(sid) }.getOrNull()
@@ -436,6 +635,36 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             // the FINALIZED-keep predicate so vaulted recordings vanish
             // from the Library without touching any other filtering.
             .filter { com.aritr.rova.ui.vault.isLibraryVisible(it.vaultState) }
+    }
+
+    /**
+     * ADR-0030 (Slice 2) — derives the per-row session facts the Library row model
+     * needs (duration / topology / badge inputs / startedAt). For a per-segment
+     * (`MULTI_SEGMENT_KEPT`) row the duration is that ONE segment (matched by
+     * filename); every other row sums the session's segments.
+     */
+    private fun factsFor(m: SessionManifest, rec: ResolvedRecording): RowManifestFacts {
+        val durations = if (rec.segmentIndex != null) {
+            val seg = m.segments.firstOrNull { it.filename == rec.file?.name }
+            listOf(seg?.durationMs ?: 0L)
+        } else {
+            m.segments.map { it.durationMs }
+        }
+        return RowManifestFacts(
+            startedAt = m.startedAt,
+            segmentDurationsMs = durations,
+            topologyPersisted = m.config.captureTopology,
+            terminated = m.terminated,
+            exportState = m.exportState,
+        )
+    }
+
+    private fun manifestDrivenArtifacts(
+        visibleManifests: List<SessionManifest>,
+        sessionStore: SessionStore,
+        resolver: ContentResolver
+    ): List<ResolvedRecording> {
+        return visibleManifests
             .flatMap { m ->
                 // Milestone 2 — MULTI_SEGMENT_KEPT fanout. Each kept segment
                 // becomes a standalone library row. Composition with the

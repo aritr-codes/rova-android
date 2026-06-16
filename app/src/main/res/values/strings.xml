@@ -786,4 +786,20 @@
     <string name="vault_delete_title">Delete from vault?</string>
     <string name="vault_delete_body">This permanently deletes the recording. It is not in your gallery and cannot be recovered.</string>
     <string name="vault_delete_confirm">Delete</string>
+    <!-- Library/History redesign (ADR-0030) -->
+    <string name="library_eyebrow_latest">Latest recording</string>
+    <string name="library_action_play">Play</string>
+    <string name="library_action_favorite">Favorite</string>
+    <string name="library_action_unfavorite">Remove favorite</string>
+    <string name="library_action_share">Share</string>
+    <string name="library_view_grid">Grid view</string>
+    <string name="library_view_list">List view</string>
+    <string name="library_badge_recovered">Recovered</string>
+    <string name="library_badge_interrupted">Interrupted</string>
+    <string name="library_badge_pl">Portrait plus Landscape</string>
+    <string name="library_a11y_duration">duration</string>
+    <string name="library_day_size_total">%1$s this day</string>
+    <string name="library_empty_title">No recordings yet</string>
+    <string name="library_empty_body">Your background recordings will appear here.</string>
+    <string name="library_empty_cta">Start recording</string>
 </resources>

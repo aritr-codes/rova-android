@@ -25,6 +25,9 @@ object SmartTitle {
         return "$day · $time · $clips · ${formatDuration(totalDurationMs)}"
     }
 
+    /** Public m/s duration label (`12m`, `1m 30s`, `42s`) — shared by cards + semantics. */
+    fun durationLabel(ms: Long): String = formatDuration(ms)
+
     private fun formatDuration(ms: Long): String {
         val totalSec = ms / 1000
         val m = totalSec / 60

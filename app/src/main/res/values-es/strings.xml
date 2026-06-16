@@ -784,4 +784,20 @@
     <string name="vault_delete_title">¿Eliminar de la caja fuerte?</string>
     <string name="vault_delete_body">Esto elimina la grabación de forma permanente. No está en tu galería y no se puede recuperar.</string>
     <string name="vault_delete_confirm">Eliminar</string>
+    <!-- Rediseño de Biblioteca/Historial (ADR-0030) -->
+    <string name="library_eyebrow_latest">Última grabación</string>
+    <string name="library_action_play">Reproducir</string>
+    <string name="library_action_favorite">Favorito</string>
+    <string name="library_action_unfavorite">Quitar favorito</string>
+    <string name="library_action_share">Compartir</string>
+    <string name="library_view_grid">Vista de cuadrícula</string>
+    <string name="library_view_list">Vista de lista</string>
+    <string name="library_badge_recovered">Recuperado</string>
+    <string name="library_badge_interrupted">Interrumpido</string>
+    <string name="library_badge_pl">Vertical y horizontal</string>
+    <string name="library_a11y_duration">duración</string>
+    <string name="library_day_size_total">%1$s este día</string>
+    <string name="library_empty_title">Aún no hay grabaciones</string>
+    <string name="library_empty_body">Tus grabaciones en segundo plano aparecerán aquí.</string>
+    <string name="library_empty_cta">Empezar a grabar</string>
 </resources>

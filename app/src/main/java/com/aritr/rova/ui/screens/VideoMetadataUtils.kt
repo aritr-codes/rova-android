@@ -2,9 +2,11 @@ package com.aritr.rova.ui.screens
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.aritr.rova.data.QualityLabels
+import java.io.ByteArrayOutputStream
 
 object VideoMetadataUtils {
 
@@ -70,4 +72,32 @@ object VideoMetadataUtils {
             retriever.release()
         }
     }
+
+    /** Encode a thumbnail to WebP bytes for the disk cache (spec §7). */
+    fun encodeThumb(bitmap: Bitmap, quality: Int = 80): ByteArray {
+        val out = ByteArrayOutputStream()
+        @Suppress("DEPRECATION")
+        bitmap.compress(Bitmap.CompressFormat.WEBP, quality, out)
+        return out.toByteArray()
+    }
+
+    /** Decode disk-cache bytes back to a Bitmap (null on corrupt entry). */
+    fun decodeThumb(bytes: ByteArray): Bitmap? =
+        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+
+    /**
+     * Recover the quality label for a cached thumbnail from its own pixel
+     * dimensions (owner adjustment 3). `getFrameAtTime` returns the frame at the
+     * NATIVE video resolution, so the decoded thumbnail's width/height equal the
+     * source dimensions and reproduce the exact [QualityLabels.forDimensions] label
+     * with no stored companion field and no migration. Returns [UNKNOWN_RESOLUTION]
+     * for a null bitmap.
+     *
+     * NOTE: valid only while the disk cache stores the FULL-resolution keyframe (it
+     * does today — [encodeThumb] compresses the unscaled `getFrameAtTime` bitmap).
+     * If a future change downscales before caching, this label would shrink.
+     */
+    fun resolutionForBitmap(bitmap: Bitmap?): String =
+        if (bitmap == null) UNKNOWN_RESOLUTION
+        else QualityLabels.forDimensions(bitmap.width, bitmap.height) ?: UNKNOWN_RESOLUTION
 }
