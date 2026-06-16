@@ -35,7 +35,17 @@ data class LibraryRow(
 )
 
 /** Sort options for the Library (decision C). */
-enum class LibrarySort { NEWEST, OLDEST, LONGEST, LARGEST }
+enum class LibrarySort {
+    NEWEST, OLDEST, LONGEST, LARGEST;
+
+    /**
+     * Date-ordered sorts get day-grouped headers ("Today" / "Yesterday" / date); size- and
+     * duration-ordered sorts render as one flat, header-less list. Day headers are a chronological
+     * affordance — under LONGEST/LARGEST same-day rows are NOT contiguous, so per-day buckets would
+     * both read wrong and (fatally) collide LazyList keys. See [LibraryDayGrouping.groupForSort].
+     */
+    val isChronological: Boolean get() = this == NEWEST || this == OLDEST
+}
 
 /**
  * Filter facets (decision C). [topology] null = any. [search] blank = no search.

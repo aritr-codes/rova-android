@@ -347,7 +347,7 @@ fun LibraryScreen(
     val collection = remember(visibleRows, hero, sort, filter) {
         LibraryQuery.collection(visibleRows, sort, filter, hero?.stableKey)
     }
-    val groups = remember(collection, nowMillis, locale, tz) { LibraryDayGrouping.group(collection, nowMillis, locale, tz) }
+    val groups = remember(collection, sort, nowMillis, locale, tz) { LibraryDayGrouping.groupForSort(collection, sort, nowMillis, locale, tz) }
     // Scrubber segments: leading = recovery/warnings header (always) + hero (if present).
     val leadingItemCount = 1 + (if (hero != null) 1 else 0)
     val scrubberSegments = remember(groups, leadingItemCount) {
@@ -617,8 +617,12 @@ fun LibraryScreen(
                                         item(span = { GridItemSpan(maxLineSpan) }, key = "hero-${hero.stableKey}") { renderHero(hero) }
                                     }
                                     groups.forEach { group ->
-                                        item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
-                                            LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                        // Header suppressed for non-chronological sorts (label = "" →
+                                        // flat list, LibraryDayGrouping.groupForSort). Date sorts keep it.
+                                        if (group.label.isNotEmpty()) {
+                                            item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
+                                                LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                            }
                                         }
                                         itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
                                             LibraryGridCard(
@@ -661,7 +665,9 @@ fun LibraryScreen(
                                         item(key = "hero-${hero.stableKey}") { renderHero(hero) }
                                     }
                                     groups.forEach { group ->
-                                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        if (group.label.isNotEmpty()) {
+                                            item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        }
                                         items(group.rows, key = { it.stableKey }) { row ->
                                             LibraryListRow(
                                                 row = row,

@@ -19,6 +19,33 @@ data class LibraryDayGroup(
  */
 object LibraryDayGrouping {
 
+    /**
+     * Bug-fix 2026-06-16 (sort crash on Largest/Longest) — group only when the active [sort] is
+     * chronological. [group] folds same-day rows assuming they are contiguous (true for NEWEST/
+     * OLDEST). Under LONGEST/LARGEST the collection is size/duration-ordered, so a given day's rows
+     * scatter and [group] emits the SAME day label in multiple non-adjacent buckets. The render then
+     * keys header items as `hdr-<label>` → duplicate LazyList keys → IllegalArgumentException crash.
+     * For non-chronological sorts we return a single header-less bucket (label = "" → the caller
+     * suppresses the day header), which is also the correct UX (flat list, no scattered date headers).
+     */
+    fun groupForSort(
+        rows: List<LibraryRow>,
+        sort: LibrarySort,
+        nowMillis: Long,
+        locale: Locale,
+        tz: TimeZone,
+    ): List<LibraryDayGroup> {
+        if (rows.isEmpty()) return emptyList()
+        if (sort.isChronological) return group(rows, nowMillis, locale, tz)
+        return listOf(
+            LibraryDayGroup(
+                label = "",
+                sizeTotalLabel = StorageFormat.dayTotal(rows.map { it.sizeBytes }, locale),
+                rows = rows,
+            ),
+        )
+    }
+
     fun group(
         rows: List<LibraryRow>,
         nowMillis: Long,
