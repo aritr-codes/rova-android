@@ -1875,6 +1875,99 @@ val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") 
     }
 }
 
+// ADR-0031 §4 (P0) — every in-app glyph tint flows through the SemanticIcon seam. A raw Color literal
+// bound to a `tint =` argument bypasses the theme engine's single icon-color contract. Keyed on the
+// `tint =` argument (offenders are multi-line Icon(...) calls), scanned over a 3-line window so a
+// wrapped/conditional Color value is still caught. The seam file is allowlisted by canonical path.
+val checkSemanticIconNoRawAlpha = tasks.register("checkSemanticIconNoRawAlpha") {
+    group = "verification"
+    description = "Forbid a raw Color literal as an Icon tint outside the SemanticIcon seam — all glyph " +
+        "color must flow through SemanticIcon/SemanticIconSpec (ADR-0031 §4)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val seamFile = file("src/main/java/com/aritr/rova/ui/components/SemanticIcon.kt").canonicalFile
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkSemanticIconNoRawAlpha: Rova source dir missing: $srcDir")
+        }
+        // `\bColor\s*[.(]` matches a standalone `Color` token (word boundary) followed by `.` or `(`,
+        // so theme-derived tints (`tint = palette.textHigh`, `tint = LocalContentColor.current`,
+        // `tint = RecordChromeTokens.navIcon`, `tint = severityColor`) are NOT flagged. Non-greedy `.*?`
+        // stops at the first Color token.
+        val rawTintPattern = Regex("""tint\s*=.*?\bColor\s*[.(]""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != seamFile }
+            .mapNotNull { f ->
+                val lines = f.readLines()
+                val hits = lines.indices.mapNotNull { i ->
+                    val line = lines[i]
+                    if (line.contains("semanticicon-opt-out")) return@mapNotNull null
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@mapNotNull null
+                    if (!line.contains("tint")) return@mapNotNull null
+                    val window = (i until minOf(i + 3, lines.size)).joinToString(" ") { lines[it] }
+                    if (rawTintPattern.containsMatchIn(window)) i to line else null
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
+            }
+            throw GradleException(
+                "ADR-0031 §4 violation: raw Color literal used as an Icon tint outside the SemanticIcon " +
+                    "seam. Route glyph color through `SemanticIcon(role = …, status = …)` / " +
+                    "`SemanticIconSpec` so the theme engine drives icon color from one place. " +
+                    "For a genuinely non-themed glyph, add `// semanticicon-opt-out: <reason>` on the line.\n" +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
+// ADR-0031 §3 (P0) — locked semantic status colors. A RovaSemantics color is exact and used at full
+// opacity; mutating it at a call-site (.copy of alpha or any channel) breaks the lock. The status→
+// RovaSemantics mapping itself is covered by SemanticIconSpecTest; this gate enforces no-mutation everywhere.
+val checkStatusColorLocked = tasks.register("checkStatusColorLocked") {
+    group = "verification"
+    description = "Forbid per-call mutation (.copy of alpha or any channel) of a locked RovaSemantics " +
+        "status color — status colors are exact, used at full locked opacity, always paired with shape " +
+        "(ADR-0031 §3, WCAG 1.4.1)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkStatusColorLocked: Rova source dir missing: $srcDir")
+        }
+        // The `.copy(` opener sits on the `RovaSemantics.<member>` line even when args wrap, so this
+        // also catches the multiline / positional-arg (`copy(0.6f)`) cases an alpha-only regex misses.
+        val dilutePattern = Regex("""RovaSemantics\s*\.\s*\w+\s*\.copy\s*\(""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .mapNotNull { f ->
+                val hits = f.readLines().withIndex().filter { (_, line) ->
+                    val trimmed = line.trimStart()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
+                    else dilutePattern.containsMatchIn(line)
+                }
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
+            }
+            throw GradleException(
+                "ADR-0031 §3 violation: a locked RovaSemantics status color is mutated (.copy) at the " +
+                    "call-site. Status colors render exact, at full locked opacity (and are paired with " +
+                    "shape, WCAG 1.4.1). Use the color directly, or vary emphasis with shape/size.\n" +
+                    "Offenders:\n$report"
+            )
+        }
+    }
+}
+
 // ADR-0029 PR-γ gate 1 — live capture paths must not branch on the legacy
 // orientation-carrying mode strings; read-compat sites are allowlisted (§6).
 // Comment/KDoc lines are skipped: documenting a legacy value is legal,
@@ -2477,6 +2570,8 @@ afterEvaluate {
         dependsOn(checkFrontBackCapabilityGated)
         dependsOn(checkUserCopyVocabulary)
         dependsOn(checkRecordChromeLockSingleSite)
+        dependsOn(checkSemanticIconNoRawAlpha)
+        dependsOn(checkStatusColorLocked)
     }
 }
 
