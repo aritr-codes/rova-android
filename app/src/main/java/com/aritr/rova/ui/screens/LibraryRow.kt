@@ -100,7 +100,9 @@ import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
 import com.aritr.rova.ui.recovery.VendorGuidanceIntents
 import com.aritr.rova.ui.recovery.recoveryViewModelFactory
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.share.safeShareUri
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaTheme
 import com.aritr.rova.ui.warnings.HistoryWarningSheetHost
 import com.aritr.rova.ui.warnings.HistoryWarningStrip
@@ -389,10 +391,10 @@ private fun VideoThumbnail(thumbnail: Bitmap?, modifier: Modifier = Modifier) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            Icon(
+            SemanticIcon(
                 Icons.Default.PlayCircle,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.78f),
+                role = IconRole.Default,
                 modifier = Modifier.size(28.dp)
             )
         } else {

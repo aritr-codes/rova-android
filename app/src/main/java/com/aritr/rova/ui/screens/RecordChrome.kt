@@ -70,10 +70,13 @@ import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.theme.ChromeScale
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaTokens
+import com.aritr.rova.ui.theme.SemanticIconSpec
 import com.aritr.rova.ui.components.RecordHudFormatters
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
@@ -248,10 +251,10 @@ fun RecordCameraControls(
     // 48dp circular containers (touch targets) stay stable.
     spinDegrees: () -> Float = { 0f },
 ) {
-    val tint = if (enabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    val flipTint = if (flipEnabled) Color.White.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.3f)
-    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, tint, spinDegrees) }
-    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipTint, spinDegrees) }
+    val flashRole = if (enabled) IconRole.Secondary else IconRole.Disabled
+    val flipRole = if (flipEnabled) IconRole.Secondary else IconRole.Disabled
+    val flash = @Composable { CamFlashButton(flashMode, onCycleFlash, enabled, flashRole, spinDegrees) }
+    val flip = @Composable { CamFlipButton(onFlip, flipEnabled, isFrontCamera, flipRole, spinDegrees) }
     if (orientation == ChromeOrientation.LANDSCAPE) {
         Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.camControlGap)) {
             flash(); flip()
@@ -264,13 +267,14 @@ fun RecordCameraControls(
 }
 
 @Composable
-private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, tint: Color, spinDegrees: () -> Float = { 0f }) {
+private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Boolean, role: IconRole, spinDegrees: () -> Float = { 0f }) {
     GlassCircleButton(onClick = onCycleFlash, enabled = enabled) {
         val isOff = flashMode != RovaRecordingService.FLASH_MODE_ON &&
             flashMode != RovaRecordingService.FLASH_MODE_AUTO
-        val contentTint = when {
+        val palette = LocalGlassEnvironment.current.palette
+        val contentTint = when { // semanticicon-opt-out: flash-ON is a hardware-state indicator, not a theme/status color
             flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
-            else -> tint
+            else -> SemanticIconSpec.tint(palette, role)
         }
         // PR-ε (spec §5): bolt + OFF slash spin as ONE unit so the slash stays
         // diagonal relative to the glyph, not the screen.
@@ -298,7 +302,7 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
 }
 
 @Composable
-private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, flipTint: Color, spinDegrees: () -> Float = { 0f }) {
+private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamera: Boolean, role: IconRole, spinDegrees: () -> Float = { 0f }) {
     // Phase 6.1b smoke-fix #6 — flip-camera gated SEPARATELY from [enabled] so
     // P+L mode can disable JUST this button while flash stays usable. P+L is
     // rear-only by design (DualShot needs a single full-FOV sensor frame,
@@ -315,10 +319,10 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
             else R.string.record_switch_to_front_cd,
         )
         SpinningBox(degrees = spinDegrees) {
-            Icon(
+            SemanticIcon(
                 flipIcon,
                 contentDescription = flipCd,
-                tint = flipTint,
+                role = role,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -755,11 +759,12 @@ internal fun NavItem(icon: ImageVector, label: String, enabled: Boolean, onClick
         ) {
             // PR-ε (spec §5): glyph spins inside the stable square icon box
             // (square = rotation-invariant; clickable stays on the Column).
+            val palette = LocalGlassEnvironment.current.palette
             SpinningBox(degrees = spinDegrees) {
                 Icon(
                     icon,
                     contentDescription = label,
-                    tint = if (enabled) RecordChromeTokens.navIcon else Color.White.copy(alpha = 0.14f),
+                    tint = if (enabled) RecordChromeTokens.navIcon else SemanticIconSpec.tint(palette, IconRole.Disabled),
                     modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
                 )
             }
@@ -818,8 +823,8 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: 
                             .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
                             .background(RecordChromeTokens.stopSquare),
                     )
-                    RecordFabState.Start -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(22.dp))
-                    RecordFabState.Disabled -> Icon(RecordChromeIcons.fabPlay, contentDescription = null, tint = Color.White.copy(alpha = 0.25f), modifier = Modifier.size(22.dp))
+                    RecordFabState.Start -> SemanticIcon(RecordChromeIcons.fabPlay, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(22.dp))
+                    RecordFabState.Disabled -> SemanticIcon(RecordChromeIcons.fabPlay, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -859,7 +864,7 @@ fun RecordRecoveryChip(count: Int, onReview: () -> Unit, modifier: Modifier = Mo
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    Icon(Icons.Default.HistoryIcon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    SemanticIcon(Icons.Default.HistoryIcon, contentDescription = null, role = IconRole.Secondary, modifier = Modifier.size(14.dp))
                     Text(chipLabel, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
                 }
             }

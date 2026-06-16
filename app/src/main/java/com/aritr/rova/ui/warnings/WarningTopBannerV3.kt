@@ -39,6 +39,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
 /**
@@ -148,10 +150,10 @@ internal fun WarningTopBannerV3(
                     onClick = { expanded = true },
                     modifier = Modifier.size(40.dp),
                 ) {
-                    Icon(
+                    SemanticIcon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = stringResource(R.string.warning_more_options_cd),
-                        tint = Color.White.copy(alpha = 0.55f),
+                        role = IconRole.Secondary,
                         modifier = Modifier.size(20.dp),
                     )
                 }

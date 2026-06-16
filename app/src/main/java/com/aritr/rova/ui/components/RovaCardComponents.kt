@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.text.resolve
+import com.aritr.rova.ui.theme.IconRole
 import java.io.File
 
 @Composable
@@ -171,10 +172,10 @@ fun LastRecordingCard(
                         .background(Color.Black, RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
+                    SemanticIcon(
                         Icons.Default.PlayCircle,
                         contentDescription = stringResource(R.string.common_play),
-                        tint = Color.White
+                        role = IconRole.Default
                     )
                 }
                 Spacer(modifier = Modifier.size(14.dp))

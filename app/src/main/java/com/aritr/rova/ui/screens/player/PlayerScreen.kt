@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -55,7 +54,9 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.LocalSecureFlagController
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.screens.HistoryRowFormatters
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 import kotlinx.coroutines.launch
@@ -272,10 +273,10 @@ private fun PlayerReady(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(
+                    SemanticIcon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.player_back_cd),
-                        tint = Color.White.copy(alpha = 0.85f)
+                        role = IconRole.Default
                     )
                 }
                 Spacer(modifier = Modifier.size(4.dp))
@@ -332,10 +333,10 @@ private fun PlayerReady(
                         .semantics { contentDescription = playCd }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
+                        SemanticIcon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.9f),
+                            role = IconRole.Default,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -435,17 +436,17 @@ private fun ControlsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onTrim) {
-            Icon(
+            SemanticIcon(
                 imageVector = Icons.Default.ContentCut,
                 contentDescription = stringResource(R.string.player_trim_cd),
-                tint = Color.White.copy(alpha = 0.6f)
+                role = IconRole.Secondary
             )
         }
         IconButton(onClick = onSeekBack) {
-            Icon(
+            SemanticIcon(
                 imageVector = Icons.Default.Replay10,
                 contentDescription = stringResource(R.string.player_rewind_cd),
-                tint = Color.White.copy(alpha = 0.85f)
+                role = IconRole.Default
             )
         }
         Surface(
@@ -457,25 +458,25 @@ private fun ControlsRow(
                 .semantics { contentDescription = playPauseCd }
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
+                SemanticIcon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.9f)
+                    role = IconRole.Default
                 )
             }
         }
         IconButton(onClick = onSeekForward) {
-            Icon(
+            SemanticIcon(
                 imageVector = Icons.Default.Forward10,
                 contentDescription = stringResource(R.string.player_forward_cd),
-                tint = Color.White.copy(alpha = 0.85f)
+                role = IconRole.Default
             )
         }
         IconButton(onClick = onEdit) {
-            Icon(
+            SemanticIcon(
                 imageVector = Icons.Default.Edit,
                 contentDescription = stringResource(R.string.player_edit_cd),
-                tint = Color.White.copy(alpha = 0.6f)
+                role = IconRole.Secondary
             )
         }
     }

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +28,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.theme.RovaWarnings
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
 /**
@@ -93,10 +94,10 @@ internal fun WarningSnoozeChip(
                 .clip(CircleShape)
                 .background(severityColor.copy(alpha = dotAlpha)),
         )
-        Icon(
+        SemanticIcon(
             imageVector = content.icon,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.78f),
+            role = IconRole.Default,
             modifier = Modifier.size(12.dp),
         )
         Text(

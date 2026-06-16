@@ -12,13 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -27,7 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.LibrarySort
+import com.aritr.rova.ui.theme.IconRole
 
 /**
  * spec §5.4 — glass sort sheet. One row per [LibrarySort]; the active sort carries a
@@ -70,11 +71,15 @@ fun LibrarySortSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start,
             ) {
-                Icon(
+                // Check is always laid out; alpha hides it when not current (the row's
+                // `selected` + stateDescription carry selection non-visually, WCAG 2.2 AA).
+                SemanticIcon(
                     Icons.Filled.Check,
                     contentDescription = null,
-                    tint = if (isCurrent) androidx.compose.material3.MaterialTheme.colorScheme.primary else Color.Transparent,
-                    modifier = Modifier.size(20.dp),
+                    role = IconRole.Accent,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .alpha(if (isCurrent) 1f else 0f),
                 )
                 Spacer(Modifier.width(20.dp))
                 Text(label)
