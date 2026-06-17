@@ -1,6 +1,6 @@
 # ADR-0031: In-app icon &amp; glyph system — outlined-default duotone, semantic tint seam, locked status
 
-Status: **Accepted** (2026-06-16) — design approved; **P0 landed 2026-06-16** (`SemanticIcon` seam + status-color lock + `RovaIcons` collision map + gates `checkSemanticIconNoRawAlpha` §4 / `checkStatusColorLocked` §3); P1/P2 remain deferred
+Status: **Accepted** (2026-06-16) — design approved; **P0 landed 2026-06-16** (`SemanticIcon` seam + status-color lock + `RovaIcons` collision map + gates `checkSemanticIconNoRawAlpha` §4 / `checkStatusColorLocked` §3); **P1a slices 1–3 landed 2026-06-17** (slice 1: 4 nav glyphs + two-layer render; slice 2: 6 brand + 2 orientation glyphs authored + `RecordChromeIcons` fold-in + `checkRovaGlyphHome` §5; slice 3: `Single`+`FollowDevice` authored and all brand/orientation glyphs **wired** into the capture-topology/orientation pickers, the Vault row, the Merge-complete card, and the Recovery card — `BackgroundRecord` notification icon deferred, it needs a drawable-resource vector pipeline, not an `ImageVector`); remaining P1 palette/glass-chip wiring + P2 remain deferred
 Refines: ADR-0028 §9 ("Icons — separate later PR"). Reuses ADR-0028 §3 (locked `RovaSemantics`), ADR-0020 (WCAG 2.2 AA), ADR-0022 (strings in resources).
 Design spec: `docs/superpowers/specs/2026-06-16-icon-glyph-system-design.md`. Visual exploration: `.superpowers/brainstorm/…/board-3-semantic.html`.
 
