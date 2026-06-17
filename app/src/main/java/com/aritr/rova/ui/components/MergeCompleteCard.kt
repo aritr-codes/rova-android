@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,6 +21,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.text.resolve
+import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * Phase 2.4 — brief "Merge Complete" card shown for a short grace
@@ -70,10 +68,11 @@ fun MergeCompleteCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
+            // ADR-0031 P1a slice 3: the merge mark through the SemanticIcon seam.
+            // The card's Surface already carries the live-region a11y label.
+            SemanticIcon(
+                glyph = RovaIcons.Merge,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp)
             )
             Text(
