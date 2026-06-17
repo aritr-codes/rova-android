@@ -71,6 +71,7 @@ import com.aritr.rova.ui.theme.ChromeScale
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaGlyphs
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RecordChromeTokens
 import com.aritr.rova.ui.theme.RovaGlyph
@@ -283,7 +284,7 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
         SpinningBox(degrees = spinDegrees) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    RecordChromeIcons.flashBolt,
+                    RovaGlyphs.FlashBolt,
                     contentDescription = stringResource(R.string.record_flash_cd),
                     tint = contentTint,
                     modifier = Modifier.size(15.dp),
@@ -315,7 +316,7 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
         // B6 — name the lens the tap switches TO (front active → "rear"
         // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
         // requirement; strings are localized resources (checkNoHardcodedUiStrings).
-        val flipIcon = if (isFrontCamera) RecordChromeIcons.cameraRear else RecordChromeIcons.cameraFront
+        val flipIcon = if (isFrontCamera) RovaGlyphs.CameraRear else RovaGlyphs.CameraFront
         val flipCd = stringResource(
             if (isFrontCamera) R.string.record_switch_to_rear_cd
             else R.string.record_switch_to_front_cd,
@@ -451,7 +452,7 @@ fun RecordSettingsCard(
                     // landscape grip.
                     SpinningBox(degrees = spinDegrees, modifier = Modifier.padding(start = 8.dp).size(13.dp)) {
                         Icon(
-                            RecordChromeIcons.chevronUp,
+                            RovaGlyphs.ChevronUp,
                             contentDescription = stringResource(R.string.record_edit_session_settings_cd),
                             tint = RecordChromeTokens.settingsArrow,
                             modifier = Modifier.size(13.dp),

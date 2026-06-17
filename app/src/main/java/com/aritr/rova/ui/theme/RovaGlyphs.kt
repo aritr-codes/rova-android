@@ -13,8 +13,8 @@ import androidx.compose.ui.unit.dp
 /**
  * Bespoke System-D glyphs (ADR-0031 §5), authored from `board-3-semantic.html` on the 24-grid,
  * 1.9px monoline, round caps/joins. Placeholder colors are overridden by `Icon(tint = …)` in
- * [com.aritr.rova.ui.components.SemanticIcon]. This is the start of the bespoke `RovaGlyphs` home;
- * `RecordChromeIcons` folds in here in a later slice.
+ * [com.aritr.rova.ui.components.SemanticIcon]. This is the one home for bespoke `ImageVector`s
+ * (the ex-`RecordChromeIcons` vectors folded in below; enforced by `checkRovaGlyphHome`, ADR-0031 §5).
  */
 object RovaGlyphs {
     // Brush placeholder, overridden by `Icon(tint = …)`. MUST be declared BEFORE the glyph vals
@@ -136,6 +136,99 @@ object RovaGlyphs {
         outline = glyph { strokePath { roundRect(3f, 8f, 18f, 8f, 2.2f) } },
         accent = glyph { strokePath { seg(5.4f, 10.6f, 5.4f, 13.4f) } },
     )
+
+    // ── Folded-in record-chrome vectors (ex-RecordChromeIcons, verbatim) ────
+    // Single-layer, neutral white, tinted by the consuming Icon/SemanticIcon.
+    // Kept at their original viewports/strokes — this was a structural move, not
+    // a re-skin (System-D re-authoring is a later visual slice). Superseded
+    // library/settings/flipCamera were dropped (duotone RovaGlyphs replace nav;
+    // flip switched to CameraFront/CameraRear in B6).
+
+    /** `.cam-ctrl-btn` flash glyph — single lightning bolt. */
+    val FlashBolt: ImageVector =
+        ImageVector.Builder(
+            name = "RovaGlyphFlashBolt",
+            defaultWidth = 13.dp, defaultHeight = 15.dp,
+            viewportWidth = 13f, viewportHeight = 15f,
+        ).apply {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(7.5f, 1f); lineTo(1.5f, 8.5f); horizontalLineTo(6f)
+                lineTo(5f, 14f); lineTo(11.5f, 6.5f); horizontalLineTo(7f)
+                lineTo(7.5f, 1f); close()
+            }
+        }.build()
+
+    /** "switch to FRONT camera" — body + selfie head/shoulders. */
+    val CameraFront: ImageVector =
+        ImageVector.Builder(
+            name = "RovaGlyphCameraFront",
+            defaultWidth = 16.dp, defaultHeight = 16.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            val stroke = SolidColor(Color.White)
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(4f, 7f); horizontalLineTo(20f); verticalLineTo(19f); horizontalLineTo(4f); close()
+            }
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9f, 7f); lineTo(10.5f, 4.5f); horizontalLineTo(13.5f); lineTo(15f, 7f)
+            }
+            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(13.5f, 12f)
+                arcTo(1.5f, 1.5f, 0f, true, true, 10.5f, 12f)
+                arcTo(1.5f, 1.5f, 0f, true, true, 13.5f, 12f)
+                close()
+            }
+            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9.5f, 17f)
+                arcTo(2.5f, 2.5f, 0f, false, true, 14.5f, 17f)
+            }
+        }.build()
+
+    /** "switch to REAR camera" — body + centred lens ring. */
+    val CameraRear: ImageVector =
+        ImageVector.Builder(
+            name = "RovaGlyphCameraRear",
+            defaultWidth = 16.dp, defaultHeight = 16.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            val stroke = SolidColor(Color.White)
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(4f, 7f); horizontalLineTo(20f); verticalLineTo(19f); horizontalLineTo(4f); close()
+            }
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9f, 7f); lineTo(10.5f, 4.5f); horizontalLineTo(13.5f); lineTo(15f, 7f)
+            }
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(15f, 13f)
+                arcTo(3f, 3f, 0f, true, true, 9f, 13f)
+                arcTo(3f, 3f, 0f, true, true, 15f, 13f)
+                close()
+            }
+        }.build()
+
+    /** `.settings-arrow` chevron — points up (expand sheet). */
+    val ChevronUp: ImageVector =
+        ImageVector.Builder(
+            name = "RovaGlyphChevronUp",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(stroke = SolidColor(Color.White), strokeLineWidth = 2.2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(18f, 15f); lineTo(12f, 9f); lineTo(6f, 15f)
+            }
+        }.build()
+
+    /** Play triangle (ex-fabPlay) — used as RovaIcons.Play. */
+    val Play: ImageVector =
+        ImageVector.Builder(
+            name = "RovaGlyphPlay",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(9f, 7f); lineTo(17f, 12f); lineTo(9f, 17f); close()
+            }
+        }.build()
 
     // ── authoring helpers ───────────────────────────────────────────────────
     // (PLACEHOLDER + SW are declared at the TOP of the object — see the init-order note there.)

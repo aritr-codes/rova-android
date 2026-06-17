@@ -29,4 +29,15 @@ class RovaIconsTest {
         assertEquals(RovaGlyphs.Sort, RovaIcons.Sort)
         assertEquals(RovaGlyphs.Record, RovaIcons.Record)
     }
+
+    @Test fun brand_and_orientation_concepts_resolve_to_bespoke_glyphs() {
+        assertEquals(RovaGlyphs.DualShot, RovaIcons.DualShot)
+        assertEquals(RovaGlyphs.Vault, RovaIcons.Vault)
+        assertEquals(RovaGlyphs.Recovery, RovaIcons.Recovery)
+        assertEquals(RovaGlyphs.DualSight, RovaIcons.DualSight)
+        assertEquals(RovaGlyphs.BackgroundRecord, RovaIcons.BackgroundRecord)
+        assertEquals(RovaGlyphs.Merge, RovaIcons.Merge)
+        assertEquals(RovaGlyphs.OrientationPortrait, RovaIcons.OrientationPortrait)
+        assertEquals(RovaGlyphs.OrientationLandscape, RovaIcons.OrientationLandscape)
+    }
 }
