@@ -722,6 +722,7 @@
     <string name="dialog_custom_duration_error">El valor debe estar entre 5 y 300</string>
     <string name="dialog_ok">Aceptar</string>
     <string name="dialog_cancel">Cancelar</string>
+    <string name="dialog_close">Cerrar</string>
     <!-- Merge progress sheet. %1$s = coarse status text -->
     <string name="dialog_merge_progress_cd">Combinando vídeos. %1$s</string>
     <string name="dialog_merge_progress_title">Combinando vídeos</string>

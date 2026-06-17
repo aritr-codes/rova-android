@@ -652,7 +652,6 @@ fun RecordScreen(
             text = stringResource(R.string.record_camera_disconnected_body),
             confirmText = stringResource(R.string.record_camera_disconnected_stop),
             destructive = true,
-            confirmFilled = true,
             onConfirm = { viewModel.stopRecording() },
         )
     }

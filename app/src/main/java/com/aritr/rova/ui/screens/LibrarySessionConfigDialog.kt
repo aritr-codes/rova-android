@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.ui.components.RovaAlertDialog
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
 
 /**
  * Phase 2.2 — Library "View Settings" popup.
@@ -42,27 +44,32 @@ fun LibrarySessionConfigDialog(
     config: SessionConfig,
     onDismiss: () -> Unit
 ) {
+    // Informational dialog: no bottom button — dismissed via the top-right X (owner 2026-06-17).
     RovaAlertDialog(
         onDismissRequest = onDismiss,
         title = stringResource(R.string.history_config_title),
-        confirmText = stringResource(R.string.history_config_close),
-        onConfirm = onDismiss,
+        dismissIcon = true,
         content = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val palette = LocalGlassEnvironment.current.palette
+            val divider = palette.edge.copy(alpha = palette.edge.alpha * 0.6f)
+            Column {
                 ConfigRow(
                     label = stringResource(R.string.history_config_clip_length),
                     value = LibrarySessionConfigFormatters.formatClipLength(
                         config.durationSeconds
                     )
                 )
+                HorizontalDivider(color = divider)
                 ConfigRow(
                     label = stringResource(R.string.history_config_repeats),
                     value = LibrarySessionConfigFormatters.formatRepeats(config.loopCount)
                 )
+                HorizontalDivider(color = divider)
                 ConfigRow(
                     label = stringResource(R.string.history_config_wait),
                     value = LibrarySessionConfigFormatters.formatWait(config.intervalMinutes)
                 )
+                HorizontalDivider(color = divider)
                 ConfigRow(
                     label = stringResource(R.string.history_config_quality),
                     value = LibrarySessionConfigFormatters.formatQuality(config.resolution)
@@ -72,25 +79,27 @@ fun LibrarySessionConfigDialog(
     )
 }
 
+/** Spec-sheet row — label dimmed, value high-contrast with tabular numerals for clean alignment. */
 @Composable
 private fun ConfigRow(label: String, value: String) {
+    val palette = LocalGlassEnvironment.current.palette
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = palette.textDim
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.SemiBold,
+            color = palette.textHigh
         )
     }
 }

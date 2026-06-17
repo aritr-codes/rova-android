@@ -1,67 +1,98 @@
 package com.aritr.rova.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
+import kotlin.math.roundToInt
 
 /**
- * Branded app dialog (owner 2026-06-17 — stock M3 [AlertDialog] looked generic). One reusable
- * scaffold so every dialog joins the Liquid Glass identity (ADR-0028): a palette-tinted near-opaque
- * [GlassSurface] (role=Dialog) with a real cast shadow, app typography, and royal-violet accent-tinted
- * actions instead of stock Material blue. [BasicAlertDialog] supplies the modal window + scrim +
- * outside/back dismiss; this owns the surface + layout.
+ * Branded app dialog (owner 2026-06-17 — stock M3 [AlertDialog] looked generic; the flat first pass
+ * "looked half baked"). One reusable scaffold so every dialog joins the Liquid Glass identity
+ * (ADR-0028) with REAL depth, not a recolored box. Premium cues (2026 research + codex 2026-06-17):
+ *   - 32dp concentric corners + a soft ambient shadow.
+ *   - A palette-tinted [GlassSurface] (role=Dialog) base, overlaid with a faint top "lift" wash and a
+ *     lit glass RIM (gradient `edgeTop → edge`, brighter at the top) — depth without a second flat box.
+ *   - An optional header icon in a soft accent chip beside a [headlineSmall] title.
+ *   - The primary action is a FILLED accent-gradient pill (the focal point); its label color is WCAG-
+ *     checked per palette via [DialogActionColors] (neon accents like Meadow stay AA, SC 1.4.3). Dismiss
+ *     is a ghost [textDim] button so hierarchy matches consequence; [destructive] paints the CTA + icon
+ *     in the error color.
  *
- * - [text] = a plain body line; [content] = a custom body slot (text fields, validation, etc.). Either,
- *   both, or neither. Custom content inherits `LocalContentColor = palette.textHigh`.
- * - [confirmEnabled] gates the confirm action; [destructive] tints it (and any [icon]) in the error
- *   color; [confirmFilled] renders confirm as a dominant filled button (critical modals only).
- * - [dismissText] null → no dismiss button (e.g. force-action modals). Dismiss reads in [textDim] so the
- *   confirm action stays the visual lead.
- * - A11y: the surface carries `paneTitle`; the title `Text` is a heading (SC 1.3.1 / 4.1.2, ADR-0020).
+ * - [text] = a plain body line; [content] = a custom body slot (text fields, spec rows, …). Custom
+ *   content inherits `LocalContentColor = palette.textHigh`.
+ * - [confirmText] null → no primary button. [dismissText] null → no ghost button. [dismissIcon] true →
+ *   a top-right X (wired to [onDismissRequest]) — the dismiss affordance for informational dialogs that
+ *   have no actions (e.g. "Recording details", owner asked to drop the bottom "Close").
+ * - A11y: surface carries `paneTitle`; title is a heading; the X is a 40dp [IconButton] with a "Close"
+ *   contentDescription; the CTA pill announces as a Button (SC 1.3.1 / 2.5.8 / 4.1.2, ADR-0020).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RovaAlertDialog(
     onDismissRequest: () -> Unit,
     title: String,
-    confirmText: String,
-    onConfirm: () -> Unit,
+    confirmText: String? = null,
+    onConfirm: () -> Unit = {},
     modifier: Modifier = Modifier,
     confirmEnabled: Boolean = true,
     destructive: Boolean = false,
-    confirmFilled: Boolean = false,
     dismissText: String? = null,
     onDismiss: () -> Unit = onDismissRequest,
+    dismissIcon: Boolean = false,
     icon: ImageVector? = null,
     text: String? = null,
     content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val palette = LocalGlassEnvironment.current.palette
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(32.dp)
     val accentColor = if (destructive) MaterialTheme.colorScheme.error else palette.accent
+
+    // Depth overlays (drawn over the GlassSurface fill, under the content): a top "lift" wash + one lit
+    // glass rim. Light palette (Daylight) lifts with black; dark palettes lift with white.
+    val liftColor = if (palette.isLight) Color.Black.copy(alpha = 0.035f) else Color.White.copy(alpha = 0.06f)
+    val lift = Brush.verticalGradient(
+        0f to liftColor,
+        0.55f to Color.Transparent,
+        1f to Color.Transparent,
+    )
+    val rim = Brush.verticalGradient(
+        listOf(palette.edgeTop, palette.edge.copy(alpha = palette.edge.alpha * 0.35f)),
+    )
+
     BasicAlertDialog(onDismissRequest = onDismissRequest, modifier = modifier) {
-        Box(Modifier.shadow(12.dp, shape, clip = false)) {
+        Box(Modifier.shadow(22.dp, shape, clip = false)) {
             GlassSurface(
                 role = GlassRole.Dialog,
                 shape = shape,
@@ -69,19 +100,48 @@ fun RovaAlertDialog(
                     .widthIn(min = 280.dp, max = 560.dp)
                     .semantics { paneTitle = title },
             ) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clip(shape)
+                        .background(lift)
+                        .border(1.dp, rim, shape),
+                )
                 CompositionLocalProvider(LocalContentColor provides palette.textHigh) {
-                    Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                        if (icon != null) {
-                            Icon(icon, null, tint = accentColor, modifier = Modifier.size(28.dp))
-                            Spacer(Modifier.height(12.dp))
+                    Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (icon != null) {
+                                Box(
+                                    Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(accentColor.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(icon, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                                }
+                                Spacer(Modifier.width(14.dp))
+                            }
+                            Text(
+                                title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = palette.textHigh,
+                                modifier = Modifier.weight(1f).semantics { heading() },
+                            )
+                            if (dismissIcon) {
+                                IconButton(onClick = onDismissRequest, modifier = Modifier.size(40.dp)) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.dialog_close),
+                                        tint = palette.textDim,
+                                    )
+                                }
+                            }
                         }
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = palette.textHigh,
-                            modifier = Modifier.semantics { heading() },
-                        )
                         if (text != null) {
                             Spacer(Modifier.height(12.dp))
                             Text(
@@ -91,45 +151,84 @@ fun RovaAlertDialog(
                             )
                         }
                         if (content != null) {
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(16.dp))
                             content()
                         }
-                        Spacer(Modifier.height(20.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (dismissText != null) {
-                                TextButton(
-                                    onClick = onDismiss,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = palette.textDim,
-                                    ),
-                                ) { Text(dismissText) }
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            if (confirmFilled) {
-                                Button(
-                                    onClick = onConfirm,
-                                    enabled = confirmEnabled,
-                                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                ) { Text(confirmText) }
-                            } else {
-                                TextButton(
-                                    onClick = onConfirm,
-                                    enabled = confirmEnabled,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = accentColor,
-                                        disabledContentColor = palette.textHigh.copy(alpha = 0.38f),
-                                    ),
-                                ) { Text(confirmText) }
+                        if (confirmText != null || dismissText != null) {
+                            Spacer(Modifier.height(22.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (dismissText != null) {
+                                    TextButton(
+                                        onClick = onDismiss,
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = palette.textDim,
+                                        ),
+                                    ) { Text(dismissText) }
+                                    Spacer(Modifier.width(10.dp))
+                                }
+                                if (confirmText != null) {
+                                    DialogCtaButton(
+                                        label = confirmText,
+                                        enabled = confirmEnabled,
+                                        startColor = accentColor,
+                                        endColor = if (destructive) accentColor else palette.accent2,
+                                        onClick = onConfirm,
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** Premium filled CTA pill — accent gradient with a WCAG-checked label ([DialogActionColors]). */
+@Composable
+private fun DialogCtaButton(
+    label: String,
+    enabled: Boolean,
+    startColor: Color,
+    endColor: Color,
+    onClick: () -> Unit,
+) {
+    fun Color.toRgb() = intArrayOf(
+        (red * 255).roundToInt(),
+        (green * 255).roundToInt(),
+        (blue * 255).roundToInt(),
+    )
+    val cta = remember(startColor, endColor) {
+        DialogActionColors.resolve(startColor.toRgb(), endColor.toRgb())
+    }
+    val fill = Brush.horizontalGradient(
+        listOf(
+            Color(cta.start[0], cta.start[1], cta.start[2]),
+            Color(cta.end[0], cta.end[1], cta.end[2]),
+        ),
+    )
+    val labelColor = if (cta.contentWhite) Color.White else Color(0xFF0E1116)
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .alpha(if (enabled) 1f else 0.4f)
+            .background(fill, RoundedCornerShape(24.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { role = Role.Button }
+            .padding(horizontal = 26.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = labelColor,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 
