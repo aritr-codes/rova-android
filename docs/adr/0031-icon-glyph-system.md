@@ -32,7 +32,7 @@ This is a presentation-only program. No reliability/behavior change. Delivered f
 
 - `checkSemanticIconNoRawAlpha` (P0, **BUILT 2026-06-16**, §4): forbids a raw `Color` literal on any `tint =` argument outside `ui/components/SemanticIcon.kt`; keyed on the `tint =` argument over a 3-line window (catches wrapped/conditional tints); `// semanticicon-opt-out: <reason>` hatch for genuinely non-themed glyphs (e.g. the flash-ON hardware-state indicator).
 - `checkStatusColorLocked` (P0, **BUILT 2026-06-16**, §3): forbids any `.copy(...)` on a `RovaSemantics.<member>` (no per-call alpha/channel mutation of a locked status color). The status→`RovaSemantics` mapping itself is covered by `SemanticIconSpecTest` (JVM).
-- `checkRovaGlyphHome` (P1): bespoke `ImageVector`s declared only in `RovaGlyphs` (subsumes the `RecordChromeIcons.kt` allowance in `checkRecordSurfaceNoBlur`).
+- `checkRovaGlyphHome` (P1, **BUILT 2026-06-17**, §5): forbids `ImageVector.Builder(` outside `ui/theme/RovaGlyphs.kt` (whole-file, comment-stripped scan so a builder split across lines is still caught). Landed with the `RecordChromeIcons.kt` fold-in (that file deleted; its 5 still-used vectors relocated into `RovaGlyphs`, the 3 superseded dropped) — subsumes the `RecordChromeIcons.kt` allowance in `checkRecordSurfaceNoBlur`.
 - Reused: `checkA11yTargetSizeToken` (≥24dp), `checkA11yAnimationGated` (reduce-motion), `checkNoHardcodedUiStrings` (en+es), `ThemeContrastTest`/`ContrastMath` for glyph+chip ratios.
 
 Pure-Kotlin + JVM-tested: the `SemanticIcon` resolver, the concept→glyph map, and the size registry follow the project seam/pure-helper pattern.
