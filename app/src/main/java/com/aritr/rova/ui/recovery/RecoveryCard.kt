@@ -39,10 +39,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -132,11 +135,27 @@ fun RecoveryCard(
             // does not carry one; introducing a derived "moments ago"
             // would couple the composable to a Clock seam, which is
             // explicitly out of scope for B1.
-            SeverityTag(
-                label = stringResource(tagLabelResFor(state.kind)),
-                accent = severityColor,
-                pulsing = isHardSeverity,
-            )
+            // ADR-0031 P1a slice 3: a Recovery emblem leads the severity tag. Role =
+            // Secondary (textDim) so the quiet emblem does not visually outrank the
+            // severity tag. The severity colour stays on the tag dot + card glow, which
+            // use RovaWarnings (not the locked RovaSemantics status palette), so mixing
+            // the two colour systems on one mark is deliberately avoided.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SemanticIcon(
+                    glyph = RovaIcons.Recovery,
+                    contentDescription = null, // card title/body carry the meaning
+                    modifier = Modifier.size(22.dp),
+                    role = IconRole.Secondary,
+                )
+                SeverityTag(
+                    label = stringResource(tagLabelResFor(state.kind)),
+                    accent = severityColor,
+                    pulsing = isHardSeverity,
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
 
