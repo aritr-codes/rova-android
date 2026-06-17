@@ -1,5 +1,8 @@
 package com.aritr.rova.ui.library.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -12,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,6 +25,7 @@ import androidx.compose.runtime.setValue
 import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -34,8 +39,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.ScrubberIndex
 import com.aritr.rova.ui.library.ScrubberSegment
+import com.aritr.rova.ui.theme.LocalGlassEnvironment
+import kotlinx.coroutines.delay
 
 /**
  * spec §5.4 — date fast-scroll rail. Pure index math lives in [ScrubberIndex]; this owns
@@ -65,6 +73,26 @@ fun LibraryScrubber(
     else ScrubberIndex.segmentIndexForItemIndex(segments, firstVisibleItemIndex)
     val label = segments[selectedSeg].label
     val thumbFraction = selectedSeg.toFloat() / (n - 1)
+
+    // Rest-state fade: the thumb is a scroll affordance, not a permanent ornament. It stays visible
+    // while dragging and for [SCRUBBER_IDLE_MS] after the last scroll/drag, then fades out so it
+    // stops drawing attention at rest. Keying on `dragging` too keeps it lit through a stationary
+    // drag and only starts the idle countdown once the drag ends (codex). Reduced-motion snaps.
+    var recentlyActive by remember { mutableStateOf(false) }
+    LaunchedEffect(firstVisibleItemIndex, dragging) {
+        recentlyActive = true
+        if (!dragging) {
+            delay(SCRUBBER_IDLE_MS)
+            recentlyActive = false
+        }
+    }
+    val reduceMotion = rememberReduceMotion()
+    val thumbAlpha by animateFloatAsState(
+        targetValue = if (recentlyActive) 1f else 0f,
+        animationSpec = if (reduceMotion) snap() else tween(durationMillis = SCRUBBER_FADE_MS),
+        label = "scrubberThumbAlpha",
+    )
+    val accent = LocalGlassEnvironment.current.palette.accent
 
     // Coalesce drag scrolls (codex: don't launch a scroll every frame — only on segment change).
     fun scrollToSeg(seg: Int) {
@@ -138,9 +166,16 @@ fun LibraryScrubber(
                 Modifier
                     .padding(top = thumbY)
                     .size(24.dp)
+                    .alpha(thumbAlpha)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(accent),
             )
         }
     }
 }
+
+/** How long the scrubber thumb stays fully visible after the last scroll/drag before fading. */
+private const val SCRUBBER_IDLE_MS = 1100L
+
+/** Thumb fade-in/out duration (bypassed under reduced-motion, which snaps). */
+private const val SCRUBBER_FADE_MS = 260

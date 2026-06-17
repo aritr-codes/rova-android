@@ -222,12 +222,16 @@ object RecordChromeTokens {
     val navItemGap = 5.dp
     /** `.nav-ico` rounded container size. */
     val navIconBoxSize = 42.dp
-    /** Inner `<svg>` glyph size within `.nav-ico`. */
-    val navIconGlyphSize = 20.dp
+    /** Inner glyph size within `.nav-ico`. Base value; call sites multiply by [ChromeScale.factor]
+     *  via `rememberChromeScale()` so it scales with screen size (dp already covers density). */
+    val navIconGlyphSize = 24.dp
     /** `.nav-ico` corner radius. */
     val navIconCornerRadius = 12.dp
     /** `.center-btn` diameter. */
     val fabSize = 56.dp
+    /** Inner Start/Disabled record-disc glyph size within the FAB. Base value; scaled by
+     *  `rememberChromeScale()` at the call site (screen-size responsive; dp covers density). */
+    val fabGlyphSize = 26.dp
     /** `.btn-stop::after` ring inset (negative in CSS — extends outward). */
     val fabStopRingInset = 5.dp
     /** `.stop-sq` dimensions. */

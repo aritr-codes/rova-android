@@ -766,7 +766,7 @@ internal fun NavItem(glyph: RovaGlyph, label: String, enabled: Boolean, onClick:
                     glyph = glyph,
                     contentDescription = label,
                     role = if (enabled) IconRole.Default else IconRole.Disabled,
-                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize),
+                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize * rememberChromeScale()),
                 )
             }
         }
@@ -824,8 +824,8 @@ internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: 
                             .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
                             .background(RecordChromeTokens.stopSquare),
                     )
-                    RecordFabState.Start -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(22.dp))
-                    RecordFabState.Disabled -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(22.dp))
+                    RecordFabState.Start -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(RecordChromeTokens.fabGlyphSize * rememberChromeScale()))
+                    RecordFabState.Disabled -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(RecordChromeTokens.fabGlyphSize * rememberChromeScale()))
                 }
             }
         }
