@@ -16,6 +16,14 @@ import androidx.compose.ui.unit.dp
  * `RecordChromeIcons` folds in here in a later slice.
  */
 object RovaGlyphs {
+    // Brush placeholder, overridden by `Icon(tint = …)`. MUST be declared BEFORE the glyph vals
+    // below: object properties initialize top-to-bottom, so a glyph referencing a later-declared
+    // `val PLACEHOLDER` would build its paths with a NULL brush → geometry present but nothing paints
+    // (device-confirmed invisible Record FAB/nav, 2026-06-17). `SW` is a `const val` (compile-time
+    // inlined) so its position is irrelevant; PLACEHOLDER is a runtime `val` and its position is not.
+    private val PLACEHOLDER = SolidColor(Color.Black)
+    private const val SW = 1.9f
+
     // Library — stacked frames (back = outline, top = accent). Un-collides Play (spec §8).
     val Library = RovaGlyph(
         outline = glyph { strokePath { roundRect(3.5f, 8f, 13f, 11f, 2f) } },
@@ -57,8 +65,7 @@ object RovaGlyphs {
     )
 
     // ── authoring helpers ───────────────────────────────────────────────────
-    private const val SW = 1.9f
-    private val PLACEHOLDER = SolidColor(Color.Black) // overridden by Icon tint
+    // (PLACEHOLDER + SW are declared at the TOP of the object — see the init-order note there.)
 
     private fun glyph(build: ImageVector.Builder.() -> Unit): ImageVector =
         ImageVector.Builder(

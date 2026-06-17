@@ -35,6 +35,9 @@ What the memory trail implies is most concrete and ready to pick up:
 - [ ] **Advanced lock UI (reverse-portrait / 180° / "lock whatever I'm aimed at now")** — **P3**
   Deferred per ADR-0029 decision D ("defer advanced-lock UI, build the 4-rotation model now"). The two clean axes (capture-topology × orientation-policy) were built specifically so future locks are cheap; the UI surface is not yet designed. *(Source: ADR-0029 decision D; `memory/project_mode_orientation_replan.md`.)*
 
+- [ ] **DualShot performance — frame jitter + thermal buildup** — **P2** · **owner-reported 2026-06-17 (device RZCYA1VBQ2H)**
+  Two distinct symptoms from owner DualShot smoke: **(1) frame jitter/stutter** — DualShot capture is visibly less smooth than the native camera; suspect the EGL14/GLES20 fan-out render path (`service/dualrecord/**` — single `CameraEffect(target=PREVIEW)` → FBO-ring → fence-sync → dual MediaMuxer) dropping/uneven frames vs the single-encode path. **(2) Excessive heating** — after ~5+ clips the device heats enough to trip the thermal warning (and DualShot auto-stop, ADR-0016/0019), implying sustained high GPU/encoder load from running two muxes + the GL fan-out. Owner direction: **future optimization cycle — make the app lighter / less resource-intensive.** Investigate: per-frame copy/FBO cost, double-encode bitrate, whether the broadcast `AudioRecord` + dual-muxer cadence stalls the GL thread, and whether δ0 (CameraX 1.5.3, SurfaceProcessor-shutdown fix) helps. Needs a profiling pass (systrace/GPU profiler) on device before any fix. *(Source: owner DualShot smoke 2026-06-17; `memory/project_dualshot_stability_stack.md`; ADR-0009.)*
+
 ---
 
 ## Reliability / Service

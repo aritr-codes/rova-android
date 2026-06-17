@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -39,7 +40,7 @@ fun SemanticIcon(
  * Two-layer overload for bespoke [RovaGlyph]s (ADR-0031 §1). Stacks the outline (tinted by role or
  * status via [SemanticIconSpec]) and the optional duotone accent layer (tinted by the palette accent —
  * the retintable channel). `status` locks the whole mark and suppresses the separate accent tint.
- * Callers MUST pass a size in [modifier] (both layers use `matchParentSize`).
+ * Callers MUST pass a size in [modifier]; the [Box] takes that size and both layers `fillMaxSize` it.
  */
 @Composable
 fun SemanticIcon(
@@ -52,10 +53,10 @@ fun SemanticIcon(
     val palette = LocalGlassEnvironment.current.palette
     val baseTint = if (status != null) SemanticIconSpec.statusTint(status) else SemanticIconSpec.tint(palette, role)
     Box(modifier) {
-        Icon(glyph.outline, contentDescription, Modifier.matchParentSize(), tint = baseTint)
+        Icon(glyph.outline, contentDescription, Modifier.fillMaxSize(), tint = baseTint)
         glyph.accent?.let { acc ->
             val accentTint = if (status != null) baseTint else palette.accent
-            Icon(acc, contentDescription = null, Modifier.matchParentSize(), tint = accentTint)
+            Icon(acc, contentDescription = null, Modifier.fillMaxSize(), tint = accentTint)
         }
     }
 }
