@@ -802,6 +802,7 @@ fun LibraryScreen(
                 unfavoriteLabel = unfavoriteLabel,
                 renameLabel = stringResource(R.string.library_action_rename),
                 vaultLabel = stringResource(R.string.library_action_vault),
+                vaultUnavailableReason = stringResource(R.string.library_action_vault_unavailable_dualshot),
                 viewSettingsLabel = stringResource(R.string.library_action_view_settings),
                 deleteLabel = stringResource(R.string.library_action_delete),
                 onPlay = { sheetTarget = null; play(row.stableKey) },
