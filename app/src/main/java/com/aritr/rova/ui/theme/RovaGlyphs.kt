@@ -121,6 +121,27 @@ object RovaGlyphs {
         accent = glyph { fillPath { circle(16.5f, 12f, 1.9f) } },
     )
 
+    // Single (Auto) — one capture frame (outline) + accent capture core. Mono-safe:
+    // one frame reads as single-camera capture; the core dot is the duotone channel.
+    // (No board source — authored here as the Auto sibling of DualShot's twin frames.)
+    val Single = RovaGlyph(
+        outline = glyph { strokePath { roundRect(5.5f, 6.5f, 13f, 11f, 2.4f) } },
+        accent = glyph { fillPath { circle(12f, 12f, 2f) } },
+    )
+
+    // FollowDevice — phone + two auto-rotate arrows (outline) + speaker bar (accent).
+    // The rotation arrows are its ONLY differentiator from Portrait, so they live in the
+    // MONO outline layer — they must never wash out (ADR-0031 §1 mono-safe). The accent is
+    // the speaker bar, matching Portrait/Landscape's duotone channel. (No board source.)
+    val FollowDevice = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(9f, 6f, 6f, 12f, 1.8f) }
+            svgStroke("M14.5 4c3 0.6 5 2.6 5.6 5.6M20.1 9.6l0.1-2.6M20.1 9.6l-2.6 0.2")
+            svgStroke("M9.5 20c-3-0.6-5-2.6-5.6-5.6M3.9 14.4l-0.1 2.6M3.9 14.4l2.6-0.2")
+        },
+        accent = glyph { strokePath { seg(10.5f, 8.4f, 13.5f, 8.4f) } },
+    )
+
     // ── Orientation (phone outline; owner-chosen over a person glyph) ───────
     // Mono-safe: the outline alone reads as an upright vs rotated phone; the
     // accent speaker bar is the duotone channel. (No board source — authored here.)

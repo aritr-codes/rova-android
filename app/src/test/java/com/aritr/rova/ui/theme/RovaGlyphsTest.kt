@@ -62,6 +62,18 @@ class RovaGlyphsTest {
         assertNotNull("Merge accent = join node", RovaGlyphs.Merge.accent)
     }
 
+    @Test fun single_is_duotone_frame_with_core() {
+        assertNotNull(RovaGlyphs.Single.outline)
+        assertNotNull("Single accent = capture core dot", RovaGlyphs.Single.accent)
+    }
+
+    @Test fun follow_device_is_duotone_phone_with_rotation() {
+        assertNotNull(RovaGlyphs.FollowDevice.outline)
+        // Rotation arrows live in the MONO outline (mono-safe differentiator vs Portrait);
+        // the accent is the speaker-bar duotone flavour, consistent with Portrait/Landscape.
+        assertNotNull("FollowDevice accent = speaker bar", RovaGlyphs.FollowDevice.accent)
+    }
+
     @Test fun orientation_portrait_is_duotone_phone() {
         assertNotNull(RovaGlyphs.OrientationPortrait.outline)
         assertNotNull("Portrait accent = speaker bar", RovaGlyphs.OrientationPortrait.accent)
@@ -87,6 +99,7 @@ class RovaGlyphsTest {
             RovaGlyphs.DualShot, RovaGlyphs.Vault, RovaGlyphs.Recovery, RovaGlyphs.DualSight,
             RovaGlyphs.BackgroundRecord, RovaGlyphs.Merge,
             RovaGlyphs.OrientationPortrait, RovaGlyphs.OrientationLandscape,
+            RovaGlyphs.Single, RovaGlyphs.FollowDevice,
         ).forEach { g ->
             assertEquals(24f, g.outline.viewportWidth, 0f)
             assertEquals(24f, g.outline.viewportHeight, 0f)
@@ -128,6 +141,10 @@ class RovaGlyphsTest {
             "OrientationPortrait.accent" to RovaGlyphs.OrientationPortrait.accent!!,
             "OrientationLandscape.outline" to RovaGlyphs.OrientationLandscape.outline,
             "OrientationLandscape.accent" to RovaGlyphs.OrientationLandscape.accent!!,
+            "Single.outline" to RovaGlyphs.Single.outline,
+            "Single.accent" to RovaGlyphs.Single.accent!!,
+            "FollowDevice.outline" to RovaGlyphs.FollowDevice.outline,
+            "FollowDevice.accent" to RovaGlyphs.FollowDevice.accent!!,
         ).forEach { (name, iv) -> assertEveryPathHasBrush(name, iv.root) }
     }
 
