@@ -484,6 +484,9 @@
     <string name="settings_sheet_clip_duration">Clip length</string>
     <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Wait Between</string>
+    <string name="settings_value_entry_hint">Enter a value</string>
+    <string name="settings_value_entry_confirm">Set</string>
+    <string name="library_action_vault_unavailable_dualshot">DualShot recordings can\'t be moved to the vault</string>
     <string name="settings_sheet_quality">Quality</string>
     <string name="settings_sheet_save">Save</string>
     <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
