@@ -95,11 +95,13 @@ import com.aritr.rova.R
 import com.aritr.rova.data.PresetSaveValidator
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.screens.chrome.DeviceLandscape
 import com.aritr.rova.ui.screens.chrome.NavEdge
 import com.aritr.rova.ui.screens.chrome.clusterEdge
 import com.aritr.rova.ui.screens.chrome.landscapeSense
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SettingsSheetTokens
@@ -873,8 +875,37 @@ internal fun ModeTabs(
                     !enabled -> SettingsSheetTokens.modeTabDisabledText
                     else -> SettingsSheetTokens.modeTabIdleText
                 }
+                // ADR-0031 P1a slice 3: glyph above the label. Icon role tracks the
+                // text tier (active = textHigh, idle = textDim, disabled). The duotone
+                // accent may wash out over the active accent gradient — acceptable, the
+                // mark is mono-safe (meaning survives without the accent, ADR-0031 §1).
+                val iconRole = when {
+                    isActive -> IconRole.Default
+                    !enabled -> IconRole.Disabled
+                    else -> IconRole.Secondary
+                }
                 Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
-                    Text(label, style = RovaTokens.sheetModeTab, color = textColor)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        SemanticIcon(
+                            glyph = captureGlyphFor(mode),
+                            contentDescription = null, // the tab semantics{} already carries the label
+                            modifier = Modifier.size(18.dp),
+                            role = iconRole,
+                        )
+                        // maxLines=1 + ellipsis keeps the now-taller (icon+label) tab a
+                        // predictable height at large font / 320dp (verify in device smoke).
+                        Text(
+                            label,
+                            style = RovaTokens.sheetModeTab,
+                            color = textColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -965,8 +996,30 @@ internal fun OrientationRow(
                 !enabled -> SettingsSheetTokens.modeTabDisabledText
                 else -> SettingsSheetTokens.modeTabIdleText
             }
+            // ADR-0031 P1a slice 3: orientation glyph above the label. The whole row
+            // already alphas to 0.4 when disabled, so per-icon Disabled role is not
+            // needed — active = Default, idle = Secondary.
+            val iconRole = if (isActive) IconRole.Default else IconRole.Secondary
             Box(modifier = tabModifier, contentAlignment = Alignment.Center) {
-                Text(label, style = RovaTokens.sheetModeTab, color = textColor)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    SemanticIcon(
+                        glyph = orientationGlyphFor(optPolicy, optLock),
+                        contentDescription = null, // the tab semantics{} already carries the label
+                        modifier = Modifier.size(18.dp),
+                        role = iconRole,
+                    )
+                    Text(
+                        label,
+                        style = RovaTokens.sheetModeTab,
+                        color = textColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }
