@@ -95,6 +95,7 @@ import com.aritr.rova.R
 import com.aritr.rova.data.PresetSaveValidator
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
+import com.aritr.rova.ui.components.NumericEntryDialog
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.screens.chrome.DeviceLandscape
@@ -680,6 +681,8 @@ private fun SettingsContent(
             atMin = RecordSettingBounds.clipAtMin(durationSeconds),
             atMax = RecordSettingBounds.clipAtMax(durationSeconds),
             onStep = { dir -> onDurationChange(RecordSettingBounds.stepClip(durationSeconds, dir)) },
+            editValue = durationSeconds,
+            onSetValue = { onDurationChange(RecordSettingBounds.clampClip(it)) },
         )
         SheetRowDivider()
         StepperRow(
@@ -689,6 +692,10 @@ private fun SettingsContent(
             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
             onStep = { dir -> onLoopCountChange(RecordSettingBounds.stepRepeats(loopCount, dir)) },
+            // ∞ (continuous = -1): dialog opens EMPTY (editValue=null) so OK can't silently turn
+            // ∞→1; the user must type a finite count. ∞ stays reachable via '−' at min. [1,999].
+            editValue = loopCount.takeIf { it != RecordSettingBounds.REPEATS_CONTINUOUS },
+            onSetValue = { onLoopCountChange(RecordSettingBounds.clampRepeats(it)) },
         )
         SheetRowDivider()
         StepperRow(
@@ -698,6 +705,8 @@ private fun SettingsContent(
             atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
             atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
             onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
+            editValue = intervalMinutes,
+            onSetValue = { onIntervalChange(RecordSettingBounds.clampWait(it)) },
         )
         SheetRowDivider()
         QualityRow(quality = quality, enabled = editable, onPick = onQualityChange)
@@ -1033,7 +1042,12 @@ internal fun StepperRow(
     atMin: Boolean,
     atMax: Boolean,
     onStep: (Int) -> Unit,
+    // Owner 2026-06-17: tap the value to enter it directly. onSetValue != null enables the tap
+    // path; editValue is the dialog prefill (null → start empty, e.g. Repeats when currently ∞).
+    editValue: Int? = null,
+    onSetValue: ((Int) -> Unit)? = null,
 ) {
+    var editing by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1051,15 +1065,35 @@ internal fun StepperRow(
             horizontalArrangement = Arrangement.spacedBy(SettingsSheetTokens.stepperGap),
         ) {
             StepButton("−", enabled = enabled && !atMin, onClick = { onStep(-1) })
+            val canEdit = enabled && onSetValue != null
             Text(
                 value,
                 style = RovaTokens.sheetStepValue,
                 color = SettingsSheetTokens.stepValText,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(min = SettingsSheetTokens.stepValMinWidth),
+                modifier = Modifier
+                    .widthIn(min = SettingsSheetTokens.stepValMinWidth)
+                    .then(
+                        if (canEdit) {
+                            Modifier.clickable(role = Role.Button, onClickLabel = label) { editing = true }
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
             StepButton("+", enabled = enabled && !atMax, onClick = { onStep(+1) })
         }
+    }
+    if (editing && onSetValue != null) {
+        NumericEntryDialog(
+            title = label,
+            initialValue = editValue,
+            hint = stringResource(R.string.settings_value_entry_hint),
+            confirmLabel = stringResource(R.string.settings_value_entry_confirm),
+            cancelLabel = stringResource(R.string.dialog_cancel),
+            onConfirm = { editing = false; onSetValue(it) },
+            onDismiss = { editing = false },
+        )
     }
 }
 
