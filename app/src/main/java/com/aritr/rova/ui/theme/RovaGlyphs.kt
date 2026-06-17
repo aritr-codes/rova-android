@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -64,6 +65,78 @@ object RovaGlyphs {
         outline = glyph { fillPath { circle(12f, 12f, 6.8f) } },
     )
 
+    // ── Brand glyphs (spec Part B, board-3-semantic.html) ───────────────────
+
+    // DualShot — P+L twin frames (outline) + accent capture core. board `ds_twin`.
+    val DualShot = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.4f, 5.6f, 8.6f, 12.8f, 2f) }
+            strokePath { roundRect(11.6f, 9f, 9f, 9f, 2f) }
+        },
+        accent = glyph { fillPath { circle(11.9f, 12f, 2f) } },
+    )
+
+    // Vault — front frame (outline) + back frame & padlock (accent). board `vault_stack`.
+    val Vault = RovaGlyph(
+        outline = glyph { strokePath { roundRect(3.5f, 8f, 12.5f, 9f, 2f) } },
+        accent = glyph {
+            strokePath { roundRect(6f, 4f, 12.5f, 9f, 2f) }
+            fillPath { roundRect(14f, 14.2f, 6.5f, 5.3f, 1.2f) }
+            svgStroke("M15.3 14.2v-1.3a2 2 0 0 1 4 0v1.3")
+        },
+    )
+
+    // Recovery — two rejoined bracket halves (outline) + dashed seam (accent). board `recov_rejoin`.
+    val Recovery = RovaGlyph(
+        outline = glyph {
+            svgStroke("M10.3 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4.3")
+            svgStroke("M13.7 5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4.3")
+        },
+        accent = glyph { svgStroke("M12 4.3v3M12 10.5v3M12 16.7v3") },
+    )
+
+    // DualSight — frame + 2nd lens (outline) + PiP inset (accent). board `dualsight`.
+    val DualSight = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 5.5f, 17f, 13f, 2.3f) }
+            strokePath { circle(8.2f, 10.5f, 2.4f) }
+        },
+        accent = glyph { fillPath { roundRect(12.4f, 11.6f, 6.2f, 5.2f, 1.4f) } },
+    )
+
+    // Background-record — backgrounded-app card (outline) + rec dot (accent). board `bg_record`.
+    val BackgroundRecord = RovaGlyph(
+        outline = glyph {
+            svgStroke("M8.5 4.5H18a1.8 1.8 0 0 1 1.8 1.8V15")
+            strokePath { roundRect(4.2f, 8f, 11.6f, 11.5f, 2.2f) }
+        },
+        accent = glyph { fillPath { circle(10f, 13.7f, 2.6f) } },
+    )
+
+    // Merge — two streams converge (outline) + join node (accent). board `merge_stitch`.
+    val Merge = RovaGlyph(
+        outline = glyph {
+            svgStroke("M4 7h4M4 17h4M8 7c4 0 4 5 8 5M8 17c4 0 4-5 8-5M16 12h4")
+        },
+        accent = glyph { fillPath { circle(16.5f, 12f, 1.9f) } },
+    )
+
+    // ── Orientation (phone outline; owner-chosen over a person glyph) ───────
+    // Mono-safe: the outline alone reads as an upright vs rotated phone; the
+    // accent speaker bar is the duotone channel. (No board source — authored here.)
+
+    // Portrait — upright phone + top speaker bar.
+    val OrientationPortrait = RovaGlyph(
+        outline = glyph { strokePath { roundRect(8f, 3f, 8f, 18f, 2.2f) } },
+        accent = glyph { strokePath { seg(10.6f, 5.4f, 13.4f, 5.4f) } },
+    )
+
+    // Landscape — rotated phone + speaker bar on the left short edge.
+    val OrientationLandscape = RovaGlyph(
+        outline = glyph { strokePath { roundRect(3f, 8f, 18f, 8f, 2.2f) } },
+        accent = glyph { strokePath { seg(5.4f, 10.6f, 5.4f, 13.4f) } },
+    )
+
     // ── authoring helpers ───────────────────────────────────────────────────
     // (PLACEHOLDER + SW are declared at the TOP of the object — see the init-order note there.)
 
@@ -83,6 +156,20 @@ object RovaGlyphs {
 
     private fun ImageVector.Builder.fillPath(block: PathBuilder.() -> Unit) {
         path(fill = PLACEHOLDER, pathBuilder = block)
+    }
+
+    /** Verbatim SVG `<path d=…>` stroke (round caps/joins, System-D weight). */
+    private fun ImageVector.Builder.svgStroke(d: String) {
+        addPath(
+            pathData = addPathNodes(d),
+            stroke = PLACEHOLDER, strokeLineWidth = SW,
+            strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
+        )
+    }
+
+    /** Verbatim SVG `<path d=…>` fill. */
+    private fun ImageVector.Builder.svgFill(d: String) {
+        addPath(pathData = addPathNodes(d), fill = PLACEHOLDER)
     }
 
     /** A straight segment (SVG `M x1 y1 L x2 y2`). */
