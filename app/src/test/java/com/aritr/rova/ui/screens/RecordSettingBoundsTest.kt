@@ -68,4 +68,23 @@ class RecordSettingBoundsTest {
         assertTrue(RecordSettingBounds.waitAtMin(0))
         assertTrue(RecordSettingBounds.waitAtMax(60))
     }
+
+    @Test fun clampClip_coercesToRange() {
+        assertEquals(1, RecordSettingBounds.clampClip(0))
+        assertEquals(300, RecordSettingBounds.clampClip(5000))
+        assertEquals(45, RecordSettingBounds.clampClip(45))
+    }
+
+    @Test fun clampRepeats_coercesToFiniteRange() {
+        assertEquals(1, RecordSettingBounds.clampRepeats(0))
+        assertEquals(1, RecordSettingBounds.clampRepeats(-9))
+        assertEquals(999, RecordSettingBounds.clampRepeats(100000))
+        assertEquals(12, RecordSettingBounds.clampRepeats(12))
+    }
+
+    @Test fun clampWait_coercesToRange() {
+        assertEquals(0, RecordSettingBounds.clampWait(-3))
+        assertEquals(60, RecordSettingBounds.clampWait(99))
+        assertEquals(15, RecordSettingBounds.clampWait(15))
+    }
 }
