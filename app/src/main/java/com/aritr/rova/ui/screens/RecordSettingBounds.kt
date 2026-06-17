@@ -42,4 +42,11 @@ internal object RecordSettingBounds {
     fun repeatsAtMax(v: Int): Boolean = v >= REPEATS_MAX
     fun waitAtMin(v: Int): Boolean = v.coerceIn(WAIT_MIN, WAIT_MAX) <= WAIT_MIN
     fun waitAtMax(v: Int): Boolean = v.coerceIn(WAIT_MIN, WAIT_MAX) >= WAIT_MAX
+
+    // Direct manual-entry clamps (owner 2026-06-17 — tap the value to enter it). A typed value
+    // is coerced into the SAME bounds the steppers enforce, so no out-of-range value can be set.
+    // Repeats clamps to the finite range; ∞ (continuous) stays a '−'-at-min affordance.
+    fun clampClip(v: Int): Int = v.coerceIn(CLIP_MIN, CLIP_MAX)
+    fun clampRepeats(v: Int): Int = v.coerceIn(REPEATS_MIN, REPEATS_MAX)
+    fun clampWait(v: Int): Int = v.coerceIn(WAIT_MIN, WAIT_MAX)
 }

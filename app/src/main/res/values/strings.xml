@@ -343,7 +343,7 @@
     <string name="history_empty_start_recording">Start Recording</string>
 
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
-    <string name="history_config_title">Recording Settings</string>
+    <string name="history_config_title">Recording details</string>
     <string name="history_config_clip_length">Clip length</string>
     <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Wait</string>
@@ -484,6 +484,9 @@
     <string name="settings_sheet_clip_duration">Clip length</string>
     <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Wait Between</string>
+    <string name="settings_value_entry_hint">Enter a value</string>
+    <string name="settings_value_entry_confirm">Set</string>
+    <string name="library_action_vault_unavailable_dualshot">DualShot recordings can\'t be moved to the vault</string>
     <string name="settings_sheet_quality">Quality</string>
     <string name="settings_sheet_save">Save</string>
     <string name="settings_sheet_reset_snoozes">Reset snoozed warnings</string>
@@ -721,6 +724,7 @@
     <string name="dialog_custom_duration_error">Value must be between 5 and 300</string>
     <string name="dialog_ok">OK</string>
     <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_close">Close</string>
     <!-- Merge progress sheet. %1$s = coarse status text -->
     <string name="dialog_merge_progress_cd">Merging videos. %1$s</string>
     <string name="dialog_merge_progress_title">Merging Videos</string>
@@ -840,7 +844,7 @@
     <string name="library_action_vault">Move to vault</string>
     <string name="library_action_vault_disabled">Vault unavailable for this selection</string>
     <string name="library_action_rename">Rename</string>
-    <string name="library_action_view_settings">View settings</string>
+    <string name="library_action_view_settings">Details</string>
     <string name="library_delete_confirm_title">Delete recordings?</string>
     <string name="library_delete_confirm_body">%1$d recording(s) will be deleted.</string>
     <string name="library_delete_undo">Undo</string>

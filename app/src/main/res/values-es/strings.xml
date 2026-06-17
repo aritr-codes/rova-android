@@ -341,7 +341,7 @@
     <string name="history_empty_start_recording">Iniciar grabación</string>
 
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
-    <string name="history_config_title">Ajustes de grabación</string>
+    <string name="history_config_title">Detalles de grabación</string>
     <string name="history_config_clip_length">Duración del clip</string>
     <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Espera</string>
@@ -482,6 +482,9 @@
     <string name="settings_sheet_clip_duration">Duración del clip</string>
     <string name="settings_sheet_repeats">Clips</string>
     <string name="settings_sheet_wait_between">Espera entre clips</string>
+    <string name="settings_value_entry_hint">Introduce un valor</string>
+    <string name="settings_value_entry_confirm">Establecer</string>
+    <string name="library_action_vault_unavailable_dualshot">Las grabaciones DualShot no se pueden mover a la bóveda</string>
     <string name="settings_sheet_quality">Calidad</string>
     <string name="settings_sheet_save">Guardar</string>
     <string name="settings_sheet_reset_snoozes">Restablecer advertencias pospuestas</string>
@@ -719,6 +722,7 @@
     <string name="dialog_custom_duration_error">El valor debe estar entre 5 y 300</string>
     <string name="dialog_ok">Aceptar</string>
     <string name="dialog_cancel">Cancelar</string>
+    <string name="dialog_close">Cerrar</string>
     <!-- Merge progress sheet. %1$s = coarse status text -->
     <string name="dialog_merge_progress_cd">Combinando vídeos. %1$s</string>
     <string name="dialog_merge_progress_title">Combinando vídeos</string>
@@ -838,7 +842,7 @@
     <string name="library_action_vault">Mover a la caja fuerte</string>
     <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
     <string name="library_action_rename">Cambiar nombre</string>
-    <string name="library_action_view_settings">Ver ajustes</string>
+    <string name="library_action_view_settings">Detalles</string>
     <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
     <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
     <string name="library_delete_undo">Deshacer</string>

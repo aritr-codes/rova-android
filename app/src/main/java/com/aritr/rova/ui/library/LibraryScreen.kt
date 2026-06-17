@@ -59,6 +59,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.ui.components.RovaAlertDialog
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
@@ -715,51 +716,44 @@ fun LibraryScreen(
         }
 
         pendingMoveToVaultSessionId?.let { sid ->
-            androidx.compose.material3.AlertDialog(
+            RovaAlertDialog(
                 onDismissRequest = { pendingMoveToVaultSessionId = null },
-                title = { androidx.compose.material3.Text(stringResource(R.string.vault_move_in)) },
-                text = { androidx.compose.material3.Text(stringResource(R.string.vault_share_leaves_warning)) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        pendingMoveToVaultSessionId = null
-                        if (sid == "__batch__") {
-                            val keys = selection.keys
-                            selection = SelectionReducer.clear(selection)
-                            coroutineScope.launch {
-                                val res = viewModel.batchMoveToVault(keys)
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.library_vault_batch_result, res.moved, res.skipped),
-                                )
-                            }
-                        } else {
-                            coroutineScope.launch { viewModel.moveToVault(sid) }
+                title = stringResource(R.string.vault_move_in),
+                text = stringResource(R.string.vault_share_leaves_warning),
+                confirmText = stringResource(R.string.vault_move_in),
+                onConfirm = {
+                    pendingMoveToVaultSessionId = null
+                    if (sid == "__batch__") {
+                        val keys = selection.keys
+                        selection = SelectionReducer.clear(selection)
+                        coroutineScope.launch {
+                            val res = viewModel.batchMoveToVault(keys)
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.library_vault_batch_result, res.moved, res.skipped),
+                            )
                         }
-                    }) { androidx.compose.material3.Text(stringResource(R.string.vault_move_in)) }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { pendingMoveToVaultSessionId = null }) {
-                        androidx.compose.material3.Text(stringResource(R.string.dialog_cancel))
+                    } else {
+                        coroutineScope.launch { viewModel.moveToVault(sid) }
                     }
                 },
+                dismissText = stringResource(R.string.dialog_cancel),
+                onDismiss = { pendingMoveToVaultSessionId = null },
             )
         }
 
         pendingDeleteConfirm?.let { keys ->
-            androidx.compose.material3.AlertDialog(
+            RovaAlertDialog(
                 onDismissRequest = { pendingDeleteConfirm = null },
-                title = { androidx.compose.material3.Text(stringResource(R.string.library_delete_confirm_title)) },
-                text = { androidx.compose.material3.Text(stringResource(R.string.library_delete_confirm_body, keys.size)) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        pendingDeleteConfirm = null
-                        startDeferredDelete(keys)
-                    }) { androidx.compose.material3.Text(stringResource(R.string.library_action_delete)) }
+                title = stringResource(R.string.library_delete_confirm_title),
+                text = stringResource(R.string.library_delete_confirm_body, keys.size),
+                confirmText = stringResource(R.string.library_action_delete),
+                destructive = true,
+                onConfirm = {
+                    pendingDeleteConfirm = null
+                    startDeferredDelete(keys)
                 },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { pendingDeleteConfirm = null }) {
-                        androidx.compose.material3.Text(stringResource(R.string.dialog_cancel))
-                    }
-                },
+                dismissText = stringResource(R.string.dialog_cancel),
+                onDismiss = { pendingDeleteConfirm = null },
             )
         }
 
@@ -802,6 +796,7 @@ fun LibraryScreen(
                 unfavoriteLabel = unfavoriteLabel,
                 renameLabel = stringResource(R.string.library_action_rename),
                 vaultLabel = stringResource(R.string.library_action_vault),
+                vaultUnavailableReason = stringResource(R.string.library_action_vault_unavailable_dualshot),
                 viewSettingsLabel = stringResource(R.string.library_action_view_settings),
                 deleteLabel = stringResource(R.string.library_action_delete),
                 onPlay = { sheetTarget = null; play(row.stableKey) },

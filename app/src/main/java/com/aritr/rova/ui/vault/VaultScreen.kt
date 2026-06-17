@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -50,6 +48,7 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.LocalSecureFlagController
+import com.aritr.rova.ui.components.RovaAlertDialog
 import com.aritr.rova.ui.screens.LibraryRow
 import kotlinx.coroutines.launch
 
@@ -220,23 +219,17 @@ fun VaultScreen(
     // B5 / ADR-0025 (Task 22) — move-OUT confirmation. Reuses the vault
     // move/share warning string (moving out un-hides the recording).
     pendingMoveOutSessionId?.let { sid ->
-        AlertDialog(
+        RovaAlertDialog(
             onDismissRequest = { pendingMoveOutSessionId = null },
-            title = { Text(stringResource(R.string.vault_move_out)) },
-            text = { Text(stringResource(R.string.vault_share_leaves_warning)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingMoveOutSessionId = null
-                    coroutineScope.launch { viewModel.moveOutOfVault(sid) }
-                }) {
-                    Text(stringResource(R.string.vault_move_out))
-                }
+            title = stringResource(R.string.vault_move_out),
+            text = stringResource(R.string.vault_share_leaves_warning),
+            confirmText = stringResource(R.string.vault_move_out),
+            onConfirm = {
+                pendingMoveOutSessionId = null
+                coroutineScope.launch { viewModel.moveOutOfVault(sid) }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingMoveOutSessionId = null }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            }
+            dismissText = stringResource(R.string.dialog_cancel),
+            onDismiss = { pendingMoveOutSessionId = null },
         )
     }
 
@@ -245,26 +238,18 @@ fun VaultScreen(
     // (move-in removed the public copy), so deletion cannot be undone. The
     // confirm button is tinted with the error color to signal destruction.
     pendingDeleteSessionId?.let { sid ->
-        AlertDialog(
+        RovaAlertDialog(
             onDismissRequest = { pendingDeleteSessionId = null },
-            title = { Text(stringResource(R.string.vault_delete_title)) },
-            text = { Text(stringResource(R.string.vault_delete_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingDeleteSessionId = null
-                    coroutineScope.launch { viewModel.deleteFromVault(sid) }
-                }) {
-                    Text(
-                        text = stringResource(R.string.vault_delete_confirm),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+            title = stringResource(R.string.vault_delete_title),
+            text = stringResource(R.string.vault_delete_body),
+            confirmText = stringResource(R.string.vault_delete_confirm),
+            destructive = true,
+            onConfirm = {
+                pendingDeleteSessionId = null
+                coroutineScope.launch { viewModel.deleteFromVault(sid) }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteSessionId = null }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            }
+            dismissText = stringResource(R.string.dialog_cancel),
+            onDismiss = { pendingDeleteSessionId = null },
         )
     }
 }

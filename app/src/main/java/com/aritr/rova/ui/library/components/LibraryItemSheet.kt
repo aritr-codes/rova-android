@@ -1,9 +1,7 @@
 package com.aritr.rova.ui.library.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,7 +20,6 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -40,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,14 +45,16 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.FloatingGlassSheet
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaGlyph
 import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * spec §5.3 / Polish P8 — per-item context sheet (overflow / long-press outside select mode):
- * Play · Share · Favorite · Rename · Move-to-Vault · View settings · Delete. No Export (ADR-0030).
- * The Vault row is hidden when [movable] is false (DualShot). Each row is a Button-role clickable ≥48dp
- * (checkA11yClickableHasRole + checkA11yTargetSizeToken). All labels are passed in (en/es resources).
+ * Play · Share · Favorite · Rename · View settings · Move-to-Vault · Delete. No Export (ADR-0030).
+ * When [movable] is false (DualShot), the Vault row is shown DISABLED with [vaultUnavailableReason]
+ * (greyed, not hidden — owner 2026-06-17) rather than dropped. Each row is a Button-role clickable
+ * ≥44dp (checkA11yClickableHasRole + checkA11yTargetSizeToken). All labels are passed in (en/es).
  *
  * P8 — re-skinned from a hard-attached bottom sheet into a **floating "Brave-style" elevated card**: the
  * [ModalBottomSheet] container is transparent and inset-free, and an inner elevated [Surface] floats off
@@ -79,6 +79,7 @@ fun LibraryItemSheet(
     unfavoriteLabel: String,
     renameLabel: String,
     vaultLabel: String,
+    vaultUnavailableReason: String?,
     viewSettingsLabel: String,
     deleteLabel: String,
     onPlay: () -> Unit,
@@ -111,15 +112,9 @@ fun LibraryItemSheet(
             shape = RoundedCornerShape(LibraryDimens.sheetCornerRadius),
             shadowElevation = LibraryDimens.sheetElevation,
         ) {
-            Column(Modifier.padding(vertical = 8.dp)) {
-                Box(
-                    Modifier
-                        .padding(top = 4.dp, bottom = 8.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .size(width = 34.dp, height = 4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)),
-                )
+            // Compact pass (owner 2026-06-17): no drag-handle (floating card, redundant), tighter
+            // padding + slimmer header + 44dp rows so the sheet sits well under half-screen.
+            Column(Modifier.padding(vertical = 4.dp)) {
                 SheetHeader(headerThumbnail, headerTitle, headerMeta)
                 HorizontalDivider(color = libraryColors.cardEdge)
                 // UX-B — grouped by intent: Primary (do-the-thing) · Secondary (manage) · Danger (destructive),
@@ -135,8 +130,13 @@ fun LibraryItemSheet(
                     if (isFavorite) unfavoriteLabel else favoriteLabel,
                 ) { onToggleFavorite() }
                 SheetRow(Icons.Filled.Edit, renameLabel) { onRename() }
-                SheetRow(Icons.Filled.Settings, viewSettingsLabel) { onViewSettings() }
-                if (movable) SheetRow(RovaIcons.Vault, vaultLabel) { onMoveToVault() }
+                SheetRow(RovaIcons.Details.glyph, viewSettingsLabel) { onViewSettings() }
+                SheetRow(
+                    glyph = RovaIcons.Vault,
+                    label = vaultLabel,
+                    enabled = movable,
+                    reason = vaultUnavailableReason,
+                ) { onMoveToVault() }
                 HorizontalDivider(color = libraryColors.cardEdge)
                 // ── Danger ──
                 SheetRow(Icons.Filled.Delete, deleteLabel, danger = true) { onDelete() }
@@ -149,12 +149,12 @@ fun LibraryItemSheet(
 @Composable
 private fun SheetHeader(thumbnail: android.graphics.Bitmap?, title: String, meta: String) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         VideoFrame(
             thumbnail,
-            Modifier.size(width = 64.dp, height = 40.dp).clip(RoundedCornerShape(9.dp)),
+            Modifier.size(width = 48.dp, height = 30.dp).clip(RoundedCornerShape(8.dp)),
         )
         Spacer(Modifier.width(12.dp))
         Column {
@@ -187,10 +187,10 @@ private fun SheetRow(icon: ImageVector, label: String, danger: Boolean = false, 
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .heightIn(min = 44.dp)
             .clickable(onClick = onClick)
             .semantics { role = Role.Button }
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
@@ -200,22 +200,46 @@ private fun SheetRow(icon: ImageVector, label: String, danger: Boolean = false, 
     }
 }
 
-/** Bespoke-glyph row (ADR-0031): renders a two-layer [RovaGlyph] through the SemanticIcon seam. */
+/**
+ * Bespoke-glyph row (ADR-0031): renders a two-layer [RovaGlyph] through the SemanticIcon seam.
+ * When [enabled] is false the row is non-clickable, greyed, and shows [reason] as a subtext line
+ * (e.g. DualShot can't be vaulted — owner 2026-06-17); it still announces as a disabled Button.
+ */
 @Composable
-private fun SheetRow(glyph: RovaGlyph, label: String, onClick: () -> Unit) {
-    val contentColor = MaterialTheme.colorScheme.onSurface
+private fun SheetRow(
+    glyph: RovaGlyph,
+    label: String,
+    enabled: Boolean = true,
+    reason: String? = null,
+    onClick: () -> Unit,
+) {
+    val baseColor = MaterialTheme.colorScheme.onSurface
+    val contentColor = if (enabled) baseColor else baseColor.copy(alpha = 0.38f)
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
-            .semantics { role = Role.Button }
-            .padding(horizontal = 24.dp),
+            .heightIn(min = 44.dp)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .semantics {
+                role = Role.Button
+                if (!enabled) disabled()
+            }
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
-        SemanticIcon(glyph = glyph, contentDescription = null, modifier = Modifier.size(24.dp))
+        SemanticIcon(
+            glyph = glyph,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            role = if (enabled) IconRole.Default else IconRole.Disabled,
+        )
         Spacer(Modifier.width(20.dp))
-        Text(label, color = contentColor)
+        Column {
+            Text(label, color = contentColor)
+            if (!enabled && reason != null) {
+                Text(reason, style = MaterialTheme.typography.bodySmall, color = contentColor)
+            }
+        }
     }
 }

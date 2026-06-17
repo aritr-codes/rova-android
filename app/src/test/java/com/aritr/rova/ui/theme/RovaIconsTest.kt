@@ -15,6 +15,10 @@ class RovaIconsTest {
         assertNull(RovaIcons.NotificationsSetting.status)
     }
 
+    @Test fun details_is_a_setting_not_a_status() {
+        assertNull(RovaIcons.Details.status)
+    }
+
     @Test fun library_and_play_are_distinct_glyphs() {
         assertNotEquals(RovaIcons.Library.outline, RovaIcons.Play.glyph)
     }

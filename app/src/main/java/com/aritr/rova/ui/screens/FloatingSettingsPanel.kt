@@ -268,6 +268,8 @@ internal fun FloatingSettingsPanel(
                             atMin = RecordSettingBounds.clipAtMin(durationSeconds),
                             atMax = RecordSettingBounds.clipAtMax(durationSeconds),
                             onStep = { dir -> onDurationChange(RecordSettingBounds.stepClip(durationSeconds, dir)) },
+                            editValue = durationSeconds,
+                            onSetValue = { onDurationChange(RecordSettingBounds.clampClip(it)) },
                         )
                         SheetRowDivider()
                         StepperRow(
@@ -277,6 +279,9 @@ internal fun FloatingSettingsPanel(
                             atMin = RecordSettingBounds.repeatsAtMin(loopCount),
                             atMax = RecordSettingBounds.repeatsAtMax(loopCount),
                             onStep = { dir -> onLoopCountChange(RecordSettingBounds.stepRepeats(loopCount, dir)) },
+                            // ∞ (continuous = -1): dialog opens EMPTY so OK can't silently turn ∞→1.
+                            editValue = loopCount.takeIf { it != RecordSettingBounds.REPEATS_CONTINUOUS },
+                            onSetValue = { onLoopCountChange(RecordSettingBounds.clampRepeats(it)) },
                         )
                         SheetRowDivider()
                         StepperRow(
@@ -286,6 +291,8 @@ internal fun FloatingSettingsPanel(
                             atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
                             atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
                             onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
+                            editValue = intervalMinutes,
+                            onSetValue = { onIntervalChange(RecordSettingBounds.clampWait(it)) },
                         )
                         SheetRowDivider()
 
