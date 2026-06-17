@@ -2386,6 +2386,53 @@ val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPubl
     }
 }
 
+// ADR-0031 §5 (P1) — bespoke ImageVectors have one home. `ImageVector.Builder(` may appear only in
+// RovaGlyphs.kt; folding RecordChromeIcons in here removed the second declaration site. This subsumes
+// the old RecordChromeIcons.kt allowance in checkRecordSurfaceNoBlur.
+val checkRovaGlyphHome = tasks.register("checkRovaGlyphHome") {
+    group = "verification"
+    description = "Bespoke ImageVectors must be declared only in RovaGlyphs.kt — one home for " +
+        "hand-authored glyphs so the icon family + theme engine resolve from a single source (ADR-0031 §5)."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val homeFile = file("src/main/java/com/aritr/rova/ui/theme/RovaGlyphs.kt").canonicalFile
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkRovaGlyphHome: Rova source dir missing: $srcDir")
+        }
+        // Whole-file scan (NOT per-line): `\s` then matches a newline, so a builder split across
+        // lines (`ImageVector.\n    Builder(`) is still caught (codex-flagged false-negative). Strip
+        // block + line comments first (preserving line counts) so KDoc/examples never false-fire.
+        val builderPattern = Regex("""\bImageVector\s*\.\s*Builder\s*\(""")
+        fun stripComments(src: String): String {
+            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
+            return noBlock.lines().joinToString("\n") { line ->
+                val i = line.indexOf("//"); if (i >= 0) line.substring(0, i) else line
+            }
+        }
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != homeFile }
+            .mapNotNull { f ->
+                val text = stripComments(f.readText())
+                val hits = builderPattern.findAll(text)
+                    .map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }
+                    .toList()
+                if (hits.isEmpty()) null else f to hits
+            }
+            .toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { line -> "  ${f.relativeTo(rootDir)}:$line" }
+            }
+            throw GradleException(
+                "ADR-0031 §5 violation: a bespoke ImageVector is declared outside RovaGlyphs.kt. " +
+                    "All hand-authored glyphs live in ui/theme/RovaGlyphs.kt so the icon family and the " +
+                    "theme engine resolve glyphs from one place. Move the vector there.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
 val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
     group = "verification"
     description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
@@ -2398,7 +2445,7 @@ val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
         // Record-chrome rendering files (confirmed real). DualPreviewZone is
         // deliberately EXCLUDED — it's the camera preview/carve-out, not chrome.
         val recordChromeNames = setOf(
-            "RecordScreen.kt", "RecordChrome.kt", "RecordChromeIcons.kt",
+            "RecordScreen.kt", "RecordChrome.kt",
         )
         val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
         val offenders = srcDir.walkTopDown()
@@ -2572,6 +2619,7 @@ afterEvaluate {
         dependsOn(checkRecordChromeLockSingleSite)
         dependsOn(checkSemanticIconNoRawAlpha)
         dependsOn(checkStatusColorLocked)
+        dependsOn(checkRovaGlyphHome)
     }
 }
 
