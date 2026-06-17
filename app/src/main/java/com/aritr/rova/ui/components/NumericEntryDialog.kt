@@ -1,11 +1,8 @@
 package com.aritr.rova.ui.components
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,25 +31,21 @@ fun NumericEntryDialog(
 ) {
     var text by remember { mutableStateOf(initialValue?.toString() ?: "") }
     val parsed = text.trim().toIntOrNull()
-    AlertDialog(
+    RovaAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { new -> text = new.filter { it.isDigit() }.take(4) },
-                    singleLine = true,
-                    label = { Text(hint) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            }
+        title = title,
+        confirmText = confirmLabel,
+        confirmEnabled = parsed != null,
+        onConfirm = { parsed?.let(onConfirm) },
+        dismissText = cancelLabel,
+        content = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { new -> text = new.filter { it.isDigit() }.take(4) },
+                singleLine = true,
+                label = { Text(hint) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
         },
-        confirmButton = {
-            TextButton(enabled = parsed != null, onClick = { parsed?.let(onConfirm) }) {
-                Text(confirmLabel)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(cancelLabel) } },
     )
 }

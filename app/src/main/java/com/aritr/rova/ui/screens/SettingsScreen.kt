@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -95,6 +94,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
+import com.aritr.rova.ui.components.RovaAlertDialog
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.locale.AppLocale
 import com.aritr.rova.ui.theme.GlassRole
@@ -1069,36 +1069,18 @@ private fun BatteryOptimizationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    RovaAlertDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.BatteryAlert,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
+        icon = Icons.Default.BatteryAlert,
+        title = stringResource(R.string.settings_battery_dialog_title),
+        text = if (exempt) {
+            stringResource(R.string.settings_battery_dialog_body_exempt)
+        } else {
+            stringResource(R.string.settings_battery_dialog_body_not_exempt)
         },
-        title = { Text(text = stringResource(R.string.settings_battery_dialog_title)) },
-        text = {
-            Text(
-                text = if (exempt) {
-                    stringResource(R.string.settings_battery_dialog_body_exempt)
-                } else {
-                    stringResource(R.string.settings_battery_dialog_body_not_exempt)
-                },
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = stringResource(R.string.settings_battery_dialog_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_battery_dialog_dismiss))
-            }
-        }
+        confirmText = stringResource(R.string.settings_battery_dialog_confirm),
+        onConfirm = onConfirm,
+        dismissText = stringResource(R.string.settings_battery_dialog_dismiss),
     )
 }
 

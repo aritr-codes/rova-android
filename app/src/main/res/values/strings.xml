@@ -343,7 +343,7 @@
     <string name="history_empty_start_recording">Start Recording</string>
 
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
-    <string name="history_config_title">Recording Settings</string>
+    <string name="history_config_title">Recording details</string>
     <string name="history_config_clip_length">Clip length</string>
     <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Wait</string>
@@ -843,7 +843,7 @@
     <string name="library_action_vault">Move to vault</string>
     <string name="library_action_vault_disabled">Vault unavailable for this selection</string>
     <string name="library_action_rename">Rename</string>
-    <string name="library_action_view_settings">View settings</string>
+    <string name="library_action_view_settings">Details</string>
     <string name="library_delete_confirm_title">Delete recordings?</string>
     <string name="library_delete_confirm_body">%1$d recording(s) will be deleted.</string>
     <string name="library_delete_undo">Undo</string>

@@ -645,19 +645,15 @@ fun RecordScreen(
 
     // Camera Disconnected Alert
     if (serviceState.isRecording && !isCameraActive) {
-        AlertDialog(
+        RovaAlertDialog(
             onDismissRequest = { /* Force user to stop */ },
-            title = { Text(stringResource(R.string.record_camera_disconnected_title)) },
-            text = { Text(stringResource(R.string.record_camera_disconnected_body)) },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.stopRecording() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(R.string.record_camera_disconnected_stop))
-                }
-            },
-            icon = { Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error) }
+            icon = Icons.Default.Error,
+            title = stringResource(R.string.record_camera_disconnected_title),
+            text = stringResource(R.string.record_camera_disconnected_body),
+            confirmText = stringResource(R.string.record_camera_disconnected_stop),
+            destructive = true,
+            confirmFilled = true,
+            onConfirm = { viewModel.stopRecording() },
         )
     }
 

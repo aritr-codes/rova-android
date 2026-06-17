@@ -5,11 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.data.SessionConfig
+import com.aritr.rova.ui.components.RovaAlertDialog
 
 /**
  * Phase 2.2 — Library "View Settings" popup.
@@ -44,17 +42,12 @@ fun LibrarySessionConfigDialog(
     config: SessionConfig,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    RovaAlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(18.dp),
-        title = {
-            Text(
-                text = stringResource(R.string.history_config_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        text = {
+        title = stringResource(R.string.history_config_title),
+        confirmText = stringResource(R.string.history_config_close),
+        onConfirm = onDismiss,
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ConfigRow(
                     label = stringResource(R.string.history_config_clip_length),
@@ -76,11 +69,6 @@ fun LibrarySessionConfigDialog(
                 )
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.history_config_close))
-            }
-        }
     )
 }
 

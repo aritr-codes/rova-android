@@ -341,7 +341,7 @@
     <string name="history_empty_start_recording">Iniciar grabación</string>
 
     <!-- View Settings dialog (LibrarySessionConfigDialog) -->
-    <string name="history_config_title">Ajustes de grabación</string>
+    <string name="history_config_title">Detalles de grabación</string>
     <string name="history_config_clip_length">Duración del clip</string>
     <string name="history_config_repeats">Clips</string>
     <string name="history_config_wait">Espera</string>
@@ -841,7 +841,7 @@
     <string name="library_action_vault">Mover a la caja fuerte</string>
     <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
     <string name="library_action_rename">Cambiar nombre</string>
-    <string name="library_action_view_settings">Ver ajustes</string>
+    <string name="library_action_view_settings">Detalles</string>
     <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
     <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
     <string name="library_delete_undo">Deshacer</string>

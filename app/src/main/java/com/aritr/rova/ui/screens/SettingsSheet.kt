@@ -47,7 +47,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -96,6 +95,7 @@ import com.aritr.rova.data.PresetSaveValidator
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.data.RovaPreset
 import com.aritr.rova.ui.components.NumericEntryDialog
+import com.aritr.rova.ui.components.RovaAlertDialog
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.screens.chrome.DeviceLandscape
@@ -765,23 +765,14 @@ internal fun PresetDeleteDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    AlertDialog(
+    RovaAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.preset_delete_title)) },
-        text = { Text(stringResource(R.string.preset_delete_body, target.name)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.preset_delete_confirm),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
-            }
-        },
+        title = stringResource(R.string.preset_delete_title),
+        text = stringResource(R.string.preset_delete_body, target.name),
+        confirmText = stringResource(R.string.preset_delete_confirm),
+        destructive = true,
+        onConfirm = onConfirm,
+        dismissText = stringResource(R.string.dialog_cancel),
     )
 }
 
@@ -1562,37 +1553,29 @@ internal fun PresetNameDialog(
         PresetSaveValidator.Result.Blank -> if (text.isNotEmpty()) R.string.preset_name_error_blank else null
         PresetSaveValidator.Result.Ok -> null
     }
-    AlertDialog(
+    RovaAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.preset_name_dialog_title)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text(stringResource(R.string.preset_name_field_label)) },
-                    isError = errorRes != null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+        title = stringResource(R.string.preset_name_dialog_title),
+        confirmText = stringResource(R.string.dialog_ok),
+        confirmEnabled = isOk,
+        onConfirm = { if (isOk) onConfirm(text.trim()) },
+        dismissText = stringResource(R.string.dialog_cancel),
+        content = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(stringResource(R.string.preset_name_field_label)) },
+                isError = errorRes != null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            )
+            if (errorRes != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(errorRes),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
-                if (errorRes != null) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(errorRes),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (isOk) onConfirm(text.trim()) }, enabled = isOk) {
-                Text(stringResource(R.string.dialog_ok))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.dialog_cancel))
             }
         },
     )
