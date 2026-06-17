@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -32,6 +33,9 @@ object RovaIcons {
 
     // ── Still stock Material (RovaIcon), authored in a later slice ──
     val View = RovaIcon(Icons.Default.GridView)
+    // "View settings" on a library item shows that recording's read-only capture config — per-item
+    // details/metadata, not app preferences → Info (ⓘ), not a gear (owner 2026-06-17).
+    val Details = RovaIcon(Icons.Outlined.Info)
     val Play = RovaIcon(RovaGlyphs.Play)
     val WarningStatus = RovaIcon(Icons.Default.WarningAmber, status = IconStatus.Warning)
     val NotificationsSetting = RovaIcon(Icons.Default.Notifications)
