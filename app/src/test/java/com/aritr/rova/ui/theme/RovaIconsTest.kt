@@ -39,5 +39,7 @@ class RovaIconsTest {
         assertEquals(RovaGlyphs.Merge, RovaIcons.Merge)
         assertEquals(RovaGlyphs.OrientationPortrait, RovaIcons.OrientationPortrait)
         assertEquals(RovaGlyphs.OrientationLandscape, RovaIcons.OrientationLandscape)
+        assertEquals(RovaGlyphs.Single, RovaIcons.Single)
+        assertEquals(RovaGlyphs.FollowDevice, RovaIcons.FollowDevice)
     }
 }

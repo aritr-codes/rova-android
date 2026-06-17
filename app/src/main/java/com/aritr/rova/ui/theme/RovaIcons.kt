@@ -27,6 +27,8 @@ object RovaIcons {
     val Merge: RovaGlyph = RovaGlyphs.Merge
     val OrientationPortrait: RovaGlyph = RovaGlyphs.OrientationPortrait
     val OrientationLandscape: RovaGlyph = RovaGlyphs.OrientationLandscape
+    val Single: RovaGlyph = RovaGlyphs.Single
+    val FollowDevice: RovaGlyph = RovaGlyphs.FollowDevice
 
     // ── Still stock Material (RovaIcon), authored in a later slice ──
     val View = RovaIcon(Icons.Default.GridView)
