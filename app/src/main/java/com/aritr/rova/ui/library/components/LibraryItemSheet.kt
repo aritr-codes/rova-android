@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -45,8 +44,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.FloatingGlassSheet
+import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * spec §5.3 / Polish P8 — per-item context sheet (overflow / long-press outside select mode):
@@ -134,7 +136,7 @@ fun LibraryItemSheet(
                 ) { onToggleFavorite() }
                 SheetRow(Icons.Filled.Edit, renameLabel) { onRename() }
                 SheetRow(Icons.Filled.Settings, viewSettingsLabel) { onViewSettings() }
-                if (movable) SheetRow(Icons.Filled.Lock, vaultLabel) { onMoveToVault() }
+                if (movable) SheetRow(RovaIcons.Vault, vaultLabel) { onMoveToVault() }
                 HorizontalDivider(color = libraryColors.cardEdge)
                 // ── Danger ──
                 SheetRow(Icons.Filled.Delete, deleteLabel, danger = true) { onDelete() }
@@ -193,6 +195,26 @@ private fun SheetRow(icon: ImageVector, label: String, danger: Boolean = false, 
         horizontalArrangement = Arrangement.Start,
     ) {
         Icon(icon, contentDescription = null, tint = contentColor)
+        Spacer(Modifier.width(20.dp))
+        Text(label, color = contentColor)
+    }
+}
+
+/** Bespoke-glyph row (ADR-0031): renders a two-layer [RovaGlyph] through the SemanticIcon seam. */
+@Composable
+private fun SheetRow(glyph: RovaGlyph, label: String, onClick: () -> Unit) {
+    val contentColor = MaterialTheme.colorScheme.onSurface
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick)
+            .semantics { role = Role.Button }
+            .padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start,
+    ) {
+        SemanticIcon(glyph = glyph, contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(20.dp))
         Text(label, color = contentColor)
     }
