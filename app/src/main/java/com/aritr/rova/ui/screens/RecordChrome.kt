@@ -79,6 +79,7 @@ import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.SemanticIconSpec
 import com.aritr.rova.ui.components.RecordHudFormatters
+import com.aritr.rova.ui.components.ProcessingGlyph
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.RecordHudState
 import com.aritr.rova.ui.components.focusHighlight
@@ -94,9 +95,7 @@ import com.aritr.rova.ui.text.resolve
 
 // Phase 2 — record chrome consumes the mockup token set (RecordChromeTokens,
 // docs/UI_DESIGN_TOKENS.md §2.13). Only values with no token stay local:
-// the merging-dot colour (the mockup defines no merging dot) and the 48 dp
-// a11y touch box (an interaction metric, not a mockup pixel).
-private val MergingDotColor = Color(0xFF60A5FA)   // blue — no mockup token (mockup has idle/recording/break only)
+// the 48 dp a11y touch box (an interaction metric, not a mockup pixel).
 private val ControlBtnTouchSize = 48.dp           // a11y touch target; the glass circle is centered inside
 private val StatusPillShape = RoundedCornerShape(RecordChromeTokens.statusPillRadius)
 private val PillShape = RoundedCornerShape(RecordChromeTokens.loopPillRadius)
@@ -1039,7 +1038,9 @@ private fun StatusDot(dot: StatusDotColor, modifier: Modifier = Modifier) {
     val color = when (dot) {
         StatusDotColor.RECORDING -> RecordChromeTokens.dotRecording
         StatusDotColor.WAITING   -> RecordChromeTokens.dotBreak   // slate #94A3B8 — mockup .dot-break
-        StatusDotColor.MERGING   -> MergingDotColor
+        // MERGING never reaches StatusDot — StatusPill routes it to ProcessingGlyph
+        // (Icon P2 Track A). The arm stays for exhaustiveness; tripping it is a caller bug.
+        StatusDotColor.MERGING   -> error("StatusDot is not rendered for MERGING; StatusPill uses ProcessingGlyph")
     }
     if (dot == StatusDotColor.RECORDING) {
         // mockup `.dot-recording` — blink 1.8s ease-in-out + a red glow.
@@ -1200,7 +1201,13 @@ private fun StatusPill(content: StatusPillContent, modifier: Modifier = Modifier
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(RecordChromeTokens.pillContentGap),
             ) {
-                StatusDot(content.dot)
+                if (content.dot == StatusDotColor.MERGING) {
+                    // Icon P2 Track A — branded animated merge glyph replaces the
+                    // static dot for the Merging HUD state (ADR-0031 §6/§8).
+                    ProcessingGlyph(size = 18.dp)
+                } else {
+                    StatusDot(content.dot)
+                }
                 Text(
                     content.main.resolve(),
                     style = RovaTokens.statusMain,
