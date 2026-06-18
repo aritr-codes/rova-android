@@ -30,9 +30,10 @@ fun RovaTheme(
     dynamicColor: Boolean = false,
     // ADR-0028 — the active liquid-glass palette, seeded into LocalGlassEnvironment
     // for any descendant GlassSurface. Defaults to Aurora so existing call sites
-    // (and previews) stay valid. The MaterialTheme color scheme is still driven by
-    // [darkTheme] in PR1 (Aurora→dark, Daylight→light) — palette-driven MaterialTheme
-    // colors migrate per surface in later PRs, so PR1 has no visual regression.
+    // (and previews) stay valid. The MaterialTheme color scheme is now derived from
+    // this palette via [PaletteColorScheme.from] (ADR-0028 propagation amendment,
+    // 2026-06-18) — every surface restyles from the active palette. `darkTheme` now
+    // only drives status-bar icon polarity.
     palette: RovaPalette = rovaPalettes.getValue(ThemeSelection.AURORA),
     content: @Composable () -> Unit
 ) {
