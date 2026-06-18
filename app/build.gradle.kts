@@ -2454,7 +2454,8 @@ val checkSingleColorSchemeSource = tasks.register("checkSingleColorSchemeSource"
         fun strip(src: String): String {
             val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
             val noLine = noBlock.lines().joinToString("\n") { line ->
-                val i = line.indexOf("//"); if (i >= 0) line.substring(0, i) else line
+                val i = line.indexOf("//")
+                if (i >= 0) line.substring(0, i) + " ".repeat(line.length - i) else line
             }
             // blank out double-quoted string contents (keep quotes + length)
             val noStr = Regex(""""[^"\\]*(?:\\.[^"\\]*)*"""").replace(noLine) { m -> "\"" + " ".repeat((m.value.length - 2).coerceAtLeast(0)) + "\"" }
@@ -2464,7 +2465,7 @@ val checkSingleColorSchemeSource = tasks.register("checkSingleColorSchemeSource"
         }
         fun lineAt(text: String, idx: Int) = text.substring(0, idx).count { it == '\n' } + 1
         val factory = Regex("""\b(dark|light)ColorScheme\s*\(""")
-        val mt = Regex("""MaterialTheme\s*\(""")
+        val mt = Regex("""\bMaterialTheme\s*\(""")
         val offenders = srcDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" && it.canonicalFile !in allow }
             .mapNotNull { f ->
