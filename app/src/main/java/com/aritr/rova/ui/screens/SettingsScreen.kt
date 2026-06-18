@@ -738,10 +738,8 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     }
 
     if (openThemeSheet) {
-        // ADR-0028 — Wave-1 ThemeSelection picker (Follow-System + signature six).
-        // Wave-2 palettes exist in the enum but are not surfaced until a later PR.
-        // Labels are resolved here (composable context) because SettingsOptionSheet's
-        // optionLabel is a plain lambda, mirroring the prior theme-sheet pattern.
+        // ADR-0028 — full 12-palette ThemeSwatchSheet (Follow-System + Wave-1 + Wave-2).
+        // Labels are resolved here (composable context) so the lambda stays pure.
         val followLabel = stringResource(R.string.settings_theme_selection_follow_system)
         val auroraLabel = stringResource(R.string.settings_theme_selection_aurora)
         val tideLabel = stringResource(R.string.settings_theme_selection_tide)
@@ -749,9 +747,15 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         val duskLabel = stringResource(R.string.settings_theme_selection_dusk)
         val eclipseLabel = stringResource(R.string.settings_theme_selection_eclipse)
         val daylightLabel = stringResource(R.string.settings_theme_selection_daylight)
-        SettingsOptionSheet(
+        val blossomLabel = stringResource(R.string.settings_theme_selection_blossom)
+        val coralLabel = stringResource(R.string.settings_theme_selection_coral)
+        val meadowLabel = stringResource(R.string.settings_theme_selection_meadow)
+        val cobaltLabel = stringResource(R.string.settings_theme_selection_cobalt)
+        val orchidLabel = stringResource(R.string.settings_theme_selection_orchid)
+        val graphiteLabel = stringResource(R.string.settings_theme_selection_graphite)
+        ThemeSwatchSheet(
             title = stringResource(R.string.settings_theme_label),
-            options = ThemeSelection.wave1Picker,
+            options = ThemeSelection.allPicker,
             selected = themeSelection,
             optionLabel = { sel ->
                 when (sel) {
@@ -762,7 +766,12 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     ThemeSelection.DUSK -> duskLabel
                     ThemeSelection.ECLIPSE -> eclipseLabel
                     ThemeSelection.DAYLIGHT -> daylightLabel
-                    else -> sel.name
+                    ThemeSelection.BLOSSOM -> blossomLabel
+                    ThemeSelection.CORAL -> coralLabel
+                    ThemeSelection.MEADOW -> meadowLabel
+                    ThemeSelection.COBALT -> cobaltLabel
+                    ThemeSelection.ORCHID -> orchidLabel
+                    ThemeSelection.GRAPHITE -> graphiteLabel
                 }
             },
             onPick = { settingsViewModel.themeSelection.value = it },
@@ -1093,8 +1102,12 @@ private fun themeSelectionLabel(sel: ThemeSelection): String = when (sel) {
     ThemeSelection.DUSK -> stringResource(R.string.settings_theme_selection_dusk)
     ThemeSelection.ECLIPSE -> stringResource(R.string.settings_theme_selection_eclipse)
     ThemeSelection.DAYLIGHT -> stringResource(R.string.settings_theme_selection_daylight)
-    // Wave-2 not yet surfaced in the picker; fall back to the enum name (never shown in PR1).
-    else -> sel.name
+    ThemeSelection.BLOSSOM -> stringResource(R.string.settings_theme_selection_blossom)
+    ThemeSelection.CORAL -> stringResource(R.string.settings_theme_selection_coral)
+    ThemeSelection.MEADOW -> stringResource(R.string.settings_theme_selection_meadow)
+    ThemeSelection.COBALT -> stringResource(R.string.settings_theme_selection_cobalt)
+    ThemeSelection.ORCHID -> stringResource(R.string.settings_theme_selection_orchid)
+    ThemeSelection.GRAPHITE -> stringResource(R.string.settings_theme_selection_graphite)
 }
 
 @Composable

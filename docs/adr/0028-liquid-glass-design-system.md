@@ -151,3 +151,21 @@ d. **Record personality = accent on the selected mode only; record/stop locked
    The mockup's edge-hugging landscape *re-layout* and the segmented in-sheet
    mode picker are NOT part of PR2 (candidate PR2b); PR2 themes the existing
    portrait/landscape/P+L layouts.
+
+## Amendment (2026-06-18) — theme engine slice 1: palette propagation
+
+§Consequences (PR1) froze most surfaces on the static `DarkColorScheme`/`LightColorScheme`
+until per-surface migration. This is superseded: the active palette now derives
+`MaterialTheme.colorScheme` app-wide via the pure `PaletteColorScheme.from(palette)`
+(factory base + `.copy`), so all surfaces restyle from one layer. Identity-vs-locked
+(§1.3) is unchanged — `error*` come from `RovaSemantics`, `scrim` is black, sourced
+inside the mapper; the surfaceContainer family is a neutral tonal ladder off the new
+`RovaPalette.surfaceBase`, never accent-tinted. Pinned camera/media routes (§2.4) stay
+neutral-dark: `RovaDarkSurface` applies `PinnedGlassEnvironment.forPinnedRoute` itself
+before building its scheme (the caller provides the pinned env inside its content), so a
+light app theme never leaks a light scheme onto the camera. New preBuild gate
+`checkSingleColorSchemeSource` enforces the single construction site (Theme.kt +
+PaletteColorScheme.kt). AA across all 12 palettes × derived slots is proven by
+`ThemeContrastTest`; purity/locked/opacity/pairing by `PaletteColorSchemeTest`.
+Deferred: icon glass-chip active states + animated states (ADR-0031 P2); deep
+per-surface seams only where the mapping proves too coarse in device smoke.

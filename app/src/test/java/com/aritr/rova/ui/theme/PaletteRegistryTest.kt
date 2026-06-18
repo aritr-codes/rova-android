@@ -44,4 +44,27 @@ class PaletteRegistryTest {
         assertEquals(ThemeSelection.AURORA, rovaPalettes.getValue(ThemeSelection.AURORA).id)
         assertTrue(rovaPalettes.containsKey(ThemeSelection.DEFAULT))
     }
+
+    @Test
+    fun `every palette has an opaque surfaceBase matching its darkest background stop`() {
+        val expected = mapOf(
+            ThemeSelection.AURORA to Color(0xFF141622),
+            ThemeSelection.TIDE to Color(0xFF0E1A1F),
+            ThemeSelection.JADE to Color(0xFF0C1C18),
+            ThemeSelection.DUSK to Color(0xFF1F1310),
+            ThemeSelection.ECLIPSE to Color(0xFF000000),
+            ThemeSelection.DAYLIGHT to Color(0xFFF4F1EA),
+            ThemeSelection.BLOSSOM to Color(0xFF1E1220),
+            ThemeSelection.CORAL to Color(0xFF1F1510),
+            ThemeSelection.MEADOW to Color(0xFF12190E),
+            ThemeSelection.COBALT to Color(0xFF0E1230),
+            ThemeSelection.ORCHID to Color(0xFF1E1019),
+            ThemeSelection.GRAPHITE to Color(0xFF0E0F12),
+        )
+        expected.forEach { (sel, base) ->
+            val p = rovaPalettes.getValue(sel)
+            assertEquals("$sel surfaceBase", base, p.surfaceBase)
+            assertEquals("$sel surfaceBase must be opaque", 1f, p.surfaceBase.alpha)
+        }
+    }
 }

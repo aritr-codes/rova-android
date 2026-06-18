@@ -2433,6 +2433,86 @@ val checkRovaGlyphHome = tasks.register("checkRovaGlyphHome") {
     }
 }
 
+val checkSingleColorSchemeSource = tasks.register("checkSingleColorSchemeSource") {
+    group = "verification"
+    description = "The Material ColorScheme is constructed in exactly one place — the engine " +
+        "(Theme.kt builds it from PaletteColorScheme; PaletteColorScheme.kt holds the factory base). " +
+        "No other file may call darkColorScheme(/lightColorScheme( or pass MaterialTheme(colorScheme=…) " +
+        "(ADR-0028 amendment 2026-06-18). // colorscheme-source-opt-out to waive a line."
+    val srcDir = file("src/main/java/com/aritr/rova")
+    val allow = setOf(
+        file("src/main/java/com/aritr/rova/ui/theme/Theme.kt").canonicalFile,
+        file("src/main/java/com/aritr/rova/ui/theme/PaletteColorScheme.kt").canonicalFile,
+    )
+    inputs.dir(srcDir).withPropertyName("rovaSources")
+    doLast {
+        if (!srcDir.exists()) {
+            throw GradleException("checkSingleColorSchemeSource: Rova source dir missing: $srcDir")
+        }
+        // Strip block + line comments AND string literals (preserve newlines for line numbers) so a
+        // `colorScheme =` inside a comment/string never matches.
+        fun strip(src: String): String {
+            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
+            val noLine = noBlock.lines().joinToString("\n") { line ->
+                val i = line.indexOf("//")
+                if (i >= 0) line.substring(0, i) + " ".repeat(line.length - i) else line
+            }
+            // blank out double-quoted string contents (keep quotes + length)
+            val noStr = Regex(""""[^"\\]*(?:\\.[^"\\]*)*"""").replace(noLine) { m -> "\"" + " ".repeat((m.value.length - 2).coerceAtLeast(0)) + "\"" }
+            // blank char literals too — a Kotlin '(' or ')' must not corrupt the balanced-paren scan (codex).
+            // Preserve length (escaped literals like '\n' are 4 chars) so raw-offset waiver stays 1:1.
+            return Regex("""'(\\.|[^'\\])'""").replace(noStr) { m -> "'" + " ".repeat(m.value.length - 2) + "'" }
+        }
+        fun lineAt(text: String, idx: Int) = text.substring(0, idx).count { it == '\n' } + 1
+        val factory = Regex("""\b(dark|light)ColorScheme\s*\(""")
+        val mt = Regex("""\bMaterialTheme\s*\(""")
+        val offenders = srcDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.canonicalFile !in allow }
+            .mapNotNull { f ->
+                val raw = f.readText()
+                val text = strip(raw)
+                val hits = mutableListOf<Int>()
+                factory.findAll(text).forEach { m ->
+                    if (!waived(raw, m.range.first)) hits += lineAt(text, m.range.first)
+                }
+                // Balanced-paren scan from each MaterialTheme( — inspect only THAT call's args for colorScheme=
+                mt.findAll(text).forEach { m ->
+                    val open = text.indexOf('(', m.range.first)
+                    if (open < 0) return@forEach
+                    var depth = 0; var i = open; var close = -1
+                    while (i < text.length) {
+                        when (text[i]) { '(' -> depth++; ')' -> { depth--; if (depth == 0) { close = i; break } } }
+                        i++
+                    }
+                    if (close < 0) return@forEach
+                    val args = text.substring(open + 1, close)
+                    if (Regex("""\bcolorScheme\s*=""").containsMatchIn(args) && !waived(raw, m.range.first)) {
+                        hits += lineAt(text, m.range.first)
+                    }
+                }
+                if (hits.isEmpty()) null else f to hits.sorted()
+            }.toList()
+        if (offenders.isNotEmpty()) {
+            val report = offenders.joinToString("\n") { (f, hits) ->
+                hits.joinToString("\n") { "  ${f.relativeTo(rootDir)}:$it" }
+            }
+            throw GradleException(
+                "ADR-0028 amendment: the Material ColorScheme must be built only by the theme engine " +
+                    "(Theme.kt / PaletteColorScheme.kt). A surface constructs or overrides its own scheme " +
+                    "— route it through the active palette instead.\nOffenders:\n$report"
+            )
+        }
+    }
+}
+
+// shared: a `// colorscheme-source-opt-out` on the same or previous line waives a hit
+fun waived(text: String, idx: Int): Boolean {
+    val lineStart = text.lastIndexOf('\n', idx).let { if (it < 0) 0 else it }
+    val lineEnd = text.indexOf('\n', idx).let { if (it < 0) text.length else it }
+    val prevStart = text.lastIndexOf('\n', (lineStart - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it }
+    return text.substring(prevStart, lineEnd).contains("colorscheme-source-opt-out")
+}
+
 val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
     group = "verification"
     description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
@@ -2620,6 +2700,7 @@ afterEvaluate {
         dependsOn(checkSemanticIconNoRawAlpha)
         dependsOn(checkStatusColorLocked)
         dependsOn(checkRovaGlyphHome)
+        dependsOn(checkSingleColorSchemeSource)
     }
 }
 
