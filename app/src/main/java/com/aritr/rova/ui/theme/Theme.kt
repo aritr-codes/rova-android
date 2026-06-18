@@ -3,8 +3,6 @@ package com.aritr.rova.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -15,75 +13,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.aritr.rova.ui.components.ReducedMotion
 
-// Phase 2.1A — dark scheme aligned with docs/UI_DESIGN_TOKENS.md §2.1.
-// `primary` flips Harbor90 → InfraBlue (#5B7FFF) and `error` flips
-// RecordingRed → SignalRed (#EF4444); the surface stack picks up the
-// new Midnight / MidnightSurface / MidnightSurfaceAlt hex values from
-// Color.kt. Container slots (primaryContainer, errorContainer, etc.)
-// and on* tints stay as-shipped — only color values landed here, no
-// slot-mapping changes.
-private val DarkColorScheme = darkColorScheme(
-    primary = InfraBlue,
-    onPrimary = Color.White,
-    primaryContainer = Harbor40,
-    onPrimaryContainer = Ink10,
-    secondary = Copper90,
-    onSecondary = Ink95,
-    secondaryContainer = Copper40,
-    onSecondaryContainer = Sand10,
-    tertiary = Sage90,
-    onTertiary = Ink95,
-    tertiaryContainer = Sage40,
-    onTertiaryContainer = Sand10,
-    error = SignalRed,
-    errorContainer = OnRecordingRedContainer,
-    onError = Color.White,
-    onErrorContainer = RecordingRedContainer,
-    background = Midnight,
-    onBackground = Sand10,
-    surface = MidnightSurface,
-    onSurface = Sand10,
-    surfaceVariant = MidnightSurfaceAlt,
-    onSurfaceVariant = Ink30,
-    outline = MidnightOutline,
-    outlineVariant = Ink80,
-    inverseSurface = Sand30,
-    inverseOnSurface = Ink95,
-    inversePrimary = Harbor40
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Harbor40,
-    onPrimary = Color.White,
-    primaryContainer = Harbor90,
-    onPrimaryContainer = Ink95,
-    secondary = Copper40,
-    onSecondary = Color.White,
-    secondaryContainer = Copper90,
-    onSecondaryContainer = Ink95,
-    tertiary = Sage40,
-    onTertiary = Color.White,
-    tertiaryContainer = Sage90,
-    onTertiaryContainer = Ink95,
-    error = RecordingRed,
-    onError = Color.White,
-    errorContainer = RecordingRedContainer,
-    onErrorContainer = OnRecordingRedContainer,
-    background = Sand30,
-    onBackground = Ink95,
-    surface = Sand10,
-    onSurface = Ink95,
-    surfaceVariant = Sand60,
-    onSurfaceVariant = Ink80,
-    outline = Sand90,
-    outlineVariant = Sand60,
-    // Phase 2.1A — pinned to the pre-2.1A MidnightSurface hex (#18212B) so
-    // the light scheme is byte-identical with shipped Slices 1-4 even after
-    // the dark MidnightSurface moved to #0E1216.
-    inverseSurface = LightInverseSurface,
-    inverseOnSurface = Sand10,
-    inversePrimary = Harbor90
-)
 
 @Composable
 fun RovaTheme(
@@ -107,7 +36,7 @@ fun RovaTheme(
     palette: RovaPalette = rovaPalettes.getValue(ThemeSelection.AURORA),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val colorScheme = PaletteColorScheme.from(palette)
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -150,8 +79,13 @@ fun RovaTheme(
  */
 @Composable
 fun RovaDarkSurface(content: @Composable () -> Unit) {
+    // Pinned camera/media routes stay cinematic neutral-dark (ADR-0028 §2.4). The
+    // pinned-env swap is provided INSIDE this composable's content by the caller, so
+    // we apply forPinnedRoute here too to build the scheme from the neutral-dark base
+    // carrying ONLY the active accent — never the (possibly light) app surface.
+    val pinned = PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current)
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = PaletteColorScheme.from(pinned.palette),
         typography = Typography,
         content = content,
     )
