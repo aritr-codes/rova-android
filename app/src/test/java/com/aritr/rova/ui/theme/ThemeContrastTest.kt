@@ -136,4 +136,23 @@ class ThemeContrastTest {
             assertTrue("$sel outline/surface", ratioColor(s.outline, s.surface) >= 3.0)
         }
     }
+
+    @Test
+    fun `processing status color clears 3 to 1 over the pinned-dark record glass`() {
+        // Both merge surfaces (Record-home StatusPill, recovery card) render on the
+        // pinned-dark record route — neutral-dark regardless of theme. The branded
+        // merge glyph uses the locked IconStatus.Processing -> RovaSemantics.escalating.
+        // Substrate = the StatusPill glass fill (Black @ 40%) composited over the
+        // neutral-dark record background. (Brighter video frames are the inherited
+        // over-media caveat the glass chip handles per ADR-0031 §6 — not this slice.)
+        val recordBg = NeutralDarkRecordPalette.surfaceBase
+        val glassAlpha = RecordChromeTokens.glassFill.alpha.toDouble()  // Black @ 0.40
+        val (br, bg, bb) = rgb(recordBg)
+        val substrate = ContrastMath.compositeAlphaOver(0, 0, 0, glassAlpha, br, bg, bb)
+        val ratio = ratioOver(RovaSemantics.escalating, substrate)
+        assertTrue(
+            "escalating ${"%.2f".format(ratio)}:1 < 3.0 over pinned-dark record glass",
+            ratio >= 3.0,
+        )
+    }
 }
