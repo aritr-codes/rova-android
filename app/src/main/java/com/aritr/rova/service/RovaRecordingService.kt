@@ -699,9 +699,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
         private const val WAKE_DRIFT_BUDGET_MS = 60_000L
         private const val WAKE_REARM_OFFSET_MS = 5_000L
 
-        // beepStart playback await + acoustic tail margin. See beepStart()
-        // KDoc for rationale.
-        private const val BEEP_PLAYBACK_TIMEOUT_MS = 1_500L
+        // beepStart acoustic tail margin past onCompletion. The await ceiling
+        // is no longer a fixed constant — it is derived from the cue's real
+        // duration via beepPlaybackCeilingMs(). See beepStart() KDoc.
         private const val BEEP_TAIL_MARGIN_MS = 150L
 
         /**
@@ -1465,8 +1465,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // camera (which would race the in-flight teardown).
                     var lastResult: SegmentResult = SegmentResult.RetryableFailure
                     retry@ for (attempt in 1..3) {
-                        _serviceState.update { it.copy(isRecording = true, recordingError = null) }
-                        beepStart(mMinutes.toInt()) // Q3: beep on recording start
+                        // Pre-roll cue plays OUTSIDE capture: beepStart suspends
+                        // until the cue finishes, THEN we mark isRecording and open
+                        // the mic. Setting isRecording before the cue made the HUD
+                        // claim "recording" during the ~3.7 s pre-roll (cue-bleed fix).
+                        _serviceState.update { it.copy(recordingError = null) }
+                        beepStart(mMinutes.toInt()) // Q3: pre-roll cue, awaited to completion
+                        _serviceState.update { it.copy(isRecording = true) }
                         lastResult = recordSegment()
                         beepEnd(mMinutes.toInt()) // Q3: beep on recording stop
                         _serviceState.update { it.copy(isRecording = false) }
@@ -4325,24 +4330,35 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    // Q3: short beep on recording start/stop using rova_beep.mp3.
+    // Q3: short beep on recording start/stop using rova_beep.
     //
-    // Beta-smoke fix v2: bleed-prevention is now timing, not blanket
-    // suppression. `beepStart` suspends until the speaker has fully
-    // decayed before returning, so the next call (recordSegment) does
-    // not open the mic on top of a still-radiating tone. `beepEnd` is
-    // fire-and-forget — the mic is OFF when it runs, so no capture
-    // path exists. For interval == 0 (continuous), the policy
-    // suppresses both ends entirely because there is no natural gap
-    // to hide a synchronous-await playback inside.
+    // Bleed-prevention is timing, not suppression: `beepStart` suspends
+    // until the cue has finished playing (plus a small acoustic-decay
+    // margin) before returning, so the next call (recordSegment) does
+    // not open the mic on top of an audible cue. `beepEnd` is
+    // fire-and-forget — the mic is OFF when it runs, so no capture path
+    // exists. For interval == 0 (continuous), the policy suppresses both
+    // ends entirely because there is no natural gap to hide a
+    // synchronous-await playback inside.
     //
-    // Constants:
-    // - BEEP_PLAYBACK_TIMEOUT_MS: defensive ceiling on the await.
-    //   `rova_beep.mp3` is ~300 ms; any device that exceeds 1.5 s is
-    //   broken in a way no amount of waiting will fix.
-    // - BEEP_TAIL_MARGIN_MS: acoustic decay buffer past
-    //   onCompletion. CameraX recorder.start() is the next thing to
-    //   run; this margin keeps mic-open strictly after speaker-quiet.
+    // Cue-bleed fix (2026-06-18, device RZCYA1VBQ2H): the await ceiling
+    // used to be a fixed 1500 ms, premised on `rova_beep` being "~300 ms".
+    // On-device measurement proved the asset is a ~3527 ms, 4-pulse cue,
+    // so the 1500 ms timeout always tripped ~2 s BEFORE onCompletion;
+    // `beepStart` returned mid-cue and the mic opened while ~3 pulses were
+    // still playing → the cue bled into every segment (single + DualShot,
+    // both fed by this same path). The ceiling is now derived from the
+    // cue's real `MediaPlayer.duration` via `beepPlaybackCeilingMs()` so
+    // the await genuinely reaches onCompletion; it auto-adapts if the asset
+    // changes. NOTE: the cue is ~3.5 s, so this is a ~3.7 s pre-roll per
+    // segment — trim the asset if a shorter gap is wanted (asset hygiene,
+    // not correctness). `BEEP_TAIL_MARGIN_MS` is the decay buffer past
+    // onCompletion; on this device acoustic silence arrived ~40 ms BEFORE
+    // onCompletion, so 150 ms is comfortable.
+    //
+    // The MediaPlayer lifecycle runs on the main Looper: MediaPlayer is
+    // not thread-safe and delivers onCompletion on the creating thread's
+    // Looper. The await is suspending, so it never blocks the main thread.
     private suspend fun beepStart(intervalMinutes: Int) {
         if (!com.aritr.rova.service.audio.shouldPlayBeep(
                 enableBeeps = RovaSettings(this).enableBeeps,
@@ -4350,24 +4366,35 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 intervalMinutes = intervalMinutes
             )
         ) return
-        val mp = try {
-            MediaPlayer.create(this, R.raw.rova_beep) ?: return
-        } catch (e: Exception) {
-            RovaLog.w("beepStart: create failed", e)
-            return
-        }
-        val done = CompletableDeferred<Unit>()
-        mp.setOnCompletionListener {
-            try { it.release() } catch (_: Throwable) {}
-            done.complete(Unit)
-        }
-        try {
-            mp.start()
-            withTimeoutOrNull(BEEP_PLAYBACK_TIMEOUT_MS) { done.await() }
-            delay(BEEP_TAIL_MARGIN_MS)
-        } catch (e: Exception) {
-            RovaLog.w("beepStart: playback failed", e)
-            try { mp.release() } catch (_: Throwable) {}
+        withContext(Dispatchers.Main.immediate) {
+            val mp = try {
+                MediaPlayer.create(this@RovaRecordingService, R.raw.rova_beep) ?: return@withContext
+            } catch (e: Exception) {
+                RovaLog.w("beepStart: create failed", e); return@withContext
+            }
+            val done = CompletableDeferred<Unit>()
+            mp.setOnCompletionListener { done.complete(Unit) }
+            mp.setOnErrorListener { _, _, _ -> done.complete(Unit); true }
+            val cueDurationMs = mp.duration.toLong()
+            if (com.aritr.rova.service.audio.beepCeilingIsClamped(cueDurationMs)) {
+                RovaLog.w(
+                    "beepStart: cue duration ${cueDurationMs}ms exceeds the " +
+                        "${com.aritr.rova.service.audio.BEEP_CEILING_MAX_MS}ms ceiling backstop — " +
+                        "await may truncate and the cue could bleed; trim R.raw.rova_beep"
+                )
+            }
+            val ceiling = com.aritr.rova.service.audio.beepPlaybackCeilingMs(cueDurationMs)
+            try {
+                mp.start()
+                withTimeoutOrNull(ceiling) { done.await() }
+                delay(BEEP_TAIL_MARGIN_MS)
+            } catch (e: Exception) {
+                RovaLog.w("beepStart: playback failed", e)
+            } finally {
+                mp.setOnCompletionListener(null)
+                mp.setOnErrorListener(null)
+                runCatching { mp.release() }
+            }
         }
     }
 
