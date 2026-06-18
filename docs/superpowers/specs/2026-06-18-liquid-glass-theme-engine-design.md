@@ -110,9 +110,9 @@ identity-vs-locked contract, exactly like `LibraryColorSpec`):
 | Material slot     | Source                          |
 |-------------------|---------------------------------|
 | `error`           | `RovaSemantics.error` (#EF4444) |
-| `onError`         | `Color.White`                   |
-| `errorContainer`  | `RovaSemantics.error @ low alpha` over `surfaceBase` → opaque |
-| `onErrorContainer`| `palette.textHigh`              |
+| `onError`         | near-black (white-on-#EF4444 is ~3.95:1 < AA; black is ~5.0:1) |
+| `errorContainer`  | M3 factory default — the locked `RovaSemantics.error` must NOT be mutated (`.copy`) per ADR-0031 §3 / `checkStatusColorLocked` |
+| `onErrorContainer`| M3 factory default (pairs with the factory errorContainer) |
 | `scrim`           | locked `Color.Black` (not palette identity) |
 
 Light vs dark polarity comes from `palette.isLight` (only Daylight is light) — it

@@ -123,7 +123,6 @@ class PaletteColorSchemeTest {
         concrete.forEach { sel ->
             val s = PaletteColorScheme.from(rovaPalettes.getValue(sel))
             assertEquals("$sel error", RovaSemantics.error, s.error)
-            assertEquals("$sel onError", Color.White, s.onError)
             assertEquals("$sel scrim", Color.Black, s.scrim)
         }
     }
@@ -246,9 +245,10 @@ object PaletteColorScheme {
             inverseOnSurface = if (p.isLight) Color(0xFFF2F3F6) else Color(0xFF15171C),
             inversePrimary = p.accent,
             error = RovaSemantics.error,
-            onError = Color.White,
-            errorContainer = RovaSemantics.error.copy(alpha = 0.22f).compositeOver(sb),
-            onErrorContainer = p.textHigh,
+            // onError is near-black: white on the locked #EF4444 error is only ~3.95:1 (< AA 4.5).
+            onError = NearBlack,
+            // errorContainer / onErrorContainer keep the M3 factory defaults — the locked
+            // RovaSemantics.error must NOT be mutated (.copy) per ADR-0031 §3 / checkStatusColorLocked.
             scrim = Color.Black,
         )
     }
