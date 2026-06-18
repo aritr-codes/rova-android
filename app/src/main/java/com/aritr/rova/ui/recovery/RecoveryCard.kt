@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.ProcessingGlyph
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
@@ -354,14 +355,25 @@ private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = headerLabel,
-                style = MaterialTheme.typography.labelSmall,
-                // WCAG 2.2 AA (ADR-0020, audit RECOV-06): 0.36α was ~3:1 over the
-                // elevated card — below the 4.5:1 SC 1.4.3 bar. 0.70α ≈ 6.83:1.
-                // See ContrastMathTest.
-                color = Color.White.copy(alpha = 0.70f),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (progress != null) {
+                    // Icon P2 Track A — branded animated merge glyph beside the
+                    // "Merging" header while a recovery merge runs (ADR-0031 §6/§8).
+                    // Decorative; the strip's polite live region announces progress.
+                    ProcessingGlyph(size = 16.dp)
+                }
+                Text(
+                    text = headerLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    // WCAG 2.2 AA (ADR-0020, audit RECOV-06): 0.36α was ~3:1 over the
+                    // elevated card — below the 4.5:1 SC 1.4.3 bar. 0.70α ≈ 6.83:1.
+                    // See ContrastMathTest.
+                    color = Color.White.copy(alpha = 0.70f),
+                )
+            }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
