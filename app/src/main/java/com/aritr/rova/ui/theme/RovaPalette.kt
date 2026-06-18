@@ -36,6 +36,7 @@ data class RovaPalette(
     val textFaint: Color,
     val accentOnDark: Color,
     val accentContainerOnDark: Color,
+    val surfaceBase: Color,
     val isLight: Boolean,
 )
 
@@ -67,6 +68,7 @@ private fun darkPalette(
     textFaint = DarkTextFaint,
     accentOnDark = accent,
     accentContainerOnDark = accent.copy(alpha = 0.22f),
+    surfaceBase = Color(bgBottom),
     isLight = false,
 )
 
@@ -95,6 +97,7 @@ private val Eclipse = RovaPalette(
     textFaint = DarkTextFaint,
     accentOnDark = Color(0xFF8B7CFF),
     accentContainerOnDark = Color(0xFF8B7CFF).copy(alpha = 0.22f),
+    surfaceBase = Color(0xFF000000),
     isLight = false,
 )
 
@@ -112,6 +115,7 @@ private val Daylight = RovaPalette(
     textFaint = Color(0x6B141A28),
     accentOnDark = Color(0xFF5B7FFF),
     accentContainerOnDark = Color(0xFF5B7FFF).copy(alpha = 0.22f),
+    surfaceBase = Color(0xFFF4F1EA),
     isLight = true,
 )
 
@@ -166,5 +170,6 @@ internal val NeutralDarkRecordPalette = RovaPalette(
     textFaint = Color.White.copy(alpha = 0.50f),
     accentOnDark = Color(0xFF5B9DFF),       // overwritten per-route
     accentContainerOnDark = Color(0xFF5B9DFF).copy(alpha = 0.22f), // overwritten per-route
+    surfaceBase = Color(0xFF05070B),
     isLight = false,
 )
