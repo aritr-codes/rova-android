@@ -673,7 +673,9 @@ private fun ThemeSwatchTile(
             .clip(RoundedCornerShape(16.dp))
             .background(p.background)
             .border(if (isSelected) 2.dp else 1.dp, ring, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            // selectable (not clickable) — single-select picker: carries Role.RadioButton
+            // so TalkBack announces selected state + satisfies checkA11yClickableHasRole (ADR-0020).
+            .selectable(selected = isSelected, onClick = onClick, role = Role.RadioButton)
             .padding(12.dp)
             .heightIn(min = 72.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -28,5 +28,8 @@ enum class ThemeSelection {
         val wave1Picker: List<ThemeSelection> = listOf(
             FOLLOW_SYSTEM, AURORA, TIDE, JADE, DUSK, ECLIPSE, DAYLIGHT,
         )
+
+        /** Full picker — Follow-System + all 12 palettes (engine slice 1, 2026-06-18). */
+        val allPicker: List<ThemeSelection> = listOf(FOLLOW_SYSTEM) + entries.filter { it != FOLLOW_SYSTEM }
     }
 }

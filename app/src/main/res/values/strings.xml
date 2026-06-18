@@ -410,6 +410,12 @@
     <string name="settings_theme_selection_dusk">Dusk</string>
     <string name="settings_theme_selection_eclipse">Eclipse</string>
     <string name="settings_theme_selection_daylight">Daylight</string>
+    <string name="settings_theme_selection_blossom">Blossom</string>
+    <string name="settings_theme_selection_coral">Coral</string>
+    <string name="settings_theme_selection_meadow">Meadow</string>
+    <string name="settings_theme_selection_cobalt">Cobalt</string>
+    <string name="settings_theme_selection_orchid">Orchid</string>
+    <string name="settings_theme_selection_graphite">Graphite</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_language_supporting">Choose the app language</string>
     <string name="settings_language_system">System default</string>
