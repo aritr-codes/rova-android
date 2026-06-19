@@ -94,6 +94,17 @@ object RecordChromeTokens {
     /** `.stop-sq` — `#ef4444`. */
     val stopSquare = Color(0xFFEF4444)
 
+    // ── FAB lifecycle states (board-3-semantic.html FB row; UI Phase 2 PR-2) ──
+    /** Recording disc (`rec_morph` kind=disc) — fixed red gradient `linear-gradient(160deg,#ff6b6b,#c0392b)`. */
+    val fabRecordingDiscStart = Color(0xFFFF6B6B)
+    val fabRecordingDiscEnd = Color(0xFFC0392B)
+    /** `rec_morph` white rounded-square stop mark on the recording disc (white clears AA over the dark red). */
+    val fabRecMorphFill = Color.White
+    val fabRecMorphSize = 18.dp
+    val fabRecMorphRadius = 4.dp
+    /** Ghost FAB container (Disabled / Waiting / Processing) — board `rgba(accent,.14)` + 1dp edge, no shadow. */
+    val fabGhostFillAlpha = 0.14f
+
     // ── Camera-zone framing (dual mode) ──────────────────────────────────
     /** `.cam-split-divider` — `rgba(255,255,255,0.14)`. */
     val splitDivider = Color.White.copy(alpha = 0.14f)

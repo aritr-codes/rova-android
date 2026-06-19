@@ -158,6 +158,41 @@ object RovaGlyphs {
         accent = glyph { strokePath { seg(5.4f, 10.6f, 5.4f, 13.4f) } },
     )
 
+    // ── FAB lifecycle glyphs (board-3-semantic.html FB row) ─────────────────
+
+    // Record nav/disabled resting form — ring (outline) + accent core. board `rec_ring`.
+    // The FAB Disabled state renders this (the action's resting silhouette).
+    val RecordRing = RovaGlyph(
+        outline = glyph { strokePath { circle(12f, 12f, 8f) } },
+        accent = glyph { fillPath { circle(12f, 12f, 3.2f) } },
+    )
+
+    // Waiting — hourglass frame (outline) + accent sand (accent). board `waiting`.
+    // Pending / scheduled / between intervals (FAB Waiting state).
+    val Waiting = RovaGlyph(
+        outline = glyph {
+            svgStroke("M7 4h10")
+            svgStroke("M7 20h10")
+            svgStroke("M7.5 4c0 4 4.5 5 4.5 8 0-3 4.5-4 4.5-8")
+            svgStroke("M7.5 20c0-4 4.5-5 4.5-8 0 3 4.5 4 4.5 8")
+        },
+        accent = glyph { svgFill("M12 12.4c-1.3 1.3-2.6 2.2-2.6 5.1h5.2c0-2.9-1.3-3.8-2.6-5.1z") },
+    )
+
+    // Processing — 270° arc, spun by the consumer. board `proc_arc`. Mono (single layer).
+    val ProcArc = RovaGlyph(
+        outline = glyph { svgStroke("M12 4a8 8 0 1 1-7.4 5") },
+    )
+
+    // Processing — reduced-motion static fallback: three dots. board `proc_dots`.
+    val ProcDots = RovaGlyph(
+        outline = glyph {
+            fillPath { circle(5.5f, 12f, 1.8f) }
+            fillPath { circle(12f, 12f, 1.8f) }
+            fillPath { circle(18.5f, 12f, 1.8f) }
+        },
+    )
+
     // ── Folded-in record-chrome vectors (ex-RecordChromeIcons, verbatim) ────
     // Single-layer, neutral white, tinted by the consuming Icon/SemanticIcon.
     // Kept at their original viewports/strokes — this was a structural move, not

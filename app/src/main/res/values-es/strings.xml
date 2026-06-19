@@ -203,6 +203,8 @@
     <string name="record_fab_start_cd">Iniciar grabación</string>
     <string name="record_fab_stop_cd">Detener grabación</string>
     <string name="record_fab_start_unavailable_cd">Iniciar grabación (no disponible)</string>
+    <string name="record_fab_waiting_cd">Esperando entre clips. Detener grabación</string>
+    <string name="record_fab_processing_cd">Combinando clips</string>
 
     <!-- Recovery chip -->
     <string name="record_recovery_review">Revisar</string>
