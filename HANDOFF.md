@@ -1,19 +1,21 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-18 — the P1 recording-cue audio-bleed bug is FIXED (PR #121, device-smoke PASS). `master` = `0a8818e` and `origin/master` is now CURRENT (pushed through `0a8818e`; the prior ~50-commit local-only backlog including theme engine slice 1 / PR #120 + Icon P2 Track A is published). Open PRs: #121 (cue-bleed fix, ready to merge) + #115 (DualSight, archival/never-merge). NEXT = owner pick from the next-task shortlist at the bottom.**
+> **As of 2026-06-19 — UI Phase 2 PR-1 (theme hygiene) + PR-2 (board-exact Record FAB lifecycle) are MERGED. `master` = `8225c80`, `origin/master` CURRENT. PRs #122 + #123 squash-merged (both off master, independent), branches deleted; owner device-smoke GO on the FAB. Earlier this session: cue-bleed fix #121 merged (`d4ef5b5`). Open PRs: only #115 (DualSight, archival/never-merge). NEXT = UI Phase 2 continuation — PR-3 icon foundation → PR-4 Library migration → PR-5 remaining surfaces (plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7).**
 
 ---
 
 ## Where things stand
 
-- **`master` = `0a8818e`; `origin/master` CURRENT** (the previously-unpushed ~50-commit backlog was published this session on owner GO). The cue-bleed fix lives on pushed branch `fix/beep-cue-bleed` (PR #121, open against master). Working tree clean apart from ephemeral `gradle_*.log` in root.
-- **Static gates: 46** custom `check*` tasks, all green on master. (46th = `checkSingleColorSchemeSource`, theme engine; 45th = `checkRovaGlyphHome`; the icon seam added `checkSemanticIconNoRawAlpha` + `checkStatusColorLocked`.) Icon P2 added **no** new gate.
+- **`master` = `8225c80`; `origin/master` CURRENT.** UI Phase 2 PR-1 (#122) + PR-2 (#123) merged this session; cue-bleed #121 merged earlier. Working tree clean apart from ephemeral `gradle_*.log` / `smoke_*.png` in root.
+- **Static gates: 46** custom `check*` tasks, all green on master. (46th = `checkSingleColorSchemeSource`, theme engine; 45th = `checkRovaGlyphHome`; the icon seam added `checkSemanticIconNoRawAlpha` + `checkStatusColorLocked`.) **UI Phase 2 PR-1/PR-2 added no new gate.**
 - **Open PRs:** only **#115 — DualSight investigation** (DRAFT, archival, **never merge** — concurrent-camera hardware-blocked; see `memory/project_pr_delta_dualsight_probe.md`).
 - **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke mandatory for any capture path (device = RZCYA1VBQ2H, Android 14).
 
 ### Landed since the last handoff (all on local master, owner device-GO)
 
+- **UI Phase 2 PR-1 — theme hygiene, PR #122 → master `5d8c292`.** New pure `ReducedTransparency` seam: glass→solid collapse now fires on the real OS high-contrast-text signal OR reduce-motion (was reduce-motion only, so high-contrast-text users never got the solid path). `RovaTheme`/`RovaDarkSurface` now `remember(palette) { PaletteColorScheme.from(palette) }`. JVM test; no new gate.
+- **UI Phase 2 PR-2 — board-exact Record FAB lifecycle, PR #123 → master `8225c80` (owner device-smoke GO).** Rebuilt the FAB to match `board-3-semantic.html`'s `FB` row exactly (first cut reused primitives → NO-GO; redone). Pure `RecordFabVisualSpec` (visual ⟂ action) drives 5 states: Idle accent-gradient disc + `rec_disc` · Recording red-gradient disc + `rec_morph` (no ring) · Waiting ghost + `waiting` hourglass (cancellable) · Processing ghost + spinning `proc_arc` (inert) · Disabled ghost + `rec_ring`. Authored `RecordRing`/`Waiting`/`ProcArc`/`ProcDots` glyphs (`RovaGlyphs`); `rec_morph` = white Box. **AA (full 4.5:1):** disc = `DialogActionColors`-deepened accent gradient + new `IconRole.OnAccent` (the FAB is on the always-white pinned route, so board-literal white-on-accent would fail light accents). `ThemeContrastTest` pins accent-ghost ≥3:1 + OnAccent ≥4.5:1 × 12 palettes. Open Q (owner GO'd as-is): Disabled FAB shows board-literal faint-ring + **accent core** — revisit if a fully-dim disabled reads better. Plan/status: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7. Full record: `memory/project_icon_glyph_system.md`.
 - **Recording-cue audio-bleed bug — FIXED, PR #121 (branch `fix/beep-cue-bleed`, commit `9848fab`).** Proven on-device: `rova_beep` is a ~3.5 s/4-pulse cue (not "~300 ms"), so `beepStart`'s fixed 1500 ms await ceiling truncated mid-cue and the mic opened on ~3 pulses still playing → bled into every segment (single + DualShot). Fix derives the await ceiling from the cue's real `MediaPlayer.duration` (pure `BeepTiming.beepPlaybackCeilingMs`, JVM-tested), hardens the player lifecycle (`Main.immediate` + `try/finally` release + `OnErrorListener`), reorders `isRecording`, and trims the asset to a 1 s beep. Device-smoke PASS (objective WAV analysis + owner playback). Full record: `memory/project_beep_cue_bleed_fix.md`.
 - **Liquid Glass theme engine — slice 1 (palette propagation), PR #120 → master `8a75849`.** Pure `PaletteColorScheme.from(palette): ColorScheme` drives MaterialTheme app-wide (every `colorScheme.*` reader restyles per palette, not just ~3 surfaces); 12-swatch picker (`ThemeSwatchSheet`, Wave-2 exposed, en+es); **46th gate `checkSingleColorSchemeSource`**; `ThemeContrastTest` asserts WCAG AA across all 12 palettes; pinned routes (Record/Player/Onboarding) stay neutral-dark via `PinnedGlassEnvironment`. Full record: `memory/project_theme_engine.md`.
 - **Icon P2 Track A — branded merge animation, merged `c4f9baa` (no-ff).** One shared indeterminate-spin primitive (pure `MergeMotion` + `ProcessingGlyph` on the `SemanticIcon` seam) drives both merge surfaces — Record-home `StatusPill` (orange spinner replaces the retired blue `MergingDotColor`) and recovery-card `ProgressStrip` header. Locked `IconStatus.Processing → RovaSemantics.escalating`; reduced-motion static; no new gate. Device-GO on the pill; recovery surface closed by `ProcessingGlyph` parity. Full record: `memory/project_icon_glyph_system.md` (P2 entry).
@@ -64,31 +66,46 @@ The P1 cue-bleed bug is done (PR #121). Two parallel survey agents (reliability 
 
 ---
 
-## Fresh-session kickoff prompt — next dev task (owner pick)
+## Fresh-session kickoff prompt — UI Phase 2 PR-3 → PR-4 → PR-5 (icon system)
 
-Paste this to start the next session. Pick ONE task from the shortlist above; default to the `RovaRecordingService.kt` split unless the owner says otherwise.
+Paste this to start the next session. UI Phase 2 PR-1/PR-2 are MERGED; this continues the icon system.
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
+Caveman mode + Ultracode ON.
 
-Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, and docs/BACKLOG.md. Don't
-re-explore what those establish. Confirm master is 0a8818e and origin/master is current (cue-bleed
-fix PR #121 open; theme engine + Icon P2 already merged; 46 gates) before starting.
+Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, docs/BACKLOG.md, and the
+UI Phase 2 plan docs/UI_PHASE2_ICON_THEME_AUDIT.md (esp. §7 — the reconciled PR sequence). Don't
+re-explore what those establish. Confirm master is 8225c80 and origin/master is current (UI Phase 2
+PR-1 #122 + PR-2 #123 merged; 46 gates) before starting.
 
-TASK: the P1 cue-bleed bug is DONE (PR #121). Pick the next item from the "Next development task —
-shortlist" in HANDOFF.md. Default = RovaRecordingService.kt split (P2): decompose the largest, most
-load-bearing file (sole owner of CameraX + MediaMuxer + the segment loop) into seams, behavior-
-preserving. The 46-gate static suite + JVM tests pin the invariants — keep them green at every step;
-no `check*` may be edited to pass. A real-device capture smoke on RZCYA1VBQ2H is required at the end
-(gates prove invariants, not that CameraX still records). If the owner instead picks video-player
-upgrades (NEEDS-SPEC) → brainstorm→spec slice 1 first. If DualShot perf → device profiling pass
-before any fix.
+SOURCE OF TRUTH for every glyph = .superpowers/brainstorm/1234-1781611237/content/board-3-semantic.html
+(extract glyph SVG paths + the E1 semantic map with ctx_execute_file; do NOT eyeball — match the board
+exactly, as PR-2's FAB did). Authoring pattern + helpers (glyph/strokePath/fillPath/svgStroke/svgFill/
+circle/roundRect/seg) live in ui/theme/RovaGlyphs.kt — the ONLY allowlisted home (checkRovaGlyphHome).
+Two-layer duotone = RovaGlyph(outline, accent?); rendered via SemanticIcon (IconRole identity tints,
+IconStatus locked colors, IconRole.OnAccent for filled-accent surfaces). RovaIcons = the concept→glyph
+collision map.
 
-Process: brainstorm/plan first for any non-trivial task; pure-helper extraction + JVM tests per house
-convention; codex-review architecture/refactor boundaries; subagent-driven-dev or executing-plans with
-subagents EDIT-ONLY and the controller running all gradle + commits. Build WARM (no cache wipe; confirm
-packageDebug EXECUTED before any device install). New user-facing strings in en+es (ADR-0022).
-Local-only branch off master; push/merge only when the owner asks.
+TASK — work PR-3 → PR-4 → PR-5 (each its own branch off master, push + PR + merge only on owner GO):
+- PR-3 Icon foundation (batched, additive): author the remaining everyday-action glyphs (search,
+  share, delete, favorite/_on, select, pause, view, edit, theme) + status (warn_tri, notif_bell/_off)
+  in RovaGlyphs; flip the RovaIcons stock-Material bridges to them. NOTE: rec_ring/waiting/proc_arc/
+  proc_dots already shipped in PR-2 — skip those.
+- PR-4 Library migration: route the whole Library surface through SemanticIcon; delete→IconStatus
+  danger; favorite outline→filled accent.
+- PR-5 Remaining surfaces: split Player out first; then Warnings/Vault/Settings/Onboarding; author
+  rec_clipcheck + interrupted.
 
-First action: confirm master state, then brainstorm/plan the chosen task.
+Process: brainstorm/plan first; pure-helper + JVM tests in the same PR; codex-review the glyph set +
+seam wiring (mcp__codex__codex); subagent-driven-dev (subagents EDIT-ONLY, controller runs all gradle/
+commits/smoke). Keep all 46 gates + JVM green at every step; never edit a check* to pass. New strings
+in en+es (ADR-0022). Build WARM — confirm :app:packageDebug EXECUTED before any adb install -r (debug
+APK is debug-signed; if a release build is installed, uninstall first). Mandatory device smoke on
+RZCYA1VBQ2H for any visible-surface PR (adb via PowerShell directly; device goes unauthorized on
+reconnect — owner re-accepts the USB prompt; Record/Player are FLAG_SECURE so adb screencap can't see
+them — owner verifies visually).
+
+First action: confirm master state, then ctx-extract the PR-3 glyph paths from board-3-semantic.html
+and brainstorm/plan PR-3.
 ```
