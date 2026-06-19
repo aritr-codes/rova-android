@@ -6,12 +6,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.aritr.rova.ui.components.ReducedMotion
+import com.aritr.rova.ui.components.ReducedTransparency
 
 
 @Composable
@@ -37,7 +38,10 @@ fun RovaTheme(
     palette: RovaPalette = rovaPalettes.getValue(ThemeSelection.AURORA),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = PaletteColorScheme.from(palette)
+    // Memoized: from() runs DialogActionColors.resolve + the full surface ladder;
+    // keyed on palette so it recomputes only on a real theme change, not every
+    // recomposition of this (busy) subtree.
+    val colorScheme = remember(palette) { PaletteColorScheme.from(palette) }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -54,10 +58,12 @@ fun RovaTheme(
     val glassEnv = GlassEnvironment(
         palette = palette,
         apiLevel = Build.VERSION.SDK_INT,
-        // ADR-0028 — reuse the available pure a11y seam as the transparency-
-        // degradation proxy. A dedicated "reduce transparency" system read can
-        // replace this later without touching GlassResolver.
-        reduceTransparency = ReducedMotion.isReduced(context),
+        // ADR-0028 — collapse faux-blur glass to solid fills when the user asks
+        // for maximum legibility. Driven by the real OS high-contrast-text signal
+        // OR reduced-motion (see ReducedTransparency); previously this was wired
+        // to reduce-motion alone, so high-contrast-text users never got the solid
+        // path. GlassResolver consumes this flag unchanged.
+        reduceTransparency = ReducedTransparency.isReduced(context),
     )
 
     CompositionLocalProvider(LocalGlassEnvironment provides glassEnv) {
@@ -85,8 +91,9 @@ fun RovaDarkSurface(content: @Composable () -> Unit) {
     // we apply forPinnedRoute here too to build the scheme from the neutral-dark base
     // carrying ONLY the active accent — never the (possibly light) app surface.
     val pinned = PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current)
+    val colorScheme = remember(pinned.palette) { PaletteColorScheme.from(pinned.palette) }
     MaterialTheme(
-        colorScheme = PaletteColorScheme.from(pinned.palette),
+        colorScheme = colorScheme,
         typography = Typography,
         content = content,
     )
