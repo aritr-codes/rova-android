@@ -694,12 +694,14 @@ fun RecordScreen(
     // ----------------------------------------------------------------
     // isUiLocked (declared above) == isPeriodicActive || isMerging — the same "session running" predicate
     // recordFabState/RecordBottomNav want; no need for a second copy.
-    val fabState = recordFabState(hudState, sessionLocked = isUiLocked, hardBlockActive = startBlocked)
+    val fabState = RecordFabVisualSpec.stateFor(hudState, hardBlockActive = startBlocked)
     val onFabClick: () -> Unit = {
-        when (fabState) {
-            RecordFabState.Start -> onStart()
-            RecordFabState.Stop -> viewModel.stopRecording()
-            RecordFabState.Disabled -> { /* no-op — the warning sheet carries the CTA */ }
+        // Action is decoupled from the visual (PR-2): Waiting stays cancellable
+        // (Stop); Processing/Disabled are inert (merge is NonCancellable, ADR-0006).
+        when (RecordFabVisualSpec.visualFor(fabState).action) {
+            FabAction.Start -> onStart()
+            FabAction.Stop -> viewModel.stopRecording()
+            FabAction.None -> { /* inert — warning sheet carries the CTA; merge is non-cancellable */ }
         }
     }
     // status pill text — exact active-state copy is R2's concern

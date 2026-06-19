@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -52,6 +53,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,6 +62,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -68,7 +71,9 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.service.RovaRecordingService
 import com.aritr.rova.ui.theme.ChromeScale
+import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.GlassRole
+import com.aritr.rova.ui.theme.MergeMotion
 import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaGlyphs
@@ -89,6 +94,7 @@ import com.aritr.rova.ui.screens.chrome.DeviceLandscape
 import com.aritr.rova.ui.screens.chrome.railOrder
 import com.aritr.rova.ui.screens.chrome.SlotAnchor
 import com.aritr.rova.ui.screens.chrome.SlotPlacement
+import kotlin.math.roundToInt
 import com.aritr.rova.ui.screens.chrome.uprightFadeAlpha
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
@@ -199,36 +205,9 @@ private fun StatusDot(hudState: RecordHudState) {
     )
 }
 
-/** What the center button in the Record bottom nav shows / does. */
-enum class RecordFabState { Start, Stop, Disabled }
-
-/**
- * Pure derivation of the center-FAB state from the HUD state + gating booleans.
- *
- * - Idle + a hard-block active (camera permission denied OR storage insufficient
- *   to start — see [com.aritr.rova.ui.warnings.WarningCenterViewModel] / RecordScreen's
- *   leaf-signal reads) → [Disabled]; the actionable CTA lives in the auto-presented
- *   warning sheet, not the FAB.
- * - Idle, not blocked → [Start].
- * - Recording or Waiting → [Stop] (always — `sessionLocked`/`hardBlockActive` are
- *   irrelevant once a session is running).
- * - Merging → [Disabled] — the merge runs `NonCancellable` (ADR 0006), so a Stop
- *   affordance would be a lie.
- *
- * `sessionLocked` (= isPeriodicActive || isMerging) is passed for symmetry / future
- * use; the FAB is `Stop` (not `Disabled`) during an active session.
- */
-fun recordFabState(
-    hudState: RecordHudState,
-    sessionLocked: Boolean,
-    hardBlockActive: Boolean,
-): RecordFabState = when (hudState) {
-    RecordHudState.Idle -> if (hardBlockActive) RecordFabState.Disabled else RecordFabState.Start
-    // Bug B — Starting is an active-session state (the loop is running, just
-    // pre-first-clip), so the FAB stays Stop alongside Recording / Waiting.
-    RecordHudState.Recording, RecordHudState.Starting, RecordHudState.Waiting -> RecordFabState.Stop
-    is RecordHudState.Merging -> RecordFabState.Disabled
-}
+// RecordFabState (now {Idle,Recording,Waiting,Processing,Disabled}) + the pure
+// state/visual derivation moved to RecordFabVisualSpec.kt (UI Phase 2 PR-2 —
+// board-3 FAB lifecycle). Callers use RecordFabVisualSpec.stateFor(...).
 
 /**
  * Floating flash + flip controls, top-right of the viewfinder (mockups/new_uiux/01-record-home.html
@@ -670,8 +649,8 @@ internal object RecordChromeMetrics {
  * any more — this bar lives only on the Record screen; Library/Settings PUSH those screens.
  *
  * Library/Settings dim + disable while [navItemsLocked] (= isPeriodicActive || isMerging). The FAB
- * is [RecordFabState.Stop] during an active session and [RecordFabState.Disabled] when a hard-block
- * is active (idle) or during merge.
+ * shows [RecordFabState.Recording]/[RecordFabState.Waiting] during an active session,
+ * [RecordFabState.Processing] during merge, and [RecordFabState.Disabled] on an idle hard-block.
  */
 @Composable
 fun RecordBottomNav(
@@ -779,57 +758,128 @@ internal fun NavItem(glyph: RovaGlyph, label: String, enabled: Boolean, onClick:
 
 @Composable
 internal fun RecordFab(state: RecordFabState, onClick: () -> Unit, spinDegrees: () -> Float = { 0f }) {
-    val (fill, stroke, semanticsLabel) = when (state) {
-        RecordFabState.Start -> Triple(RecordChromeTokens.fabStartFill, RecordChromeTokens.fabStartStroke, stringResource(R.string.record_fab_start_cd))
-        RecordFabState.Stop -> Triple(RecordChromeTokens.fabStopFill, RecordChromeTokens.fabStopStroke, stringResource(R.string.record_fab_stop_cd))
-        RecordFabState.Disabled -> Triple(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.08f), stringResource(R.string.record_fab_start_unavailable_cd))
-    }
-    val enabled = state != RecordFabState.Disabled
-    Box(contentAlignment = Alignment.Center) {
-        if (state == RecordFabState.Stop) {
-            // .btn-stop::after — a ring inset -5 dp (extends outward).
-            Box(
-                Modifier
-                    .size(RecordChromeTokens.fabSize + RecordChromeTokens.fabStopRingInset * 2)
-                    .clip(CircleShape)
-                    .border(1.dp, RecordChromeTokens.fabStopRing, CircleShape),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(RecordChromeTokens.fabSize)
-                .clip(CircleShape)
-                .background(fill)
-                .border(1.5.dp, stroke, CircleShape)
-                .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
-                // SC 4.1.3 (NAV-07): the label flips Start↔Stop when recording
-                // toggles; a polite live region announces that transition even
-                // when focus is elsewhere on the HUD.
-                .semantics {
-                    contentDescription = semanticsLabel
-                    liveRegion = LiveRegionMode.Polite
-                    role = Role.Button
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            // PR-ε (spec §5): only the glyph spins inside the stable circular
-            // surface (clickable/semantics/ring untouched). The stop square is
-            // near rotation-symmetric but the play triangle is not — wrapping
-            // the whole `when` keeps every state consistent.
-            SpinningBox(degrees = spinDegrees) {
-                when (state) {
-                    RecordFabState.Stop -> Box(
-                        Modifier
-                            .size(RecordChromeTokens.stopSquareSize)
-                            .clip(RoundedCornerShape(RecordChromeTokens.stopSquareRadius))
-                            .background(RecordChromeTokens.stopSquare),
-                    )
-                    RecordFabState.Start -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Default, modifier = Modifier.size(RecordChromeTokens.fabGlyphSize * rememberChromeScale()))
-                    RecordFabState.Disabled -> SemanticIcon(glyph = RovaIcons.Record, contentDescription = null, role = IconRole.Disabled, modifier = Modifier.size(RecordChromeTokens.fabGlyphSize * rememberChromeScale()))
-                }
+    val visual = RecordFabVisualSpec.visualFor(state)
+    val palette = LocalGlassEnvironment.current.palette
+    // Container brush per board-3 FB lifecycle. AccentDisc deepens the accent→accent2
+    // gradient to the AA-safe variant via the same resolver as the premium dialog CTA
+    // (owner 2026-06-19: full 4.5:1, no WCAG exception); the OnAccent glyph tint pairs
+    // with it. RedDisc is the fixed recording-red gradient; Ghost = translucent accent.
+    val containerBrush = when (visual.container) {
+        FabContainer.AccentDisc -> {
+            val cta = remember(palette.accent, palette.accent2) {
+                DialogActionColors.resolve(palette.accent.toFabRgb(), palette.accent2.toFabRgb())
             }
+            Brush.linearGradient(listOf(cta.start.toFabColor(), cta.end.toFabColor()))
+        }
+        FabContainer.RedDisc -> Brush.linearGradient(
+            listOf(RecordChromeTokens.fabRecordingDiscStart, RecordChromeTokens.fabRecordingDiscEnd),
+        )
+        FabContainer.Ghost -> SolidColor(palette.accent.copy(alpha = RecordChromeTokens.fabGhostFillAlpha))
+    }
+    val isGhost = visual.container == FabContainer.Ghost
+    val semanticsLabel = when (visual.label) {
+        FabLabel.Start -> stringResource(R.string.record_fab_start_cd)
+        FabLabel.Stop -> stringResource(R.string.record_fab_stop_cd)
+        FabLabel.Waiting -> stringResource(R.string.record_fab_waiting_cd)
+        FabLabel.Processing -> stringResource(R.string.record_fab_processing_cd)
+        FabLabel.Unavailable -> stringResource(R.string.record_fab_start_unavailable_cd)
+    }
+    val glyphSize = RecordChromeTokens.fabGlyphSize * rememberChromeScale()
+    Box(
+        modifier = Modifier
+            .size(RecordChromeTokens.fabSize)
+            .clip(CircleShape)
+            .background(containerBrush)
+            // Ghost states carry only the board 1dp edge; disc states are gradient-only (no border).
+            .then(if (isGhost) Modifier.border(1.dp, palette.edge, CircleShape) else Modifier)
+            .then(if (visual.enabled) Modifier.clickable { onClick() } else Modifier)
+            // SC 4.1.3 (NAV-07): the label tracks the FAB state (Start / Stop / Waiting /
+            // Merging); a polite live region announces the transition even when focus is
+            // elsewhere on the HUD. SC 4.1.2: inert states (Processing = NonCancellable
+            // merge, Disabled = idle hard-block) expose disabled so TalkBack doesn't
+            // announce an actionable button.
+            .semantics {
+                contentDescription = semanticsLabel
+                liveRegion = LiveRegionMode.Polite
+                role = Role.Button
+                if (!visual.enabled) disabled()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // PR-ε (spec §5): only the inner mark spins inside the stable circular surface
+        // (container/clickable/semantics untouched). proc_arc self-animates via
+        // RecordFabProcessing (reduced-motion → static proc_dots).
+        when (visual.glyph) {
+            // rec_disc — the Record mark, AA-paired on the accent disc.
+            FabGlyph.RecDisc -> SpinningBox(degrees = spinDegrees) {
+                SemanticIcon(
+                    glyph = RovaIcons.Record, contentDescription = null,
+                    role = IconRole.OnAccent, modifier = Modifier.size(glyphSize),
+                )
+            }
+            // rec_morph — white rounded-square stop mark on the red disc.
+            FabGlyph.RecMorph -> SpinningBox(degrees = spinDegrees) {
+                Box(
+                    Modifier
+                        .size(RecordChromeTokens.fabRecMorphSize)
+                        .clip(RoundedCornerShape(RecordChromeTokens.fabRecMorphRadius))
+                        .background(RecordChromeTokens.fabRecMorphFill),
+                )
+            }
+            // rec_ring — resting ring + accent core, dimmed (Disabled).
+            FabGlyph.RecRing -> SemanticIcon(
+                glyph = RovaIcons.RecordRing, contentDescription = null,
+                role = IconRole.Disabled, modifier = Modifier.size(glyphSize),
+            )
+            // waiting — accent hourglass (Waiting / scheduled).
+            FabGlyph.Waiting -> SemanticIcon(
+                glyph = RovaIcons.Waiting, contentDescription = null,
+                role = IconRole.Accent, modifier = Modifier.size(glyphSize),
+            )
+            // proc_arc — accent spinner (Processing).
+            FabGlyph.ProcArc -> RecordFabProcessing(size = glyphSize)
         }
     }
+}
+
+/** Color → board RGB (0..255) for [DialogActionColors]. */
+private fun Color.toFabRgb(): IntArray =
+    intArrayOf((red * 255).roundToInt(), (green * 255).roundToInt(), (blue * 255).roundToInt())
+
+private fun IntArray.toFabColor(): Color = Color(this[0], this[1], this[2])
+
+/**
+ * Processing FAB mark — board `proc_arc` accent arc spinning one revolution per
+ * [MergeMotion.SPIN_PERIOD_MS]. Mirrors [ProcessingGlyph]'s reduced-motion discipline
+ * (WCAG 2.2 SC 2.3.3 / 2.2.2, ADR-0020): when the OS toggle is on, render the static
+ * `proc_dots` fallback and never build the infinite transition. The same-file
+ * `rememberReduceMotion()` read satisfies `checkA11yAnimationGated`.
+ */
+@Composable
+private fun RecordFabProcessing(size: androidx.compose.ui.unit.Dp) {
+    val reduceMotion = rememberReduceMotion()
+    if (reduceMotion) {
+        SemanticIcon(
+            glyph = RovaIcons.ProcessingDots, contentDescription = null,
+            role = IconRole.Accent, modifier = Modifier.size(size),
+        )
+        return
+    }
+    val transition = rememberInfiniteTransition(label = "fabProcSpin")
+    val fraction by transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = MergeMotion.SPIN_PERIOD_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "fabProcFraction",
+    )
+    SemanticIcon(
+        glyph = RovaIcons.Processing, contentDescription = null, role = IconRole.Accent,
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer { rotationZ = MergeMotion.angle(fraction, reduceMotion = false) },
+    )
 }
 
 /**

@@ -155,4 +155,42 @@ class ThemeContrastTest {
             ratio >= 3.0,
         )
     }
+
+    @Test
+    fun `record FAB ghost glyphs (accent) clear 3 to 1 over the pinned-dark substrate (all 12 palettes)`() {
+        // UI Phase 2 PR-2 (board-3 FB): the Ghost FAB states (Waiting hourglass,
+        // Processing arc, Disabled rec_ring core) tint the glyph with the palette
+        // ACCENT over a ghost container = accent @ 0.14 over the pinned record bg.
+        // Adjacent cases above don't cover this exact composite, so assert it: the
+        // accent glyph clears 3:1 (SC 1.4.11 graphical) over the ghost for every palette.
+        val (br, bg, bb) = rgb(NeutralDarkRecordPalette.surfaceBase)
+        concrete.forEach { sel ->
+            val pinned = PinnedGlassEnvironment.forPinnedRoute(
+                GlassEnvironment(rovaPalettes.getValue(sel), 31, false),
+            ).palette
+            val (ar, ag, ab) = rgb(pinned.accent)
+            val ghost = ContrastMath.compositeAlphaOver(ar, ag, ab, 0.14, br, bg, bb)
+            val ratio = ratioOver(pinned.accent.copy(alpha = 1f), ghost)
+            assertTrue("$sel accent FAB glyph ${"%.2f".format(ratio)}:1 < 3.0 over accent-ghost", ratio >= 3.0)
+        }
+    }
+    @Test
+    fun `FAB OnAccent tint clears 4_5 over the deepened accent disc (all 12 palettes)`() {
+        // Pins the IconRole.OnAccent WIRING (not just the resolver): the tint SemanticIconSpec
+        // actually returns must clear 4.5:1 worst-case over the DialogActionColors-deepened
+        // gradient the FAB disc fills with, for the pinned accent of every palette. Guards drift
+        // where DialogActionColors stays green but the OnAccent mapping/conversion changes.
+        concrete.forEach { sel ->
+            val pinned = PinnedGlassEnvironment.forPinnedRoute(
+                GlassEnvironment(rovaPalettes.getValue(sel), 31, false),
+            ).palette
+            val (ar, ag, ab) = rgb(pinned.accent)
+            val (er, eg, eb) = rgb(pinned.accent2)
+            val cta = DialogActionColors.resolve(intArrayOf(ar, ag, ab), intArrayOf(er, eg, eb))
+            val tint = SemanticIconSpec.tint(pinned, IconRole.OnAccent)
+            val mid = intArrayOf((cta.start[0] + cta.end[0]) / 2, (cta.start[1] + cta.end[1]) / 2, (cta.start[2] + cta.end[2]) / 2)
+            val worst = listOf(cta.start, mid, cta.end).minOf { s -> ratioOver(tint, intArrayOf(s[0], s[1], s[2])) }
+            assertTrue("$sel OnAccent ${"%.2f".format(worst)}:1 < 4.5 over FAB disc", worst >= 4.5)
+        }
+    }
 }

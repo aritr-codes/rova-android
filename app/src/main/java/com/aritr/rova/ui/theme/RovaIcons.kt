@@ -26,6 +26,11 @@ object RovaIcons {
     val DualSight: RovaGlyph = RovaGlyphs.DualSight
     val BackgroundRecord: RovaGlyph = RovaGlyphs.BackgroundRecord
     val Merge: RovaGlyph = RovaGlyphs.Merge
+    // FAB lifecycle (board-3 FB): rec_disc = [Record] above; the rest:
+    val RecordRing: RovaGlyph = RovaGlyphs.RecordRing
+    val Waiting: RovaGlyph = RovaGlyphs.Waiting
+    val Processing: RovaGlyph = RovaGlyphs.ProcArc
+    val ProcessingDots: RovaGlyph = RovaGlyphs.ProcDots
     val OrientationPortrait: RovaGlyph = RovaGlyphs.OrientationPortrait
     val OrientationLandscape: RovaGlyph = RovaGlyphs.OrientationLandscape
     val Single: RovaGlyph = RovaGlyphs.Single
