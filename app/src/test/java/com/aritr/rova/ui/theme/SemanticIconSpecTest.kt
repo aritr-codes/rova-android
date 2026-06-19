@@ -41,6 +41,19 @@ class SemanticIconSpecTest {
         assertEquals(RovaSemantics.success, SemanticIconSpec.statusTint(IconStatus.Success))
         assertEquals(RovaSemantics.warning, SemanticIconSpec.statusTint(IconStatus.Warning))
         assertEquals(RovaSemantics.rec, SemanticIconSpec.statusTint(IconStatus.Rec))
+        assertEquals(RovaSemantics.error, SemanticIconSpec.statusTint(IconStatus.Danger))
+    }
+
+    @Test fun danger_status_maps_to_locked_error_red() {
+        assertEquals(RovaSemantics.error, SemanticIconSpec.statusTint(IconStatus.Danger))
+    }
+
+    @Test fun danger_is_distinct_from_recording_red() {
+        // destructive (0xFFEF4444) must never collapse onto recording (0xFFFF4D4D)
+        assertNotEquals(
+            SemanticIconSpec.statusTint(IconStatus.Rec),
+            SemanticIconSpec.statusTint(IconStatus.Danger),
+        )
     }
 
     @Test fun status_tints_carry_no_per_call_alpha_dilution() {

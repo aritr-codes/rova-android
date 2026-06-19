@@ -11,8 +11,10 @@ class RovaIconsTest {
         assertEquals(IconStatus.Warning, RovaIcons.WarningStatus.status)
     }
 
-    @Test fun notifications_setting_is_not_a_status() {
-        assertNull(RovaIcons.NotificationsSetting.status)
+    @Test fun notifications_setting_is_a_bespoke_chrome_glyph_not_a_status() {
+        // PR-3 flipped NotificationsSetting off stock Material to the bespoke bell glyph. It is a
+        // bare RovaGlyph (a role-tinted chrome toggle) — it has no status channel at all.
+        assertEquals(RovaGlyphs.NotifBell, RovaIcons.NotificationsSetting)
     }
 
     @Test fun details_is_a_setting_not_a_status() {
@@ -24,7 +26,30 @@ class RovaIconsTest {
     }
 
     @Test fun settings_and_view_are_distinct_glyphs() {
-        assertNotEquals(RovaIcons.Settings.outline, RovaIcons.View.glyph)
+        // PR-3 flipped View off Icons.Default.GridView to the bespoke 2×2-grid RovaGlyph.
+        assertNotEquals(RovaIcons.Settings.outline, RovaIcons.View.outline)
+    }
+
+    @Test fun pr3_flips_resolve_to_bespoke_glyphs() {
+        assertEquals(RovaGlyphs.View, RovaIcons.View)
+        assertEquals(RovaGlyphs.NotifBell, RovaIcons.NotificationsSetting)
+        // WarningStatus stays a RovaIcon so the locked status travels with the concept;
+        // WarnTriangle is mono so its single mark is the exposed image vector.
+        assertEquals(RovaGlyphs.WarnTriangle.outline, RovaIcons.WarningStatus.glyph)
+        assertEquals(IconStatus.Warning, RovaIcons.WarningStatus.status)
+    }
+
+    @Test fun pr3_everyday_action_concepts_resolve_to_bespoke_glyphs() {
+        assertEquals(RovaGlyphs.Search, RovaIcons.Search)
+        assertEquals(RovaGlyphs.Share, RovaIcons.Share)
+        assertEquals(RovaGlyphs.Delete, RovaIcons.Delete)
+        assertEquals(RovaGlyphs.Favorite, RovaIcons.Favorite)
+        assertEquals(RovaGlyphs.FavoriteOn, RovaIcons.FavoriteOn)
+        assertEquals(RovaGlyphs.Select, RovaIcons.Select)
+        assertEquals(RovaGlyphs.Pause, RovaIcons.Pause)
+        assertEquals(RovaGlyphs.Edit, RovaIcons.Edit)
+        assertEquals(RovaGlyphs.Theme, RovaIcons.Theme)
+        assertEquals(RovaGlyphs.NotifOff, RovaIcons.NotificationsOff)
     }
 
     @Test fun bespoke_concepts_resolve_to_RovaGlyphs() {

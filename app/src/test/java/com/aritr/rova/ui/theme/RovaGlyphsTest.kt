@@ -93,6 +93,26 @@ class RovaGlyphsTest {
         )
     }
 
+    @Test fun pr3_action_and_status_glyph_models_match_board() {
+        // mono (accent == null)
+        assertNull(RovaGlyphs.Search.accent)
+        assertNull(RovaGlyphs.Delete.accent)
+        assertNull("Favorite is single-channel; accent comes from IconRole.Accent", RovaGlyphs.Favorite.accent)
+        assertNull(RovaGlyphs.FavoriteOn.accent)
+        assertNull(RovaGlyphs.Pause.accent)
+        assertNull(RovaGlyphs.View.accent)
+        assertNull("board warn_tri has zero .ac2", RovaGlyphs.WarnTriangle.accent)
+        // duotone (accent != null)
+        assertNotNull(RovaGlyphs.Share.accent)
+        assertNotNull(RovaGlyphs.Select.accent)
+        assertNotNull(RovaGlyphs.Edit.accent)
+        assertNotNull(RovaGlyphs.Theme.accent)
+        assertNotNull(RovaGlyphs.NotifBell.accent)
+        assertNotNull(RovaGlyphs.NotifOff.accent)
+        assertNotNull(RovaGlyphs.RecClipCheck.accent)
+        assertNotNull(RovaGlyphs.Interrupted.accent)
+    }
+
     @Test fun all_glyphs_use_the_24_grid() {
         listOf(
             RovaGlyphs.Library, RovaGlyphs.Settings, RovaGlyphs.Sort, RovaGlyphs.Record,
@@ -100,6 +120,10 @@ class RovaGlyphsTest {
             RovaGlyphs.BackgroundRecord, RovaGlyphs.Merge,
             RovaGlyphs.OrientationPortrait, RovaGlyphs.OrientationLandscape,
             RovaGlyphs.Single, RovaGlyphs.FollowDevice,
+            RovaGlyphs.Search, RovaGlyphs.Share, RovaGlyphs.Delete, RovaGlyphs.Favorite,
+            RovaGlyphs.FavoriteOn, RovaGlyphs.Select, RovaGlyphs.Pause, RovaGlyphs.View,
+            RovaGlyphs.Edit, RovaGlyphs.Theme, RovaGlyphs.WarnTriangle, RovaGlyphs.NotifBell,
+            RovaGlyphs.NotifOff, RovaGlyphs.RecClipCheck, RovaGlyphs.Interrupted,
         ).forEach { g ->
             assertEquals(24f, g.outline.viewportWidth, 0f)
             assertEquals(24f, g.outline.viewportHeight, 0f)
@@ -145,6 +169,29 @@ class RovaGlyphsTest {
             "Single.accent" to RovaGlyphs.Single.accent!!,
             "FollowDevice.outline" to RovaGlyphs.FollowDevice.outline,
             "FollowDevice.accent" to RovaGlyphs.FollowDevice.accent!!,
+            "Search.outline" to RovaGlyphs.Search.outline,
+            "Share.outline" to RovaGlyphs.Share.outline,
+            "Share.accent" to RovaGlyphs.Share.accent!!,
+            "Delete.outline" to RovaGlyphs.Delete.outline,
+            "Favorite.outline" to RovaGlyphs.Favorite.outline,
+            "FavoriteOn.outline" to RovaGlyphs.FavoriteOn.outline,
+            "Select.outline" to RovaGlyphs.Select.outline,
+            "Select.accent" to RovaGlyphs.Select.accent!!,
+            "Pause.outline" to RovaGlyphs.Pause.outline,
+            "View.outline" to RovaGlyphs.View.outline,
+            "Edit.outline" to RovaGlyphs.Edit.outline,
+            "Edit.accent" to RovaGlyphs.Edit.accent!!,
+            "Theme.outline" to RovaGlyphs.Theme.outline,
+            "Theme.accent" to RovaGlyphs.Theme.accent!!,
+            "WarnTriangle.outline" to RovaGlyphs.WarnTriangle.outline,
+            "NotifBell.outline" to RovaGlyphs.NotifBell.outline,
+            "NotifBell.accent" to RovaGlyphs.NotifBell.accent!!,
+            "NotifOff.outline" to RovaGlyphs.NotifOff.outline,
+            "NotifOff.accent" to RovaGlyphs.NotifOff.accent!!,
+            "RecClipCheck.outline" to RovaGlyphs.RecClipCheck.outline,
+            "RecClipCheck.accent" to RovaGlyphs.RecClipCheck.accent!!,
+            "Interrupted.outline" to RovaGlyphs.Interrupted.outline,
+            "Interrupted.accent" to RovaGlyphs.Interrupted.accent!!,
         ).forEach { (name, iv) -> assertEveryPathHasBrush(name, iv.root) }
     }
 

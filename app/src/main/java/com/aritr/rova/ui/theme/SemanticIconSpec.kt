@@ -17,8 +17,12 @@ enum class IconRole { Default, Secondary, Disabled, Accent, OnAccent }
 /**
  * Locked status roles — bound to [RovaSemantics], identical across all 12 palettes, never
  * theme-retinted and never per-call alpha-diluted (ADR-0031 §3, WCAG 1.4.1: always paired with shape).
+ *
+ * [Danger] is the destructive/irreversible lock (delete, discard) → [RovaSemantics.error], the
+ * app-wide destructive red. It is kept DISTINCT from [Rec] (recording red): two unrelated meanings
+ * must not share a color (owner + codex 2026-06-19).
  */
-enum class IconStatus { Recovered, Interrupted, Processing, Success, Warning, Rec }
+enum class IconStatus { Recovered, Interrupted, Processing, Success, Warning, Rec, Danger }
 
 /**
  * The single content-color contract for every in-app glyph (ADR-0031 §4). Pure-Kotlin so it is
@@ -63,5 +67,6 @@ object SemanticIconSpec {
         IconStatus.Success -> RovaSemantics.success
         IconStatus.Warning -> RovaSemantics.warning
         IconStatus.Rec -> RovaSemantics.rec
+        IconStatus.Danger -> RovaSemantics.error
     }
 }

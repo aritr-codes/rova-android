@@ -193,6 +193,136 @@ object RovaGlyphs {
         },
     )
 
+    // ── PR-3 everyday-action + status glyphs (board-3-semantic.html "shared small" + Part A #3) ──
+
+    // Search — lens ring + handle (mono). board `search`.
+    val Search = RovaGlyph(
+        outline = glyph {
+            strokePath { circle(10.8f, 10.8f, 5.9f) }
+            svgStroke("M15.4 15.4 20 20")
+        },
+    )
+
+    // Share — 2 neutral connectors (outline) + 3 accent nodes (accent). board `share`.
+    val Share = RovaGlyph(
+        outline = glyph {
+            svgStroke("M8.4 10.9 15 7.1")
+            svgStroke("M8.4 13.1 15 16.9")
+        },
+        accent = glyph {
+            fillPath { circle(6.2f, 12f, 2.3f) }
+            fillPath { circle(17.3f, 6f, 2.3f) }
+            fillPath { circle(17.3f, 18f, 2.3f) }
+        },
+    )
+
+    // Delete — trash can (mono). board `delete`. Destructive tint is a call-site concern:
+    // the glyph is neutral; consume with `status = IconStatus.Danger` in destructive contexts.
+    val Delete = RovaGlyph(
+        outline = glyph {
+            svgStroke("M5 7h14")
+            svgStroke("M9 7V5.6A1.6 1.6 0 0 1 10.6 4h2.8A1.6 1.6 0 0 1 15 5.6V7")
+            svgStroke("M7.2 7 8.1 19.4A1.6 1.6 0 0 0 9.7 21h4.6a1.6 1.6 0 0 0 1.6-1.6L16.8 7")
+        },
+    )
+
+    // Favorite (off) — star outline. board `favorite` (single accent channel). Single-layer:
+    // consume with IconRole.Accent so the whole star is the palette accent (NEVER a status — that
+    // would recolor it). PR-4 toggles state by swapping to [FavoriteOn].
+    val Favorite = RovaGlyph(
+        outline = glyph { svgStroke("M12 4 14.5 9.1l5.5.8-4 3.9.95 5.5L12 17.6 7.05 19.3 8 13.8 4 9.9l5.5-.8z") },
+    )
+
+    // Favorite (on) — filled star. board `favorite_on`. Consume with IconRole.Accent.
+    val FavoriteOn = RovaGlyph(
+        outline = glyph { svgFill("M12 4 14.5 9.1l5.5.8-4 3.9.95 5.5L12 17.6 7.05 19.3 8 13.8 4 9.9l5.5-.8z") },
+    )
+
+    // Select — ring (outline) + accent check (accent). board `select`.
+    val Select = RovaGlyph(
+        outline = glyph { strokePath { circle(12f, 12f, 8f) } },
+        accent = glyph { svgStroke("M8.4 12.2 10.8 14.7 15.6 9.6") },
+    )
+
+    // Pause — two filled bars (mono). board `pause`.
+    val Pause = RovaGlyph(
+        outline = glyph {
+            fillPath { roundRect(7.4f, 6f, 3.3f, 12f, 1.4f) }
+            fillPath { roundRect(13.3f, 6f, 3.3f, 12f, 1.4f) }
+        },
+    )
+
+    // View — 2×2 grid (mono). board `view` (== rejected `set_grid`: grid is canonically View).
+    val View = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(4f, 4f, 6.4f, 6.4f, 1.6f) }
+            strokePath { roundRect(13.6f, 4f, 6.4f, 6.4f, 1.6f) }
+            strokePath { roundRect(4f, 13.6f, 6.4f, 6.4f, 1.6f) }
+            strokePath { roundRect(13.6f, 13.6f, 6.4f, 6.4f, 1.6f) }
+        },
+    )
+
+    // Edit — pencil body (outline) + accent nib (accent). board `edit`.
+    val Edit = RovaGlyph(
+        outline = glyph { svgStroke("M5 19h3l9-9-3-3-9 9z") },
+        accent = glyph { svgStroke("M14 6 17 9") },
+    )
+
+    // Theme — ring (outline) + accent-filled half-disc (accent). board `theme`.
+    val Theme = RovaGlyph(
+        outline = glyph { strokePath { circle(12f, 12f, 8f) } },
+        accent = glyph { svgFill("M12 4a8 8 0 0 1 0 16z") },
+    )
+
+    // WarnTriangle — triangle + ! + dot (mono). board `warn_tri` (zero .ac2). A STATUS:
+    // consume with `status = IconStatus.Warning` (locked amber, never a setting).
+    val WarnTriangle = RovaGlyph(
+        outline = glyph {
+            svgStroke("M12 4.4 20.6 19.2H3.4z")
+            svgStroke("M12 9.8v4.3")
+            fillPath { circle(12f, 16.6f, 0.95f) }
+        },
+    )
+
+    // NotifBell — bell (outline) + accent clapper (accent). board `notif_bell`. Chrome toggle
+    // (a destination/setting), role-tinted — NOT a status.
+    val NotifBell = RovaGlyph(
+        outline = glyph { svgStroke("M6.5 10.5a5.5 5.5 0 0 1 11 0c0 4.5 2 5.5 2 5.5H4.5s2-1 2-5.5") },
+        accent = glyph { svgStroke("M10.2 18.5a2 2 0 0 0 3.6 0") },
+    )
+
+    // NotifOff — bell-off (outline) + accent slash & clapper (accent). board `notif_off`.
+    val NotifOff = RovaGlyph(
+        outline = glyph {
+            svgStroke("M6.5 10.5a5.5 5.5 0 0 1 8.4-4.7")
+            svgStroke("M17.5 12.5c.2 2.4 1.5 3.5 1.5 3.5H8")
+        },
+        accent = glyph {
+            svgStroke("M4.5 4.5 19.5 19.5")
+            svgStroke("M10.2 18.5a2 2 0 0 0 3.6 0")
+        },
+    )
+
+    // RecClipCheck — clip frame + side bar (outline) + accent check (accent). board `rec_clipcheck`.
+    // Authored now; map entry + wiring land in PR-5 (recovered-clip-verified surface).
+    val RecClipCheck = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 6f, 12f, 11.5f, 2.3f) }
+            svgStroke("M18.5 8.2v7")
+        },
+        accent = glyph { svgStroke("M12.6 16.8 15.1 19.3 19.6 14.3") },
+    )
+
+    // Interrupted — ring + top/bottom ticks (outline) + accent slash (accent). board `interrupted`.
+    // A STATUS (locked amber). Authored now; map entry + status-encoding land in PR-5.
+    val Interrupted = RovaGlyph(
+        outline = glyph {
+            strokePath { circle(12f, 12f, 8f) }
+            svgStroke("M12 4v3M12 17v3")
+        },
+        accent = glyph { svgStroke("M8 8 16 16") },
+    )
+
     // ── Folded-in record-chrome vectors (ex-RecordChromeIcons, verbatim) ────
     // Single-layer, neutral white, tinted by the consuming Icon/SemanticIcon.
     // Kept at their original viewports/strokes — this was a structural move, not
