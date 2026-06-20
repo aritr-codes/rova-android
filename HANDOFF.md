@@ -1,15 +1,16 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-19 — UI Phase 2 PR-1 (theme hygiene) + PR-2 (board-exact Record FAB lifecycle) are MERGED. `master` = `8225c80`, `origin/master` CURRENT. PRs #122 + #123 squash-merged (both off master, independent), branches deleted; owner device-smoke GO on the FAB. Earlier this session: cue-bleed fix #121 merged (`d4ef5b5`). Open PRs: only #115 (DualSight, archival/never-merge). NEXT = UI Phase 2 continuation — PR-3 icon foundation → PR-4 Library migration → PR-5 remaining surfaces (plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7).**
+> **As of 2026-06-19 — UI Phase 2 PR-4 (Library + Vault icon migration) is COMPLETE, PR open off `feat/library-icon-pr4` (base `881f8c8`), awaiting owner merge.** 10 source/test files + spec + plan; 46 gates + JVM (+ new `LibraryIconSpecTest`) + codex all green; owner device-smoke GO (Library top-bar glyphs + hero star verified; Vault FLAG_SECURE so visual-only). PR-3 (#124), PR-1 (#122), PR-2 (#123) merged earlier this session. Open PRs: PR-4 + #115 (DualSight, archival/never-merge). NEXT = PR-5 remaining surfaces (Player split → Warnings/Settings/Onboarding; wire `rec_clipcheck`+`interrupted`; plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7). **Vault screen was pulled forward from PR-5 into PR-4 at owner request.**
 
 ---
 
 ## Where things stand
 
-- **`master` = `8225c80`; `origin/master` CURRENT.** UI Phase 2 PR-1 (#122) + PR-2 (#123) merged this session; cue-bleed #121 merged earlier. Working tree clean apart from ephemeral `gradle_*.log` / `smoke_*.png` in root.
+- **`master` = `881f8c8`; `origin/master` CURRENT.** UI Phase 2 PR-1 (#122) + PR-2 (#123) + **PR-3 icon foundation (#124, squash, branch deleted)** all merged this session; cue-bleed #121 earlier. **PR-4 (Library + Vault icon migration) is on branch `feat/library-icon-pr4` (base `881f8c8`), PR open, NOT yet merged.** Working tree noisy with ephemeral `gradle_*.log` / `smoke_*.png` / `.superpowers/sdd/` scratch — not committed.
+- **PR-4 = the first surface to CONSUME the PR-3 glyphs.** `LibraryIconSpec` (pure, JVM-tested) holds the state→glyph/status decisions; 7 Library components + `VaultScreen` route their identity icons through `SemanticIcon`. Delete→`IconStatus.Danger` (item sheet) / neutral (batch bar); Favorite outline→filled-accent (sheet) / media-safe `overlayText` (hero); selected→`RovaIcons.Select` accent. Nav/utility (Back/Close/Clear/Play/Details) stay stock (identity-only fence). No new gate, no new strings. Full record: `memory/project_icon_glyph_system.md`.
 - **Static gates: 46** custom `check*` tasks, all green on master. (46th = `checkSingleColorSchemeSource`, theme engine; 45th = `checkRovaGlyphHome`; the icon seam added `checkSemanticIconNoRawAlpha` + `checkStatusColorLocked`.) **UI Phase 2 PR-1/PR-2 added no new gate.**
-- **Open PRs:** only **#115 — DualSight investigation** (DRAFT, archival, **never merge** — concurrent-camera hardware-blocked; see `memory/project_pr_delta_dualsight_probe.md`).
+- **Open PRs:** **PR-4** (Library + Vault icon migration, `feat/library-icon-pr4`, awaiting owner merge) + **#115 — DualSight investigation** (DRAFT, archival, **never merge** — concurrent-camera hardware-blocked; see `memory/project_pr_delta_dualsight_probe.md`).
 - **Test baseline:** JVM unit tests only (`:app:testDebugUnitTest`), green on master. Real-device smoke mandatory for any capture path (device = RZCYA1VBQ2H, Android 14).
 
 ### Landed since the last handoff (all on local master, owner device-GO)
@@ -66,9 +67,9 @@ The P1 cue-bleed bug is done (PR #121). Two parallel survey agents (reliability 
 
 ---
 
-## Fresh-session kickoff prompt — UI Phase 2 PR-3 → PR-4 → PR-5 (icon system)
+## Fresh-session kickoff prompt — UI Phase 2 PR-5 (icon system)
 
-Paste this to start the next session. UI Phase 2 PR-1/PR-2 are MERGED; this continues the icon system.
+Paste this to start the next session. UI Phase 2 PR-3 MERGED (#124); PR-4 (Library + Vault) is PR-open on `feat/library-icon-pr4` awaiting merge; this continues with PR-5 (merge PR-4 first so PR-5 branches off a master that has the consumed-glyph patterns).
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
@@ -87,15 +88,13 @@ Two-layer duotone = RovaGlyph(outline, accent?); rendered via SemanticIcon (Icon
 IconStatus locked colors, IconRole.OnAccent for filled-accent surfaces). RovaIcons = the concept→glyph
 collision map.
 
-TASK — work PR-3 → PR-4 → PR-5 (each its own branch off master, push + PR + merge only on owner GO):
-- PR-3 Icon foundation (batched, additive): author the remaining everyday-action glyphs (search,
-  share, delete, favorite/_on, select, pause, view, edit, theme) + status (warn_tri, notif_bell/_off)
-  in RovaGlyphs; flip the RovaIcons stock-Material bridges to them. NOTE: rec_ring/waiting/proc_arc/
-  proc_dots already shipped in PR-2 — skip those.
-- PR-4 Library migration: route the whole Library surface through SemanticIcon; delete→IconStatus
-  danger; favorite outline→filled accent.
-- PR-5 Remaining surfaces: split Player out first; then Warnings/Vault/Settings/Onboarding; author
-  rec_clipcheck + interrupted.
+TASK — PR-3 MERGED (#124). PR-4 (Library + Vault icon migration) is PR-open on feat/library-icon-pr4
+(LibraryIconSpec pure helper + 7 Library components + VaultScreen on the SemanticIcon seam; delete→Danger,
+favorite outline→filled-accent, selected→Select accent; 46 gates+JVM+codex green; device-GO). Merge PR-4
+first, then continue PR-5 (its own branch off master, push + PR + merge only on owner GO):
+- PR-5 Remaining surfaces: split Player out FIRST (its own slice); then Warnings/Settings/Onboarding (Vault
+  already done in PR-4). Wire the already-authored rec_clipcheck + interrupted glyphs (PR-3) into RovaIcons +
+  their surfaces. VISIBLE surfaces → mandatory device smoke (Player is FLAG_SECURE → owner verifies visually).
 
 Process: brainstorm/plan first; pure-helper + JVM tests in the same PR; codex-review the glyph set +
 seam wiring (mcp__codex__codex); subagent-driven-dev (subagents EDIT-ONLY, controller runs all gradle/
@@ -106,6 +105,7 @@ RZCYA1VBQ2H for any visible-surface PR (adb via PowerShell directly; device goes
 reconnect — owner re-accepts the USB prompt; Record/Player are FLAG_SECURE so adb screencap can't see
 them — owner verifies visually).
 
-First action: confirm master state, then ctx-extract the PR-3 glyph paths from board-3-semantic.html
-and brainstorm/plan PR-3.
+First action: confirm PR-4 is merged (or merge on owner GO), then brainstorm/plan PR-5 — start with the
+Player slice (enumerate its icon call-sites + target glyphs/roles), then sweep Warnings/Settings/Onboarding,
+and wire rec_clipcheck + interrupted into RovaIcons + their surfaces.
 ```

@@ -18,10 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,6 +34,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.components.RovaAnimations.pressScale
 import com.aritr.rova.ui.library.LibraryRow
@@ -163,12 +164,21 @@ fun LibraryGridCard(
                     .background(libraryColors.checkChipScrim),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                    contentDescription = null,
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else libraryColors.overlayText,
-                    modifier = Modifier.size(22.dp),
-                )
+                if (isSelected) {
+                    SemanticIcon(
+                        glyph = RovaIcons.Select,
+                        contentDescription = null,
+                        role = IconRole.Accent,
+                        modifier = Modifier.size(22.dp),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = libraryColors.overlayText,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
         }
     }

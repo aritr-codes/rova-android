@@ -18,8 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -131,11 +129,12 @@ fun LibraryHeroCard(
             onClick = onFavorite,
             modifier = Modifier.align(Alignment.TopEnd).padding(LibraryDimens.cardPadV),
         ) {
-            if (row.favorite) {
-                Icon(Icons.Filled.Star, contentDescription = unfavoriteLabel, tint = libraryColors.overlayText)
-            } else {
-                Icon(Icons.Outlined.StarBorder, contentDescription = favoriteLabel, tint = libraryColors.overlayText)
-            }
+            val favGlyph = LibraryIconSpec.favoriteGlyph(row.favorite)
+            Icon(
+                favGlyph.outline,
+                contentDescription = if (row.favorite) unfavoriteLabel else favoriteLabel,
+                tint = libraryColors.overlayText,
+            )
         }
 
         // 4) Static-poster Play affordance — a quiet centered glyph, decorative (the media owns the one

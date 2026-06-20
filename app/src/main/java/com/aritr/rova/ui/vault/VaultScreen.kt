@@ -17,8 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,10 +130,10 @@ fun VaultScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
+                        SemanticIcon(
+                            glyph = RovaIcons.Vault,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            role = IconRole.Secondary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.size(8.dp))
@@ -267,8 +268,11 @@ private fun NoLockBanner() {
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Seam-exception (ADR-0031): render the bespoke WarnTriangle SHAPE but keep the banner's
+            // contrast tint instead of routing through SemanticIcon(status = Warning). The locked amber
+            // would fight this errorContainer surface, so we deliberately ignore WarningStatus.status here.
             Icon(
-                imageVector = Icons.Default.Warning,
+                imageVector = RovaIcons.WarningStatus.glyph,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.size(20.dp)
@@ -290,10 +294,10 @@ private fun VaultEmptyState(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.Lock,
+            SemanticIcon(
+                glyph = RovaIcons.Vault,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                role = IconRole.Accent,
                 modifier = Modifier.size(48.dp)
             )
             Spacer(Modifier.height(16.dp))
