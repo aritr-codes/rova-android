@@ -404,17 +404,8 @@ object RovaGlyphs {
             }
         }.build()
 
-    /** Play triangle (ex-fabPlay) — used as RovaIcons.Play. */
-    val Play: ImageVector =
-        ImageVector.Builder(
-            name = "RovaGlyphPlay",
-            defaultWidth = 24.dp, defaultHeight = 24.dp,
-            viewportWidth = 24f, viewportHeight = 24f,
-        ).apply {
-            path(fill = SolidColor(Color.White)) {
-                moveTo(9f, 7f); lineTo(17f, 12f); lineTo(9f, 17f); close()
-            }
-        }.build()
+    /** Play triangle (ex-fabPlay) — used as RovaIcons.Play. Board `play` fill path. */
+    val Play: ImageVector = glyph { svgFill("M8 6.3 17.4 12 8 17.7z") }
 
     // ── authoring helpers ───────────────────────────────────────────────────
     // (PLACEHOLDER + SW are declared at the TOP of the object — see the init-order note there.)

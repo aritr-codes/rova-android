@@ -36,12 +36,19 @@ class SemanticIconSpecTest {
 
     @Test fun status_tints_are_locked_to_RovaSemantics() {
         assertEquals(RovaSemantics.success, SemanticIconSpec.statusTint(IconStatus.Recovered))
-        assertEquals(RovaSemantics.warning, SemanticIconSpec.statusTint(IconStatus.Interrupted))
+        assertEquals(RovaSemantics.escalating, SemanticIconSpec.statusTint(IconStatus.Interrupted))
         assertEquals(RovaSemantics.escalating, SemanticIconSpec.statusTint(IconStatus.Processing))
         assertEquals(RovaSemantics.success, SemanticIconSpec.statusTint(IconStatus.Success))
         assertEquals(RovaSemantics.warning, SemanticIconSpec.statusTint(IconStatus.Warning))
         assertEquals(RovaSemantics.rec, SemanticIconSpec.statusTint(IconStatus.Rec))
         assertEquals(RovaSemantics.error, SemanticIconSpec.statusTint(IconStatus.Danger))
+    }
+
+    @Test fun interrupted_isEscalatingOrange() {
+        // Interrupted now reads as escalating-orange; Recovered/Warning stay green/amber.
+        assertEquals(RovaSemantics.escalating, SemanticIconSpec.statusTint(IconStatus.Interrupted))
+        assertEquals(RovaSemantics.success, SemanticIconSpec.statusTint(IconStatus.Recovered))
+        assertEquals(RovaSemantics.warning, SemanticIconSpec.statusTint(IconStatus.Warning))
     }
 
     @Test fun danger_status_maps_to_locked_error_red() {
