@@ -1,7 +1,7 @@
 # Rova — Engineering Backlog
 
 > Single planning artifact enumerating every remaining, deferred, and carried-over task for **Rova** (`com.aritr.rova`).
-> **As of 2026-06-19, master at HEAD `c8350df`, origin/master CURRENT** (UI Phase 2 PR-1 #122 + PR-2 #123 + PR-3 #124 + **PR-4 Library + Vault icon migration #125** merged; on top of theme engine slice 1, Icon P0+P1a+P2A, premium dialogs, Library redesign, cue-bleed fix #121). **46** custom `check*` gates (UI Phase 2 added none). Open PRs = only **#115 DualSight** (DRAFT, archival, never-merge). **NEXT = UI Phase 2 PR-5 remaining surfaces** (Player split → Warnings/Settings/Onboarding; wire `rec_clipcheck`+`interrupted`; plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7; trigger prompt at the bottom of HANDOFF.md). Other live candidates remain below (`RovaRecordingService.kt` split; video-player upgrades; DualShot perf).
+> **As of 2026-06-20, UI Phase 2 PR-5 Player slice MERGED (PR #126).** Stack so far: PR-1 #122 + PR-2 #123 + PR-3 #124 + PR-4 #125 + **PR-5 Player #126** (icons + control-row honesty; transport→`PlayerIconSpec` seam; **removed the 2 fake Trim/Edit buttons**). On top of theme engine slice 1, Icon P0+P1a+P2A, premium dialogs, Library redesign, cue-bleed fix #121. **46** custom `check*` gates (UI Phase 2 added none). Open PRs = only **#115 DualSight** (DRAFT, archival, never-merge). **NEXT (re-prioritize at session start — do NOT assume): two live icon/player tracks** — (a) **PR-5b remaining icon surfaces** (Warnings/Settings/Onboarding + wire `rec_clipcheck`/`interrupted` status glyphs — last icon slice); (b) **Player functionality PR-6** (interactive timeline · segment prev/next · wall-clock playhead · resume) → **PR-7** (speed · double-tap · auto-hide). Plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7. Other live candidates: `RovaRecordingService.kt` split; DualShot perf; beep-cadence tweak (below).
 > This document is a backlog, not a commitment. Every item traces to an ADR, roadmap, accessibility doc, memory file, or a measured code fact. Priority tags: **P1** (next) · **P2** (soon) · **P3** (later) · **Parked**.
 
 ---
@@ -10,7 +10,7 @@
 
 What the memory trail implies is most concrete and ready to pick up:
 
-1. **UI Phase 2 — PR-5 remaining surfaces** — **NEXT, P2 (owner-selected 2026-06-19).** Continue the in-app icon system (ADR-0031). PR-3 (#124) + **PR-4 Library + Vault migration through the `SemanticIcon` seam (#125)** MERGED. PR-5: split Player out FIRST, then Warnings/Settings/Onboarding (Vault already done in PR-4) + wire `rec_clipcheck`/`interrupted`. Follow PR-4's pattern (pure `*IconSpec` helper, identity-only fence, `IconRole.Accent` for favorite/select, token-tint seam-exception for over-media icons). *(Source: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7; trigger at bottom of HANDOFF.md.)*
+1. **UI Phase 2 — PR-5b remaining icon surfaces** — **P2.** Last icon-system slice (ADR-0031). PR-5 Player MERGED (#126); remaining = Warnings / Settings / Onboarding migration + wire the authored `rec_clipcheck`/`interrupted` status glyphs into `RovaIcons` + Recovery/History/notification surfaces. Follow PR-4's pattern (pure `*IconSpec` helper, identity-only fence, `IconRole.Accent` for favorite/select, `IconStatus` for status). *(Source: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7.)*
 2. **`RovaRecordingService.kt` split** (Reliability/Service, P2) — the largest file; decompose into seams without changing behavior, with the static-gate suite pinning invariants. Strongest non-UI candidate. *(Source: `memory/project_current_state.md`.)*
 3. **Rova video-player upgrades** (Video/Player/Editing, P2, NEEDS-SPEC) / **DualShot performance** (frame jitter + thermal, P2, owner-reported 2026-06-17) — strongest remaining UI/capture candidates. *(Source: `memory/project_current_state.md`; BACKLOG Capture/Mode.)*
 
@@ -130,13 +130,22 @@ ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker finding
 
 ## Video / Player / Editing
 
-> **Owner-requested 2026-06-14** alongside the modernization sweep. Player + editing upgrades. Marked **NEEDS-SPEC**.
+> **Owner-requested 2026-06-14**; **re-specced 2026-06-20** with web research + codex adversarial review. Domain reframe: this is a personal recording / surveillance-**review** tool, not streaming — so value ranking inverts (find-the-moment beats watch-fast). Player today (post-PR-5 #126) = read-only viewer: play/pause, ±10s seek, display-only segmented timeline, pause-on-background, FLAG_SECURE on vault. Media3 pinned 1.4.1.
 
-- [ ] **Rova video-player upgrades** — **P2** · **NEEDS-SPEC**
-  Enhance the in-app Media3 player (shipped `db25405`, `ui/screens/player/`, Media3 pinned 1.4.1) — playback-speed control, scrub thumbnail preview, frame-step, gesture controls (double-tap seek / vertical brightness+volume), background/PiP playback, share affordance, and the deferred A11y timeline semantics (cross-ref Accessibility row 21 — SegmentedTimeline `progressbar` role + per-cell labels). *(Source: owner request 2026-06-14; player in `ui/screens/player/`; accessibility row 21.)*
+- [ ] **PR-6 — Player navigation core** — **P2** · **SPECCED (this session)**
+  All low-cost, high domain-fit, none needing the Media3 bump or a MediaSession: (1) **interactive timeline** — tap-to-seek + drag-scrub on the existing `SegmentedTimeline` (Compose `pointerInput`→`seekTo`; local MP4 = cheap frame-accurate seek); (2) **segment prev/next jump** — segments are built-in chapters, offsets already walked by `SegmentedTimelineMath`; (3) **wall-clock playhead** — `intervalMinutes` means footage-time ≠ real time; compute true capture time from `startedAt` + segment index, show during play+scrub (primary index for review footage); (4) **resume-from-position** — persist `positionMs` in the existing `LibraryMetadataStore` sidecar, near-end→restart threshold. Fold in the deferred A11y timeline semantics (Accessibility "Player timeline semantics" P3 — `progressbar` role + per-cell labels) since the bar becomes interactive. Also clean up the dead `player_trim_cd`/`player_edit_cd`/`player_editor_coming_soon` string resources left by PR-5. *(Source: 2026-06-20 player evaluation — research workflow + codex; `memory/project_icon_glyph_system.md` / a new player-roadmap memory.)*
+
+- [ ] **PR-7 — Player skim/comfort** — **P2** · **SPECCED (this session)**
+  **Playback speed** chips (1x/1.5x/2x; hold 4x unless device-test shows it's comprehensible — `setPlaybackSpeed`, no MediaSession) · **double-tap left/right ±10s** (discoverable gesture; lets the explicit seek buttons retire) · **auto-hide controls** (~3s debounce, pinned during scrub — not headline, lands after gestures exist). *(Source: same evaluation.)*
+
+- [ ] **Player — later / nice-to-have** — **P3** · **NEEDS-SPEC**
+  Overflow clip-actions menu (share/export · delete via the proven `discardSession` confirm — NOT in the transport row, accidental-loss risk) · **trim-as-export** (real, scoped — destructive-vs-export semantics, range UI, sidecar; NOT the 10-line fake) · thumbnail scrub preview (no free path on plain MP4 → precompute subsystem, real cost) · frame-step (no native API in 1.4.1) · A-B loop · fit/fill `resizeMode` (4:3 DualShot / P+L letterbox) · mute · lock controls · ±1s fine seek · Media3 1.8 scrubbing-mode bump (smoother fast-drag, fights the version-pin).
+
+- [ ] **Player — AVOID (evaluated + rejected 2026-06-20)** — not worth building for this domain
+  **PiP** (FLAG_SECURE blanks it, no MediaSession, wrong use case) · brightness/volume **gestures** (portrait, audio secondary) · **landscape/fullscreen/orientation** (portrait by design) · subtitles/CC · casting · quality/audio-track switching — streaming cruft, meaningless for local self-recordings.
 
 - [ ] **Expanded video-editing capabilities** — **P2 / Parked** · **cross-ref / NEEDS-SPEC**
-  Owner wants expanded editing. Today only `MediaMuxer`-concat exists (`utils/VideoMerger.kt`); the player's Edit button is a `TODO` snackbar. The full **"In-app video editor (17 tools)" is Parked NO-GO for v1.0** (see Parked section — module larger than `service/` + `data/` combined, needs `media3.transformer`/OpenGL/`MediaCodec`). **Re-scope** as a shippable incremental subset — trim/cut, reorder/delete clips, thumbnail-accurate seek, simple top-level export — rather than the full editor. *(Source: owner request 2026-06-14; see Parked "In-app video editor (17 tools)"; `NEW_UI_BACKEND_REPLAN.md` §5/§7.)*
+  The full **"In-app video editor (17 tools)" stays Parked NO-GO for v1.0** (module larger than `service/` + `data/` combined, needs `media3.transformer`/OpenGL/`MediaCodec`). Incremental subset (trim-as-export, reorder/delete clips) is folded into the Player "later" row above. Today only `MediaMuxer`-concat exists (`utils/VideoMerger.kt`); the player's fake Edit/Trim buttons were **removed** in PR-5. *(Source: Parked "In-app video editor (17 tools)"; `NEW_UI_BACKEND_REPLAN.md` §5/§7.)*
 
 ---
 
