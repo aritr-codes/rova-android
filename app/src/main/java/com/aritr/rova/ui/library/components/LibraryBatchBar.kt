@@ -9,18 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -28,8 +21,12 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * spec §5.2 — glass bottom batch bar: Share · Vault · Favorite · Delete (no Export, ADR-0030). Polish pass:
@@ -60,30 +57,31 @@ fun LibraryBatchBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BatchAction(Icons.Filled.Share, shareLabel, enabled = true, onClick = onShare)
+            BatchAction(RovaIcons.Share, shareLabel, enabled = true, onClick = onShare)
             BatchAction(
-                Icons.Filled.Lock,
+                RovaIcons.Vault,
                 vaultLabel,
                 enabled = vaultEnabled,
                 disabledDescription = vaultDisabledLabel,
                 onClick = onVault,
             )
-            BatchAction(Icons.Filled.Star, favoriteLabel, enabled = true, onClick = onFavorite)
-            BatchAction(Icons.Filled.Delete, deleteLabel, enabled = true, onClick = onDelete)
+            BatchAction(RovaIcons.FavoriteOn, favoriteLabel, enabled = true, onClick = onFavorite)
+            BatchAction(RovaIcons.Delete, deleteLabel, enabled = true, onClick = onDelete)
         }
     }
 }
 
 @Composable
 private fun BatchAction(
-    icon: ImageVector,
+    glyph: RovaGlyph,
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    iconRole: IconRole = IconRole.Default,
     disabledDescription: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    val tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    val labelColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
     val a11y = if (enabled) label else (disabledDescription ?: label)
     Column(
         modifier
@@ -99,11 +97,16 @@ private fun BatchAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(LibraryDimens.actionIcon))
+        SemanticIcon(
+            glyph = glyph,
+            contentDescription = null,
+            modifier = Modifier.size(LibraryDimens.actionIcon),
+            role = if (enabled) iconRole else IconRole.Disabled,
+        )
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = tint,
+            color = labelColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clearAndSetSemantics {},

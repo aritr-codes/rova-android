@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,18 +69,20 @@ fun LibraryTopBar(
             )
             if (onOpenVault != null) {
                 IconButton(onClick = onOpenVault) {
-                    Icon(
-                        Icons.Filled.Lock,
+                    SemanticIcon(
+                        glyph = RovaIcons.Vault,
                         contentDescription = vaultLabel,
+                        role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )
                 }
             }
             if (onOpenSearch != null) {
                 IconButton(onClick = onOpenSearch) {
-                    Icon(
-                        Icons.Filled.Search,
+                    SemanticIcon(
+                        glyph = RovaIcons.Search,
                         contentDescription = searchLabel,
+                        role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )
                 }
@@ -99,11 +98,20 @@ fun LibraryTopBar(
                 }
             }
             IconButton(onClick = onToggleView) {
-                Icon(
-                    if (viewMode == LibraryViewMode.GRID) Icons.AutoMirrored.Filled.ViewList else Icons.Filled.GridView,
-                    contentDescription = if (viewMode == LibraryViewMode.GRID) listLabel else gridLabel,
-                    modifier = Modifier.size(LibraryDimens.navIcon),
-                )
+                if (viewMode == LibraryViewMode.GRID) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ViewList,
+                        contentDescription = listLabel,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                } else {
+                    SemanticIcon(
+                        glyph = RovaIcons.View,
+                        contentDescription = gridLabel,
+                        role = IconRole.Secondary,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                }
             }
         }
     }

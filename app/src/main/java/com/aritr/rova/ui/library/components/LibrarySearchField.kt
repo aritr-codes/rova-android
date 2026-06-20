@@ -2,11 +2,11 @@ package com.aritr.rova.ui.library.components
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +22,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 
 /**
  * spec §5.4 — inline Library search. Substring match runs in the pure LibraryQuery; this
@@ -43,7 +46,14 @@ fun LibrarySearchField(
         onValueChange = onValueChange,
         singleLine = true,
         label = { Text(stringResource(R.string.library_search_hint)) },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        leadingIcon = {
+            SemanticIcon(
+                glyph = RovaIcons.Search,
+                contentDescription = null,
+                role = IconRole.Secondary,
+                modifier = Modifier.size(24.dp),
+            )
+        },
         trailingIcon = {
             if (value.isNotEmpty()) {
                 IconButton(onClick = onClear) {

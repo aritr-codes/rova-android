@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +34,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.components.RovaAnimations.pressScale
 import com.aritr.rova.ui.library.LibraryRow
@@ -92,12 +94,21 @@ fun LibraryListRow(
     ) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isSelectionMode) {
-                Icon(
-                    imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                    contentDescription = null,
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp),
-                )
+                if (isSelected) {
+                    SemanticIcon(
+                        glyph = RovaIcons.Select,
+                        contentDescription = null,
+                        role = IconRole.Accent,
+                        modifier = Modifier.padding(end = 8.dp).size(24.dp),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
             }
             // Larger, more prominent thumbnail (112×63 = exact 16:9) with a duration badge overlay.
             Box(Modifier.size(width = 112.dp, height = 63.dp).clip(RoundedCornerShape(LibraryDimens.pillRadius))) {

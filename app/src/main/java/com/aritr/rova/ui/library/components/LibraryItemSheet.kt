@@ -16,13 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,6 +40,7 @@ import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.FloatingGlassSheet
 import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.IconStatus
 import com.aritr.rova.ui.theme.RovaGlyph
 import com.aritr.rova.ui.theme.RovaIcons
 
@@ -121,15 +116,16 @@ fun LibraryItemSheet(
                 // separated by hairlines so Delete is visually quarantined from the safe actions.
                 // ── Primary ──
                 SheetRow(Icons.Filled.PlayArrow, playLabel) { onPlay() }
-                SheetRow(Icons.Filled.Share, shareLabel) { onShare() }
+                SheetRow(RovaIcons.Share, shareLabel) { onShare() }
                 HorizontalDivider(color = libraryColors.cardEdge)
                 // ── Secondary ──
-                SheetRow(Icons.Filled.Checklist, selectLabel) { onSelect() }
+                SheetRow(RovaIcons.Select, selectLabel) { onSelect() }
                 SheetRow(
-                    if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    if (isFavorite) unfavoriteLabel else favoriteLabel,
+                    glyph = LibraryIconSpec.favoriteGlyph(isFavorite),
+                    label = if (isFavorite) unfavoriteLabel else favoriteLabel,
+                    iconRole = IconRole.Accent,
                 ) { onToggleFavorite() }
-                SheetRow(Icons.Filled.Edit, renameLabel) { onRename() }
+                SheetRow(RovaIcons.Edit, renameLabel) { onRename() }
                 SheetRow(RovaIcons.Details.glyph, viewSettingsLabel) { onViewSettings() }
                 SheetRow(
                     glyph = RovaIcons.Vault,
@@ -139,7 +135,11 @@ fun LibraryItemSheet(
                 ) { onMoveToVault() }
                 HorizontalDivider(color = libraryColors.cardEdge)
                 // ── Danger ──
-                SheetRow(Icons.Filled.Delete, deleteLabel, danger = true) { onDelete() }
+                SheetRow(
+                    glyph = RovaIcons.Delete,
+                    label = deleteLabel,
+                    status = LibraryIconSpec.deleteStatus(destructive = true),
+                ) { onDelete() }
             }
         }
     }
@@ -179,11 +179,11 @@ private fun SheetHeader(thumbnail: android.graphics.Bitmap?, title: String, meta
 }
 
 @Composable
-private fun SheetRow(icon: ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+private fun SheetRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     // Explicit content colour: the floating sheet is a GlassSurface (no Material Surface to seed
-    // LocalContentColor), so rows must state their own colour. Danger (Delete) reads in the error tint.
-    val contentColor =
-        if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    // LocalContentColor), so rows state their own colour. Used by the stock-Material rows (Play,
+    // Details=Info) that have no bespoke glyph yet.
+    val contentColor = MaterialTheme.colorScheme.onSurface
     Row(
         Modifier
             .fillMaxWidth()
@@ -211,10 +211,16 @@ private fun SheetRow(
     label: String,
     enabled: Boolean = true,
     reason: String? = null,
+    iconRole: IconRole = IconRole.Default,
+    status: IconStatus? = null,
     onClick: () -> Unit,
 ) {
     val baseColor = MaterialTheme.colorScheme.onSurface
-    val contentColor = if (enabled) baseColor else baseColor.copy(alpha = 0.38f)
+    val labelColor = when {
+        status == IconStatus.Danger -> MaterialTheme.colorScheme.error
+        !enabled -> baseColor.copy(alpha = 0.38f)
+        else -> baseColor
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -232,13 +238,14 @@ private fun SheetRow(
             glyph = glyph,
             contentDescription = null,
             modifier = Modifier.size(24.dp),
-            role = if (enabled) IconRole.Default else IconRole.Disabled,
+            role = if (!enabled) IconRole.Disabled else iconRole,
+            status = status,
         )
         Spacer(Modifier.width(20.dp))
         Column {
-            Text(label, color = contentColor)
+            Text(label, color = labelColor)
             if (!enabled && reason != null) {
-                Text(reason, style = MaterialTheme.typography.bodySmall, color = contentColor)
+                Text(reason, style = MaterialTheme.typography.bodySmall, color = labelColor)
             }
         }
     }
