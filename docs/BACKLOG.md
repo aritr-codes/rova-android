@@ -149,6 +149,15 @@ ADR-0020 ("WCAG 2.2 AA by default") is **Proposed**. All Serious/Blocker finding
 
 ---
 
+## Audio cues
+
+> **Re-specced 2026-06-20** after owner clarification + code/asset verification. **Current reality:** ONE asset `res/raw/rova_beep.mp3` (~1.07s, 256kbps CBR — PR #121 trimmed it from the old 3.5s/4-pulse cue) is played by BOTH `beepStart` (awaited pre-roll, mic opens after) AND `beepEnd` (fire-and-forget), at the start AND end of EVERY segment ([RovaRecordingService.kt:1473/1476](app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt#L1473)). No start-vs-reminder-vs-end distinction; reminder is NOT a shortened start. **`BeepTiming.kt`'s KDoc is STALE** — still claims the asset is "~3527 ms, 4-pulse" (misled a research agent).
+
+- [ ] **Differentiated recording cues** — **P3** · **SPECCED** · service/audio-only (disjoint from icons + player → independent parallel stream)
+  Desired UX: (1) **first-segment start cue** = a full ~3.5s multi-pulse cue (recover the pre-#121 asset from git history as `rova_cue_start`); paid once per recording, acceptable pre-roll. (2) **periodic reminder** (subsequent segment starts) = a SHORT distinct tone — keep ~1s, NOT ~2s (reminders are awaited pre-roll → cue duration = lost capture each interval; bias short, change the *sound* not the *length* for recognizability; ~1.3–1.5s ceiling). (3) **REMOVE the end cue** (`beepEnd`) entirely — fires every segment, redundant + fatiguing. Impl: `beepStart(intervalMinutes, isFirstSegment)` branches asset; delete `beepEnd` call + fn; **fix the stale `BeepTiming.kt` KDoc**; re-smoke the cue-bleed fix with the restored long asset (`beepPlaybackCeilingMs` auto-adapts via `mp.duration`). *(Source: 2026-06-20 owner clarification + verified code/asset audit.)*
+
+---
+
 ## Modern-app expectations (QoL)
 
 - [ ] **Modern video-app must-haves & QoL bundle** — **P3** · **NEEDS-SPEC**
