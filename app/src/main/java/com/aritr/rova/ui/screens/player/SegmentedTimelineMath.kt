@@ -91,4 +91,64 @@ internal object SegmentedTimelineMath {
             totalClips = segmentDurationsMs.size
         )
     }
+
+    fun totalDurationMs(durations: List<Long>): Long = durations.sumOf { it.coerceAtLeast(0L) }
+
+    fun fractionFromPosition(positionMs: Long, durations: List<Long>): Float {
+        val total = totalDurationMs(durations)
+        if (total <= 0L) return 0f
+        return (positionMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+    }
+
+    fun positionFromFraction(fraction: Float, durations: List<Long>): Long {
+        val total = totalDurationMs(durations)
+        if (total <= 0L) return 0L
+        return (fraction.coerceIn(0f, 1f) * total).toLong().coerceIn(0L, total)
+    }
+
+    fun segmentStartMs(index: Int, durations: List<Long>): Long {
+        var acc = 0L
+        for (i in 0 until index.coerceIn(0, durations.size)) acc += durations[i].coerceAtLeast(0L)
+        return acc
+    }
+
+    fun segmentAtPosition(positionMs: Long, durations: List<Long>): Int {
+        if (durations.isEmpty()) return 0
+        val clamped = positionMs.coerceIn(0L, totalDurationMs(durations))
+        var acc = 0L
+        for ((i, d) in durations.withIndex()) {
+            acc += d.coerceAtLeast(0L)
+            if (clamped < acc) return i
+        }
+        return durations.lastIndex
+    }
+
+    fun nextSegmentStart(positionMs: Long, durations: List<Long>): Long? {
+        val cur = segmentAtPosition(positionMs, durations)
+        if (cur >= durations.lastIndex) return null
+        return segmentStartMs(cur + 1, durations)
+    }
+
+    fun prevSegmentStart(positionMs: Long, durations: List<Long>, restartCurrentAfterMs: Long = 750L): Long? {
+        if (durations.isEmpty() || positionMs <= 0L) return null
+        val cur = segmentAtPosition(positionMs, durations)
+        val curStart = segmentStartMs(cur, durations)
+        return if (positionMs - curStart > restartCurrentAfterMs) curStart
+        else if (cur == 0) null
+        else segmentStartMs(cur - 1, durations)
+    }
+
+    fun snapIfNear(positionMs: Long, durations: List<Long>, snapWindowMs: Long): Long {
+        var acc = 0L
+        val boundaries = ArrayList<Long>(durations.size + 1).apply { add(0L) }
+        for (d in durations) { acc += d.coerceAtLeast(0L); boundaries.add(acc) }
+        val nearest = boundaries.minByOrNull { kotlin.math.abs(it - positionMs) } ?: return positionMs
+        return if (kotlin.math.abs(nearest - positionMs) <= snapWindowMs) nearest else positionMs
+    }
+
+    fun cellWeights(durations: List<Long>): List<Float> {
+        val total = totalDurationMs(durations)
+        if (total <= 0L) return durations.map { 1f / durations.size.coerceAtLeast(1) }
+        return durations.map { it.coerceAtLeast(0L).toFloat() / total.toFloat() }
+    }
 }
