@@ -14,25 +14,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -57,9 +50,9 @@ import com.aritr.rova.ui.LocalSecureFlagController
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.screens.HistoryRowFormatters
 import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
-import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -121,10 +114,6 @@ fun PlayerScreen(
         if (shouldSecure) secureFlag?.acquire()
         onDispose { if (shouldSecure) secureFlag?.release() }
     }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-    val editorPlaceholderMessage = stringResource(R.string.player_editor_coming_soon)
-
     // Audit F#1 — pause ExoPlayer when the host activity goes to the
     // background. Without this, audio keeps decoding from a detached
     // surface (Home / lock-screen / Recents picker). Compose's
@@ -148,8 +137,7 @@ fun PlayerScreen(
     }
 
     Scaffold(
-        containerColor = Color.Black,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        containerColor = Color.Black
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -166,11 +154,6 @@ fun PlayerScreen(
                     onBack = onBack,
                     onTogglePlay = viewModel::togglePlayPause,
                     onSeekRelative = viewModel::seekRelative,
-                    onTrimOrEditPlaceholder = {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(editorPlaceholderMessage)
-                        }
-                    },
                     bindPlayerView = { playerView ->
                         playerView.player = viewModel.getOrCreatePlayer()
                     }
@@ -220,7 +203,6 @@ private fun PlayerReady(
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
     onSeekRelative: (Long) -> Unit,
-    onTrimOrEditPlaceholder: () -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
     val playCd = stringResource(R.string.player_play_cd)
@@ -334,7 +316,7 @@ private fun PlayerReady(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         SemanticIcon(
-                            imageVector = Icons.Default.PlayArrow,
+                            imageVector = RovaIcons.Play.glyph,
                             contentDescription = null,
                             role = IconRole.Default,
                             modifier = Modifier.size(36.dp)
@@ -369,9 +351,7 @@ private fun PlayerReady(
                 isPlaying = progress.isPlaying,
                 onTogglePlay = onTogglePlay,
                 onSeekBack = { onSeekRelative(-SEEK_DELTA_MS) },
-                onSeekForward = { onSeekRelative(SEEK_DELTA_MS) },
-                onTrim = onTrimOrEditPlaceholder,
-                onEdit = onTrimOrEditPlaceholder
+                onSeekForward = { onSeekRelative(SEEK_DELTA_MS) }
             )
         }
     }
@@ -421,9 +401,7 @@ private fun ControlsRow(
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
     onSeekBack: () -> Unit,
-    onSeekForward: () -> Unit,
-    onTrim: () -> Unit,
-    onEdit: () -> Unit
+    onSeekForward: () -> Unit
 ) {
     val playPauseCd = if (isPlaying) {
         stringResource(R.string.player_pause_cd)
@@ -435,13 +413,6 @@ private fun ControlsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onTrim) {
-            SemanticIcon(
-                imageVector = Icons.Default.ContentCut,
-                contentDescription = stringResource(R.string.player_trim_cd),
-                role = IconRole.Secondary
-            )
-        }
         IconButton(onClick = onSeekBack) {
             SemanticIcon(
                 imageVector = Icons.Default.Replay10,
@@ -459,7 +430,7 @@ private fun ControlsRow(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 SemanticIcon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = PlayerIconSpec.transportGlyph(isPlaying),
                     contentDescription = null,
                     role = IconRole.Default
                 )
@@ -470,13 +441,6 @@ private fun ControlsRow(
                 imageVector = Icons.Default.Forward10,
                 contentDescription = stringResource(R.string.player_forward_cd),
                 role = IconRole.Default
-            )
-        }
-        IconButton(onClick = onEdit) {
-            SemanticIcon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = stringResource(R.string.player_edit_cd),
-                role = IconRole.Secondary
             )
         }
     }
