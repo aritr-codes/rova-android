@@ -1,7 +1,7 @@
 # Rova — Session Handoff
 
 > Drop-in orientation for a **fresh session**. Read this + `CLAUDE.md` + the auto-loaded `MEMORY.md`, then [`docs/BACKLOG.md`](docs/BACKLOG.md) for the full task list.
-> **As of 2026-06-19 — UI Phase 2 PR-4 (Library + Vault icon migration) is MERGED (PR #125 squash → `master` = `c8350df`, branch deleted).** 10 source/test files + spec + plan; 46 gates + JVM (+ `LibraryIconSpecTest`) + codex all green; owner device-smoke GO (Library top-bar glyphs + hero star verified; Vault FLAG_SECURE so visual-only). PR-1 (#122), PR-2 (#123), PR-3 (#124) also merged this session. Open PRs: only #115 (DualSight, archival/never-merge). NEXT = PR-5 remaining surfaces (Player split → Warnings/Settings/Onboarding; wire `rec_clipcheck`+`interrupted`; plan: `docs/UI_PHASE2_ICON_THEME_AUDIT.md` §7). **Vault was pulled forward from PR-5 into PR-4.**
+> **As of 2026-06-20 — UI Phase 2 PR-5 Player slice MERGED (PR #126).** Scoped to icons + control-row honesty: transport (center-play + play/pause toggle) → `RovaIcons.Play`/`Pause` via pure `PlayerIconSpec.transportGlyph` (JVM-tested); **removed the 2 fake Trim/Edit buttons** (snackbar stubs, editing NO-GO) → control row is now `[−10s][Play/Pause][+10s]`, all real. 46 gates + JVM (`PlayerIconSpecTest` 3/3) + codex green; owner device-smoke GO (FLAG_SECURE → visual). PR-1 #122 · PR-2 #123 · PR-3 #124 · PR-4 #125 merged earlier this stack. Open PRs: only #115 (DualSight, archival/never-merge). **A full player evaluation ran 2026-06-20 (research workflow + codex)** → roadmap in `docs/BACKLOG.md` "Video / Player / Editing". **NEXT = re-prioritize (do NOT assume PR-6):** two live tracks — (a) **PR-5b** remaining icon surfaces (Warnings/Settings/Onboarding + wire `rec_clipcheck`/`interrupted`); (b) **PR-6** player nav (interactive timeline · segment jump · wall-clock playhead · resume) → **PR-7** (speed · double-tap · auto-hide).
 
 ---
 
@@ -67,48 +67,37 @@ The P1 cue-bleed bug is done (PR #121). Two parallel survey agents (reliability 
 
 ---
 
-## Fresh-session kickoff prompt — UI Phase 2 PR-5 (icon system)
+## Fresh-session kickoff prompt — re-prioritize first (PR-5b icons vs PR-6 player)
 
-Paste this to start the next session. UI Phase 2 PR-3 (#124) + PR-4 Library + Vault (#125) MERGED; this continues with PR-5 (remaining surfaces), which branches off a master that already has the consumed-glyph patterns from PR-4.
+PR-5 Player (#126) MERGED. A 2026-06-20 project assessment (status review + re-prioritization + icon audit + motion polish + parallelization + audio-cue review) was delivered in chat — **start the next session by reading it / re-confirming the priority**, do NOT assume PR-6 is automatically next. Two live tracks below; both branch off the post-#126 master.
 
 ```
 Rova Android (com.aritr.rova), repo g:\Books\Python\ACTUAL CODES\PROJECTS\rova-android.
 Caveman mode + Ultracode ON.
 
-Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, docs/BACKLOG.md, and the
-UI Phase 2 plan docs/UI_PHASE2_ICON_THEME_AUDIT.md (esp. §7 — the reconciled PR sequence). Don't
-re-explore what those establish. Confirm master is c8350df and origin/master is current (UI Phase 2
-PR-1 #122 + PR-2 #123 + PR-3 #124 + PR-4 #125 merged; 46 gates) before starting.
+Orient first: read HANDOFF.md, CLAUDE.md, the auto-loaded MEMORY.md, docs/BACKLOG.md (esp. "Video /
+Player / Editing" — the specced PR-6/PR-7 player roadmap), and docs/UI_PHASE2_ICON_THEME_AUDIT.md §7.
+Confirm master includes PR-5 #126 and origin/master is current; 46 gates; JVM baseline green.
 
-SOURCE OF TRUTH for every glyph = .superpowers/brainstorm/1234-1781611237/content/board-3-semantic.html
-(extract glyph SVG paths + the E1 semantic map with ctx_execute_file; do NOT eyeball — match the board
-exactly, as PR-2's FAB did). Authoring pattern + helpers (glyph/strokePath/fillPath/svgStroke/svgFill/
-circle/roundRect/seg) live in ui/theme/RovaGlyphs.kt — the ONLY allowlisted home (checkRovaGlyphHome).
-Two-layer duotone = RovaGlyph(outline, accent?); rendered via SemanticIcon (IconRole identity tints,
-IconStatus locked colors, IconRole.OnAccent for filled-accent surfaces). RovaIcons = the concept→glyph
-collision map.
+RE-PRIORITIZE before coding (owner asked, 2026-06-20). Two ready tracks:
+- PR-5b — remaining ICON surfaces (last icon-system slice, ADR-0031): Warnings / Settings / Onboarding
+  migration + wire the authored rec_clipcheck (Recovered status) / interrupted glyphs into RovaIcons +
+  Recovery/History/notification surfaces. SOURCE OF TRUTH for glyphs = board-3-semantic.html (extract
+  via ctx_execute_file; do NOT eyeball). Follow PR-4/PR-5 pattern: pure *IconSpec helper for any
+  state→glyph/status decision; identity-only fence; IconStatus for status; IconRole.Accent for
+  favorite/select. Author in ui/theme/RovaGlyphs.kt (checkRovaGlyphHome).
+- PR-6 — player NAVIGATION core (interactive timeline tap+scrub · segment prev/next · wall-clock
+  playhead · resume), then PR-7 (speed · double-tap · auto-hide). Full spec + the AVOID list in
+  docs/BACKLOG.md "Video / Player / Editing". Player is read-only today; segments = built-in chapters.
 
-TASK — PR-3 (#124) + PR-4 (#125) MERGED. PR-4 established the consume-pattern: LibraryIconSpec pure helper
-(state→glyph/status) + 7 Library components + VaultScreen on the SemanticIcon seam (delete→Danger, favorite
-outline→filled-accent, selected→Select accent; param named iconRole to avoid the semantics{role=} shadow-bug;
-identity-only fence leaves Back/Close/Clear/Play/Details stock). Continue PR-5 (its own branch off master
-c8350df, push + PR + merge only on owner GO):
-- PR-5 Remaining surfaces: split Player out FIRST (its own slice); then Warnings/Settings/Onboarding (Vault
-  already done in PR-4). Wire the already-authored rec_clipcheck + interrupted glyphs (PR-3) into RovaIcons +
-  their surfaces. VISIBLE surfaces → mandatory device smoke (Player is FLAG_SECURE → owner verifies visually).
-  Follow PR-4's pattern: pure *IconSpec helper for any state→glyph decision; identity-only fence (nav/utility
-  stay stock); favorite/select via IconRole.Accent; over-media icons via a token-tint seam-exception.
+Process: brainstorm/plan first; pure-helper + JVM tests in the same PR; codex-review (mcp__codex__codex);
+subagent-driven-dev (subagents EDIT-ONLY, controller runs all gradle/commits/smoke). Keep all 46 gates +
+JVM green; never edit a check* to pass. New strings en+es (ADR-0022). Build WARM — confirm
+:app:packageDebug EXECUTED before adb install -r (debug-signed; uninstall a release build first).
+Mandatory device smoke on RZCYA1VBQ2H (adb via PowerShell; device unauthorized on reconnect — owner
+re-accepts USB prompt; Record/Player FLAG_SECURE → owner verifies visually; do NOT blind-tap deep nav).
+Push + PR + merge ONLY on owner GO.
 
-Process: brainstorm/plan first; pure-helper + JVM tests in the same PR; codex-review the glyph set +
-seam wiring (mcp__codex__codex); subagent-driven-dev (subagents EDIT-ONLY, controller runs all gradle/
-commits/smoke). Keep all 46 gates + JVM green at every step; never edit a check* to pass. New strings
-in en+es (ADR-0022). Build WARM — confirm :app:packageDebug EXECUTED before any adb install -r (debug
-APK is debug-signed; if a release build is installed, uninstall first). Mandatory device smoke on
-RZCYA1VBQ2H for any visible-surface PR (adb via PowerShell directly; device goes unauthorized on
-reconnect — owner re-accepts the USB prompt; Record/Player are FLAG_SECURE so adb screencap can't see
-them — owner verifies visually).
-
-First action: confirm master is c8350df (PR-4 #125 merged) + origin current, then brainstorm/plan PR-5 —
-start with the Player slice (enumerate its icon call-sites + target glyphs/roles; note Player is FLAG_SECURE),
-then sweep Warnings/Settings/Onboarding, and wire rec_clipcheck + interrupted into RovaIcons + their surfaces.
+First action: confirm master has #126 + origin current, then re-confirm priority with the owner (PR-5b
+vs PR-6) before planning the chosen slice.
 ```
