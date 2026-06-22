@@ -325,7 +325,7 @@ object RovaGlyphs {
 
     // FlipCam — twin lens-orbit arcs (outline) + 2 arrowheads & centre core (accent). board `flip_cam`.
     // The two arcs read as a camera flip on their own (mono-safe); the arrowheads + core are the accent
-    // channel. Bespoke duotone sibling of CameraFront/CameraRear; the call-site flip migrates in 5b-2…5.
+    // channel. The record-screen flip control consumes this glyph (migrated in 5b-5).
     val FlipCam = RovaGlyph(
         outline = glyph {
             svgStroke("M5.5 9.5A7 6 0 0 1 18 7.5")
@@ -365,7 +365,7 @@ object RovaGlyphs {
     // Kept at their original viewports/strokes — this was a structural move, not
     // a re-skin (System-D re-authoring is a later visual slice). Superseded
     // library/settings/flipCamera were dropped (duotone RovaGlyphs replace nav;
-    // flip switched to CameraFront/CameraRear in B6).
+    // flip now uses the duotone RovaGlyphs.FlipCam — 5b-5).
 
     // Flash — single lightning bolt, re-authored to System-D (board `flash`). Mono (single
     // outline layer): the bolt silhouette carries the whole meaning with no accent channel, so
@@ -373,54 +373,6 @@ object RovaGlyphs {
     // RecordChrome (hardware-state yellow when flash is ON) — keep the `ImageVector` type. The
     // 24-grid stroke (SW, round caps/joins) replaces the legacy folded 13×15 fill body.
     val FlashBolt: ImageVector = glyph { svgStroke("M13 3.5 6.5 13.2 11 13.2 11 20.5 17.5 10.8 13 10.8z") }
-
-    /** "switch to FRONT camera" — body + selfie head/shoulders. */
-    val CameraFront: ImageVector =
-        ImageVector.Builder(
-            name = "RovaGlyphCameraFront",
-            defaultWidth = 16.dp, defaultHeight = 16.dp,
-            viewportWidth = 24f, viewportHeight = 24f,
-        ).apply {
-            val stroke = SolidColor(Color.White)
-            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(4f, 7f); horizontalLineTo(20f); verticalLineTo(19f); horizontalLineTo(4f); close()
-            }
-            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(9f, 7f); lineTo(10.5f, 4.5f); horizontalLineTo(13.5f); lineTo(15f, 7f)
-            }
-            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(13.5f, 12f)
-                arcTo(1.5f, 1.5f, 0f, true, true, 10.5f, 12f)
-                arcTo(1.5f, 1.5f, 0f, true, true, 13.5f, 12f)
-                close()
-            }
-            path(stroke = stroke, strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(9.5f, 17f)
-                arcTo(2.5f, 2.5f, 0f, false, true, 14.5f, 17f)
-            }
-        }.build()
-
-    /** "switch to REAR camera" — body + centred lens ring. */
-    val CameraRear: ImageVector =
-        ImageVector.Builder(
-            name = "RovaGlyphCameraRear",
-            defaultWidth = 16.dp, defaultHeight = 16.dp,
-            viewportWidth = 24f, viewportHeight = 24f,
-        ).apply {
-            val stroke = SolidColor(Color.White)
-            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(4f, 7f); horizontalLineTo(20f); verticalLineTo(19f); horizontalLineTo(4f); close()
-            }
-            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(9f, 7f); lineTo(10.5f, 4.5f); horizontalLineTo(13.5f); lineTo(15f, 7f)
-            }
-            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
-                moveTo(15f, 13f)
-                arcTo(3f, 3f, 0f, true, true, 9f, 13f)
-                arcTo(3f, 3f, 0f, true, true, 15f, 13f)
-                close()
-            }
-        }.build()
 
     /** `.settings-arrow` chevron — points up (expand sheet). */
     val ChevronUp: ImageVector =

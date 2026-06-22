@@ -255,6 +255,9 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
         val palette = LocalGlassEnvironment.current.palette
         val contentTint = when { // semanticicon-opt-out: flash-ON is a hardware-state indicator, not a theme/status color
             flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
+            // 5b-5 (owner): OFF/AUTO bolt carries the theme accent (parity with FlipCam's accent);
+            // disabled falls through to the role-grey tint. palette.accent is theme-derived (gate-safe).
+            enabled -> palette.accent
             else -> SemanticIconSpec.tint(palette, role)
         }
         // PR-ε (spec §5): bolt + OFF slash spin as ONE unit so the slash stays
@@ -294,14 +297,15 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
         // B6 — name the lens the tap switches TO (front active → "rear"
         // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
         // requirement; strings are localized resources (checkNoHardcodedUiStrings).
-        val flipIcon = if (isFrontCamera) RovaGlyphs.CameraRear else RovaGlyphs.CameraFront
+        // 5b-5: the flip affordance is the rotation-arrows FlipCam glyph (duotone), state-independent
+        // — the active lens is conveyed by [flipCd], not by the glyph. (ADR-0031; board `flip_cam`.)
         val flipCd = stringResource(
             if (isFrontCamera) R.string.record_switch_to_rear_cd
             else R.string.record_switch_to_front_cd,
         )
         SpinningBox(degrees = spinDegrees) {
             SemanticIcon(
-                flipIcon,
+                glyph = RovaIcons.FlipCam,
                 contentDescription = flipCd,
                 role = role,
                 modifier = Modifier.size(16.dp),
@@ -726,27 +730,29 @@ internal fun NavItem(glyph: RovaGlyph, label: String, enabled: Boolean, onClick:
         modifier = if (enabled) {
             // SC 2.4.7 (NAV-03/05): visible D-pad/keyboard focus ring.
             Modifier
-                .focusHighlight(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius))
+                .focusHighlight(CircleShape)
                 .clickable(onClickLabel = label, role = Role.Button) { onClick() }
         } else {
             Modifier
         },
     ) {
-        Box(
-            modifier = Modifier
-                .size(RecordChromeTokens.navIconBoxSize)
-                .clip(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius)),
-            contentAlignment = Alignment.Center,
+        // 5b-5: Library/Settings sit in the SAME glass circle as the cam-controls (GlassCircleButton)
+        // so the nav reads as chrome buttons, not bare glyphs, beside the accent FAB. CircleShape is
+        // rotation-invariant — the glyph still spins inside via SpinningBox.
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.size(RecordChromeTokens.navIconBoxSize),
+            shape = CircleShape,
         ) {
-            // PR-ε (spec §5): glyph spins inside the stable square icon box
-            // (square = rotation-invariant; clickable stays on the Column).
-            SpinningBox(degrees = spinDegrees) {
-                SemanticIcon(
-                    glyph = glyph,
-                    contentDescription = label,
-                    role = if (enabled) IconRole.Default else IconRole.Disabled,
-                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize * rememberChromeScale()),
-                )
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                SpinningBox(degrees = spinDegrees) {
+                    SemanticIcon(
+                        glyph = glyph,
+                        contentDescription = label,
+                        role = if (enabled) IconRole.Default else IconRole.Disabled,
+                        modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize * rememberChromeScale()),
+                    )
+                }
             }
         }
         // PR-ε refinement (owner 2026-06-12 #5): no visible text label in EITHER
