@@ -154,6 +154,12 @@ fun PlayerScreen(
                     onBack = onBack,
                     onTogglePlay = viewModel::togglePlayPause,
                     onSeekRelative = viewModel::seekRelative,
+                    onSeek = viewModel::seekTo,
+                    onScrubStart = viewModel::beginScrub,
+                    onScrubUpdate = viewModel::updateScrub,
+                    onScrubEnd = viewModel::endScrub,
+                    onPrevSegment = viewModel::jumpPrevSegment,
+                    onNextSegment = viewModel::jumpNextSegment,
                     bindPlayerView = { playerView ->
                         playerView.player = viewModel.getOrCreatePlayer()
                     }
@@ -203,6 +209,12 @@ private fun PlayerReady(
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
     onSeekRelative: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubUpdate: (Long) -> Unit,
+    onScrubEnd: (Long) -> Unit,
+    onPrevSegment: () -> Unit,
+    onNextSegment: () -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
     val playCd = stringResource(R.string.player_play_cd)
@@ -345,7 +357,14 @@ private fun PlayerReady(
             InfoRow(state = state, progress = progress)
             SegmentedTimeline(
                 segmentDurationsMs = state.segmentDurationsMs,
-                positionMs = progress.positionMs
+                positionMs = progress.positionMs,
+                isScrubbing = progress.isScrubbing,
+                onSeek = onSeek,
+                onScrubStart = onScrubStart,
+                onScrubUpdate = onScrubUpdate,
+                onScrubEnd = onScrubEnd,
+                onPrevSegment = onPrevSegment,
+                onNextSegment = onNextSegment
             )
             ControlsRow(
                 isPlaying = progress.isPlaying,
