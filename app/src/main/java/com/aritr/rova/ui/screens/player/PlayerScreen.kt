@@ -154,6 +154,12 @@ fun PlayerScreen(
                     onBack = onBack,
                     onTogglePlay = viewModel::togglePlayPause,
                     onSeekRelative = viewModel::seekRelative,
+                    onSeek = viewModel::seekTo,
+                    onScrubStart = viewModel::beginScrub,
+                    onScrubUpdate = viewModel::updateScrub,
+                    onScrubEnd = viewModel::endScrub,
+                    onPrevSegment = viewModel::jumpPrevSegment,
+                    onNextSegment = viewModel::jumpNextSegment,
                     bindPlayerView = { playerView ->
                         playerView.player = viewModel.getOrCreatePlayer()
                     }
@@ -203,9 +209,14 @@ private fun PlayerReady(
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
     onSeekRelative: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubUpdate: (Long) -> Unit,
+    onScrubEnd: (Long) -> Unit,
+    onPrevSegment: () -> Unit,
+    onNextSegment: () -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
-    val playCd = stringResource(R.string.player_play_cd)
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
         // detach; the DisposableEffect releases the surface reference
@@ -296,36 +307,6 @@ private fun PlayerReady(
             }
         }
 
-        // Center play overlay (only when paused)
-        if (!progress.isPlaying) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    // WCAG 2.2 AA SC 1.4.11 (ADR-0020, PLR-02): the play
-                    // affordance is a functional UI component — its fill must
-                    // clear 3:1 against the dark backdrop. 0.12α was ~1.4:1;
-                    // 0.35α clears 3:1 over the dark-scene reference.
-                    color = Color.White.copy(alpha = 0.35f),
-                    onClick = onTogglePlay,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .semantics { contentDescription = playCd }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        SemanticIcon(
-                            imageVector = RovaIcons.Play.glyph,
-                            contentDescription = null,
-                            role = IconRole.Default,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-                }
-            }
-        }
-
         // Bottom panel — info row + timeline + controls
         Column(
             modifier = Modifier
@@ -345,7 +326,14 @@ private fun PlayerReady(
             InfoRow(state = state, progress = progress)
             SegmentedTimeline(
                 segmentDurationsMs = state.segmentDurationsMs,
-                positionMs = progress.positionMs
+                positionMs = progress.positionMs,
+                isScrubbing = progress.isScrubbing,
+                onSeek = onSeek,
+                onScrubStart = onScrubStart,
+                onScrubUpdate = onScrubUpdate,
+                onScrubEnd = onScrubEnd,
+                onPrevSegment = onPrevSegment,
+                onNextSegment = onNextSegment
             )
             ControlsRow(
                 isPlaying = progress.isPlaying,

@@ -58,5 +58,14 @@ sealed interface PlayerUiState {
 data class PlaybackProgress(
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
-    val isPlaying: Boolean = false
+    val isPlaying: Boolean = false,
+    /**
+     * Player PR-6 Task 4 — true for the duration of a user drag-scrub
+     * session (`beginScrub` → `endScrub`). The timeline reads this to
+     * suppress the position-poll's authoritative `positionMs` while the
+     * user's finger owns the thumb, and to render the scrub affordance.
+     * Preserved across [PlayerViewModel.pushProgress] rebuilds so a poll
+     * tick can never silently clear an in-flight scrub.
+     */
+    val isScrubbing: Boolean = false
 )

@@ -21,6 +21,10 @@ class SegmentedTimelineMathTest {
     private fun upcoming() = SegmentedTimelineMath.Cell.Upcoming
     private fun current(f: Float) = SegmentedTimelineMath.Cell.Current(f)
 
+    private val segs = listOf(1000L, 2000L, 1000L) // total 4000, starts 0/1000/3000
+
+    // ========== Original compute() tests (10 total) ==========
+
     @Test
     fun `position 0 with three equal segments has only first as current`() {
         val r = SegmentedTimelineMath.compute(listOf(10_000, 10_000, 10_000), 0L)
@@ -102,5 +106,61 @@ class SegmentedTimelineMathTest {
         assertEquals(0.7f, mid.fillFraction, 0.001f)
         assertEquals(upcoming(), r.cells[2])
         assertEquals(2, r.currentClipIndex)
+    }
+
+    // ========== New seek/segment-math tests (8 total) ==========
+
+    @Test fun totalDuration_sums() {
+        assertEquals(4000L, SegmentedTimelineMath.totalDurationMs(segs))
+        assertEquals(0L, SegmentedTimelineMath.totalDurationMs(emptyList()))
+    }
+
+    @Test fun fraction_position_roundTrip() {
+        assertEquals(0.5f, SegmentedTimelineMath.fractionFromPosition(2000L, segs), 0.0001f)
+        assertEquals(2000L, SegmentedTimelineMath.positionFromFraction(0.5f, segs))
+        assertEquals(0f, SegmentedTimelineMath.fractionFromPosition(-50L, segs), 0f)
+        assertEquals(4000L, SegmentedTimelineMath.positionFromFraction(2f, segs))
+        assertEquals(0L, SegmentedTimelineMath.positionFromFraction(-1f, segs))
+    }
+
+    @Test fun fraction_emptyOrZero_isSafe() {
+        assertEquals(0f, SegmentedTimelineMath.fractionFromPosition(100L, emptyList()), 0f)
+        assertEquals(0L, SegmentedTimelineMath.positionFromFraction(0.5f, emptyList()))
+        assertEquals(0f, SegmentedTimelineMath.fractionFromPosition(0L, listOf(0L, 0L)), 0f)
+    }
+
+    @Test fun segmentAtPosition_andStart() {
+        assertEquals(0, SegmentedTimelineMath.segmentAtPosition(0L, segs))
+        assertEquals(0, SegmentedTimelineMath.segmentAtPosition(999L, segs))
+        assertEquals(1, SegmentedTimelineMath.segmentAtPosition(1000L, segs))
+        assertEquals(2, SegmentedTimelineMath.segmentAtPosition(3500L, segs))
+        assertEquals(2, SegmentedTimelineMath.segmentAtPosition(99999L, segs))
+        assertEquals(0L, SegmentedTimelineMath.segmentStartMs(0, segs))
+        assertEquals(1000L, SegmentedTimelineMath.segmentStartMs(1, segs))
+        assertEquals(3000L, SegmentedTimelineMath.segmentStartMs(2, segs))
+    }
+
+    @Test fun nextSegmentStart_advancesThenNull() {
+        assertEquals(1000L, SegmentedTimelineMath.nextSegmentStart(500L, segs))
+        assertEquals(3000L, SegmentedTimelineMath.nextSegmentStart(1500L, segs))
+        assertEquals(null, SegmentedTimelineMath.nextSegmentStart(3500L, segs))
+    }
+
+    @Test fun prevSegmentStart_restartsCurrentThenJumps() {
+        assertEquals(1000L, SegmentedTimelineMath.prevSegmentStart(1900L, segs))
+        assertEquals(0L, SegmentedTimelineMath.prevSegmentStart(1200L, segs))
+        assertEquals(null, SegmentedTimelineMath.prevSegmentStart(0L, segs))
+    }
+
+    @Test fun snapIfNear_snapsWithinWindowOnly() {
+        assertEquals(1000L, SegmentedTimelineMath.snapIfNear(1080L, segs, 200L))
+        assertEquals(1500L, SegmentedTimelineMath.snapIfNear(1500L, segs, 200L))
+    }
+
+    @Test fun cellWeights_areProportional() {
+        val w = SegmentedTimelineMath.cellWeights(segs)
+        assertEquals(0.25f, w[0], 0.0001f)
+        assertEquals(0.50f, w[1], 0.0001f)
+        assertEquals(0.25f, w[2], 0.0001f)
     }
 }
