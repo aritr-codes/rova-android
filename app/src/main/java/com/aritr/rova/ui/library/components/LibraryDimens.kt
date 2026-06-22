@@ -60,7 +60,7 @@ object LibraryDimens {
 
     // ── Polish P6/P3: usage line + session-identity ──────────────────────
     /** Status dot diameter on list rows / cards (recovered/interrupted). */
-    val statusDotSize = 6.dp
+    val statusDotSize = 8.dp
     /** Usage fill-bar height. */
     val usageBarHeight = 4.dp
 

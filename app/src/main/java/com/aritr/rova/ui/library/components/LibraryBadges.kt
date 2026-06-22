@@ -62,8 +62,8 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun OrientationFramePill(orientation: com.aritr.rova.ui.library.LibraryOrientation, modifier: Modifier = Modifier) {
     val (w, h) = when (orientation) {
-        com.aritr.rova.ui.library.LibraryOrientation.PORTRAIT -> 10.dp to 14.dp
-        com.aritr.rova.ui.library.LibraryOrientation.LANDSCAPE -> 14.dp to 10.dp
+        com.aritr.rova.ui.library.LibraryOrientation.PORTRAIT -> 13.dp to 18.dp
+        com.aritr.rova.ui.library.LibraryOrientation.LANDSCAPE -> 18.dp to 13.dp
     }
     Box(
         modifier
@@ -74,7 +74,7 @@ fun OrientationFramePill(orientation: com.aritr.rova.ui.library.LibraryOrientati
         Box(
             Modifier
                 .size(width = w, height = h)
-                .border(1.5.dp, captionTextColor, RoundedCornerShape(2.dp)),
+                .border(2.dp, captionTextColor, RoundedCornerShape(2.dp)),
         )
     }
 }
