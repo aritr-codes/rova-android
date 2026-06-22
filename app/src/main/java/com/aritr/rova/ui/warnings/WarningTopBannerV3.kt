@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -87,12 +88,16 @@ internal fun WarningTopBannerV3(
                 .background(severityColor.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = content.icon,
-                contentDescription = null,
-                tint = severityColor.copy(alpha = 0.95f),
-                modifier = Modifier.size(18.dp),
-            )
+            // ADR-0031 §4 severity-tint exception: both glyph layers take severityColor, not
+            // palette.accent — so this renders manually instead of via SemanticIcon.
+            Box(modifier = Modifier.size(18.dp)) {
+                Icon(content.glyph.outline, contentDescription = null, modifier = Modifier.fillMaxSize(),
+                    tint = severityColor.copy(alpha = 0.95f))
+                content.glyph.accent?.let { acc ->
+                    Icon(acc, contentDescription = null, modifier = Modifier.fillMaxSize(),
+                        tint = severityColor.copy(alpha = 0.95f))
+                }
+            }
         }
 
         Column(

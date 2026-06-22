@@ -43,7 +43,7 @@ class WarningSheetContentTest {
         // returns a non-blank, callable sheet content (never rendered as a sheet).
         val c = warningSheetContent(WarningId.STORAGE_LOW_MID_REC)
         assertNotEquals("title @StringRes set", 0, c.title)
-        assertNotNull("icon", c.icon)
+        assertEquals("glyph wired from spec", WarningIconSpec.glyphFor(WarningId.STORAGE_LOW_MID_REC), c.glyph)
         assertEquals(R.string.warning_action_ok, c.primary.label)
         assertNull("secondary should be null on TopBanner-only arm", c.secondary)
     }

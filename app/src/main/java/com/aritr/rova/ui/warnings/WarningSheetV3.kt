@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -41,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaGlyph
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -141,7 +142,7 @@ internal fun WarningSheetV3(
             ) {
                 Spacer(Modifier.height(8.dp))
 
-                IconWithGlow(icon = content.icon, accent = accent)
+                IconWithGlow(glyph = content.glyph, accent = accent)
 
                 Spacer(Modifier.height(10.dp))
 
@@ -231,7 +232,7 @@ internal fun WarningSheetV3(
 
 @Composable
 private fun IconWithGlow(
-    icon: ImageVector,
+    glyph: RovaGlyph,
     accent: Color,
 ) {
     // The radial glow brush needs an explicit radius in pixels — the default
@@ -275,7 +276,14 @@ private fun IconWithGlow(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = accent)
+            // ADR-0031 §4 severity-tint exception: both glyph layers take `accent` (the warning
+            // severity color), not palette.accent — so this renders manually instead of via SemanticIcon.
+            Box(modifier = Modifier.size(24.dp)) {
+                Icon(glyph.outline, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = accent)
+                glyph.accent?.let { acc ->
+                    Icon(acc, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = accent)
+                }
+            }
         }
     }
 }
