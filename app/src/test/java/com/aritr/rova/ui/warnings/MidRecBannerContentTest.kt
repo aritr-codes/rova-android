@@ -3,7 +3,6 @@ package com.aritr.rova.ui.warnings
 import com.aritr.rova.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class MidRecBannerContentTest {
@@ -15,7 +14,7 @@ class MidRecBannerContentTest {
         assertEquals("expected 12 TopBanner-mapped ids", 12, ids.size)
         for (id in ids) {
             val c = midRecBannerContent(id)
-            assertNotNull("icon for $id", c.icon)
+            assertEquals("glyph for $id", WarningIconSpec.glyphFor(id), c.glyph)
             assertNotEquals("title @StringRes for $id", 0, c.title)
             assertNotEquals("sub @StringRes for $id", 0, c.sub)
             assertNotEquals("cta @StringRes for $id", 0, c.cta)

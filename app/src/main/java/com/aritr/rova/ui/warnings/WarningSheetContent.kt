@@ -1,19 +1,8 @@
 package com.aritr.rova.ui.warnings
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AlarmOff
-import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.material.icons.filled.BatterySaver
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.NoPhotography
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Thermostat
-import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.annotation.StringRes
 import com.aritr.rova.R
+import com.aritr.rova.ui.theme.RovaGlyph
 
 /**
  * Where a given [WarningId] is surfaced on the Record screen (ADR 0007). The
@@ -84,7 +73,7 @@ internal enum class ActionTarget {
 }
 
 internal data class WarningSheetContent(
-    val icon: ImageVector,
+    val glyph: RovaGlyph,
     @StringRes val title: Int,
     /** Short supporting line; @StringRes 0 = blank for TopBanner-only defensive arms. Final copy is the dev's call. */
     @StringRes val body: Int,
@@ -113,36 +102,36 @@ internal data class WarningSheetContent(
 
 /**
  * The 21-arm sheet-content map (ADR 0007). Copy mirrors `mockups/new_uiux/07-warnings.html`.
- * Icons reuse the ones the old banner carried. Replaces `bannerContent` now that [WarningSheet] is live.
+ * Glyphs come from [WarningIconSpec] (System-D, ADR-0031). Replaces `bannerContent` now that [WarningSheet] is live.
  * STORAGE_LOW_MID_REC (#11, R2) has a defensive arm — TopBanner-only, never renders as a sheet.
  */
 internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id) {
     WarningId.CAMERA_PERMISSION_DENIED -> WarningSheetContent(
-        Icons.Default.NoPhotography, R.string.warning_camera_perm_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_camera_perm_title,
         R.string.warning_camera_perm_body,
         WarningAction(R.string.warning_camera_perm_primary, ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.EXACT_ALARM_DENIED -> WarningSheetContent(
-        Icons.Default.AlarmOff, R.string.warning_exact_alarm_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_exact_alarm_title,
         R.string.warning_exact_alarm_body,
         WarningAction(R.string.warning_exact_alarm_primary, ActionTarget.EXACT_ALARM_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.EXACT_ALARM_SETTINGS),
     )
     WarningId.STORAGE_INSUFFICIENT -> WarningSheetContent(
-        Icons.Default.Storage, R.string.warning_storage_insufficient_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_storage_insufficient_title,
         R.string.warning_storage_insufficient_body,
         WarningAction(R.string.warning_storage_insufficient_primary, ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.MICROPHONE_DENIED -> WarningSheetContent(
-        Icons.Default.MicOff, R.string.warning_mic_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_mic_title,
         R.string.warning_mic_body,
         WarningAction(R.string.warning_mic_primary, ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction(R.string.warning_mic_secondary, ActionTarget.APP_DETAILS_SETTINGS),
     )
     WarningId.NOTIFICATIONS_DENIED -> WarningSheetContent(
-        Icons.Default.NotificationsOff, R.string.warning_notifications_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_notifications_title,
         R.string.warning_notifications_body,
         WarningAction(R.string.warning_notifications_primary, ActionTarget.NOTIFICATION_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.NOTIFICATION_SETTINGS),
@@ -152,7 +141,7 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         whyThisMatters = R.string.warning_notifications_why,
     )
     WarningId.BATTERY_OPTIMIZATION_ON -> WarningSheetContent(
-        Icons.Default.BatterySaver, R.string.warning_battery_opt_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_battery_opt_title,
         R.string.warning_battery_opt_body,
         WarningAction(R.string.warning_battery_opt_primary, ActionTarget.BATTERY_OPTIMIZATION),
         WarningAction(R.string.warning_action_not_now, ActionTarget.BATTERY_OPTIMIZATION),
@@ -162,7 +151,7 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         whyThisMatters = R.string.warning_battery_opt_why,
     )
     WarningId.POWER_SAVE_MODE -> WarningSheetContent(
-        Icons.Default.PowerSettingsNew, R.string.warning_power_save_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_power_save_title,
         R.string.warning_power_save_body,
         WarningAction(R.string.warning_power_save_primary, ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
@@ -171,17 +160,17 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         ),
         whyThisMatters = R.string.warning_power_save_why,
     )
-    WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_shutdown_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_EMERGENCY -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_emergency_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_CRITICAL -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_SEVERE -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_severe_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.THERMAL_MODERATE -> WarningSheetContent(Icons.Default.Thermostat, R.string.warning_thermal_moderate_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.BATTERY_CRITICAL -> WarningSheetContent(Icons.Default.BatteryAlert, R.string.warning_battery_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.BATTERY_LOW -> WarningSheetContent(Icons.Default.BatteryAlert, R.string.warning_battery_low_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_SHUTDOWN -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_thermal_shutdown_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_EMERGENCY -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_thermal_emergency_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_CRITICAL -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_thermal_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_SEVERE -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_thermal_severe_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.THERMAL_MODERATE -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_thermal_moderate_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_CRITICAL -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_battery_critical_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.BATTERY_LOW -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_battery_low_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.STORAGE_LOW_MID_REC -> WarningSheetContent(
         // Defensive — STORAGE_LOW_MID_REC is TopBanner-only (see midRecBannerContent in T6).
         // This arm keeps warningSheetContent exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Storage, R.string.warning_storage_low_mid_rec_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_storage_low_mid_rec_title,
         R.string.warning_storage_low_mid_rec_body,
         WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
@@ -190,7 +179,7 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         // Defensive — STORAGE_FULL_AUTOSTOPPED is TopBanner-only (rendered
         // on Idle, not as a sheet). This arm keeps warningSheetContent
         // exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Storage, R.string.warning_storage_full_autostopped_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_storage_full_autostopped_title,
         R.string.warning_storage_full_autostopped_body,
         WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
@@ -199,24 +188,24 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
         // Defensive — THERMAL_AUTOSTOPPED is TopBanner-only (rendered on
         // Idle, not as a sheet). This arm keeps warningSheetContent
         // exhaustive over WarningId; never renders as a sheet.
-        Icons.Default.Thermostat, R.string.warning_thermal_autostopped_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_thermal_autostopped_title,
         R.string.warning_thermal_autostopped_body,
         WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS),
         null,
     )
     WarningId.CANT_MERGE -> WarningSheetContent(
-        Icons.Default.Storage, R.string.warning_cant_merge_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_cant_merge_title,
         R.string.warning_cant_merge_body,
         primary = WarningAction(R.string.warning_cant_merge_primary, ActionTarget.STORAGE_SETTINGS),
         secondary = WarningAction(R.string.warning_cant_merge_secondary, ActionTarget.KEEP_SEGMENTS_ONLY, WarningActionStyle.Secondary),
         tertiary = WarningAction(R.string.warning_cant_merge_tertiary, ActionTarget.DISCARD_RECOVERY_SESSION, WarningActionStyle.Link),
     )
-    WarningId.CAMERA_IN_USE -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_in_use_title, R.string.warning_camera_in_use_body, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
-    WarningId.CAMERA_DISABLED -> WarningSheetContent(Icons.Default.VideocamOff, R.string.warning_camera_disabled_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_IN_USE -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_camera_in_use_title, R.string.warning_camera_in_use_body, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
+    WarningId.CAMERA_DISABLED -> WarningSheetContent(WarningIconSpec.glyphFor(id), R.string.warning_camera_disabled_title, 0, WarningAction(R.string.warning_action_ok, ActionTarget.APP_DETAILS_SETTINGS), null)
     WarningId.SAVE_FOLDER_UNAVAILABLE -> WarningSheetContent(
         // B4b (ADR-0024) — custom SAF save folder gone or permission revoked.
         // Advisory sheet: user must open Settings > Save location to re-select.
-        Icons.Default.Storage, R.string.warning_save_folder_unavailable_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_save_folder_unavailable_title,
         R.string.warning_save_folder_unavailable_body,
         WarningAction(R.string.warning_save_folder_unavailable_primary, ActionTarget.APP_DETAILS_SETTINGS),
         WarningAction(R.string.warning_action_not_now, ActionTarget.APP_DETAILS_SETTINGS),
@@ -227,7 +216,7 @@ internal fun warningSheetContent(id: WarningId): WarningSheetContent = when (id)
 }
 
 internal data class TopBannerContent(
-    val icon: ImageVector,
+    val glyph: RovaGlyph,
     @StringRes val title: Int,
     @StringRes val sub: Int,
     @StringRes val cta: Int,
@@ -260,7 +249,7 @@ internal data class AutoAction(val secondsRemaining: Int, @StringRes val descrip
  */
 internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_shutdown_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_shutdown_title,
         R.string.warning_banner_thermal_shutdown_sub, R.string.warning_banner_cta_stop,
         autoAction = AutoAction(
             secondsRemaining = 30,
@@ -268,7 +257,7 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
         ),
     )
     WarningId.THERMAL_EMERGENCY -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_emergency_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_emergency_title,
         R.string.warning_banner_thermal_emergency_sub, R.string.warning_banner_cta_stop,
         autoAction = AutoAction(
             secondsRemaining = 30,
@@ -276,39 +265,39 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
         ),
     )
     WarningId.THERMAL_CRITICAL -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_critical_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_critical_title,
         R.string.warning_banner_thermal_critical_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.THERMAL_SEVERE -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_severe_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_severe_title,
         R.string.warning_banner_thermal_severe_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.THERMAL_MODERATE -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_moderate_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_moderate_title,
         R.string.warning_banner_thermal_moderate_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.BATTERY_CRITICAL -> TopBannerContent(
-        Icons.Default.BatteryAlert, R.string.warning_banner_battery_critical_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_battery_critical_title,
         R.string.warning_banner_battery_critical_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.BATTERY_LOW -> TopBannerContent(
-        Icons.Default.BatteryAlert, R.string.warning_banner_battery_low_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_battery_low_title,
         R.string.warning_banner_battery_low_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.CAMERA_IN_USE -> TopBannerContent(
-        Icons.Default.VideocamOff, R.string.warning_banner_camera_in_use_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_camera_in_use_title,
         R.string.warning_banner_camera_in_use_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.CAMERA_DISABLED -> TopBannerContent(
-        Icons.Default.VideocamOff, R.string.warning_banner_camera_disabled_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_camera_disabled_title,
         R.string.warning_banner_camera_disabled_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.STORAGE_LOW_MID_REC -> TopBannerContent(
-        Icons.Default.Storage, R.string.warning_banner_storage_low_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_storage_low_title,
         R.string.warning_banner_storage_low_sub, R.string.warning_banner_cta_stop,
     )
     WarningId.STORAGE_FULL_AUTOSTOPPED -> TopBannerContent(
-        Icons.Default.Storage, R.string.warning_banner_storage_full_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_storage_full_title,
         R.string.warning_banner_storage_full_sub, R.string.warning_banner_storage_full_cta,
         overflow = listOf(
             WarningAction(R.string.warning_action_dont_show_again, ActionTarget.DISMISS_AUTOSTOP_ECHO),
@@ -316,7 +305,7 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
         ),
     )
     WarningId.THERMAL_AUTOSTOPPED -> TopBannerContent(
-        Icons.Default.Thermostat, R.string.warning_banner_thermal_autostopped_title,
+        WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_autostopped_title,
         R.string.warning_banner_thermal_autostopped_sub, R.string.warning_banner_thermal_autostopped_cta,
         overflow = listOf(
             WarningAction(R.string.warning_action_dont_show_again, ActionTarget.DISMISS_AUTOSTOP_ECHO),

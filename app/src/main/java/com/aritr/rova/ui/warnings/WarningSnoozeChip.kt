@@ -95,7 +95,7 @@ internal fun WarningSnoozeChip(
                 .background(severityColor.copy(alpha = dotAlpha)),
         )
         SemanticIcon(
-            imageVector = content.icon,
+            glyph = content.glyph,
             contentDescription = null,
             role = IconRole.Default,
             modifier = Modifier.size(12.dp),
