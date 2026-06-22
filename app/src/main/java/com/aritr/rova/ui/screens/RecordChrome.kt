@@ -727,27 +727,29 @@ internal fun NavItem(glyph: RovaGlyph, label: String, enabled: Boolean, onClick:
         modifier = if (enabled) {
             // SC 2.4.7 (NAV-03/05): visible D-pad/keyboard focus ring.
             Modifier
-                .focusHighlight(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius))
+                .focusHighlight(CircleShape)
                 .clickable(onClickLabel = label, role = Role.Button) { onClick() }
         } else {
             Modifier
         },
     ) {
-        Box(
-            modifier = Modifier
-                .size(RecordChromeTokens.navIconBoxSize)
-                .clip(RoundedCornerShape(RecordChromeTokens.navIconCornerRadius)),
-            contentAlignment = Alignment.Center,
+        // 5b-5: Library/Settings sit in the SAME glass circle as the cam-controls (GlassCircleButton)
+        // so the nav reads as chrome buttons, not bare glyphs, beside the accent FAB. CircleShape is
+        // rotation-invariant — the glyph still spins inside via SpinningBox.
+        GlassSurface(
+            role = GlassRole.RecordChrome,
+            modifier = Modifier.size(RecordChromeTokens.navIconBoxSize),
+            shape = CircleShape,
         ) {
-            // PR-ε (spec §5): glyph spins inside the stable square icon box
-            // (square = rotation-invariant; clickable stays on the Column).
-            SpinningBox(degrees = spinDegrees) {
-                SemanticIcon(
-                    glyph = glyph,
-                    contentDescription = label,
-                    role = if (enabled) IconRole.Default else IconRole.Disabled,
-                    modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize * rememberChromeScale()),
-                )
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                SpinningBox(degrees = spinDegrees) {
+                    SemanticIcon(
+                        glyph = glyph,
+                        contentDescription = label,
+                        role = if (enabled) IconRole.Default else IconRole.Disabled,
+                        modifier = Modifier.size(RecordChromeTokens.navIconGlyphSize * rememberChromeScale()),
+                    )
+                }
             }
         }
         // PR-ε refinement (owner 2026-06-12 #5): no visible text label in EITHER
