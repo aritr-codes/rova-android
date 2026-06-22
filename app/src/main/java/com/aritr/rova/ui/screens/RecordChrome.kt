@@ -294,14 +294,15 @@ private fun CamFlipButton(onFlip: () -> Unit, flipEnabled: Boolean, isFrontCamer
         // B6 — name the lens the tap switches TO (front active → "rear"
         // affordance, and vice-versa). Accurate CD is an ADR-0020 (WCAG)
         // requirement; strings are localized resources (checkNoHardcodedUiStrings).
-        val flipIcon = if (isFrontCamera) RovaGlyphs.CameraRear else RovaGlyphs.CameraFront
+        // 5b-5: the flip affordance is the rotation-arrows FlipCam glyph (duotone), state-independent
+        // — the active lens is conveyed by [flipCd], not by the glyph. (ADR-0031; board `flip_cam`.)
         val flipCd = stringResource(
             if (isFrontCamera) R.string.record_switch_to_rear_cd
             else R.string.record_switch_to_front_cd,
         )
         SpinningBox(degrees = spinDegrees) {
             SemanticIcon(
-                flipIcon,
+                glyph = RovaIcons.FlipCam,
                 contentDescription = flipCd,
                 role = role,
                 modifier = Modifier.size(16.dp),
