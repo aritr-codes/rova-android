@@ -20,6 +20,8 @@ This is a presentation-only program. No reliability/behavior change. Delivered f
 
 4. **A single `SemanticIcon` tint seam.** All glyph color flows through one content-color contract — the single entry-point the theme engine drives. The 20 raw-alpha call-sites are replaced by it. This is the icon analogue of `GlassResolver`/`LibraryColorSpec`.
 
+   **Exception — Warnings severity tint (UI Phase 2 5b-2).** The Warnings surface (`WarningSheetV3` / `WarningTopBannerV3`) takes its glyph *identity* from `RovaIcons` (via the pure `WarningIconSpec`) but does NOT route color through `SemanticIcon`. Its glyphs render monochrome in the per-tier warning-severity color (`RovaWarnings` + glow), which is the warning's primary signal and is finer-grained (five thermal tiers) than `IconStatus`'s flat Warning/Danger. These tints are theme-derived (`accent`, `severityColor`), so `checkSemanticIconNoRawAlpha` permits them. Do not "fix" this into `SemanticIcon`.
+
 5. **Bespoke vectors have one home (`RovaGlyphs`); stock glyphs are aliased (`RovaIcons`).** `RecordChromeIcons.kt` folds into `RovaGlyphs`. Bespoke glyphs are authored to the locked grid/stroke so custom + stock read as one family. Bespoke is reserved for brand-unique/icon-poor concepts (DualShot, DualSight, Vault-collection, Recovery, Background-record, Merge); the rest stay stock behind the alias map.
 
 6. **Over-media glyphs get contrast at the substrate.** Record/over-media glyphs sit on a Liquid-Glass chip meeting SC 1.4.11 ≥3:1 over worst-case frames — never solved by stroke weight. Active nav = filled glyph + accent + glass-chip container (FILL 0→1, animatable).
