@@ -217,7 +217,6 @@ private fun PlayerReady(
     onNextSegment: () -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
-    val playCd = stringResource(R.string.player_play_cd)
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
         // detach; the DisposableEffect releases the surface reference
@@ -304,36 +303,6 @@ private fun PlayerReady(
                         // ~3.3:1 over the dark player scrim; 0.72α clears 4.5:1.
                         color = Color.White.copy(alpha = 0.72f)
                     )
-                }
-            }
-        }
-
-        // Center play overlay (only when paused)
-        if (!progress.isPlaying) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    // WCAG 2.2 AA SC 1.4.11 (ADR-0020, PLR-02): the play
-                    // affordance is a functional UI component — its fill must
-                    // clear 3:1 against the dark backdrop. 0.12α was ~1.4:1;
-                    // 0.35α clears 3:1 over the dark-scene reference.
-                    color = Color.White.copy(alpha = 0.35f),
-                    onClick = onTogglePlay,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .semantics { contentDescription = playCd }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        SemanticIcon(
-                            imageVector = RovaIcons.Play.glyph,
-                            contentDescription = null,
-                            role = IconRole.Default,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
                 }
             }
         }
