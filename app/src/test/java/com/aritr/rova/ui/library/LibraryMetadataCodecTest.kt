@@ -2,6 +2,7 @@ package com.aritr.rova.ui.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,6 +32,30 @@ class LibraryMetadataCodecTest {
     fun `fromJson tolerates missing fields with defaults`() {
         val back = LibraryMetadataCodec.fromJson("""{"/a.mp4":{"favorite":true}}""")
         assertEquals(LibraryMetadataEntry(favorite = true), back["/a.mp4"])
+    }
+
+    @Test
+    fun `positionMs round-trips and is omitted when null`() {
+        val withPos = mapOf("rec1" to LibraryMetadataEntry(positionMs = 12_345L))
+        val json = LibraryMetadataCodec.toJson(withPos)
+        assertEquals(12_345L, LibraryMetadataCodec.fromJson(json)["rec1"]?.positionMs)
+
+        val noPos = LibraryMetadataCodec.toJson(mapOf("rec2" to LibraryMetadataEntry(favorite = true)))
+        assertFalse(noPos.contains("positionMs"))
+    }
+
+    @Test
+    fun `positionMs of zero or negative is not emitted`() {
+        // positionMs alone is the only field, and ≤0 must not emit → the entry serializes to nothing.
+        assertFalse(LibraryMetadataCodec.toJson(mapOf("z" to LibraryMetadataEntry(positionMs = 0L))).contains("positionMs"))
+        assertFalse(LibraryMetadataCodec.toJson(mapOf("n" to LibraryMetadataEntry(positionMs = -5L))).contains("positionMs"))
+    }
+
+    @Test
+    fun `fromJson without positionMs yields null (backward compatible)`() {
+        val back = LibraryMetadataCodec.fromJson("""{"/a.mp4":{"favorite":true,"lastPlayedAt":42}}""")
+        assertEquals(LibraryMetadataEntry(favorite = true, lastPlayedAt = 42L), back["/a.mp4"])
+        assertNull(back["/a.mp4"]?.positionMs)
     }
 
     @Test

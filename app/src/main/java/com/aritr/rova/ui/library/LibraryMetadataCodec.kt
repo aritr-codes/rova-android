@@ -13,6 +13,7 @@ object LibraryMetadataCodec {
     private const val FAVORITE = "favorite"
     private const val CUSTOM_TITLE = "customTitle"
     private const val LAST_PLAYED_AT = "lastPlayedAt"
+    private const val POSITION_MS = "positionMs"
 
     fun toJson(map: Map<String, LibraryMetadataEntry>): String {
         val root = JSONObject()
@@ -22,6 +23,7 @@ object LibraryMetadataCodec {
             if (e.favorite) obj.put(FAVORITE, true)
             if (e.customTitle != null) obj.put(CUSTOM_TITLE, e.customTitle)
             if (e.lastPlayedAt != null) obj.put(LAST_PLAYED_AT, e.lastPlayedAt)
+            e.positionMs?.let { if (it > 0L) obj.put(POSITION_MS, it) }
             root.put(key, obj)
         }
         return root.toString()
@@ -38,6 +40,7 @@ object LibraryMetadataCodec {
                         favorite = obj.optBoolean(FAVORITE, false),
                         customTitle = if (obj.has(CUSTOM_TITLE) && !obj.isNull(CUSTOM_TITLE)) obj.getString(CUSTOM_TITLE) else null,
                         lastPlayedAt = if (obj.has(LAST_PLAYED_AT) && !obj.isNull(LAST_PLAYED_AT)) obj.getLong(LAST_PLAYED_AT) else null,
+                        positionMs = if (obj.has(POSITION_MS)) obj.optLong(POSITION_MS).takeIf { it > 0L } else null,
                     )
                     if (!entry.isEmpty()) put(key, entry)
                 }
