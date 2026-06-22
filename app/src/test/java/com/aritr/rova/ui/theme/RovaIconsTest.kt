@@ -2,6 +2,7 @@ package com.aritr.rova.ui.theme
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -70,5 +71,53 @@ class RovaIconsTest {
         assertEquals(RovaGlyphs.OrientationLandscape, RovaIcons.OrientationLandscape)
         assertEquals(RovaGlyphs.Single, RovaIcons.Single)
         assertEquals(RovaGlyphs.FollowDevice, RovaIcons.FollowDevice)
+    }
+
+    // ── 5b-1 Task 4: new T2/T3 concepts + FlipCam, and the two status entries ──
+
+    @Test fun new_5b1_concepts_resolve_to_bespoke_glyphs() {
+        assertEquals(RovaGlyphs.Thermal, RovaIcons.Thermal)
+        assertEquals(RovaGlyphs.Storage, RovaIcons.Storage)
+        assertEquals(RovaGlyphs.BatteryLow, RovaIcons.BatteryLow)
+        assertEquals(RovaGlyphs.BatterySaver, RovaIcons.BatterySaver)
+        assertEquals(RovaGlyphs.PowerMode, RovaIcons.PowerMode)
+        assertEquals(RovaGlyphs.AlarmOff, RovaIcons.AlarmOff)
+        assertEquals(RovaGlyphs.CameraOff, RovaIcons.CameraOff)
+        assertEquals(RovaGlyphs.CameraPermission, RovaIcons.CameraPermission)
+        assertEquals(RovaGlyphs.MicOff, RovaIcons.MicOff)
+        assertEquals(RovaGlyphs.DarkMode, RovaIcons.DarkMode)
+        assertEquals(RovaGlyphs.Language, RovaIcons.Language)
+        assertEquals(RovaGlyphs.Quality, RovaIcons.Quality)
+        assertEquals(RovaGlyphs.Timer, RovaIcons.Timer)
+        assertEquals(RovaGlyphs.Schedule, RovaIcons.Schedule)
+        assertEquals(RovaGlyphs.Lock, RovaIcons.Lock)
+        assertEquals(RovaGlyphs.Vibration, RovaIcons.Vibration)
+        assertEquals(RovaGlyphs.Device, RovaIcons.Device)
+        assertEquals(RovaGlyphs.GridLayout, RovaIcons.GridLayout)
+        assertEquals(RovaGlyphs.Video, RovaIcons.Video)
+        assertEquals(RovaGlyphs.Folder, RovaIcons.Folder)
+        assertEquals(RovaGlyphs.Cleanup, RovaIcons.Cleanup)
+        assertEquals(RovaGlyphs.DeleteAll, RovaIcons.DeleteAll)
+        assertEquals(RovaGlyphs.Privacy, RovaIcons.Privacy)
+        assertEquals(RovaGlyphs.Info, RovaIcons.Info)
+        assertEquals(RovaGlyphs.CameraAccess, RovaIcons.CameraAccess)
+        assertEquals(RovaGlyphs.MicAccess, RovaIcons.MicAccess)
+        assertEquals(RovaGlyphs.FlipCam, RovaIcons.FlipCam)
+    }
+
+    @Test fun spot_checked_new_concepts_are_mapped() {
+        listOf(
+            RovaIcons.Thermal, RovaIcons.Storage, RovaIcons.Timer, RovaIcons.Folder,
+            RovaIcons.Language, RovaIcons.FlipCam, RovaIcons.Info, RovaIcons.Privacy,
+        ).forEach { assertNotNull(it) }
+    }
+
+    @Test fun status_glyphs_carry_their_locked_status() {
+        // Recovered + Interrupted mirror WarningStatus: RovaIcon(glyph.outline, status = …) so the
+        // lock travels with the concept and a call-site reads `.glyph` and `.status`.
+        assertEquals(IconStatus.Recovered, RovaIcons.Recovered.status)
+        assertEquals(IconStatus.Interrupted, RovaIcons.Interrupted.status)
+        assertEquals(RovaGlyphs.RecClipCheck.outline, RovaIcons.Recovered.glyph)
+        assertEquals(RovaGlyphs.Interrupted.outline, RovaIcons.Interrupted.glyph)
     }
 }

@@ -62,7 +62,7 @@ object SemanticIconSpec {
 
     fun statusTint(status: IconStatus): Color = when (status) {
         IconStatus.Recovered -> RovaSemantics.success
-        IconStatus.Interrupted -> RovaSemantics.warning
+        IconStatus.Interrupted -> RovaSemantics.escalating
         IconStatus.Processing -> RovaSemantics.escalating
         IconStatus.Success -> RovaSemantics.success
         IconStatus.Warning -> RovaSemantics.warning

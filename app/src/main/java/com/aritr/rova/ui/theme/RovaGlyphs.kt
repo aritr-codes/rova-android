@@ -323,6 +323,21 @@ object RovaGlyphs {
         accent = glyph { svgStroke("M8 8 16 16") },
     )
 
+    // FlipCam — twin lens-orbit arcs (outline) + 2 arrowheads & centre core (accent). board `flip_cam`.
+    // The two arcs read as a camera flip on their own (mono-safe); the arrowheads + core are the accent
+    // channel. Bespoke duotone sibling of CameraFront/CameraRear; the call-site flip migrates in 5b-2…5.
+    val FlipCam = RovaGlyph(
+        outline = glyph {
+            svgStroke("M5.5 9.5A7 6 0 0 1 18 7.5")
+            svgStroke("M18.5 14.5A7 6 0 0 1 6 16.5")
+        },
+        accent = glyph {
+            svgStroke("M18.3 4.5v3.2h-3.2")
+            svgStroke("M5.7 19.5v-3.2h3.2")
+            fillPath { circle(12f, 12f, 1.7f) }
+        },
+    )
+
     // ── Folded-in record-chrome vectors (ex-RecordChromeIcons, verbatim) ────
     // Single-layer, neutral white, tinted by the consuming Icon/SemanticIcon.
     // Kept at their original viewports/strokes — this was a structural move, not
@@ -330,19 +345,12 @@ object RovaGlyphs {
     // library/settings/flipCamera were dropped (duotone RovaGlyphs replace nav;
     // flip switched to CameraFront/CameraRear in B6).
 
-    /** `.cam-ctrl-btn` flash glyph — single lightning bolt. */
-    val FlashBolt: ImageVector =
-        ImageVector.Builder(
-            name = "RovaGlyphFlashBolt",
-            defaultWidth = 13.dp, defaultHeight = 15.dp,
-            viewportWidth = 13f, viewportHeight = 15f,
-        ).apply {
-            path(fill = SolidColor(Color.White)) {
-                moveTo(7.5f, 1f); lineTo(1.5f, 8.5f); horizontalLineTo(6f)
-                lineTo(5f, 14f); lineTo(11.5f, 6.5f); horizontalLineTo(7f)
-                lineTo(7.5f, 1f); close()
-            }
-        }.build()
+    // Flash — single lightning bolt, re-authored to System-D (board `flash`). Mono (single
+    // outline layer): the bolt silhouette carries the whole meaning with no accent channel, so
+    // it reads with accent removed. Consumed as a raw `ImageVector` via `Icon(tint = …)` in
+    // RecordChrome (hardware-state yellow when flash is ON) — keep the `ImageVector` type. The
+    // 24-grid stroke (SW, round caps/joins) replaces the legacy folded 13×15 fill body.
+    val FlashBolt: ImageVector = glyph { svgStroke("M13 3.5 6.5 13.2 11 13.2 11 20.5 17.5 10.8 13 10.8z") }
 
     /** "switch to FRONT camera" — body + selfie head/shoulders. */
     val CameraFront: ImageVector =
@@ -404,17 +412,287 @@ object RovaGlyphs {
             }
         }.build()
 
-    /** Play triangle (ex-fabPlay) — used as RovaIcons.Play. */
-    val Play: ImageVector =
-        ImageVector.Builder(
-            name = "RovaGlyphPlay",
-            defaultWidth = 24.dp, defaultHeight = 24.dp,
-            viewportWidth = 24f, viewportHeight = 24f,
-        ).apply {
-            path(fill = SolidColor(Color.White)) {
-                moveTo(9f, 7f); lineTo(17f, 12f); lineTo(9f, 17f); close()
-            }
-        }.build()
+    /** Play triangle (ex-fabPlay) — used as RovaIcons.Play. Board `play` fill path. */
+    val Play: ImageVector = glyph { svgFill("M8 6.3 17.4 12 8 17.7z") }
+
+    // ── 5b-1 new concepts (Settings / Warnings / Onboarding surfaces) ────────
+    // Authored on the 24-grid, 1.9px monoline, round caps/joins; .ac2 accent only
+    // where it adds meaning; every glyph mono-safe (meaning survives accent removal).
+    // Board round-trip: each has a `G={}` entry + E1 MAP row in board-3-semantic.html.
+
+    // Thermal — thermometer stem + bulb (outline) + accent rising mercury level.
+    // Mono-safe: the stem+bulb silhouette is a thermometer on its own; the accent is
+    // the fill level (the "how hot" channel). Used for thermal-autostop status.
+    val Thermal = RovaGlyph(
+        outline = glyph {
+            svgStroke("M10 5.5a2 2 0 0 1 4 0v8.2a4 4 0 1 1-4 0z")
+            svgStroke("M16 7.5h3M16 11h2.2")
+        },
+        accent = glyph {
+            svgStroke("M12 11v4.4")
+            fillPath { circle(12f, 16.8f, 2.2f) }
+        },
+    )
+
+    // Storage — disk-platter stack (outline) + accent used-capacity bar.
+    // Mono-safe: the two stacked discs read as a drive/disk stack; the accent is the
+    // fill-level bar (the "how full" channel).
+    val Storage = RovaGlyph(
+        outline = glyph {
+            svgStroke("M5 7.5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5S15.9 5 12 5 5 6.1 5 7.5")
+            svgStroke("M5 7.5v9c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-9")
+        },
+        accent = glyph { svgStroke("M8 16.5h5.5") },
+    )
+
+    // BatteryLow — battery body + terminal (outline) + accent low charge + warn notch.
+    // Mono-safe: the cell body + nub reads as a battery; the accent is the low charge
+    // bar plus the "!" warn mark (the alert channel).
+    val BatteryLow = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 7.5f, 15f, 9f, 2f) }
+            svgStroke("M20 10.5v3")
+        },
+        accent = glyph {
+            fillPath { roundRect(5.5f, 9.5f, 3f, 5f, 0.8f) }
+            svgStroke("M12.5 9.8v3.2")
+            fillPath { circle(12.5f, 15.2f, 0.85f) }
+        },
+    )
+
+    // BatterySaver — battery body + terminal (outline) + accent eco leaf.
+    // Mono-safe: the cell body reads as a battery; the accent leaf is the "saver/eco"
+    // channel. Sibling of BatteryLow (same body geometry, different accent meaning).
+    val BatterySaver = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 7.5f, 15f, 9f, 2f) }
+            svgStroke("M20 10.5v3")
+        },
+        accent = glyph {
+            svgStroke("M11 14.5c-2.4 0-4-1.6-4-4 2.4 0 4 1.6 4 4z")
+            svgStroke("M11 14.5c1.3-1.2 2.4-1.8 4-2")
+        },
+    )
+
+    // PowerMode — power glyph: ring with a top break + vertical bar (mono).
+    // Single-layer: the universal power symbol carries the whole meaning, no accent.
+    val PowerMode = RovaGlyph(
+        outline = glyph {
+            svgStroke("M8.3 6.7a8 8 0 1 0 7.4 0")
+            svgStroke("M12 4v6.5")
+        },
+    )
+
+    // AlarmOff — clock + bell-feet (outline) + accent slash.
+    // Mono-safe: the round clock with bell-mount feet reads as an alarm; the accent
+    // slash is the "off/disabled" channel. (Alarm permission/schedule disabled.)
+    val AlarmOff = RovaGlyph(
+        outline = glyph {
+            strokePath { circle(12f, 13f, 6.2f) }
+            svgStroke("M12 10v3l2 1.5")
+            svgStroke("M4.5 7.5 7.5 4.5M19.5 7.5 16.5 4.5")
+        },
+        accent = glyph { svgStroke("M5 5 19 21") },
+    )
+
+    // CameraOff — video frame + lens (outline) + accent slash.
+    // Mono-safe: the frame+lens reads as the camera; the accent slash is the
+    // "off/blocked" channel. Reuses the camera frame+lens family geometry.
+    val CameraOff = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 6.5f, 13f, 11f, 2.3f) }
+            svgStroke("M16.5 9.2 20.5 7v10l-4-2.2")
+            strokePath { circle(8.8f, 12f, 2.6f) }
+        },
+        accent = glyph { svgStroke("M4.5 4.5 19.5 19.5") },
+    )
+
+    // CameraPermission — video frame + lens, NO slash ("needs access"). Mono (single layer).
+    // The frame+lens reads as the camera; absence of a slash distinguishes "grant access"
+    // from CameraOff. Single-layer so the whole glyph reads neutrally.
+    val CameraPermission = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(3.5f, 6.5f, 13f, 11f, 2.3f) }
+            svgStroke("M16.5 9.2 20.5 7v10l-4-2.2")
+            strokePath { circle(8.8f, 12f, 2.6f) }
+        },
+    )
+
+    // MicOff — capsule + stem/base (outline) + accent slash.
+    // Mono-safe: the capsule + stem + base reads as a microphone; the accent slash is
+    // the "off/muted" channel.
+    val MicOff = RovaGlyph(
+        outline = glyph {
+            svgStroke("M9.4 5.4a2.6 2.6 0 0 1 5.2 0v5.2a2.6 2.6 0 0 1-5.2 0z")
+            svgStroke("M6.5 11a5.5 5.5 0 0 0 11 0")
+            svgStroke("M12 16.5V20M9 20h6")
+        },
+        accent = glyph { svgStroke("M5 4.5 19 18.5") },
+    )
+
+    // DarkMode — crescent moon (mono). Theme half-disc family, but a moon.
+    // Single-layer: the crescent reads as "dark/night mode" alone. Sibling of Theme's
+    // half-disc, carved into a moon instead of split.
+    val DarkMode = RovaGlyph(
+        outline = glyph { svgStroke("M19 14.4A8 8 0 1 1 9.6 5a6.4 6.4 0 0 0 9.4 9.4z") },
+    )
+
+    // Language — globe + meridians (outline) + accent equator/active-meridian.
+    // Mono-safe: the circle + lat/long lines reads as a globe; the accent is the
+    // highlighted meridian (the "active locale" channel). Reuses globe geometry.
+    val Language = RovaGlyph(
+        outline = glyph {
+            strokePath { circle(12f, 12f, 8f) }
+            svgStroke("M4 12h16")
+            svgStroke("M12 4c2.6 2.2 4 4.9 4 8s-1.4 5.8-4 8c-2.6-2.2-4-4.9-4-8s1.4-5.8 4-8")
+        },
+        accent = glyph { svgStroke("M12 4v16") },
+    )
+
+    // Quality — capture frame (outline) + accent stacked resolution bars ("HD" abstraction).
+    // Mono-safe: the frame reads as video; the accent rising bars are the "resolution/
+    // quality level" channel.
+    val Quality = RovaGlyph(
+        outline = glyph { strokePath { roundRect(4f, 6f, 16f, 12f, 2.4f) } },
+        accent = glyph {
+            fillPath { roundRect(8f, 12.5f, 1.8f, 2f, 0.6f) }
+            fillPath { roundRect(11.1f, 10.5f, 1.8f, 4f, 0.6f) }
+            fillPath { roundRect(14.2f, 8.5f, 1.8f, 6f, 0.6f) }
+        },
+    )
+
+    // Timer — clock face + top stem (outline) + accent sweeping hand.
+    // Mono-safe: the round face + crown stem reads as a stopwatch/timer; the accent
+    // hand is the "elapsed/sweep" channel.
+    val Timer = RovaGlyph(
+        outline = glyph {
+            strokePath { circle(12f, 13.5f, 6.5f) }
+            svgStroke("M10 4h4M12 4v3")
+        },
+        accent = glyph { svgStroke("M12 13.5 15.4 11") },
+    )
+
+    // Schedule — calendar grid (outline) + accent marked day.
+    // Mono-safe: the box + header + hanging tabs reads as a calendar; the accent dot is
+    // the "scheduled day" channel.
+    val Schedule = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(4f, 5.5f, 16f, 14f, 2.4f) }
+            svgStroke("M4 9.5h16")
+            svgStroke("M8 3.5v4M16 3.5v4")
+        },
+        accent = glyph { fillPath { roundRect(10.5f, 12f, 3f, 3f, 0.8f) } },
+    )
+
+    // Lock — shackle + body (mono). Reuses the vault padlock geometry, simplified.
+    // Single-layer: the closed shackle over a lock body reads as "locked" with no accent
+    // (consume with role tint; status would mis-tint it).
+    val Lock = RovaGlyph(
+        outline = glyph {
+            fillPath { roundRect(5.5f, 11f, 13f, 8.5f, 1.6f) }
+            svgStroke("M8 11V8.5a4 4 0 0 1 8 0V11")
+        },
+    )
+
+    // Vibration — phone body (outline) + accent motion waves both sides.
+    // Mono-safe: the phone body reads as the device; the accent waves are the "vibrate/
+    // haptic" channel. Reuses the orientation phone-body family.
+    val Vibration = RovaGlyph(
+        outline = glyph { strokePath { roundRect(8.5f, 5f, 7f, 14f, 1.8f) } },
+        accent = glyph {
+            svgStroke("M5 9c-1 1.8-1 4.2 0 6")
+            svgStroke("M19 9c1 1.8 1 4.2 0 6")
+        },
+    )
+
+    // Device — phone body + screen + home indicator (mono). Reuses orientation phone family.
+    // Single-layer: the phone body with screen line + indicator reads as "this device".
+    val Device = RovaGlyph(
+        outline = glyph {
+            strokePath { roundRect(7f, 3.5f, 10f, 17f, 2.2f) }
+            svgStroke("M7 16.5h10")
+            svgStroke("M10.6 5.5h2.8")
+        },
+    )
+
+    // GridLayout — reuse of View's 2×2 grid (board `view`/`set_grid`). Alias to avoid a
+    // near-duplicate; mono single-layer (no accent). See [View].
+    val GridLayout = View
+
+    // Video — film frame (outline) + accent play notch.
+    // Mono-safe: the frame reads as a video; the accent play triangle is the "playable
+    // footage" channel. (board `lib_play` family, simplified frame.)
+    val Video = RovaGlyph(
+        outline = glyph { strokePath { roundRect(3.5f, 6f, 17f, 12f, 2.4f) } },
+        accent = glyph { svgFill("M10 9.2 15.4 12 10 14.8z") },
+    )
+
+    // Folder — folder body (outline) + accent raised tab.
+    // Mono-safe: the body reads as a folder; the accent tab is the duotone emphasis.
+    val Folder = RovaGlyph(
+        outline = glyph { svgStroke("M4 8.5v9a1.8 1.8 0 0 0 1.8 1.8h12.4A1.8 1.8 0 0 0 20 17.5V8.5z") },
+        accent = glyph { svgStroke("M4 8.5V7a1.8 1.8 0 0 1 1.8-1.8h3.4L11.4 7.4H20") },
+    )
+
+    // Cleanup — broom head + handle (outline) + accent swept particles.
+    // Mono-safe: the angled broom reads as "sweep/clean"; the accent particles are the
+    // "debris being cleared" channel.
+    val Cleanup = RovaGlyph(
+        outline = glyph {
+            svgStroke("M18 4 11 11")
+            svgStroke("M7.5 11.5 12.5 16.5 9.8 19.2a3.4 3.4 0 0 1-4.8 0 3.4 3.4 0 0 1 0-4.8z")
+        },
+        accent = glyph { svgStroke("M15.5 14.5h2.5M14 18h3M17 17.5v2.5") },
+    )
+
+    // DeleteAll — trash can (outline) + accent stacked-item sweep lines.
+    // Mono-safe: the trash can reads as delete; the accent stacked lines distinguish
+    // "delete ALL/clear" from a single Delete. Reuses the trash geometry from [Delete].
+    val DeleteAll = RovaGlyph(
+        outline = glyph {
+            svgStroke("M5 7h14")
+            svgStroke("M9 7V5.6A1.6 1.6 0 0 1 10.6 4h2.8A1.6 1.6 0 0 1 15 5.6V7")
+            svgStroke("M7.2 7 8.1 19.4A1.6 1.6 0 0 0 9.7 21h4.6a1.6 1.6 0 0 0 1.6-1.6L16.8 7")
+        },
+        accent = glyph { svgStroke("M10 10.5v6.5M14 10.5v6.5") },
+    )
+
+    // Privacy — shield (outline) + accent eye-off (slashed eye) ("private/hidden").
+    // Mono-safe: the shield reads as "protection/privacy"; the accent eye-off is the
+    // "hidden from view" channel. Reuses the shield geometry (board `rec_shield`).
+    val Privacy = RovaGlyph(
+        outline = glyph { svgStroke("M12 3.4 19 6v5c0 4.4-2.9 7.6-7 9-4.1-1.4-7-4.6-7-9V6z") },
+        accent = glyph {
+            svgStroke("M8.4 11.8c1-1.6 2.2-2.4 3.6-2.4s2.6.8 3.6 2.4c-1 1.6-2.2 2.4-3.6 2.4s-2.6-.8-3.6-2.4z")
+            svgStroke("M8.8 8.6 15.2 15")
+        },
+    )
+
+    // Info — ring (outline) + accent "i" (dot + stem).
+    // Mono-safe: the ring + central mark reads as info; the accent "i" is the duotone
+    // emphasis. Reuses the ring geometry (board `select`/`theme` circle).
+    val Info = RovaGlyph(
+        outline = glyph { strokePath { circle(12f, 12f, 8f) } },
+        accent = glyph {
+            fillPath { circle(12f, 8.2f, 1f) }
+            svgStroke("M12 11.4v5")
+        },
+    )
+
+    // CameraAccess — affirmative camera, NO slash, onboarding (mono). = [CameraPermission]
+    // geometry. Aliased to avoid a near-duplicate; one frame+lens reads as "camera".
+    val CameraAccess = CameraPermission
+
+    // MicAccess — affirmative mic, NO slash, onboarding (mono).
+    // Single-layer: capsule + stem + base reads as a microphone with no "off" slash —
+    // the affirmative onboarding sibling of [MicOff].
+    val MicAccess = RovaGlyph(
+        outline = glyph {
+            svgStroke("M9.4 5.4a2.6 2.6 0 0 1 5.2 0v5.2a2.6 2.6 0 0 1-5.2 0z")
+            svgStroke("M6.5 11a5.5 5.5 0 0 0 11 0")
+            svgStroke("M12 16.5V20M9 20h6")
+        },
+    )
 
     // ── authoring helpers ───────────────────────────────────────────────────
     // (PLACEHOLDER + SW are declared at the TOP of the object — see the init-order note there.)
