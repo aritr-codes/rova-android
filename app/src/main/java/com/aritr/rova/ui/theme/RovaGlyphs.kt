@@ -338,6 +338,28 @@ object RovaGlyphs {
         },
     )
 
+    // Loop / Interval — repeat arrows (outline) + accent core. board `loop_interval`.
+    val LoopInterval = RovaGlyph(
+        outline = glyph {
+            svgStroke("M8 6h8a4 4 0 0 1 0 8h-1")
+            svgStroke("M16 18H8a4 4 0 0 1 0-8h1")
+        },
+        accent = glyph {
+            svgStroke("M10.5 3.5 8 6l2.5 2.5")
+            svgStroke("M13.5 20.5 16 18l-2.5-2.5")
+            fillPath { circle(12f, 12f, 1.5f) }
+        },
+    )
+
+    // Volume — filled speaker body (outline) + accent waves. board `volume`.
+    val Volume = RovaGlyph(
+        outline = glyph { svgFill("M4 9.4h3.2L11 6v12L7.2 14.6H4z") },
+        accent = glyph {
+            svgStroke("M14.4 9.2a4 4 0 0 1 0 5.6")
+            svgStroke("M17 7a7.4 7.4 0 0 1 0 10")
+        },
+    )
+
     // ── Folded-in record-chrome vectors (ex-RecordChromeIcons, verbatim) ────
     // Single-layer, neutral white, tinted by the consuming Icon/SemanticIcon.
     // Kept at their original viewports/strokes — this was a structural move, not
