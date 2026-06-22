@@ -119,6 +119,12 @@ object RovaIcons {
     val MicAccess: RovaGlyph = RovaGlyphs.MicAccess
     /** Front/back camera flip (duotone). Camera-flip call-sites migrate here in 5b-2…5b-5. */
     val FlipCam: RovaGlyph = RovaGlyphs.FlipCam
+    /** Loop count / repeats — periodic record cycle. */
+    val LoopInterval: RovaGlyph = RovaGlyphs.LoopInterval
+    /** Sound cues / volume. */
+    val Volume: RovaGlyph = RovaGlyphs.Volume
+    /** Interval between clips — reuses the Waiting hourglass (board `waiting`). */
+    val Interval: RovaGlyph = RovaGlyphs.Waiting
 
     // ── Status concept — the locked status travels WITH the map entry (codex 2026-06-19) ──
     /**
