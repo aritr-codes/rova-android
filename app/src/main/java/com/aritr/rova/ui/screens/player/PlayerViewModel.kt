@@ -94,6 +94,12 @@ class PlayerViewModel(
     private var lastScrubSeekAt = 0L
     private var lastScrubTarget = -1L
 
+    // Final-review M-1 — guards the scrub lifecycle so a stale gesture
+    // can't run with a prior gesture's state. Set true in beginScrub only
+    // after a successful pause/setSeekParameters; cleared unconditionally
+    // in endScrub. updateScrub/endScrub no-op (harmlessly) when false.
+    private var scrubActive = false
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             pushProgress(isPlaying = isPlaying)
@@ -279,6 +285,14 @@ class PlayerViewModel(
         scrubWasPlaying = p.isPlaying
         p.pause()
         p.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        // M-2 — reset the throttle bookkeeping so this gesture's first
+        // preview seek isn't delayed/suppressed by the previous gesture's
+        // timestamp/target.
+        lastScrubSeekAt = 0L
+        lastScrubTarget = -1L
+        // M-1 — only now is the gesture truly armed (pause + seek params
+        // applied). updateScrub/endScrub gate on this.
+        scrubActive = true
         _progress.update { it.copy(isScrubbing = true) }
     }
 
@@ -291,6 +305,8 @@ class PlayerViewModel(
      * still showing live frames.
      */
     fun updateScrub(targetMs: Long) {
+        // M-1 — ignore stray updates not bracketed by an active beginScrub.
+        if (!scrubActive) return
         val p = exoPlayer ?: return
         val dur = p.duration.takeIf { it > 0L } ?: return
         val target = targetMs.coerceIn(0L, dur)
@@ -312,14 +328,27 @@ class PlayerViewModel(
      * [PlaybackProgress.isScrubbing] flag.
      */
     fun endScrub(finalMs: Long) {
-        val p = exoPlayer ?: return
-        val dur = p.duration.takeIf { it > 0L } ?: return
-        p.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
-        p.seekTo(finalMs.coerceIn(0L, dur))
-        if (scrubWasPlaying) p.play()
+        // M-1 — capture whether a scrub was actually active; a spurious
+        // endScrub without a matching beginScrub must not seek/resume.
+        val wasActive = scrubActive
+        val p = exoPlayer
+        val dur = p?.duration?.takeIf { it > 0L }
+        // I-1 — the committed seek + EXACT restore + resume-play are
+        // conditional on a valid player/duration AND an active scrub…
+        if (p != null && dur != null && wasActive) {
+            p.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
+            p.seekTo(finalMs.coerceIn(0L, dur))
+            if (scrubWasPlaying) p.play()
+        }
+        // …but the STATE cleanup is UNCONDITIONAL so isScrubbing / seek
+        // params / throttle state can never wedge if the player is null or
+        // the duration is invalid at end-of-gesture.
+        scrubActive = false
         lastScrubTarget = -1L
         _progress.update { it.copy(isScrubbing = false) }
-        pushProgress()
+        // pushProgress no-ops when no player exists; only call it when one
+        // does so the cleared snapshot is published from a real position.
+        if (p != null) pushProgress()
     }
 
     private fun startPolling() {
@@ -341,7 +370,13 @@ class PlayerViewModel(
         val p = exoPlayer ?: return
         val dur = if (p.duration > 0L) p.duration else 0L
         _progress.value = PlaybackProgress(
-            positionMs = p.currentPosition.coerceAtLeast(0L),
+            // I-2 — during an active scrub the optimistic, finger-driven
+            // position is authoritative; a poll tick / seek-discontinuity
+            // callback must not yank the playhead back to the decoder's
+            // currentPosition mid-gesture. Preserve the scrubbed value;
+            // resume reading currentPosition once isScrubbing clears.
+            positionMs = if (_progress.value.isScrubbing) _progress.value.positionMs
+                         else p.currentPosition.coerceAtLeast(0L),
             durationMs = dur,
             isPlaying = isPlaying ?: p.isPlaying,
             // Task 4 — pushProgress rebuilds the whole snapshot, so it must
