@@ -255,6 +255,9 @@ private fun CamFlashButton(flashMode: Int, onCycleFlash: () -> Unit, enabled: Bo
         val palette = LocalGlassEnvironment.current.palette
         val contentTint = when { // semanticicon-opt-out: flash-ON is a hardware-state indicator, not a theme/status color
             flashMode == RovaRecordingService.FLASH_MODE_ON && enabled -> Color.Yellow
+            // 5b-5 (owner): OFF/AUTO bolt carries the theme accent (parity with FlipCam's accent);
+            // disabled falls through to the role-grey tint. palette.accent is theme-derived (gate-safe).
+            enabled -> palette.accent
             else -> SemanticIconSpec.tint(palette, role)
         }
         // PR-ε (spec §5): bolt + OFF slash spin as ONE unit so the slash stays
