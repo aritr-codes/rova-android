@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.material.icons.filled.Schedule
 import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.widget.Toast
@@ -33,17 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -69,7 +58,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -86,19 +74,15 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.data.QualityPresets
 import com.aritr.rova.service.export.SafAndroidOps
-import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import com.aritr.rova.ui.components.RovaAlertDialog
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.locale.AppLocale
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.theme.ThemeSelection
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -297,7 +281,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             ) {
                 SettingsSection(label = stringResource(R.string.settings_section_appearance)) {
                     SettingsRow(
-                        icon = Icons.Default.DarkMode,
+                        glyph = RovaIcons.DarkMode,
                         label = stringResource(R.string.settings_theme_label),
                         supporting = stringResource(R.string.settings_theme_supporting),
                         value = themeSelectionLabel(themeSelection),
@@ -307,7 +291,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     if (showLanguageRow) {
                         SettingsDivider()
                         SettingsRow(
-                            icon = Icons.Default.Language,
+                            glyph = RovaIcons.Language,
                             label = stringResource(R.string.settings_language_label),
                             supporting = stringResource(R.string.settings_language_supporting),
                             value = languageOptionLabel(localeTag),
@@ -319,7 +303,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             }
             SettingsSection(label = stringResource(R.string.settings_section_recording_defaults)) {
                 SettingsRow(
-                    icon = Icons.Default.HighQuality,
+                    glyph = RovaIcons.Quality,
                     label = stringResource(R.string.settings_default_resolution_label),
                     supporting = stringResource(R.string.settings_default_resolution_supporting),
                     value = QualityPresets.canonicalizeOrDefault(resolution),
@@ -328,7 +312,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
                 SettingsDivider()
                 SettingsRow(
-                    icon = Icons.Default.Timer,
+                    glyph = RovaIcons.Timer,
                     label = stringResource(R.string.settings_clip_duration_label),
                     supporting = stringResource(R.string.settings_clip_duration_supporting),
                     value = recordClipValue(durationSeconds),
@@ -337,7 +321,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
                 SettingsDivider()
                 SettingsRow(
-                    icon = Icons.Default.HourglassEmpty,
+                    glyph = RovaIcons.Interval,
                     label = stringResource(R.string.settings_interval_label),
                     supporting = stringResource(R.string.settings_interval_supporting),
                     value = recordWaitValue(intervalMinutes),
@@ -346,7 +330,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
                 SettingsDivider()
                 SettingsRow(
-                    icon = Icons.Default.Repeat,
+                    glyph = RovaIcons.LoopInterval,
                     label = stringResource(R.string.settings_loops_label),
                     supporting = stringResource(R.string.settings_loops_supporting),
                     value = recordRepeatsValue(loopCount),
@@ -357,7 +341,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_recording_behavior)) {
                 SettingsRow(
-                    icon = Icons.Default.Smartphone,
+                    glyph = RovaIcons.Device,
                     label = stringResource(R.string.settings_keep_screen_on_label),
                     supporting = stringResource(R.string.settings_keep_screen_on_supporting),
                     checked = keepScreenOn,
@@ -365,7 +349,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
                 SettingsDivider()
                 SettingsRow(
-                    icon = Icons.Default.GridOn,
+                    glyph = RovaIcons.GridLayout,
                     label = stringResource(R.string.settings_camera_guides_label),
                     supporting = stringResource(R.string.settings_camera_guides_supporting),
                     checked = cameraGuidesEnabled,
@@ -375,7 +359,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_library)) {
                 SettingsRow(
-                    icon = Icons.Default.Movie,
+                    glyph = RovaIcons.Video,
                     label = stringResource(R.string.settings_library_card_preview_title),
                     supporting = stringResource(R.string.settings_library_card_preview_summary),
                     checked = libraryCardPreview,
@@ -385,7 +369,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_alerts)) {
                 SettingsRow(
-                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    glyph = RovaIcons.Volume,
                     label = stringResource(R.string.settings_sound_cues_label),
                     supporting = stringResource(R.string.settings_sound_cues_supporting),
                     checked = enableBeeps,
@@ -393,7 +377,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 )
                 SettingsDivider()
                 SettingsRow(
-                    icon = Icons.Default.Vibration,
+                    glyph = RovaIcons.Vibration,
                     label = stringResource(R.string.settings_vibrate_alerts_label),
                     supporting = stringResource(R.string.settings_vibrate_alerts_supporting),
                     checked = vibrateAlerts,
@@ -407,7 +391,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             // cancelled OFF-attempt snaps back to ON (the flow never changed).
             SettingsSection(label = stringResource(R.string.settings_section_privacy)) {
                 SettingsRow(
-                    icon = Icons.Default.Lock,
+                    glyph = RovaIcons.Vault,
                     label = stringResource(R.string.settings_hide_in_vault_title),
                     supporting = stringResource(R.string.settings_hide_in_vault_summary),
                     checked = hideInVault,
@@ -442,7 +426,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             // start/stop time rows, weekday chips, and a one-tap explainer.
             SettingsSection(label = stringResource(R.string.schedule_section_title)) {
                 SettingsRow(
-                    icon = Icons.Default.Schedule,
+                    glyph = RovaIcons.Schedule,
                     label = stringResource(R.string.schedule_enable_label),
                     supporting = stringResource(R.string.schedule_enable_desc),
                     checked = scheduleEnabled,
@@ -460,7 +444,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 if (scheduleEnabled) {
                     SettingsDivider()
                     SettingsRow(
-                        icon = Icons.Default.Schedule,
+                        glyph = RovaIcons.Schedule,
                         label = stringResource(R.string.schedule_start_time_label),
                         value = formatMinuteOfDay(scheduleStartMinute),
                         onClick = {
@@ -472,7 +456,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     )
                     SettingsDivider()
                     SettingsRow(
-                        icon = Icons.Default.Schedule,
+                        glyph = RovaIcons.Schedule,
                         label = stringResource(R.string.schedule_stop_time_label),
                         value = formatMinuteOfDay(scheduleStopMinute),
                         onClick = {
@@ -502,7 +486,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                         val am = context.getSystemService(android.app.AlarmManager::class.java)
                         if (am != null && !am.canScheduleExactAlarms()) {
                             SettingsRow(
-                                icon = Icons.Default.Schedule,
+                                glyph = RovaIcons.AlarmOff,
                                 label = stringResource(R.string.schedule_exact_alarm_required),
                                 onClick = {
                                     try {
@@ -524,7 +508,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
             SettingsSection(label = stringResource(R.string.settings_section_notifications)) {
                 val notifUnavailable = stringResource(R.string.settings_system_notifications_unavailable)
                 SettingsRow(
-                    icon = Icons.Default.Notifications,
+                    glyph = RovaIcons.NotificationsSetting,
                     label = stringResource(R.string.settings_system_notifications_label),
                     supporting = stringResource(R.string.settings_system_notifications_supporting),
                     onClick = {
@@ -544,7 +528,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_storage)) {
                 SettingsRow(
-                    icon = Icons.Default.DeleteSweep,
+                    glyph = RovaIcons.DeleteAll,
                     label = stringResource(R.string.settings_auto_delete_label),
                     supporting = if (autoDeleteEnabled) {
                         stringResource(
@@ -567,7 +551,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 // B4 SAF track — custom save-location row (tree URI picker).
                 SettingsRow(
-                    icon = Icons.Default.Folder,
+                    glyph = RovaIcons.Folder,
                     label = stringResource(R.string.settings_save_location_label),
                     value = saveLabel ?: stringResource(R.string.settings_save_location_internal),
                     onClick = { pickFolder.launch(null) },
@@ -576,7 +560,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 if (saveLabel != null) {
                     SettingsDivider()
                     SettingsRow(
-                        icon = Icons.Default.Folder,
+                        glyph = RovaIcons.Folder,
                         label = stringResource(R.string.settings_save_location_use_internal),
                         onClick = { settingsViewModel.clearSaveLocationFolder() },
                         trailing = { ChevronTrailing() },
@@ -586,7 +570,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 val cacheClearedFmt = stringResource(R.string.settings_clear_cache_cleared)
                 val cacheEmptyMsg = stringResource(R.string.settings_clear_cache_empty)
                 SettingsRow(
-                    icon = Icons.Default.CleaningServices,
+                    glyph = RovaIcons.Cleanup,
                     label = stringResource(R.string.settings_clear_cache_label),
                     supporting = stringResource(R.string.settings_clear_cache_supporting),
                     onClick = {
@@ -620,7 +604,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_reliability)) {
                 SettingsRow(
-                    icon = Icons.Default.BatteryAlert,
+                    glyph = RovaIcons.PowerMode,
                     label = stringResource(R.string.settings_battery_optimization_label),
                     supporting = stringResource(R.string.settings_battery_optimization_supporting),
                     onClick = { showBatteryDialog = true },
@@ -630,7 +614,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
 
             SettingsSection(label = stringResource(R.string.settings_section_about)) {
                 SettingsRow(
-                    icon = Icons.Default.Info,
+                    glyph = RovaIcons.Info,
                     label = stringResource(R.string.settings_version_label),
                     value = BuildConfig.VERSION_NAME,
                     onClick = null,
@@ -639,7 +623,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                 SettingsDivider()
                 val noBrowserMsg = stringResource(R.string.settings_privacy_no_browser)
                 SettingsRow(
-                    icon = Icons.Default.PrivacyTip,
+                    glyph = RovaIcons.Privacy,
                     label = stringResource(R.string.settings_privacy_label),
                     supporting = stringResource(R.string.settings_privacy_supporting),
                     onClick = {
@@ -824,7 +808,7 @@ private fun SettingsSection(
 
 @Composable
 private fun SettingsRow(
-    icon: ImageVector,
+    glyph: RovaGlyph,
     label: String,
     supporting: String? = null,
     value: String? = null,
@@ -873,10 +857,10 @@ private fun SettingsRow(
             modifier = Modifier.size(RovaTokens.camControlSize)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
+                SemanticIcon(
+                    glyph = glyph,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    role = IconRole.Secondary,
                     modifier = Modifier.size(15.dp)
                 )
             }
