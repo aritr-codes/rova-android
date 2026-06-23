@@ -1470,10 +1470,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         // the mic. Setting isRecording before the cue made the HUD
                         // claim "recording" during the ~3.7 s pre-roll (cue-bleed fix).
                         _serviceState.update { it.copy(recordingError = null) }
-                        beepStart(mMinutes.toInt()) // Q3: pre-roll cue, awaited to completion
+                        beepStart(mMinutes.toInt(), isFirstSegment = segmentCount == 0) // pre-roll cue, awaited to completion
                         _serviceState.update { it.copy(isRecording = true) }
                         lastResult = recordSegment()
-                        beepEnd(mMinutes.toInt()) // Q3: beep on recording stop
                         _serviceState.update { it.copy(isRecording = false) }
 
                         when (lastResult) {
@@ -4330,45 +4329,50 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
-    // Q3: short beep on recording start/stop using rova_beep.
+    // Differentiated recording cues: a meaningful start cue on the FIRST
+    // segment, a short reminder on later segment starts, no end cue.
     //
-    // Bleed-prevention is timing, not suppression: `beepStart` suspends
-    // until the cue has finished playing (plus a small acoustic-decay
-    // margin) before returning, so the next call (recordSegment) does
-    // not open the mic on top of an audible cue. `beepEnd` is
-    // fire-and-forget — the mic is OFF when it runs, so no capture path
-    // exists. For interval == 0 (continuous), the policy suppresses both
-    // ends entirely because there is no natural gap to hide a
-    // synchronous-await playback inside.
+    // beepStart plays the full multi-pulse cue (rova_cue_start, ~3.5s) on the
+    // first segment only, and the short reminder (rova_beep, ~1s) on every
+    // later segment start. Bleed-prevention is timing, not suppression:
+    // beepStart suspends until the cue has finished playing (plus a small
+    // acoustic-decay margin) before returning, so the next call (recordSegment)
+    // does not open the mic on top of an audible cue. For interval == 0
+    // (continuous), the policy suppresses the cue entirely because there is no
+    // natural gap to hide a synchronous-await playback inside.
     //
-    // Cue-bleed fix (2026-06-18, device RZCYA1VBQ2H): the await ceiling
-    // used to be a fixed 1500 ms, premised on `rova_beep` being "~300 ms".
-    // On-device measurement proved the asset is a ~3527 ms, 4-pulse cue,
-    // so the 1500 ms timeout always tripped ~2 s BEFORE onCompletion;
-    // `beepStart` returned mid-cue and the mic opened while ~3 pulses were
-    // still playing → the cue bled into every segment (single + DualShot,
-    // both fed by this same path). The ceiling is now derived from the
-    // cue's real `MediaPlayer.duration` via `beepPlaybackCeilingMs()` so
-    // the await genuinely reaches onCompletion; it auto-adapts if the asset
-    // changes. NOTE: the cue is ~3.5 s, so this is a ~3.7 s pre-roll per
-    // segment — trim the asset if a shorter gap is wanted (asset hygiene,
-    // not correctness). `BEEP_TAIL_MARGIN_MS` is the decay buffer past
-    // onCompletion; on this device acoustic silence arrived ~40 ms BEFORE
+    // Cue-bleed fix (2026-06-18, device RZCYA1VBQ2H): the await ceiling used
+    // to be a fixed 1500 ms, premised on the cue being "~300 ms". On-device
+    // measurement proved the long cue is ~3527 ms, so the 1500 ms timeout
+    // always tripped ~2 s BEFORE onCompletion; beepStart returned mid-cue and
+    // the mic opened while ~3 pulses were still playing → the cue bled into
+    // every segment (single + DualShot, both fed by this same path). The
+    // ceiling is now derived from the cue's real MediaPlayer.duration via
+    // beepPlaybackCeilingMs() so the await genuinely reaches onCompletion; it
+    // auto-adapts to whichever asset plays. The long start cue is a ~3.7s
+    // first-segment-only pre-roll. BEEP_TAIL_MARGIN_MS is the decay buffer
+    // past onCompletion; on this device acoustic silence arrived ~40 ms BEFORE
     // onCompletion, so 150 ms is comfortable.
     //
     // The MediaPlayer lifecycle runs on the main Looper: MediaPlayer is
     // not thread-safe and delivers onCompletion on the creating thread's
     // Looper. The await is suspending, so it never blocks the main thread.
-    private suspend fun beepStart(intervalMinutes: Int) {
+    private suspend fun beepStart(intervalMinutes: Int, isFirstSegment: Boolean) {
         if (!com.aritr.rova.service.audio.shouldPlayBeep(
                 enableBeeps = RovaSettings(this).enableBeeps,
                 audioMode = currentAudioMode,
                 intervalMinutes = intervalMinutes
             )
         ) return
+        // Differentiated cues: the FIRST segment plays the full multi-pulse start cue
+        // (rova_cue_start, ~3.5s — once per recording, acceptable pre-roll); every later
+        // segment start plays the short reminder (rova_beep, ~1s). The bleed-safe await
+        // below derives its ceiling from the actual MediaPlayer.duration, so it adapts to
+        // whichever asset plays — no per-asset timing constant.
+        val cueAsset = if (isFirstSegment) R.raw.rova_cue_start else R.raw.rova_beep
         withContext(Dispatchers.Main.immediate) {
             val mp = try {
-                MediaPlayer.create(this@RovaRecordingService, R.raw.rova_beep) ?: return@withContext
+                MediaPlayer.create(this@RovaRecordingService, cueAsset) ?: return@withContext
             } catch (e: Exception) {
                 RovaLog.w("beepStart: create failed", e); return@withContext
             }
@@ -4380,7 +4384,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 RovaLog.w(
                     "beepStart: cue duration ${cueDurationMs}ms exceeds the " +
                         "${com.aritr.rova.service.audio.BEEP_CEILING_MAX_MS}ms ceiling backstop — " +
-                        "await may truncate and the cue could bleed; trim R.raw.rova_beep"
+                        "await may truncate and the cue could bleed; trim the start cue asset"
                 )
             }
             val ceiling = com.aritr.rova.service.audio.beepPlaybackCeilingMs(cueDurationMs)
@@ -4388,6 +4392,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 mp.start()
                 withTimeoutOrNull(ceiling) { done.await() }
                 delay(BEEP_TAIL_MARGIN_MS)
+            } catch (e: CancellationException) {
+                // Don't swallow cancellation: a user-stop during the longer
+                // first-segment pre-roll must propagate so the loop does not
+                // proceed to isRecording=true / recordSegment().
+                throw e
             } catch (e: Exception) {
                 RovaLog.w("beepStart: playback failed", e)
             } finally {
@@ -4395,24 +4404,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 mp.setOnErrorListener(null)
                 runCatching { mp.release() }
             }
-        }
-    }
-
-    private fun beepEnd(intervalMinutes: Int) {
-        if (!com.aritr.rova.service.audio.shouldPlayBeep(
-                enableBeeps = RovaSettings(this).enableBeeps,
-                audioMode = currentAudioMode,
-                intervalMinutes = intervalMinutes
-            )
-        ) return
-        try {
-            val mp = MediaPlayer.create(this, R.raw.rova_beep) ?: return
-            mp.setOnCompletionListener {
-                try { it.release() } catch (_: Throwable) {}
-            }
-            mp.start()
-        } catch (e: Exception) {
-            RovaLog.w("beepEnd: failed", e)
         }
     }
 
