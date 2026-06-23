@@ -19,9 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -42,6 +38,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aritr.rova.R
+import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.ui.theme.RovaTokens
 import com.aritr.rova.ui.theme.RovaWarnings
 
@@ -196,8 +196,7 @@ internal fun PermissionSlide(
     val titleRes: Int
     val bodyRes: Int
     val allowRes: Int
-    val iconDescRes: Int
-    val icon: ImageVector
+    val icon: RovaGlyph
     val accent: Color
     val severityWordRes: Int
     val calloutRes: Int?
@@ -207,8 +206,7 @@ internal fun PermissionSlide(
             titleRes = R.string.onboarding_camera_title
             bodyRes = R.string.onboarding_camera_body
             allowRes = R.string.onboarding_camera_allow
-            iconDescRes = R.string.onboarding_illustration_camera
-            icon = Icons.Filled.Videocam
+            icon = RovaIcons.CameraAccess
             accent = MaterialTheme.colorScheme.primary
             severityWordRes = R.string.onboarding_perm_required
             calloutRes = null
@@ -218,8 +216,7 @@ internal fun PermissionSlide(
             titleRes = R.string.onboarding_mic_title
             bodyRes = R.string.onboarding_mic_body
             allowRes = R.string.onboarding_mic_allow
-            iconDescRes = R.string.onboarding_illustration_mic
-            icon = Icons.Filled.Mic
+            icon = RovaIcons.MicAccess
             accent = Color(0xFF34D399)
             severityWordRes = R.string.onboarding_perm_optional
             calloutRes = R.string.onboarding_mic_callout
@@ -229,8 +226,7 @@ internal fun PermissionSlide(
             titleRes = R.string.onboarding_notifs_title
             bodyRes = R.string.onboarding_notifs_body
             allowRes = R.string.onboarding_notifs_allow
-            iconDescRes = R.string.onboarding_illustration_notifications
-            icon = Icons.Filled.Notifications
+            icon = RovaIcons.NotificationsSetting
             accent = RovaWarnings.soft
             severityWordRes = R.string.onboarding_perm_recommended
             calloutRes = null
@@ -250,7 +246,7 @@ internal fun PermissionSlide(
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(58.dp))
-        PermissionIconTile(icon = icon, accent = accent, contentDesc = stringResource(iconDescRes))
+        PermissionIconTile(icon = icon, accent = accent)
         Spacer(modifier = Modifier.height(26.dp))
         Text(
             text = eyebrow,
@@ -309,7 +305,7 @@ internal fun PermissionSlide(
 }
 
 @Composable
-private fun PermissionIconTile(icon: ImageVector, accent: Color, contentDesc: String) {
+private fun PermissionIconTile(icon: RovaGlyph, accent: Color) {
     Box(
         modifier = Modifier
             .size(70.dp)
@@ -319,10 +315,10 @@ private fun PermissionIconTile(icon: ImageVector, accent: Color, contentDesc: St
             ),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDesc,
-            tint = accent.copy(alpha = 0.90f),
+        SemanticIcon(
+            glyph = icon,
+            contentDescription = null,
+            role = IconRole.Accent,
             modifier = Modifier.size(34.dp)
         )
     }
