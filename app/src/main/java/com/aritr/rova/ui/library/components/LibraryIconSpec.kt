@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.library.components
 
+import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.theme.IconStatus
 import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaIcon
 import com.aritr.rova.ui.theme.RovaIcons
 
 /**
@@ -22,4 +24,15 @@ internal object LibraryIconSpec {
      */
     fun deleteStatus(destructive: Boolean): IconStatus? =
         if (destructive) IconStatus.Danger else null
+
+    /**
+     * Status badge → locked [RovaIcon] carrying both the glyph vector and the [IconStatus] color
+     * lock (ADR-0031 §4). Exhaustive — no else branch so new [LibraryBadge] values are caught at
+     * compile time. Callers render via the single-layer [SemanticIcon] imageVector overload with
+     * `status = badgeGlyph(badge).status`; no raw tint, no role (status wins).
+     */
+    fun badgeGlyph(badge: LibraryBadge): RovaIcon = when (badge) {
+        LibraryBadge.RECOVERED -> RovaIcons.Recovered
+        LibraryBadge.INTERRUPTED -> RovaIcons.Interrupted
+    }
 }

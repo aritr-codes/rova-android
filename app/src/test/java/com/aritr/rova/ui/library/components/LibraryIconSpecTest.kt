@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.library.components
 
+import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.theme.IconStatus
 import com.aritr.rova.ui.theme.RovaIcons
 import org.junit.Assert.assertEquals
@@ -23,5 +24,23 @@ class LibraryIconSpecTest {
 
     @Test fun delete_as_a_neutral_batch_action_has_no_status() {
         assertNull(LibraryIconSpec.deleteStatus(destructive = false))
+    }
+
+    // ── Badge glyph mapper (ADR-0031 icon 5b-4) ──────────────────────────────────────────────────
+
+    @Test fun recovered_badge_maps_to_Recovered_icon() {
+        assertSame(RovaIcons.Recovered, LibraryIconSpec.badgeGlyph(LibraryBadge.RECOVERED))
+    }
+
+    @Test fun interrupted_badge_maps_to_Interrupted_icon() {
+        assertSame(RovaIcons.Interrupted, LibraryIconSpec.badgeGlyph(LibraryBadge.INTERRUPTED))
+    }
+
+    @Test fun recovered_badge_carries_Recovered_status_lock() {
+        assertEquals(IconStatus.Recovered, LibraryIconSpec.badgeGlyph(LibraryBadge.RECOVERED).status)
+    }
+
+    @Test fun interrupted_badge_carries_Interrupted_status_lock() {
+        assertEquals(IconStatus.Interrupted, LibraryIconSpec.badgeGlyph(LibraryBadge.INTERRUPTED).status)
     }
 }

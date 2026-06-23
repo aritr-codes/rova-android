@@ -3,7 +3,6 @@ package com.aritr.rova.ui.library.components
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -43,7 +41,6 @@ import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SessionCaption
 import com.aritr.rova.ui.library.SmartTitle
 import com.aritr.rova.ui.library.StorageFormat
-import com.aritr.rova.ui.library.rememberLibraryColors
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import java.util.Locale
@@ -72,7 +69,6 @@ fun LibraryListRow(
     notSelectedLabel: String = "",
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val libraryColors = rememberLibraryColors()
     GlassSurface(
         role = GlassRole.Card,
         modifier = modifier
@@ -134,13 +130,13 @@ fun LibraryListRow(
             }
             Column(Modifier.padding(start = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    libraryColors.statusDot(row.badge)?.let { dot ->
-                        Box(
-                            Modifier
-                                .padding(end = 6.dp)
-                                .size(LibraryDimens.statusDotSize)
-                                .clip(CircleShape)
-                                .background(dot),
+                    row.badge?.let { badge ->
+                        val icon = LibraryIconSpec.badgeGlyph(badge)
+                        SemanticIcon(
+                            imageVector = icon.glyph,
+                            contentDescription = null,
+                            status = icon.status,
+                            modifier = Modifier.padding(end = 5.dp).size(14.dp),
                         )
                     }
                     Text(
