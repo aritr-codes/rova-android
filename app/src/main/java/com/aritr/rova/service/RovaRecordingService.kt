@@ -1473,7 +1473,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         beepStart(mMinutes.toInt(), isFirstSegment = segmentCount == 0) // pre-roll cue, awaited to completion
                         _serviceState.update { it.copy(isRecording = true) }
                         lastResult = recordSegment()
-                        beepEnd(mMinutes.toInt()) // Q3: beep on recording stop
                         _serviceState.update { it.copy(isRecording = false) }
 
                         when (lastResult) {
@@ -4405,24 +4404,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 mp.setOnErrorListener(null)
                 runCatching { mp.release() }
             }
-        }
-    }
-
-    private fun beepEnd(intervalMinutes: Int) {
-        if (!com.aritr.rova.service.audio.shouldPlayBeep(
-                enableBeeps = RovaSettings(this).enableBeeps,
-                audioMode = currentAudioMode,
-                intervalMinutes = intervalMinutes
-            )
-        ) return
-        try {
-            val mp = MediaPlayer.create(this, R.raw.rova_beep) ?: return
-            mp.setOnCompletionListener {
-                try { it.release() } catch (_: Throwable) {}
-            }
-            mp.start()
-        } catch (e: Exception) {
-            RovaLog.w("beepEnd: failed", e)
         }
     }
 
