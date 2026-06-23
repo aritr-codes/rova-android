@@ -39,6 +39,7 @@ import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaIcons
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.ui.components.RovaAnimations.pressScale
+import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.SmartTitle
 import com.aritr.rova.ui.library.rememberLibraryColors
@@ -62,6 +63,7 @@ fun LibraryGridCard(
     autoplay: Boolean = false,
     tileDescription: String,
     statusLabel: String?,
+    badge: LibraryBadge? = null,
     plLabel: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -132,7 +134,8 @@ fun LibraryGridCard(
                 Modifier.align(Alignment.TopEnd).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (statusLabel != null) OverlayPill(statusLabel)
+                if (statusLabel != null && badge != null) StatusBadgePill(badge, statusLabel)
+                else if (statusLabel != null) OverlayPill(statusLabel)
                 // M3a was REVERTED (2026-06-16): a DualShot session fans into per-SIDE rows, so the
                 // orientation glyph is the side's authoritative identity (OrientationResolver §1) — the
                 // one cue distinguishing the two side-tiles of a session — NOT an ambiguous "both

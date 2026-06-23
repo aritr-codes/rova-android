@@ -633,6 +633,7 @@ fun LibraryScreen(
                                                 autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
+                                                badge = row.badge,
                                                 plLabel = plLabel,
                                                 onClick = { onTileClick(row.stableKey) },
                                                 modifier = Modifier

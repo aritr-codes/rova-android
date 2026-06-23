@@ -37,10 +37,7 @@ data class LibraryColors(
     val playGlyphScrim: Color,
     val checkChipScrim: Color,
     val heroScrim: Brush,
-) {
-    /** Recovered → success, Interrupted → warning, none → no dot. Locked semantic colours (not theme). */
-    fun statusDot(badge: LibraryBadge?): Color? = LibraryColorSpec.statusDot(badge)
-}
+)
 
 /** Reads the active palette from [LocalGlassEnvironment] and resolves the Library colour slots. */
 @Composable
@@ -96,11 +93,4 @@ object LibraryColorSpec {
 
     /** Grid selection check-chip backing (over media). */
     val CHECK_CHIP_SCRIM: Color = Color.Black.copy(alpha = 0.32f)
-
-    /** Status dot = locked semantic colour. */
-    fun statusDot(badge: LibraryBadge?): Color? = when (badge) {
-        LibraryBadge.RECOVERED -> RovaSemantics.success
-        LibraryBadge.INTERRUPTED -> RovaSemantics.warning
-        null -> null
-    }
 }

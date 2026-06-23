@@ -3,12 +3,16 @@ package com.aritr.rova.ui.library.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -16,6 +20,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.library.CaptionScrim
 import com.aritr.rova.ui.library.LibraryBadge
 
@@ -44,6 +49,40 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
             .background(scrimColor, RoundedCornerShape(LibraryDimens.pillRadius))
             .padding(horizontal = LibraryDimens.badgePadH, vertical = LibraryDimens.badgePadV),
     ) {
+        Text(
+            text = text,
+            color = captionTextColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/**
+ * Exceptional status badge pill — same structural scrim chip as [OverlayPill] but with a leading
+ * status glyph ([LibraryIconSpec.badgeGlyph]) rendered via the single-layer [SemanticIcon]
+ * imageVector overload so the locked [IconStatus] color (green/orange) wins without a raw tint.
+ * The glyph is decorative (contentDescription = null); the adjacent [text] label carries the
+ * accessible announcement. No new string resources: caller supplies the already-resolved label.
+ * Semantics cleared at the pill level — the merged tile description is the authoritative a11y node.
+ */
+@Composable
+fun StatusBadgePill(badge: LibraryBadge, text: String, modifier: Modifier = Modifier) {
+    val icon = LibraryIconSpec.badgeGlyph(badge)
+    Row(
+        modifier
+            .clearAndSetSemantics {}
+            .background(scrimColor, RoundedCornerShape(LibraryDimens.pillRadius))
+            .padding(horizontal = LibraryDimens.badgePadH, vertical = LibraryDimens.badgePadV),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SemanticIcon(
+            imageVector = icon.glyph,
+            contentDescription = null,
+            status = icon.status,
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(3.dp))
         Text(
             text = text,
             color = captionTextColor,

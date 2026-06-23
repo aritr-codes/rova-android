@@ -32,17 +32,14 @@
     <string name="onboarding_mic_body">Graba el sonido junto con tu vídeo. Si lo omites, las grabaciones serán solo de vídeo, sin audio.</string>
     <string name="onboarding_mic_allow">Permitir micrófono</string>
     <string name="onboarding_mic_callout">Puedes cambiar esto cuando quieras en Ajustes.</string>
-    <string name="onboarding_illustration_mic">Micrófono</string>
 
     <string name="onboarding_notifs_title">Mantén el control</string>
     <string name="onboarding_notifs_body">Una notificación en directo te permite detener o revisar una grabación sin abrir la app, incluso con la pantalla apagada.</string>
     <string name="onboarding_notifs_allow">Permitir notificaciones</string>
-    <string name="onboarding_illustration_notifications">Campana de notificación</string>
 
     <!-- contentDescription strings for illustrations -->
     <string name="onboarding_illustration_clock_orbit">Reloj con indicadores de tiempo</string>
     <string name="onboarding_illustration_clip_merge">Tres clips se combinan en un solo archivo de vídeo</string>
-    <string name="onboarding_illustration_camera">Cámara</string>
 
     <!-- M5: Notification channel names + descriptions -->
     <string name="notification_channel_session_name">Grabación en curso</string>

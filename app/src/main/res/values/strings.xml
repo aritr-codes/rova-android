@@ -31,17 +31,14 @@
     <string name="onboarding_mic_body">Records sound alongside your video. Skip and sessions will be video-only — no audio.</string>
     <string name="onboarding_mic_allow">Allow Microphone</string>
     <string name="onboarding_mic_callout">You can change this any time in Settings.</string>
-    <string name="onboarding_illustration_mic">Microphone</string>
 
     <string name="onboarding_notifs_title">Stay in control</string>
     <string name="onboarding_notifs_body">A live notification lets you stop or check a recording without opening the app — even with the screen off.</string>
     <string name="onboarding_notifs_allow">Allow Notifications</string>
-    <string name="onboarding_illustration_notifications">Notification bell</string>
 
     <!-- contentDescription strings for illustrations -->
     <string name="onboarding_illustration_clock_orbit">Clock with timing badges</string>
     <string name="onboarding_illustration_clip_merge">Three clips combine into one video file</string>
-    <string name="onboarding_illustration_camera">Camera</string>
 
     <!-- M5: Notification channel names + descriptions -->
     <string name="notification_channel_session_name">Recording session</string>
