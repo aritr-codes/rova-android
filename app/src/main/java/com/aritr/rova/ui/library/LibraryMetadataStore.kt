@@ -56,6 +56,32 @@ class LibraryMetadataStore(private val filesDir: File) {
         }
     }
 
+    /** Merged dual-read: canonical entry merged over the legacy alias (if any). */
+    fun get(key: RecordingIdentity.MetaKey): LibraryMetadataEntry? {
+        val map = load()
+        val canonical = map[key.canonical]
+        val legacy = key.legacy?.takeIf { it != key.canonical }?.let { map[it] }
+        return LibraryMetadataEntry.merge(canonical, legacy)
+    }
+
+    /**
+     * Merge-on-write: the transform sees the merged (canonical ⊕ legacy) base, the result is written
+     * under the canonical key, and the legacy alias — if distinct — is removed (migration complete).
+     */
+    fun update(key: RecordingIdentity.MetaKey, transform: (LibraryMetadataEntry) -> LibraryMetadataEntry) {
+        synchronized(lock) {
+            val map = load()
+            val canonical = map[key.canonical]
+            val legacyKey = key.legacy?.takeIf { it != key.canonical }
+            val legacy = legacyKey?.let { map[it] }
+            val base = LibraryMetadataEntry.merge(canonical, legacy) ?: LibraryMetadataEntry()
+            val next = transform(base)
+            if (next.isEmpty()) map.remove(key.canonical) else map[key.canonical] = next
+            if (legacyKey != null) map.remove(legacyKey)
+            writeAtomic(map)
+        }
+    }
+
     /** Drop entries whose key is not in [keep] (deleted/moved-out rows). */
     fun prune(keep: Set<String>) {
         synchronized(lock) {
