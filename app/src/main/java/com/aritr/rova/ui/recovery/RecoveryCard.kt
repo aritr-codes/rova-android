@@ -141,16 +141,33 @@ fun RecoveryCard(
             // severity tag. The severity colour stays on the tag dot + card glow, which
             // use RovaWarnings (not the locked RovaSemantics status palette), so mixing
             // the two colour systems on one mark is deliberately avoided.
+            //
+            // icon 5b-4: KILLED_BY_SYSTEM / KILLED_FORCE_STOP kinds swap in the locked
+            // Interrupted status glyph (escalating orange, IconStatus.Interrupted) so the
+            // emblem communicates the involuntary-stop concept visually. USER_STOPPED keeps
+            // the generic RovaIcons.Recovery emblem (null from RecoveryIconSpec). The
+            // locked status is passed as `status` to SemanticIcon so it wins over `role`
+            // per SemanticIconSpec — no raw tint is applied (checkSemanticIconNoRawAlpha).
+            val statusIcon = RecoveryIconSpec.statusGlyphFor(state.kind)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SemanticIcon(
-                    glyph = RovaIcons.Recovery,
-                    contentDescription = null, // card title/body carry the meaning
-                    modifier = Modifier.size(22.dp),
-                    role = IconRole.Secondary,
-                )
+                if (statusIcon != null) {
+                    SemanticIcon(
+                        imageVector = statusIcon.glyph,
+                        contentDescription = null, // decorative — card title/body carry the meaning
+                        modifier = Modifier.size(22.dp),
+                        status = statusIcon.status,
+                    )
+                } else {
+                    SemanticIcon(
+                        glyph = RovaIcons.Recovery,
+                        contentDescription = null, // card title/body carry the meaning
+                        modifier = Modifier.size(22.dp),
+                        role = IconRole.Secondary,
+                    )
+                }
                 SeverityTag(
                     label = stringResource(tagLabelResFor(state.kind)),
                     accent = severityColor,
