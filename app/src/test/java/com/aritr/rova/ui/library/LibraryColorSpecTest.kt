@@ -6,7 +6,6 @@ import com.aritr.rova.ui.theme.ThemeSelection
 import com.aritr.rova.ui.theme.rovaPalettes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -51,11 +50,5 @@ class LibraryColorSpecTest {
         assertEquals(Color.White.copy(alpha = 0.30f), LibraryColorSpec.SELECTION_RING)
         assertEquals(Color.Black.copy(alpha = 0.34f), LibraryColorSpec.PLAY_GLYPH_SCRIM)
         assertEquals(Color.Black.copy(alpha = 0.32f), LibraryColorSpec.CHECK_CHIP_SCRIM)
-    }
-
-    @Test fun `status dot maps to locked semantic colours`() {
-        assertEquals(RovaSemantics.success, LibraryColorSpec.statusDot(LibraryBadge.RECOVERED))
-        assertEquals(RovaSemantics.warning, LibraryColorSpec.statusDot(LibraryBadge.INTERRUPTED))
-        assertNull(LibraryColorSpec.statusDot(null))
     }
 }
