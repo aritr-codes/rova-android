@@ -12,7 +12,7 @@ data class LibraryMetadataEntry(
     val positionsBySide: Map<String, Long> = emptyMap(),
 ) {
     fun isEmpty(): Boolean =
-        !favorite && customTitle == null && lastPlayedAt == null && positionsBySide.isEmpty()
+        !favorite && customTitle == null && lastPlayedAt == null && positionsBySide.values.none { it > 0L }
 
     /** Saved position for a side slot; a P+L side with no own value falls back to single "". */
     fun positionFor(slot: String): Long? =

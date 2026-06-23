@@ -70,4 +70,8 @@ class LibraryMetadataEntryTest {
         assertNull(LibraryMetadataEntry.merge(null, null))
         assertEquals("X", LibraryMetadataEntry.merge(null, LibraryMetadataEntry(customTitle = "X"))!!.customTitle)
     }
+
+    @Test fun isEmpty_trueWhenOnlyNonPositivePositions() {
+        assertTrue(LibraryMetadataEntry(positionsBySide = mapOf("" to 0L)).isEmpty())
+    }
 }

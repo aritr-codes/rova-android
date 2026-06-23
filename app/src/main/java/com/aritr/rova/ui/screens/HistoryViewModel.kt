@@ -508,6 +508,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 val sessionStore = runCatching { rovaApp.sessionStore }.getOrNull() ?: return@launch
                 val allManifests: List<SessionManifest> = sessionStore.listSessionIds()
                     .mapNotNull { sid -> runCatching { sessionStore.loadManifest(sid) }.getOrNull() }
+                // A session key survives prune only if its manifest loads here; keep this the sole
+                // source of finalized session ids so a transient load failure can't widen the prune.
                 val finalizedIds = HistoryArtifactMapper.finalizedManifests(allManifests)
                     .map { it.sessionId }
                 val visibleLegacy = visibleItems.map {

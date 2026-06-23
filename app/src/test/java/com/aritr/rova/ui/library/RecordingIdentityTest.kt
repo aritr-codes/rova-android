@@ -39,4 +39,12 @@ class RecordingIdentityTest {
         assertEquals("session:s2", k.canonical)
         assertNull(k.legacy)
     }
+
+    @Test fun forItem_sameSession_sameCanonicalKey_regardlessOfTier() {
+        // TIER1 _DATA path vs content:// — identity must not depend on the playable URI tier.
+        val viaPath = RecordingIdentity.forItem(sessionId = "s1", absolutePath = "/storage/emulated/0/Movies/a.mp4", docUri = null)
+        val viaContentUri = RecordingIdentity.forItem(sessionId = "s1", absolutePath = null, docUri = "content://media/external/video/media/42")
+        assertEquals(viaPath.canonical, viaContentUri.canonical)
+        assertEquals("session:s1", viaPath.canonical)
+    }
 }
