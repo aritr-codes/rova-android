@@ -136,6 +136,53 @@ class RovaApp : Application() {
     }
 
     /**
+     * Player resume — single-thread-confined scope for writing resume positions
+     * to the library sidecar. SupervisorJob so a failed write never cancels the
+     * scope. limitedParallelism(1) serialises pause-then-dispose writes so the
+     * last position written is never overtaken by an earlier one.
+     *
+     * Outlives ViewModel onCleared, so the synchronous position capture in
+     * [writeResumePosition] is guaranteed to be dispatched even after the VM
+     * is destroyed.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val sidecarWriteScope: CoroutineScope by lazy {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    }
+
+    /** Reads the saved resume position for a recording side, or null if unavailable. */
+    suspend fun readResumePosition(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide?
+    ): Long? {
+        val key = com.aritr.rova.ui.library.RecordingIdentity.MetaKey(
+            canonical = com.aritr.rova.ui.library.RecordingIdentity.sessionKey(sessionId),
+            legacy = null
+        )
+        return libraryMetadataStore.get(key)
+            ?.positionFor(com.aritr.rova.ui.library.RecordingIdentity.sideSlot(side))
+    }
+
+    /** Persists the current playback position; dispatches on [sidecarWriteScope] and survives VM teardown. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun writeResumePosition(
+        sessionId: String,
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        positionMs: Long
+    ) {
+        val key = com.aritr.rova.ui.library.RecordingIdentity.MetaKey(
+            canonical = com.aritr.rova.ui.library.RecordingIdentity.sessionKey(sessionId),
+            legacy = null
+        )
+        val slot = com.aritr.rova.ui.library.RecordingIdentity.sideSlot(side)
+        sidecarWriteScope.launch {
+            runCatching {
+                libraryMetadataStore.update(key) { it.withPosition(slot, positionMs) }
+            }.onFailure { RovaLog.e("writeResumePosition failed for $sessionId/$slot", it) }
+        }
+    }
+
+    /**
      * Phase 3.2 (NEW_UI_BACKEND_REPLAN §5 row 3.2). Process-wide
      * StateFlow of the current `POST_NOTIFICATIONS` grant state.
      * Pre-API-33 the flow is a constant `true` (OS does not gate
