@@ -153,6 +153,7 @@ Mockup PNGs / HTML under `mockups/` are **gitignored**. Specs that depend on mea
 - **No `Modifier.blur` on the record surface** (NO-GO #3 in WarningCenterContract).
 - **Recovery scan triggers only from `MainActivity.onCreate`.** Never from `Service.onCreate`, never from a `BroadcastReceiver`.
 - Untracked `gradle_*.log` files in repo root are **ephemeral verification artifacts** — leave them, don't commit them, the working tree is intentionally noisy.
+- **Task pre-flight** — at the start of each task run `pwsh scripts/preflight.ps1` (POSIX: `bash scripts/preflight.sh`). It is **read-only** (reports branch/dirty-tree/sync-vs-origin/stale-branches/worktrees, whitelists the `gradle_*.log` noise, never mutates) and prints suggested fix commands for you to run manually. Resolve every `[FLAG]` before branching for new work.
 
 ## Existing tooling guidance (global)
 
