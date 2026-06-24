@@ -93,6 +93,12 @@ class LibrarySessionConfigFormattersTest {
         assertEquals("1 h", LibrarySessionConfigFormatters.formatWait(3600))
     }
 
+    /** Defensive: the mixed `min + s` branch is unreachable from the stepper's
+     *  allowed values, but pin it so a future off-grid value still renders sanely. */
+    @Test fun formatWait_mixedMinutesSeconds_defensiveBranch() {
+        assertEquals("1 min 30 s", LibrarySessionConfigFormatters.formatWait(90))
+    }
+
     @Test
     fun `wait negative is clamped to None`() {
         assertEquals("None", LibrarySessionConfigFormatters.formatWait(-3))

@@ -9,6 +9,7 @@ class RecordSettingBoundsWaitTest {
 
     @Test fun allowedList_shape() {
         val a = RecordSettingBounds.WAIT_ALLOWED
+        assertEquals(62, a.size) // 0, 30, then 1..60 min
         assertEquals(0, a.first()); assertEquals(30, a[1]); assertEquals(60, a[2])
         assertEquals(120, a[3]); assertEquals(3600, a.last())
         assertTrue(a.zipWithNext().all { (x, y) -> y > x })
