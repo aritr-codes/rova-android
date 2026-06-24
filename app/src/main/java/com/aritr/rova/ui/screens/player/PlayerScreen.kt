@@ -30,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -161,6 +163,7 @@ fun PlayerScreen(
                     onScrubEnd = viewModel::endScrub,
                     onPrevSegment = viewModel::jumpPrevSegment,
                     onNextSegment = viewModel::jumpNextSegment,
+                    onSetSpeed = viewModel::setPlaybackSpeed,
                     bindPlayerView = { playerView ->
                         playerView.player = viewModel.getOrCreatePlayer()
                     }
@@ -216,6 +219,7 @@ private fun PlayerReady(
     onScrubEnd: (Long) -> Unit,
     onPrevSegment: () -> Unit,
     onNextSegment: () -> Unit,
+    onSetSpeed: (Float) -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -338,9 +342,11 @@ private fun PlayerReady(
             )
             ControlsRow(
                 isPlaying = progress.isPlaying,
+                speed = progress.speed,
                 onTogglePlay = onTogglePlay,
                 onSeekBack = { onSeekRelative(-SEEK_DELTA_MS) },
-                onSeekForward = { onSeekRelative(SEEK_DELTA_MS) }
+                onSeekForward = { onSeekRelative(SEEK_DELTA_MS) },
+                onCycleSpeed = { onSetSpeed(PlaybackSpeedPolicy.next(progress.speed)) }
             )
         }
     }
@@ -470,49 +476,79 @@ private fun WallClockReadout(state: PlayerUiState.Ready, positionMs: Long) {
 @Composable
 private fun ControlsRow(
     isPlaying: Boolean,
+    speed: Float,
     onTogglePlay: () -> Unit,
     onSeekBack: () -> Unit,
-    onSeekForward: () -> Unit
+    onSeekForward: () -> Unit,
+    onCycleSpeed: () -> Unit
 ) {
     val playPauseCd = if (isPlaying) {
         stringResource(R.string.player_pause_cd)
     } else {
         stringResource(R.string.player_play_cd)
     }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onSeekBack) {
-            SemanticIcon(
-                imageVector = Icons.Default.Replay10,
-                contentDescription = stringResource(R.string.player_rewind_cd),
-                role = IconRole.Default
-            )
-        }
-        Surface(
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.10f),
-            onClick = onTogglePlay,
-            modifier = Modifier
-                .size(48.dp)
-                .semantics { contentDescription = playPauseCd }
+    val locale = LocalConfiguration.current.locales[0]
+    val speedLabel = PlaybackSpeedPolicy.label(speed, locale)
+    val speedCd = stringResource(R.string.player_speed_cd, speedLabel)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            IconButton(onClick = onSeekBack) {
                 SemanticIcon(
-                    imageVector = PlayerIconSpec.transportGlyph(isPlaying),
-                    contentDescription = null,
+                    imageVector = Icons.Default.Replay10,
+                    contentDescription = stringResource(R.string.player_rewind_cd),
+                    role = IconRole.Default
+                )
+            }
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.10f),
+                onClick = onTogglePlay,
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics { contentDescription = playPauseCd }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    SemanticIcon(
+                        imageVector = PlayerIconSpec.transportGlyph(isPlaying),
+                        contentDescription = null,
+                        role = IconRole.Default
+                    )
+                }
+            }
+            IconButton(onClick = onSeekForward) {
+                SemanticIcon(
+                    imageVector = Icons.Default.Forward10,
+                    contentDescription = stringResource(R.string.player_forward_cd),
                     role = IconRole.Default
                 )
             }
         }
-        IconButton(onClick = onSeekForward) {
-            SemanticIcon(
-                imageVector = Icons.Default.Forward10,
-                contentDescription = stringResource(R.string.player_forward_cd),
-                role = IconRole.Default
-            )
+        // PR-7 speed chip — cycling 1×→1.5×→2×→0.5×→1× (owner Q1=A). Mirrors
+        // the play/pause Surface(onClick) a11y pattern: ≥48dp target,
+        // contentDescription announces current speed + that tapping changes it.
+        // Surface(onClick) supplies Role.Button (checkA11yClickableHasRole).
+        Surface(
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.10f),
+            onClick = onCycleSpeed,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(48.dp)
+                .semantics { contentDescription = speedCd }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = speedLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.88f),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

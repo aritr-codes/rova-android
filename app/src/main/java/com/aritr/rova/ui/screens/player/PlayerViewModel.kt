@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.aritr.rova.R
@@ -128,6 +129,13 @@ class PlayerViewModel(
             )
             _uiState.value =
                 PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_playback_failed))
+        }
+
+        override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+            // PR-7 — the active speed reported by the player is authoritative;
+            // reconcile the optimistic setPlaybackSpeed write so the chip
+            // reflects what is actually applied.
+            _progress.update { it.copy(speed = playbackParameters.speed) }
         }
     }
 
@@ -271,6 +279,26 @@ class PlayerViewModel(
     }
 
     /**
+     * PR-7 — set the playback speed. Coerces arbitrary input onto the
+     * supported set ([PlaybackSpeedPolicy.clampToSupported]) before applying
+     * to ExoPlayer (Media3 1.4.1 `Player.setPlaybackSpeed` — no MediaSession
+     * needed; no STATE_READY requirement). Gated on
+     * COMMAND_SET_SPEED_AND_PITCH per the Media3 contract — a no-op (and no
+     * UI write) if the command is unavailable. The optimistic
+     * [PlaybackProgress.speed] write is reconciled by
+     * [onPlaybackParametersChanged] (the player reports the active params, so
+     * the chip never drifts if the player adjusts/rejects). Session-only:
+     * nothing is persisted.
+     */
+    fun setPlaybackSpeed(speed: Float) {
+        val p = exoPlayer ?: return
+        if (!p.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) return
+        val applied = PlaybackSpeedPolicy.clampToSupported(speed)
+        p.setPlaybackSpeed(applied)
+        _progress.update { it.copy(speed = applied) }
+    }
+
+    /**
      * Task 4 — jump to the start of the next segment relative to the
      * current playback position. No-ops when already in the last segment
      * (math returns null).
@@ -403,7 +431,11 @@ class PlayerViewModel(
             // wrongly hand position authority back to the poll loop
             // mid-gesture. The flag is owned exclusively by
             // beginScrub/endScrub; everyone else preserves it.
-            isScrubbing = _progress.value.isScrubbing
+            isScrubbing = _progress.value.isScrubbing,
+            // PR-7 — speed is owned by setPlaybackSpeed; pushProgress rebuilds
+            // the whole snapshot, so it must carry the current speed forward or
+            // a poll tick would reset the chip to 1×.
+            speed = _progress.value.speed
         )
     }
 

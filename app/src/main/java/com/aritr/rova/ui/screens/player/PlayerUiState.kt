@@ -80,5 +80,13 @@ data class PlaybackProgress(
      * Preserved across [PlayerViewModel.pushProgress] rebuilds so a poll
      * tick can never silently clear an in-flight scrub.
      */
-    val isScrubbing: Boolean = false
+    val isScrubbing: Boolean = false,
+    /**
+     * PR-7 — current playback speed multiplier (session-only; resets to
+     * [PlaybackSpeedPolicy.DEFAULT] on reopen). Owned by
+     * [PlayerViewModel.setPlaybackSpeed]; preserved across
+     * [PlayerViewModel.pushProgress] rebuilds the same way [isScrubbing] is,
+     * so a poll tick can never silently reset it to 1×.
+     */
+    val speed: Float = 1f
 )
