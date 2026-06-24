@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.screens.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,16 +26,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -222,13 +230,53 @@ private fun PlayerReady(
     onSetSpeed: (Float) -> Unit,
     bindPlayerView: (PlayerView) -> Unit
 ) {
+    var surfaceWidthPx by remember { mutableFloatStateOf(0f) }
+    val showControlsCd = stringResource(R.string.player_show_controls_cd)
+    // PR-7 — placeholder; Task 3 replaces the body with chrome-show logic
+    // (chromeVisible = true; interactionTick++). Kept as a single lambda so
+    // both the pointer gesture and the semantics onClick action route through
+    // one path.
+    val onSingleTap: () -> Unit = {}
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
         // detach; the DisposableEffect releases the surface reference
         // back to the VM so a subsequent player instance does not
         // inherit a stale Surface.
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { surfaceWidthPx = it.width.toFloat() }
+                // PR-7 — single-tap shows chrome (onTap fires only after the
+                // ~300 ms double-tap window elapses; owner Q5=always-show,
+                // Q6=latency accepted). Double-tap maps the x onto an
+                // EdgeSeekZones band: left=−10s, right=+10s, center=play/pause,
+                // and reveals chrome so the playhead jump is visible (Q4=no flash).
+                // The gesture sits on the full-bleed video Box (z-below the
+                // chrome) so taps on real control buttons are consumed by
+                // those buttons (spec C5). The semantics Role+CD+onClick keeps
+                // the surface an activatable labeled control for TalkBack
+                // (checkA11yClickableHasRole); the ±10s accessible path stays
+                // the explicit Replay10/Forward10 buttons (double-tap is
+                // TalkBack-invisible, §3.4).
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onSingleTap() },
+                        onDoubleTap = { offset ->
+                            when (EdgeSeekZones.zoneFor(offset.x, surfaceWidthPx)) {
+                                EdgeSeekZones.Zone.SEEK_BACK -> onSeekRelative(-SEEK_DELTA_MS)
+                                EdgeSeekZones.Zone.SEEK_FORWARD -> onSeekRelative(SEEK_DELTA_MS)
+                                EdgeSeekZones.Zone.TOGGLE -> onTogglePlay()
+                            }
+                            onSingleTap() // reveal chrome + restart hide timer
+                        }
+                    )
+                }
+                .semantics {
+                    contentDescription = showControlsCd
+                    role = Role.Button
+                    onClick { onSingleTap(); true }
+                },
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     // PlayerView default shutter background is black —
