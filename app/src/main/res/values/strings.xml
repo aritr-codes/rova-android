@@ -357,6 +357,10 @@
     <string name="player_pause_cd">Pause</string>
     <string name="player_rewind_cd">Rewind 10 seconds</string>
     <string name="player_forward_cd">Forward 10 seconds</string>
+    <!-- Player speed chip (PR-7): %1$s = current speed label e.g. "1.5×" -->
+    <string name="player_speed_cd">Playback speed %1$s, tap to change</string>
+    <!-- Player video surface single-tap region (PR-7) -->
+    <string name="player_show_controls_cd">Video, tap to show controls</string>
     <!-- Info row: %1$s = current position MM:SS, %2$s = per-clip length MM:SS -->
     <string name="player_position_per_clip">%1$s / %2$s per clip</string>
     <!-- Info row: %1$d = current clip index, %2$d = total clip count -->
