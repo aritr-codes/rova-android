@@ -83,6 +83,8 @@ Output: `WallClockReadout { instantMs: Long, isApprox: Boolean, gapBeforeMs: Lon
   - The wrapper passes **`TimeZone.getDefault().getOffset(instantMs)` per instant** (codex #4 — historical DST for *that* instant), and computes `withDatePrefix`/day-key from **each instant's own offset**, not one session-wide offset.
 - `formatGap(gapMs): UiText` → `"+15 min gap"` (rounded to a sensible unit; only called when `gapMs > 0`).
 
+> Implementation note (plan Task 0): the time-of-day formatter uses pure `java.text.SimpleDateFormat` + `java.util.TimeZone` (java.*, JVM-testable, DST + locale correct via per-instant zone offset, no core-library desugaring) rather than hand-rolled `floorMod` modular arithmetic — same guarantees, strictly better, and removes the manual AM/PM i18n risk. This supersedes the `floorMod` mechanism described above; the constraint (pure, testable, DST/locale-correct, no desugaring) is unchanged.
+
 `spansMidnight` is derived by the wrapper: compare the local-day key of the first vs last clip instant (each via its own per-instant offset). When true, all readouts carry the date prefix.
 
 ---
