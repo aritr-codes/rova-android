@@ -51,8 +51,8 @@
         <item quantity="other">cada %d minutos</item>
     </plurals>
     <plurals name="preset_cd_every_seconds">
-        <item quantity="one">cada %1$d segundo</item>
-        <item quantity="other">cada %1$d segundos</item>
+        <item quantity="one">cada %d segundo</item>
+        <item quantity="other">cada %d segundos</item>
     </plurals>
     <plurals name="preset_cd_repeats_times">
         <item quantity="one">%d vez</item>
