@@ -41,7 +41,20 @@ sealed interface PlayerUiState {
          * than `perClipDurationMs * totalClips`. Computed at resolve
          * time so the screen never has to re-walk the segment list.
          */
-        val totalDurationFromSegmentsMs: Long
+        val totalDurationFromSegmentsMs: Long,
+        /**
+         * PR-6b (ADR-0032) — per-clip wall-clock starts, sequence-ordered and
+         * parallel to [segmentDurationsMs]. Always fully populated: exact where
+         * the segment carried [com.aritr.rova.data.SegmentRecord.startedAtWallClock],
+         * else synthesized (see [wallStartIsApproxMask]).
+         */
+        val segmentWallStartsMs: List<Long>,
+        /**
+         * PR-6b — parallel to [segmentWallStartsMs]; true where the wall-start
+         * was synthesized (legacy schema <12 or recovered orphan). The player
+         * shows an "approx" marker when the current clip's entry is true.
+         */
+        val wallStartIsApproxMask: List<Boolean>
     ) : PlayerUiState
 
     data class Unavailable(val reason: UiText) : PlayerUiState
