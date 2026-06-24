@@ -819,6 +819,7 @@
     <string name="library_view_list">List view</string>
     <string name="library_badge_recovered">Recovered</string>
     <string name="library_badge_interrupted">Interrupted</string>
+    <string name="library_badge_auto_stopped">Auto-stopped</string>
     <string name="library_badge_pl">DualShot</string>
     <string name="library_orientation_portrait">Portrait</string>
     <string name="library_orientation_landscape">Landscape</string>

@@ -3,6 +3,7 @@ package com.aritr.rova.ui.library.components
 import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.theme.IconStatus
 import com.aritr.rova.ui.theme.RovaGlyph
+import com.aritr.rova.ui.theme.RovaGlyphs
 import com.aritr.rova.ui.theme.RovaIcon
 import com.aritr.rova.ui.theme.RovaIcons
 
@@ -34,5 +35,8 @@ internal object LibraryIconSpec {
     fun badgeGlyph(badge: LibraryBadge): RovaIcon = when (badge) {
         LibraryBadge.RECOVERED -> RovaIcons.Recovered
         LibraryBadge.INTERRUPTED -> RovaIcons.Interrupted
+        // Safety auto-stop: thermal glyph with the locked Interrupted color. Task 4 refines
+        // the glyph to be reason-aware (thermometer vs storage). No `.copy` — checkStatusColorLocked clean.
+        LibraryBadge.AUTO_STOPPED -> RovaIcon(RovaGlyphs.Thermal.outline, status = IconStatus.Interrupted)
     }
 }

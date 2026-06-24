@@ -254,9 +254,11 @@ fun LibraryScreen(
         dualWord = stringResource(R.string.library_badge_pl),
         portraitWord = stringResource(R.string.library_orientation_portrait),
         landscapeWord = stringResource(R.string.library_orientation_landscape),
+        autoStoppedWord = stringResource(R.string.library_badge_auto_stopped),
     )
     val recoveredLabel = stringResource(R.string.library_badge_recovered)
     val interruptedLabel = stringResource(R.string.library_badge_interrupted)
+    val autoStoppedLabel = stringResource(R.string.library_badge_auto_stopped)
     val plLabel = stringResource(R.string.library_badge_pl)
     val eyebrow = stringResource(R.string.library_eyebrow_latest)
     val favoriteLabel = stringResource(R.string.library_action_favorite)
@@ -632,7 +634,7 @@ fun LibraryScreen(
                                                 previewUri = previewUriFor(row.stableKey),
                                                 autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
-                                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel),
+                                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel, autoStoppedLabel),
                                                 badge = row.badge,
                                                 plLabel = plLabel,
                                                 onClick = { onTileClick(row.stableKey) },

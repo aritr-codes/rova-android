@@ -120,9 +120,10 @@ fun OrientationFramePill(orientation: com.aritr.rova.ui.library.LibraryOrientati
 
 /** Localized label for an exceptional badge (null → no badge). Caller passes resource strings. */
 @Composable
-fun statusBadgeLabel(badge: LibraryBadge?, recovered: String, interrupted: String): String? = when (badge) {
+fun statusBadgeLabel(badge: LibraryBadge?, recovered: String, interrupted: String, autoStopped: String): String? = when (badge) {
     LibraryBadge.RECOVERED -> recovered
     LibraryBadge.INTERRUPTED -> interrupted
+    LibraryBadge.AUTO_STOPPED -> autoStopped
     null -> null
 }
 

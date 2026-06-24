@@ -2,6 +2,7 @@ package com.aritr.rova.ui.library
 
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportState
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.dualrecord.VideoSide
 import java.util.Locale
@@ -25,6 +26,7 @@ object LibraryRowMapper {
         val segmentDurationsMs: List<Long>,
         val topologyPersisted: String,
         val terminated: Terminated?,
+        val stopReason: StopReason,
         val exportState: ExportState,
         val customTitle: String?,
         val favorite: Boolean,
@@ -50,7 +52,7 @@ object LibraryRowMapper {
             // clip-count chip hides; the persisted-segment list = exactly the player's playable clips.
             clipCount = input.segmentDurationsMs.size,
             topology = CaptureTopology.fromPersisted(input.topologyPersisted),
-            badge = StatusBadgePolicy.badgeFor(input.terminated, input.exportState),
+            badge = StatusBadgePolicy.badgeFor(input.terminated, input.stopReason, input.exportState),
             favorite = input.favorite,
             orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
         )
