@@ -71,3 +71,7 @@ Per-session-id persistent dismissal reuses `RovaSettings.dismissedAutoStopEchoId
 - **A `/help/thermal` nav route** instead of a sheet. Rejected — a single-topic help surface is over-engineered for one bullet list; a sheet integrates with the existing chrome.
 - **A separate `SessionThermalAutoStopEchoSignal`** mirroring `SessionAutoStopEchoSignal`. Rejected — the latter is already reason-agnostic; generalization is one when-arm and a parallel signal would duplicate the dismiss-persistence wiring.
 - **Bumping `StopReason.SEVERE` to the auto-stop threshold** (contract's original wording). Revised during brainstorming for the reasons above; this ADR is the canonical record of the revision.
+
+## Presentation (2026-06-24)
+
+A `StopReason.THERMAL` stop is surfaced to the user as an "auto/safety stop", distinct from a manual user stop: a `LibraryBadge.AUTO_STOPPED` badge in the Library and a `RecoveryCardKind.SAFETY_STOPPED` recovery card with "cool down" copy and amber (soft) accent. Terminal classification stays `Terminated.USER_STOPPED`; this is display-only — the recovery scanner and manifest schema are untouched. The taxonomy seam is `data/StopCategory.kt` (`StopCategoryClassifier.categorize`). See ADR-0027, ADR-0030, and `docs/superpowers/specs/2026-06-24-safety-stop-distinction-design.md`.

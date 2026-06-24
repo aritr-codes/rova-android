@@ -2,6 +2,7 @@ package com.aritr.rova.ui.library
 
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportState
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -24,6 +25,7 @@ class LibraryRowMapperTest {
         favorite: Boolean = false,
         topology: String = "Single",
         terminated: Terminated? = Terminated.COMPLETED,
+        stopReason: StopReason = StopReason.NONE,
         export: ExportState = ExportState.FINALIZED,
         segmentDurationsMs: List<Long> = listOf(120_000L),
         startedAt: Long = millis(2026, Calendar.JUNE, 14, 14, 32),
@@ -36,6 +38,7 @@ class LibraryRowMapperTest {
         segmentDurationsMs = segmentDurationsMs,
         topologyPersisted = topology,
         terminated = terminated,
+        stopReason = stopReason,
         exportState = export,
         customTitle = customTitle,
         favorite = favorite,
@@ -79,5 +82,12 @@ class LibraryRowMapperTest {
         assertEquals(true, row.favorite)
         assertEquals(50_000_000L, row.sizeBytes)
         assertEquals("Jun 14 · 2:32 PM", row.dateLabel)
+    }
+
+    @Test fun `thermal auto-stop row is AutoStopped`() {
+        assertEquals(
+            LibraryBadge.AUTO_STOPPED,
+            LibraryRowMapper.map(input(terminated = Terminated.USER_STOPPED, stopReason = StopReason.THERMAL), locale, tz).badge,
+        )
     }
 }

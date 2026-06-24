@@ -693,6 +693,14 @@
     <string name="recovery_body_user_stopped">Your last session ended before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
     <string name="recovery_body_killed_by_system">Your device\'s battery management stopped the recording before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
     <string name="recovery_body_force_stopped">The app was force-stopped before the last session\'s clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_title_safety_thermal">Paused to cool down</string>
+    <string name="recovery_body_safety_thermal">Your device got too warm, so recording stopped before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_title_safety_storage">Stopped — storage was full</string>
+    <string name="recovery_body_safety_storage">Your device ran out of storage, so recording stopped before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_title_scheduled">Ended on schedule</string>
+    <string name="recovery_body_scheduled">This recording finished at the end of its scheduled window. The clips stay on your device until you choose Discard recording. This action is permanent.</string>
+    <string name="recovery_title_error">Recording was interrupted</string>
+    <string name="recovery_body_error">Recording stopped unexpectedly before the clips could merge. The recovered clips stay on your device until you choose Discard recording. This action is permanent.</string>
     <!-- CTA labels -->
     <string name="recovery_discard_label">Discard recording</string>
     <string name="recovery_merge_label">Merge clips</string>
@@ -715,6 +723,9 @@
     <string name="recovery_tag_killed_by_system">System-killed</string>
     <string name="recovery_tag_force_stopped">Force-stopped</string>
     <string name="recovery_tag_user_stopped">User-stopped</string>
+    <string name="recovery_tag_auto_stopped">Auto-stopped</string>
+    <string name="recovery_tag_scheduled">Scheduled</string>
+    <string name="recovery_tag_interrupted">Interrupted</string>
     <!-- Progress strip -->
     <string name="recovery_progress_header_merging">MERGING</string>
     <string name="recovery_progress_header_recovered">CLIPS RECOVERED</string>
@@ -819,6 +830,7 @@
     <string name="library_view_list">List view</string>
     <string name="library_badge_recovered">Recovered</string>
     <string name="library_badge_interrupted">Interrupted</string>
+    <string name="library_badge_auto_stopped">Auto-stopped</string>
     <string name="library_badge_pl">DualShot</string>
     <string name="library_orientation_portrait">Portrait</string>
     <string name="library_orientation_landscape">Landscape</string>

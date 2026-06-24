@@ -227,6 +227,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val segmentDurationsMs: List<Long>,
         val topologyPersisted: String,
         val terminated: com.aritr.rova.data.Terminated?,
+        val stopReason: com.aritr.rova.data.StopReason,
         val exportState: com.aritr.rova.data.ExportState,
     )
 
@@ -354,6 +355,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 segmentDurationsMs = facts?.segmentDurationsMs ?: emptyList(),
                 topologyPersisted = facts?.topologyPersisted ?: "Single",
                 terminated = facts?.terminated,
+                stopReason = facts?.stopReason ?: com.aritr.rova.data.StopReason.NONE,
                 exportState = facts?.exportState ?: com.aritr.rova.data.ExportState.FINALIZED,
                 customTitle = meta?.customTitle,
                 favorite = meta?.favorite ?: false,
@@ -810,6 +812,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             segmentDurationsMs = durations,
             topologyPersisted = m.config.captureTopology,
             terminated = m.terminated,
+            stopReason = m.stopReason,
             exportState = m.exportState,
         )
     }

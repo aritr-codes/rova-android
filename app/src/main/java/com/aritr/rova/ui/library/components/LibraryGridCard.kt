@@ -134,7 +134,7 @@ fun LibraryGridCard(
                 Modifier.align(Alignment.TopEnd).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (statusLabel != null && badge != null) StatusBadgePill(badge, statusLabel)
+                if (statusLabel != null && badge != null) StatusBadgePill(badge, statusLabel, row.badgeStopReason)
                 else if (statusLabel != null) OverlayPill(statusLabel)
                 // M3a was REVERTED (2026-06-16): a DualShot session fans into per-SIDE rows, so the
                 // orientation glyph is the side's authoritative identity (OrientationResolver §1) — the

@@ -67,8 +67,8 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
  * Semantics cleared at the pill level — the merged tile description is the authoritative a11y node.
  */
 @Composable
-fun StatusBadgePill(badge: LibraryBadge, text: String, modifier: Modifier = Modifier) {
-    val icon = LibraryIconSpec.badgeGlyph(badge)
+fun StatusBadgePill(badge: LibraryBadge, text: String, stopReason: com.aritr.rova.data.StopReason? = null, modifier: Modifier = Modifier) {
+    val icon = LibraryIconSpec.badgeGlyph(badge, stopReason)
     Row(
         modifier
             .clearAndSetSemantics {}
@@ -120,9 +120,10 @@ fun OrientationFramePill(orientation: com.aritr.rova.ui.library.LibraryOrientati
 
 /** Localized label for an exceptional badge (null → no badge). Caller passes resource strings. */
 @Composable
-fun statusBadgeLabel(badge: LibraryBadge?, recovered: String, interrupted: String): String? = when (badge) {
+fun statusBadgeLabel(badge: LibraryBadge?, recovered: String, interrupted: String, autoStopped: String): String? = when (badge) {
     LibraryBadge.RECOVERED -> recovered
     LibraryBadge.INTERRUPTED -> interrupted
+    LibraryBadge.AUTO_STOPPED -> autoStopped
     null -> null
 }
 

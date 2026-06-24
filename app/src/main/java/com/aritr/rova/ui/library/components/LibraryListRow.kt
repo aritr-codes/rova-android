@@ -131,7 +131,7 @@ fun LibraryListRow(
             Column(Modifier.padding(start = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     row.badge?.let { badge ->
-                        val icon = LibraryIconSpec.badgeGlyph(badge)
+                        val icon = LibraryIconSpec.badgeGlyph(badge, row.badgeStopReason)
                         SemanticIcon(
                             imageVector = icon.glyph,
                             contentDescription = null,

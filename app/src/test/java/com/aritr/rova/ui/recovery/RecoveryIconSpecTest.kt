@@ -25,6 +25,18 @@ class RecoveryIconSpecTest {
         assertNull(RecoveryIconSpec.statusGlyphFor(RecoveryCardKind.USER_STOPPED))
     }
 
+    @Test fun safety_stopped_is_null_keeps_generic_emblem() {
+        assertNull(RecoveryIconSpec.statusGlyphFor(RecoveryCardKind.SAFETY_STOPPED))
+    }
+
+    @Test fun scheduled_end_is_null_keeps_generic_emblem() {
+        assertNull(RecoveryIconSpec.statusGlyphFor(RecoveryCardKind.SCHEDULED_END))
+    }
+
+    @Test fun error_stopped_is_null_keeps_generic_emblem() {
+        assertNull(RecoveryIconSpec.statusGlyphFor(RecoveryCardKind.ERROR_STOPPED))
+    }
+
     @Test fun interrupted_icon_carries_locked_interrupted_status() {
         val icon = RecoveryIconSpec.statusGlyphFor(RecoveryCardKind.KILLED_BY_SYSTEM)!!
         assertEquals(IconStatus.Interrupted, icon.status)

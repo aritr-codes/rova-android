@@ -5,6 +5,7 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.recovery.Anomaly
 import com.aritr.rova.service.recovery.DiscardEligibility
@@ -36,7 +37,8 @@ class RecoveryUiStateMapperTest {
         terminated: Terminated?,
         terminatedAt: Long? = null,
         startedAt: Long = 0L,
-        exportState: ExportState = ExportState.NOT_STARTED
+        exportState: ExportState = ExportState.NOT_STARTED,
+        stopReason: StopReason = StopReason.NONE
     ) = SessionManifest(
         sessionId = sessionId,
         startedAt = startedAt,
@@ -45,7 +47,8 @@ class RecoveryUiStateMapperTest {
         exportTier = ExportTier.TIER1_API29_PLUS,
         terminated = terminated,
         terminatedAt = terminatedAt,
-        exportState = exportState
+        exportState = exportState,
+        stopReason = stopReason
     )
 
     private fun classification(
@@ -69,9 +72,10 @@ class RecoveryUiStateMapperTest {
         startedAt: Long = 0L,
         anomalies: List<Anomaly> = emptyList(),
         appendedSegmentFilenames: List<String> = emptyList(),
-        exportState: ExportState = ExportState.NOT_STARTED
+        exportState: ExportState = ExportState.NOT_STARTED,
+        stopReason: StopReason = StopReason.NONE
     ) = RecoverySessionView(
-        manifest = manifest(sessionId, terminated, terminatedAt, startedAt, exportState),
+        manifest = manifest(sessionId, terminated, terminatedAt, startedAt, exportState, stopReason),
         classification = classification(
             sessionId, eligibility, anomalies, appendedSegmentFilenames
         )
@@ -636,6 +640,57 @@ class RecoveryUiStateMapperTest {
         assertEquals("MULTI_SEGMENT_KEPT must not surface a card", RecoveryUiState.Empty, ui)
     }
 
+    // ─── Task 6: per-reason copy derivation ───────────────────────
+
+    @Test fun `thermal user-stop maps to SafetyStopped with cool-down copy`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.THERMAL))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.SAFETY_STOPPED, card.kind)
+        assertEquals(R.string.recovery_title_safety_thermal, card.titleRes)
+        assertEquals(R.string.recovery_body_safety_thermal, card.bodyRes)
+    }
+
+    @Test fun `low-storage user-stop uses storage copy`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.LOW_STORAGE))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.SAFETY_STOPPED, card.kind)
+        assertEquals(R.string.recovery_title_safety_storage, card.titleRes)
+    }
+
+    @Test fun `scheduled-window user-stop maps to ScheduledEnd`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.SCHEDULE_WINDOW))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.SCHEDULED_END, card.kind)
+        assertEquals(R.string.recovery_title_scheduled, card.titleRes)
+    }
+
+    @Test fun `permission-revoked user-stop maps to ErrorStopped`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.PERMISSION_REVOKED))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.ERROR_STOPPED, card.kind)
+        assertEquals(R.string.recovery_title_error, card.titleRes)
+    }
+
+    @Test fun `manual user-stop keeps existing copy`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.USER))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.USER_STOPPED, card.kind)
+        assertEquals(R.string.recovery_title_user_stopped, card.titleRes)
+    }
+
+    @Test fun `system kill unchanged - showVendorHelpSlot true`() {
+        val card = RecoveryUiStateMapper.map(
+            listOf(view(terminated = Terminated.KILLED_BY_SYSTEM, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.NONE))
+        ).cards.single()
+        assertEquals(RecoveryCardKind.KILLED_BY_SYSTEM, card.kind)
+        assertTrue(card.showVendorHelpSlot)
+    }
+
     // ─── resource-content helpers (B3 i18n task 8) ────────────────
 
     private fun stringResourceValue(name: String): String {
@@ -665,6 +720,10 @@ class RecoveryUiStateMapperTest {
             "recovery_body_user_stopped",
             "recovery_body_killed_by_system",
             "recovery_body_force_stopped",
+            "recovery_body_safety_thermal",
+            "recovery_body_safety_storage",
+            "recovery_body_scheduled",
+            "recovery_body_error",
         )
     }
 }

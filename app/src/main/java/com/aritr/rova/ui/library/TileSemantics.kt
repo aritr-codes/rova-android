@@ -17,6 +17,7 @@ object TileSemantics {
         val dualWord: String,
         val portraitWord: String = "",
         val landscapeWord: String = "",
+        val autoStoppedWord: String = "",
     )
 
     fun describe(row: LibraryRow, f: Fragments): String = buildString {
@@ -25,6 +26,7 @@ object TileSemantics {
         when (row.badge) {
             LibraryBadge.RECOVERED -> append(", ").append(f.recoveredWord)
             LibraryBadge.INTERRUPTED -> append(", ").append(f.interruptedWord)
+            LibraryBadge.AUTO_STOPPED -> if (f.autoStoppedWord.isNotBlank()) append(", ").append(f.autoStoppedWord)
             null -> {}
         }
         if (row.topology == CaptureTopology.DualShot) append(", ").append(f.dualWord)
