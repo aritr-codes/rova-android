@@ -91,7 +91,7 @@ class RecoveryScannerTest {
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = startedAt,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
+            config = SessionConfig(durationSeconds = 5, intervalSeconds = 60, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
             segments = manifestSegments.mapIndexed { i, name ->
                 SegmentRecord(filename = name, durationMs = 1_000L, sizeBytes = 1L, sha1 = "sha-$i")
             },
@@ -130,7 +130,7 @@ class RecoveryScannerTest {
         val manifest = SessionManifest(
             sessionId = sessionId,
             startedAt = startedAt,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
+            config = SessionConfig(durationSeconds = 5, intervalSeconds = 60, resolution = "720p", loopCount = 0, captureTopology = captureTopology),
             segments = manifestRecords,
             exportTier = ExportTier.TIER1_API29_PLUS,
             exportState = exportState,
@@ -445,7 +445,7 @@ class RecoveryScannerTest {
         val malformed = SessionManifest(
             sessionId = sid,
             startedAt = SESSION_STARTED_AT,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0),
+            config = SessionConfig(durationSeconds = 5, intervalSeconds = 60, resolution = "720p", loopCount = 0),
             segments = listOf(
                 SegmentRecord(filename = "weird_legacy_name.mp4", durationMs = 1_000L, sizeBytes = 1L, sha1 = "x")
             ),
@@ -518,7 +518,7 @@ class RecoveryScannerTest {
         val duplicated = SessionManifest(
             sessionId = sid,
             startedAt = SESSION_STARTED_AT,
-            config = SessionConfig(durationSeconds = 5, intervalMinutes = 1, resolution = "720p", loopCount = 0),
+            config = SessionConfig(durationSeconds = 5, intervalSeconds = 60, resolution = "720p", loopCount = 0),
             segments = listOf(
                 SegmentRecord(filename = "segment_0001.mp4", durationMs = 1_000L, sizeBytes = 1L, sha1 = "a"),
                 SegmentRecord(filename = "segment_0001.mp4", durationMs = 1_000L, sizeBytes = 1L, sha1 = "b")

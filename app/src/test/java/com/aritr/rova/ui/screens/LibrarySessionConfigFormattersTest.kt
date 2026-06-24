@@ -85,34 +85,12 @@ class LibrarySessionConfigFormattersTest {
 
     // ── formatWait ────────────────────────────────────────────────
 
-    @Test
-    fun `wait zero renders as None`() {
+    @Test fun formatWait_secondsUnit() {
         assertEquals("None", LibrarySessionConfigFormatters.formatWait(0))
-    }
-
-    @Test
-    fun `wait below an hour renders in minutes`() {
-        assertEquals("1 min", LibrarySessionConfigFormatters.formatWait(1))
-        assertEquals("5 min", LibrarySessionConfigFormatters.formatWait(5))
-        assertEquals("30 min", LibrarySessionConfigFormatters.formatWait(30))
-        assertEquals("59 min", LibrarySessionConfigFormatters.formatWait(59))
-    }
-
-    @Test
-    fun `wait exactly 60 minutes renders as 1 h`() {
-        assertEquals("1 h", LibrarySessionConfigFormatters.formatWait(60))
-    }
-
-    @Test
-    fun `wait multiple of 60 renders in hours only`() {
-        assertEquals("2 h", LibrarySessionConfigFormatters.formatWait(120))
-        assertEquals("3 h", LibrarySessionConfigFormatters.formatWait(180))
-    }
-
-    @Test
-    fun `wait non-multiple keeps hour and minutes form`() {
-        assertEquals("1 h 30 min", LibrarySessionConfigFormatters.formatWait(90))
-        assertEquals("2 h 15 min", LibrarySessionConfigFormatters.formatWait(135))
+        assertEquals("30 s", LibrarySessionConfigFormatters.formatWait(30))
+        assertEquals("1 min", LibrarySessionConfigFormatters.formatWait(60))
+        assertEquals("2 min", LibrarySessionConfigFormatters.formatWait(120))
+        assertEquals("1 h", LibrarySessionConfigFormatters.formatWait(3600))
     }
 
     @Test

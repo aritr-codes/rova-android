@@ -56,7 +56,7 @@ class Tier3RecoveryTest {
         initial = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -315,7 +315,7 @@ class Tier3RecoveryTest {
         val initialManifest = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -365,7 +365,7 @@ class Tier3RecoveryTest {
         val initialManifest = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -517,7 +517,7 @@ class Tier3RecoveryTest {
         val initialManifest = store2.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )

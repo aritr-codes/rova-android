@@ -48,7 +48,7 @@ class PlayerUriResolverTest {
         startedAt = startedAt,
         config = SessionConfig(
             durationSeconds = durationSeconds,
-            intervalMinutes = 0,
+            intervalSeconds = 0,
             resolution = "FHD",
             loopCount = segments.size.coerceAtLeast(1),
             captureTopology = mode

@@ -12,7 +12,7 @@ import org.junit.Test
 class PlayerUriResolverWallClockTest {
 
     private fun cfg(topology: String = "Single") = SessionConfig(
-        durationSeconds = 30, intervalMinutes = 15, resolution = "FHD", loopCount = 2,
+        durationSeconds = 30, intervalSeconds = 900, resolution = "FHD", loopCount = 2,
         captureTopology = topology,
     )
 

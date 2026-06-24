@@ -1285,7 +1285,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 val startSettings = com.aritr.rova.data.RovaSettings(this@RovaRecordingService)
                 val config = SessionConfig(
                     durationSeconds = nSeconds.toInt(),
-                    intervalMinutes = mMinutes.toInt(),
+                    // ADR-0033 bridge: mMinutes is still minutes here (flipped to
+                    // mSeconds in the live-currency task); persist canonical seconds.
+                    intervalSeconds = mMinutes.toInt() * 60,
                     resolution = resolutionStr,
                     loopCount = limitLoops,
                     captureTopology = startSettings.captureTopology,

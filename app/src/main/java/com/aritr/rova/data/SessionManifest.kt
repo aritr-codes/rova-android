@@ -187,7 +187,8 @@ data class SessionManifest(
         // 10->11: captureTopology/orientationPolicy axes, legacy mode read-only (ADR-0029 PR-γ §6)
         // 11->12: SegmentRecord.startedAtWallClock per-segment wall-clock start
         //         (ADR-0032). Schema-<12 segments read null.
-        const val SCHEMA_VERSION = 12   // 6->7: vault fields (B5 / ADR-0025)
+        // 12->13: ADR-0033 interval unit minutes -> seconds (intervalSeconds).
+        const val SCHEMA_VERSION = 13   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -278,7 +279,7 @@ data class SessionManifest(
  */
 data class SessionConfig(
     val durationSeconds: Int,
-    val intervalMinutes: Int,
+    val intervalSeconds: Int,
     val resolution: String,
     val loopCount: Int,
     /** ADR-0029 PR-γ axes (schema 11). */
@@ -294,7 +295,7 @@ data class SessionConfig(
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("durationSeconds", durationSeconds)
-        put("intervalMinutes", intervalMinutes)
+        put("intervalSeconds", intervalSeconds)
         put("resolution", resolution)
         put("loopCount", loopCount)
         put("captureTopology", captureTopology)
@@ -312,7 +313,7 @@ data class SessionConfig(
                 ?: ModeMigration.migrate(legacy).topology
             return SessionConfig(
                 durationSeconds = json.getInt("durationSeconds"),
-                intervalMinutes = json.getInt("intervalMinutes"),
+                intervalSeconds = if (json.has("intervalSeconds")) json.getInt("intervalSeconds") else json.getInt("intervalMinutes") * 60,
                 resolution = json.getString("resolution"),
                 loopCount = json.getInt("loopCount"),
                 captureTopology = topology,

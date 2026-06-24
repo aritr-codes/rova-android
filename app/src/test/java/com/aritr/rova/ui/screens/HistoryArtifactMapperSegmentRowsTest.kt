@@ -36,7 +36,7 @@ class HistoryArtifactMapperSegmentRowsTest {
             startedAt = 0L,
             config = SessionConfig(
                 durationSeconds = 5,
-                intervalMinutes = 1,
+                intervalSeconds = 60,
                 resolution = "FHD",
                 loopCount = 1,
                 captureTopology = captureTopology,

@@ -107,7 +107,7 @@ class SessionManifestSchemaCompatTest {
             startedAt = 1_700_000_000_000L,
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             ),

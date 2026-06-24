@@ -27,7 +27,8 @@ class SessionManifestSegmentWallClockTest {
         assertFalse(rec.toJson().has("startedAtWallClock"))
     }
 
-    @Test fun `schema version is 12`() {
-        assertEquals(12, SessionManifest.SCHEMA_VERSION)
+    @Test fun `schema version is 13`() {
+        // 12 -> 13: ADR-0033 interval unit minutes -> seconds (intervalSeconds).
+        assertEquals(13, SessionManifest.SCHEMA_VERSION)
     }
 }
