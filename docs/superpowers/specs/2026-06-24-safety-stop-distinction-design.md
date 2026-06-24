@@ -46,6 +46,16 @@ Single Compose/Android-free helper consumed by **both** surfaces, JVM-tested onc
 Lives in `data/` (alongside `SessionManifest`) so both `ui/library` and `ui/recovery`
 depend on it without a cross-UI dependency.
 
+**Refinement found during planning (vs the brainstorm draft):** the helper takes
+**only** `(terminated, stopReason)` — NOT `exportState`. Folding `FAILED` into the shared
+category was a latent bug: a user-stopped session whose export later failed would
+categorize as `INTERRUPTED` and the recovery card (which maps `INTERRUPTED`→killed) would
+mislabel it as "force-stopped". The recovery surface cares about the *stop cause*, not
+export failure (it already shows export failure via a separate `mergeFailedReason` path).
+So `FAILED` is **Library-local** — layered on top in §4. This still honors codex's
+principle: a specific persisted `StopReason` beats a generic export `FAILED`, because
+Library checks the specific categories before the `FAILED` fallback.
+
 ```kotlin
 enum class StopCategory {
     COMPLETED, USER_STOPPED, SAFETY_STOPPED, SCHEDULED_END,
@@ -53,11 +63,8 @@ enum class StopCategory {
 }
 
 object StopCategoryClassifier {
-    fun categorize(
-        terminated: Terminated?,
-        stopReason: StopReason,
-        exportState: ExportState,
-    ): StopCategory = when {
+    /** Pure stop taxonomy. exportState is intentionally NOT an input — see §3 refinement. */
+    fun categorize(terminated: Terminated?, stopReason: StopReason): StopCategory = when {
         terminated == Terminated.MULTI_SEGMENT_KEPT -> StopCategory.RECOVERED
         terminated == Terminated.KILLED_BY_SYSTEM ||
             terminated == Terminated.KILLED_FORCE_STOP -> StopCategory.INTERRUPTED
@@ -69,7 +76,6 @@ object StopCategoryClassifier {
         terminated == Terminated.USER_STOPPED &&
             (stopReason == StopReason.PERMISSION_REVOKED ||
              stopReason == StopReason.INIT_FAILED) -> StopCategory.ERROR_STOPPED
-        exportState == ExportState.FAILED -> StopCategory.INTERRUPTED   // see precedence note
         terminated == Terminated.COMPLETED -> StopCategory.COMPLETED
         terminated == Terminated.USER_STOPPED -> StopCategory.USER_STOPPED   // USER / NONE
         else -> StopCategory.COMPLETED   // terminated == null → no badge
@@ -77,33 +83,34 @@ object StopCategoryClassifier {
 }
 ```
 
-### Precedence note (codex correction)
-
-Codex proposed `COMPLETED → COMPLETED` *before* the `FAILED` check. That breaks the
-existing load-bearing test `badgeFor(COMPLETED, FAILED) == INTERRUPTED`. The
-`exportState == FAILED` branch therefore runs **after** the specific gate-reason
-splits (so a thermal-stop-with-failed-export still reads `SAFETY_STOPPED` — specific
-cause wins) but **before** `COMPLETED` (so a completed-but-failed-export still reads
-`INTERRUPTED`). Codex's core principle — a persisted `StopReason` must beat a generic
-export failure — is preserved.
-
-`SCHEDULE_WINDOW` gets an **explicit** branch (rule 4), never reached through a broad
+`SCHEDULE_WINDOW` gets an **explicit** branch, never reached through a broad
 "not-user" fallthrough — codex's flagged risk that a scheduled end could inherit amber
-severity.
+severity. `INTERRUPTED` here means **killed only** (system/force); export-FAILED is added
+by Library, not here.
 
 ## 4. Library mapping
 
-`StatusBadgePolicy.badgeFor` gains a `stopReason` parameter and delegates to the helper:
+`StatusBadgePolicy.badgeFor` gains a `stopReason` parameter, delegates to the helper, and
+layers export-`FAILED` on top (the Library-local rule, §3 refinement):
 
 ```kotlin
 fun badgeFor(terminated: Terminated?, stopReason: StopReason, exportState: ExportState): LibraryBadge? =
-    when (StopCategoryClassifier.categorize(terminated, stopReason, exportState)) {
+    when (StopCategoryClassifier.categorize(terminated, stopReason)) {
+        StopCategory.RECOVERED -> LibraryBadge.RECOVERED
         StopCategory.SAFETY_STOPPED -> LibraryBadge.AUTO_STOPPED
         StopCategory.INTERRUPTED, StopCategory.ERROR_STOPPED -> LibraryBadge.INTERRUPTED
-        StopCategory.RECOVERED -> LibraryBadge.RECOVERED
-        StopCategory.SCHEDULED_END, StopCategory.USER_STOPPED, StopCategory.COMPLETED -> null
+        // Export failed on an otherwise badge-less row (e.g. COMPLETED+FAILED, clean
+        // USER_STOPPED+FAILED) → INTERRUPTED. Runs AFTER the specific categories so a
+        // thermal/storage/scheduled stop keeps its own badge even if export failed.
+        StopCategory.SCHEDULED_END, StopCategory.USER_STOPPED, StopCategory.COMPLETED ->
+            if (exportState == ExportState.FAILED) LibraryBadge.INTERRUPTED else null
     }
 ```
+
+All 6 existing `StatusBadgePolicyTest` cases stay green: `badgeFor(COMPLETED, FAILED)` →
+COMPLETED branch → FAILED → INTERRUPTED; `badgeFor(USER_STOPPED, FINALIZED)` (reason USER)
+→ USER_STOPPED branch → null; `badgeFor(null, FINALIZED)` → categorize null→COMPLETED →
+null.
 
 ### New badge value
 ```kotlin
@@ -145,12 +152,27 @@ enum class RecoveryCardKind {
 }
 ```
 
-`RecoveryUiStateMapper.toCard` now reads `manifest.stopReason`. For `Terminated.USER_STOPPED`
-it splits by `stopReason` into the four new kinds; `KILLED_*` map directly (unchanged).
-`RECOVERED`/`COMPLETED` `StopCategory` values have no recovery card (already filtered by
-`isEligible`). Mapping helper reuses the SSOT classifier for the USER_STOPPED split, then
-distinguishes `KILLED_BY_SYSTEM` vs `KILLED_FORCE_STOP` from `Terminated` directly (the
-`INTERRUPTED` category collapses them but the card needs the split for the vendor slot).
+`RecoveryUiStateMapper.toCard` now reads `manifest.stopReason` and derives the kind via the
+shared `categorize(terminated, stopReason)` (no `exportState` — recovery doesn't bucket
+export failures into the kind; export failure surfaces via the existing `mergeFailedReason`
+path):
+
+```kotlin
+val kind = when (StopCategoryClassifier.categorize(terminated, stopReason)) {
+    StopCategory.SAFETY_STOPPED -> RecoveryCardKind.SAFETY_STOPPED
+    StopCategory.SCHEDULED_END  -> RecoveryCardKind.SCHEDULED_END
+    StopCategory.ERROR_STOPPED  -> RecoveryCardKind.ERROR_STOPPED
+    StopCategory.USER_STOPPED   -> RecoveryCardKind.USER_STOPPED
+    StopCategory.INTERRUPTED    ->   // killed only; split for the vendor slot
+        if (terminated == Terminated.KILLED_BY_SYSTEM) RecoveryCardKind.KILLED_BY_SYSTEM
+        else RecoveryCardKind.KILLED_FORCE_STOP
+    StopCategory.RECOVERED, StopCategory.COMPLETED -> return null  // no card (isEligible already filters)
+}
+```
+
+Because `categorize` excludes `exportState`, a clean user-stop whose export failed maps to
+`USER_STOPPED` (correct), not a spurious killed kind — the planning bug the §3 refinement
+prevents.
 
 ### Per-kind treatment (all `when` exhaustive — compile-forced, existing pattern)
 
@@ -199,10 +221,12 @@ manual `USER_STOPPED` kind.
 
 ## 7. Tests (JVM, same PR)
 
-- `StopCategoryClassifierTest` — full precedence matrix incl. the FAILED-vs-stop-reason
-  ordering, SCHEDULE neutral branch, null-terminated.
+- `StopCategoryClassifierTest` — full `(terminated, stopReason)` matrix: each StopReason on
+  USER_STOPPED → its category; KILLED_* → INTERRUPTED; MULTI_SEGMENT_KEPT → RECOVERED;
+  COMPLETED → COMPLETED; null → COMPLETED. (No exportState — that's Library-local.)
 - `StatusBadgePolicyTest` — 6 existing stay green; add SAFETY→AUTO_STOPPED,
-  SCHEDULED→null, ERROR→INTERRUPTED, and FAILED-over-completed retained.
+  SCHEDULED→null, ERROR→INTERRUPTED, and the FAILED-layering cases (COMPLETED+FAILED→
+  INTERRUPTED retained; SAFETY+FAILED→AUTO_STOPPED, i.e. specific cause beats FAILED).
 - `RecoveryUiStateMapperTest` — new: each StopReason on `USER_STOPPED` maps to the right
   kind + title/body res; SCHEDULED neutral; KILLED_* unchanged; vendor slot only for
   KILLED_BY_SYSTEM.
