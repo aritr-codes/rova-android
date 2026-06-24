@@ -177,10 +177,10 @@ internal object PlayerUriResolver {
         // exist in production — the service always tags) would filter to
         // empty here and surface as "Recording incomplete" below, which
         // is the right failure mode.
-        val segmentDurations = if (isPlusL && side != null) {
-            manifest.segments.filter { it.side == side }.map { it.durationMs }
+        val sideSegments = if (isPlusL && side != null) {
+            manifest.segments.filter { it.side == side }
         } else {
-            manifest.segments.map { it.durationMs }
+            manifest.segments
         }
         // Audit F#11 — a finalized manifest with zero segments should
         // not exist (every loop writes at least one segment), but a
@@ -190,8 +190,28 @@ internal object PlayerUriResolver {
         // on a 0-byte / missing file and flip back to Unavailable —
         // user sees a Ready→Unavailable flicker. Refuse to play
         // segment-less manifests up front instead.
-        if (segmentDurations.isEmpty()) {
+        if (sideSegments.isEmpty()) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_incomplete))
+        }
+        // PR-6b (ADR-0032 / codex #2) — order by parsed filename sequence so
+        // wall-starts align with footage concatenation, not async append order.
+        val order = SegmentOrdering.orderedIndices(sideSegments.map { it.filename })
+        val ordered = order.map { sideSegments[it] }
+        val segmentDurations = ordered.map { it.durationMs }
+        // PR-6b — resolve per-clip wall-starts: exact where present, else
+        // synthesize chaining from the last resolved start (codex #1: preserves
+        // exact clips; only synthesizes the missing ones — never all-or-nothing).
+        val wallStarts = ArrayList<Long>(ordered.size)
+        val approxMask = ArrayList<Boolean>(ordered.size)
+        for ((i, seg) in ordered.withIndex()) {
+            val stamp = seg.startedAtWallClock
+            if (stamp != null) {
+                wallStarts.add(stamp); approxMask.add(false)
+            } else {
+                val synth = if (i == 0) manifest.startedAt
+                            else wallStarts[i - 1] + segmentDurations[i - 1]
+                wallStarts.add(synth); approxMask.add(true)
+            }
         }
         return PlayerUiState.Ready(
             mediaUri = uri,
@@ -200,7 +220,9 @@ internal object PlayerUriResolver {
             segmentDurationsMs = segmentDurations,
             perClipDurationMs = manifest.config.durationSeconds * 1000L,
             totalClips = segmentDurations.size,
-            totalDurationFromSegmentsMs = segmentDurations.sum()
+            totalDurationFromSegmentsMs = segmentDurations.sum(),
+            segmentWallStartsMs = wallStarts,
+            wallStartIsApproxMask = approxMask
         )
     }
 

@@ -50,9 +50,9 @@ class SessionManifestVaultTest {
     }
 
     @Test
-    fun schemaVersion_isEleven() {
-        // 10 -> 11: ADR-0029 PR-γ captureTopology/orientationPolicy axes.
-        assertEquals(11, SessionManifest.SCHEMA_VERSION)
+    fun schemaVersion_isTwelve() {
+        // 11 -> 12: ADR-0032 per-segment startedAtWallClock.
+        assertEquals(12, SessionManifest.SCHEMA_VERSION)
     }
 
     // B5 / ADR-0025 commit-before-finalize follow-up: the in-flight public

@@ -29,7 +29,9 @@ class PlayerStateEmitterTest {
         segmentDurationsMs = listOf(1000L),
         perClipDurationMs = 1000L,
         totalClips = 1,
-        totalDurationFromSegmentsMs = 1000L
+        totalDurationFromSegmentsMs = 1000L,
+        segmentWallStartsMs = listOf(0L),
+        wallStartIsApproxMask = listOf(true)
     )
 
     @Test

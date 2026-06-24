@@ -139,12 +139,13 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 11`() {
-        // Bumped 10 -> 11 for ADR-0029 PR-γ captureTopology/orientationPolicy axes.
-        // Previously: 9 -> 10 ADR-0029 PR-α per-segment effectiveTargetRotation;
+    fun `SCHEMA_VERSION is 12`() {
+        // Bumped 11 -> 12 for ADR-0032 per-segment startedAtWallClock.
+        // Previously: 10 -> 11 ADR-0029 PR-γ captureTopology/orientationPolicy axes;
+        // 9 -> 10 ADR-0029 PR-α per-segment effectiveTargetRotation;
         // 8 -> 9 ADR-0027 daily-window schedule fields;
         // 7 -> 8 commit-before-finalize move-out pointers;
         // 6 -> 7 vault fields; 5 -> 6 ADR-0024 SAF target fields.
-        assertEquals(11, SessionManifest.SCHEMA_VERSION)
+        assertEquals(12, SessionManifest.SCHEMA_VERSION)
     }
 }
