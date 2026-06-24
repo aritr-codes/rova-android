@@ -1,5 +1,12 @@
 package com.aritr.rova.ui.screens.player
 
+import android.content.Context
+import android.view.accessibility.AccessibilityManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -25,8 +32,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aritr.rova.ui.components.rememberReduceMotion
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -232,11 +243,50 @@ private fun PlayerReady(
 ) {
     var surfaceWidthPx by remember { mutableFloatStateOf(0f) }
     val showControlsCd = stringResource(R.string.player_show_controls_cd)
-    // PR-7 — placeholder; Task 3 replaces the body with chrome-show logic
-    // (chromeVisible = true; interactionTick++). Kept as a single lambda so
-    // both the pointer gesture and the semantics onClick action route through
-    // one path.
-    val onSingleTap: () -> Unit = {}
+
+    var chromeVisible by remember { mutableStateOf(true) }
+    var interactionTick by remember { mutableIntStateOf(0) }
+    val reduceMotion = rememberReduceMotion()
+
+    // PR-7 — when TalkBack touch-exploration is active, auto-hide is
+    // suppressed entirely: removing a focused control from composition
+    // (AnimatedVisibility) would trap/lose the screen-reader's focus (codex).
+    // Read once at composition — a mid-session TalkBack toggle is a rare edge
+    // that re-enters the screen anyway.
+    val context = LocalContext.current
+    val touchExplorationActive = remember {
+        (context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager)
+            .isTouchExplorationEnabled
+    }
+
+    // PR-7 — auto-hide countdown. Runs only while playing + visible + not
+    // scrubbing (AutoHideChromePolicy) AND not under touch-exploration.
+    // Pausing / scrubbing changes a key and cancels-and-restarts this effect;
+    // interactionTick re-arms the timer on every chrome interaction even when
+    // chromeVisible was already true (a tap/seek/speed-cycle that doesn't flip
+    // a key would otherwise let an in-flight timer hide chrome mid-interaction).
+    LaunchedEffect(progress.isPlaying, progress.isScrubbing, chromeVisible, interactionTick) {
+        if (!touchExplorationActive &&
+            AutoHideChromePolicy.shouldRunHideTimer(
+                isPlaying = progress.isPlaying,
+                isScrubbing = progress.isScrubbing,
+                chromeVisible = chromeVisible
+            )
+        ) {
+            kotlinx.coroutines.delay(AutoHideChromePolicy.DEFAULT_TIMEOUT_MS)
+            chromeVisible = false
+        }
+    }
+
+    // PR-7 — pausing always reveals controls (spec C4). Reactive on isPlaying.
+    LaunchedEffect(progress.isPlaying) {
+        if (!progress.isPlaying) chromeVisible = AutoHideChromePolicy.onPlaybackPaused()
+    }
+
+    val onSingleTap: () -> Unit = {
+        chromeVisible = AutoHideChromePolicy.onUserTap(chromeVisible)
+        interactionTick++
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
@@ -299,103 +349,124 @@ private fun PlayerReady(
         )
 
         // Top gradient + bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(96.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.82f),
-                            Color.Transparent
+        AnimatedVisibility(
+            visible = chromeVisible,
+            enter = if (reduceMotion) EnterTransition.None else fadeIn(),
+            exit = if (reduceMotion) ExitTransition.None else fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.82f),
+                                Color.Transparent
+                            )
                         )
                     )
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            contentAlignment = Alignment.BottomStart
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                contentAlignment = Alignment.BottomStart
             ) {
-                IconButton(onClick = onBack) {
-                    SemanticIcon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.player_back_cd),
-                        role = IconRole.Default
-                    )
-                }
-                Spacer(modifier = Modifier.size(4.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = HistoryRowFormatters.formatPrimaryDateTime(state.startedAt),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White.copy(alpha = 0.88f)
-                    )
-                    val topSubTotalMs = effectiveTotalMs(
-                        totalClips = state.totalClips,
-                        // Audit F#4 — manifest-derived sum is the
-                        // authoritative total. ExoPlayer-reported
-                        // duration is only consulted when the
-                        // manifest sum is 0 (defensive — segment
-                        // durations populate at finalize time, so
-                        // this fallback should never fire).
-                        authoritativeTotalMs = state.totalDurationFromSegmentsMs,
-                        playerReportedTotalMs = progress.durationMs,
-                        fallbackPerClipMs = state.perClipDurationMs
-                    )
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.player_top_sub,
-                            state.totalClips,
-                            state.totalClips,
-                            formatMmSs(topSubTotalMs)
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        // WCAG 2.2 AA SC 1.4.3 (ADR-0020, PLR-01): 0.45α was
-                        // ~3.3:1 over the dark player scrim; 0.72α clears 4.5:1.
-                        color = Color.White.copy(alpha = 0.72f)
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        SemanticIcon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.player_back_cd),
+                            role = IconRole.Default
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = HistoryRowFormatters.formatPrimaryDateTime(state.startedAt),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                        val topSubTotalMs = effectiveTotalMs(
+                            totalClips = state.totalClips,
+                            // Audit F#4 — manifest-derived sum is the
+                            // authoritative total. ExoPlayer-reported
+                            // duration is only consulted when the
+                            // manifest sum is 0 (defensive — segment
+                            // durations populate at finalize time, so
+                            // this fallback should never fire).
+                            authoritativeTotalMs = state.totalDurationFromSegmentsMs,
+                            playerReportedTotalMs = progress.durationMs,
+                            fallbackPerClipMs = state.perClipDurationMs
+                        )
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.player_top_sub,
+                                state.totalClips,
+                                state.totalClips,
+                                formatMmSs(topSubTotalMs)
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            // WCAG 2.2 AA SC 1.4.3 (ADR-0020, PLR-01): 0.45α was
+                            // ~3.3:1 over the dark player scrim; 0.72α clears 4.5:1.
+                            color = Color.White.copy(alpha = 0.72f)
+                        )
+                    }
                 }
             }
         }
 
+        // PR-7 — every chrome interaction bumps interactionTick so the hide timer
+        // restarts (codex). togglePlay flips isPlaying and scrub flips isScrubbing,
+        // which are already keys — but seek/seekTo/speed/segment-jumps are not.
+        val onSeekRelativeBump: (Long) -> Unit = { onSeekRelative(it); interactionTick++ }
+        val onSeekBump: (Long) -> Unit = { onSeek(it); interactionTick++ }
+        val onPrevSegmentBump: () -> Unit = { onPrevSegment(); interactionTick++ }
+        val onNextSegmentBump: () -> Unit = { onNextSegment(); interactionTick++ }
+        val onCycleSpeedBump: () -> Unit = { onSetSpeed(PlaybackSpeedPolicy.next(progress.speed)); interactionTick++ }
+
         // Bottom panel — info row + timeline + controls
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.90f)
+        AnimatedVisibility(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            visible = chromeVisible,
+            enter = if (reduceMotion) EnterTransition.None else fadeIn(),
+            exit = if (reduceMotion) ExitTransition.None else fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.90f)
+                            )
                         )
                     )
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                InfoRow(state = state, progress = progress)
+                SegmentedTimeline(
+                    segmentDurationsMs = state.segmentDurationsMs,
+                    positionMs = progress.positionMs,
+                    isScrubbing = progress.isScrubbing,
+                    onSeek = onSeekBump,
+                    onScrubStart = onScrubStart,
+                    onScrubUpdate = onScrubUpdate,
+                    onScrubEnd = onScrubEnd,
+                    onPrevSegment = onPrevSegmentBump,
+                    onNextSegment = onNextSegmentBump
                 )
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            InfoRow(state = state, progress = progress)
-            SegmentedTimeline(
-                segmentDurationsMs = state.segmentDurationsMs,
-                positionMs = progress.positionMs,
-                isScrubbing = progress.isScrubbing,
-                onSeek = onSeek,
-                onScrubStart = onScrubStart,
-                onScrubUpdate = onScrubUpdate,
-                onScrubEnd = onScrubEnd,
-                onPrevSegment = onPrevSegment,
-                onNextSegment = onNextSegment
-            )
-            ControlsRow(
-                isPlaying = progress.isPlaying,
-                speed = progress.speed,
-                onTogglePlay = onTogglePlay,
-                onSeekBack = { onSeekRelative(-SEEK_DELTA_MS) },
-                onSeekForward = { onSeekRelative(SEEK_DELTA_MS) },
-                onCycleSpeed = { onSetSpeed(PlaybackSpeedPolicy.next(progress.speed)) }
-            )
+                ControlsRow(
+                    isPlaying = progress.isPlaying,
+                    speed = progress.speed,
+                    onTogglePlay = onTogglePlay,
+                    onSeekBack = { onSeekRelativeBump(-SEEK_DELTA_MS) },
+                    onSeekForward = { onSeekRelativeBump(SEEK_DELTA_MS) },
+                    onCycleSpeed = onCycleSpeedBump
+                )
+            }
         }
     }
 }
