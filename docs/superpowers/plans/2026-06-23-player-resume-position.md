@@ -175,6 +175,8 @@ git commit -m "feat(library): RecordingIdentity seam — sessionId-canonical key
 
 ---
 
+> **EXECUTION NOTE (controller, 2026-06-23):** Tasks 2 and 3 are coupled — Task 2 removes the flat `positionMs` field that Task 3's old codec references, so committing Task 2 alone leaves a non-compiling tree. To honor "GREEN at EVERY commit," Tasks 2 + 3 are executed by ONE implementer as ONE commit (entry model + codec together). The "do NOT run full suite at this step" / "reviewed as a pair" notes below reflect that. Same applies to Tasks 7 + 8 (factory references the new constructor).
+
 ### Task 2: `LibraryMetadataEntry` — split `positionMs` → `positionsBySide` + merge
 
 **Files:**
