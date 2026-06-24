@@ -377,6 +377,11 @@
     <string name="player_unavailable_incomplete">Recording incomplete</string>
     <string name="player_unavailable_playback_failed">Playback failed</string>
     <string name="player_unavailable_init_failed">Playback initialization failed</string>
+    <!-- PR-6b (ADR-0032) wall-clock playhead -->
+    <string name="player_wallclock_gap_minutes">+%1$d min gap</string>
+    <string name="player_wallclock_gap_seconds">+%1$d s gap</string>
+    <string name="player_wallclock_approx_prefix">~%1$s</string>
+    <string name="player_wallclock_cd">Recorded at %1$s</string>
 
     <!-- Settings screen + sheets (B3 i18n task 4) -->
     <string name="settings_title">Settings</string>

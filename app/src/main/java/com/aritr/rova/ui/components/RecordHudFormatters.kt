@@ -252,4 +252,46 @@ object RecordHudFormatters {
         }
         return UiText.StrArgs(id, listOf(n))
     }
+
+    // ─── PR-6b (ADR-0032) — wall-clock playhead ───────────────────
+
+    /**
+     * Time-of-day readout for the wall-clock playhead. Pure
+     * java.text/java.util (JVM-testable, DST + locale correct via [zone] +
+     * [locale]; the instant's own offset is applied since [zone] resolves DST
+     * per-instant). [withDate] prepends a short weekday when the session spans
+     * midnight (see
+     * [com.aritr.rova.ui.screens.player.WallClockTimeline.spansMidnight]).
+     */
+    fun formatTimeOfDay(
+        instantMs: Long,
+        zone: java.util.TimeZone,
+        locale: java.util.Locale,
+        is24h: Boolean,
+        withDate: Boolean,
+    ): String {
+        val pattern = when {
+            withDate && is24h -> "EEE HH:mm:ss"
+            withDate -> "EEE h:mm:ss a"
+            is24h -> "HH:mm:ss"
+            else -> "h:mm:ss a"
+        }
+        val fmt = java.text.SimpleDateFormat(pattern, locale)
+        fmt.timeZone = zone
+        return fmt.format(java.util.Date(instantMs))
+    }
+
+    /**
+     * Inter-clip gap label ("+15 min gap"). Caller passes only a positive gap
+     * ([com.aritr.rova.ui.screens.player.WallClockTimeline] suppresses
+     * non-positive); rounds to whole minutes at/over 60 s, else whole seconds.
+     */
+    fun formatWallClockGap(gapMs: Long): UiText {
+        val g = gapMs.coerceAtLeast(0L)
+        return if (g >= 60_000L) {
+            UiText.StrArgs(R.string.player_wallclock_gap_minutes, listOf((g / 60_000L).toInt()))
+        } else {
+            UiText.StrArgs(R.string.player_wallclock_gap_seconds, listOf((g / 1_000L).toInt()))
+        }
+    }
 }

@@ -375,6 +375,11 @@
     <string name="player_unavailable_incomplete">Grabación incompleta</string>
     <string name="player_unavailable_playback_failed">Falló la reproducción</string>
     <string name="player_unavailable_init_failed">Falló la inicialización de la reproducción</string>
+    <!-- PR-6b (ADR-0032) wall-clock playhead -->
+    <string name="player_wallclock_gap_minutes">+%1$d min de intervalo</string>
+    <string name="player_wallclock_gap_seconds">+%1$d s de intervalo</string>
+    <string name="player_wallclock_approx_prefix">~%1$s</string>
+    <string name="player_wallclock_cd">Grabado a las %1$s</string>
 
     <!-- Settings screen + sheets (B3 i18n task 4) -->
     <string name="settings_title">Ajustes</string>
