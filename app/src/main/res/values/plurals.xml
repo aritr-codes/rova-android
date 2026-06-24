@@ -67,6 +67,10 @@
         <item quantity="one">every %d minute</item>
         <item quantity="other">every %d minutes</item>
     </plurals>
+    <plurals name="preset_cd_every_seconds">
+        <item quantity="one">every %1$d second</item>
+        <item quantity="other">every %1$d seconds</item>
+    </plurals>
     <plurals name="preset_cd_repeats_times">
         <item quantity="one">%d time</item>
         <item quantity="other">%d times</item>

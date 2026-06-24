@@ -51,12 +51,8 @@ class RecordSettingBoundsTest {
         assertEquals(999, RecordSettingBounds.stepRepeats(999, +1))
     }
 
-    @Test fun stepWait_incrementsByOne_clamped() {
-        assertEquals(6, RecordSettingBounds.stepWait(5, +1))
-        assertEquals(4, RecordSettingBounds.stepWait(5, -1))
-        assertEquals(0, RecordSettingBounds.stepWait(0, -1))
-        assertEquals(60, RecordSettingBounds.stepWait(60, +1))
-    }
+    // Wait stepper/clamp/bound assertions moved to RecordSettingBoundsWaitTest
+    // (ADR-0033: wait picker is now a seconds allowed-values stepper, not minute arithmetic).
 
     @Test fun atBound_helpers() {
         assertTrue(RecordSettingBounds.clipAtMin(1))
@@ -65,8 +61,6 @@ class RecordSettingBoundsTest {
         assertTrue(RecordSettingBounds.repeatsAtMin(RecordSettingBounds.REPEATS_CONTINUOUS))
         assertTrue(RecordSettingBounds.repeatsAtMax(999))
         assertFalse(RecordSettingBounds.repeatsAtMin(1))
-        assertTrue(RecordSettingBounds.waitAtMin(0))
-        assertTrue(RecordSettingBounds.waitAtMax(60))
     }
 
     @Test fun clampClip_coercesToRange() {
@@ -82,9 +76,4 @@ class RecordSettingBoundsTest {
         assertEquals(12, RecordSettingBounds.clampRepeats(12))
     }
 
-    @Test fun clampWait_coercesToRange() {
-        assertEquals(0, RecordSettingBounds.clampWait(-3))
-        assertEquals(60, RecordSettingBounds.clampWait(99))
-        assertEquals(15, RecordSettingBounds.clampWait(15))
-    }
 }

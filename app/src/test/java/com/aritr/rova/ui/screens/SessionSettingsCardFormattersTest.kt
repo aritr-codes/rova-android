@@ -19,12 +19,12 @@ class SessionSettingsCardFormattersTest {
         assertEquals("Until you stop", recordRepeatsValue(-1))
     }
 
-    @Test fun waitValues() {
+    @Test fun recordWaitValue_secondsUnit() {
         assertEquals("None", recordWaitValue(0))
-        assertEquals("1 m", recordWaitValue(1))
-        assertEquals("45 m", recordWaitValue(45))
-        assertEquals("1 h", recordWaitValue(60))
-        assertEquals("2 h", recordWaitValue(120))
+        assertEquals("30 s", recordWaitValue(30))
+        assertEquals("1 m", recordWaitValue(60))
+        assertEquals("2 m", recordWaitValue(120))
+        assertEquals("1 h", recordWaitValue(3600))
     }
 
 }

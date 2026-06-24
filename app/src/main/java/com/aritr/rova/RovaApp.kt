@@ -934,7 +934,7 @@ class RovaApp : Application() {
         com.aritr.rova.service.RovaRecordingService.start(
             context = activityContext,
             nSeconds = s.durationSeconds.toFloat(),
-            mMinutes = s.intervalMinutes.toFloat(),
+            intervalSeconds = s.intervalSeconds,
             limitLoops = s.loopCount,
             resolution = s.resolution,
             startedBySchedule = true,

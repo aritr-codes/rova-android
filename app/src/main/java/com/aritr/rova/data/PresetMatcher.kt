@@ -14,21 +14,21 @@ package com.aritr.rova.data
  */
 object PresetMatcher {
     /** Active built-in id for this config, or null. */
-    fun match(duration: Int, interval: Int, loopCount: Int, resolution: String?): String? =
-        match(BuiltInPresets.all, duration, interval, loopCount, resolution)
+    fun match(duration: Int, intervalSeconds: Int, loopCount: Int, resolution: String?): String? =
+        match(BuiltInPresets.all, duration, intervalSeconds, loopCount, resolution)
 
     /** First value-match id within [presets] (canonicalized resolution), or null. */
     fun match(
         presets: List<RovaPreset>,
         duration: Int,
-        interval: Int,
+        intervalSeconds: Int,
         loopCount: Int,
         resolution: String?,
     ): String? {
         val res = QualityPresets.canonicalize(resolution) ?: return null
         return presets.firstOrNull { p ->
             p.duration == duration &&
-                p.interval == interval &&
+                p.intervalSeconds == intervalSeconds &&
                 p.loopCount == loopCount &&
                 QualityPresets.canonicalizeOrDefault(p.resolution) == res
         }?.id
@@ -38,10 +38,10 @@ object PresetMatcher {
     fun matchActive(
         customs: List<RovaPreset>,
         duration: Int,
-        interval: Int,
+        intervalSeconds: Int,
         loopCount: Int,
         resolution: String?,
     ): String? =
-        match(duration, interval, loopCount, resolution)
-            ?: match(customs, duration, interval, loopCount, resolution)
+        match(duration, intervalSeconds, loopCount, resolution)
+            ?: match(customs, duration, intervalSeconds, loopCount, resolution)
 }

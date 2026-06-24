@@ -343,7 +343,7 @@ private fun GlassCircleButton(onClick: () -> Unit, enabled: Boolean, content: @C
 fun RecordSettingsCard(
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     mode: String,
     onOpenSheet: () -> Unit,
@@ -408,7 +408,7 @@ fun RecordSettingsCard(
                     CellSep()
                     SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsCompactValue(loopCount), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
-                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
+                    SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalSeconds), Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     CellSep()
                     SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier.weight(1f), readOnly = false, spinDegrees = spinDegrees)
                     ModeCycleChip(
@@ -455,7 +455,7 @@ fun RecordSettingsCard(
                 val baseCells = listOf<@Composable () -> Unit>(
                     { SettingsCell(stringResource(R.string.record_cell_clip), recordClipValue(durationSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { SettingsCell(stringResource(R.string.record_cell_repeats), recordRepeatsCompactValue(loopCount), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
-                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalMinutes), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
+                    { SettingsCell(stringResource(R.string.record_cell_wait), recordWaitValue(intervalSeconds), Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { SettingsCell(stringResource(R.string.record_cell_quality), quality, Modifier, readOnly = false, compact = true, spinDegrees = spinDegrees) },
                     { ModeCycleChip(mode = mode, onCycleMode = onCycleMode, onLongPress = onOpenSheet, enabled = !dimmed, compact = true, spinDegrees = spinDegrees) },
                 )

@@ -669,7 +669,7 @@ fun RecordScreen(
         val result = RovaRecordingService.start(
             context,
             viewModel.duration.value.toFloat(),
-            viewModel.interval.value.toFloat(),
+            viewModel.interval.value,
             viewModel.loopCount.value,
             viewModel.resolution.value
         )
@@ -1084,7 +1084,7 @@ fun RecordScreen(
                     RecordSettingsCard(
                         durationSeconds = duration,
                         loopCount = loopCount,
-                        intervalMinutes = interval,
+                        intervalSeconds = interval,
                         quality = resolution,
                         mode = modeLabel,
                         onOpenSheet = { viewModel.openSettingsSheet() },
@@ -1217,7 +1217,7 @@ fun RecordScreen(
                         spinDegrees = spinDegrees,
                         durationSeconds = duration,
                         loopCount = loopCount,
-                        intervalMinutes = interval,
+                        intervalSeconds = interval,
                         quality = resolution,
                         currentMode = mode,
                         editable = !isUiLocked,
@@ -1260,7 +1260,7 @@ fun RecordScreen(
                     visible = combinedOpen,
                     durationSeconds = duration,
                     loopCount = loopCount,
-                    intervalMinutes = interval,
+                    intervalSeconds = interval,
                     quality = resolution,
                     currentMode = mode,
                     editable = !isUiLocked,

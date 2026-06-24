@@ -16,23 +16,15 @@ object BuiltInPresets {
     const val DEFAULT_ID = "builtin.standard"
 
     val all: List<RovaPreset> = listOf(
-        RovaPreset(
-            name = "Quick Sample", duration = 10, interval = 1, loopCount = 10,
-            resolution = QualityPresets.FHD, id = "builtin.quick_sample", isBuiltIn = true,
-        ),
-        RovaPreset(
-            name = "Standard", duration = 30, interval = 2, loopCount = 20,
-            resolution = QualityPresets.FHD, id = DEFAULT_ID, isBuiltIn = true,
-        ),
-        RovaPreset(
-            name = "Long Session", duration = 60, interval = 5, loopCount = 50,
-            resolution = QualityPresets.HD, id = "builtin.long_session", isBuiltIn = true,
-        ),
-        RovaPreset(
-            name = "Continuous", duration = 60, interval = 0,
+        RovaPreset(name = "Quick Sample", duration = 10, intervalSeconds = 60, loopCount = 10,
+            resolution = QualityPresets.FHD, id = "builtin.quick_sample", isBuiltIn = true),
+        RovaPreset(name = "Standard", duration = 30, intervalSeconds = 120, loopCount = 20,
+            resolution = QualityPresets.FHD, id = DEFAULT_ID, isBuiltIn = true),
+        RovaPreset(name = "Long Session", duration = 60, intervalSeconds = 300, loopCount = 50,
+            resolution = QualityPresets.HD, id = "builtin.long_session", isBuiltIn = true),
+        RovaPreset(name = "Continuous", duration = 60, intervalSeconds = 0,
             loopCount = RecordSettingBounds.REPEATS_CONTINUOUS,
-            resolution = QualityPresets.HD, id = "builtin.continuous", isBuiltIn = true,
-        ),
+            resolution = QualityPresets.HD, id = "builtin.continuous", isBuiltIn = true),
     )
 
     /** The Standard preset (first-run default). */

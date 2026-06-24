@@ -43,7 +43,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // so the in-memory copies converge and neither clobbers the other.
     val resolution = MutableStateFlow(settings.resolution)
     val durationSeconds = MutableStateFlow(settings.durationSeconds)
-    val intervalMinutes = MutableStateFlow(settings.intervalMinutes)
+    val intervalSeconds = MutableStateFlow(settings.intervalSeconds)
     val loopCount = MutableStateFlow(settings.loopCount)
 
     // B2 — app theme mode. Single owner (only this VM writes it); the write-back
@@ -122,7 +122,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { libraryCardPreview.collect { settings.libraryCardPreview = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
         viewModelScope.launch { durationSeconds.collect { settings.durationSeconds = it } }
-        viewModelScope.launch { intervalMinutes.collect { settings.intervalMinutes = it } }
+        viewModelScope.launch { intervalSeconds.collect { settings.intervalSeconds = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
         viewModelScope.launch { themeMode.collect { settings.themeMode = it } }
         viewModelScope.launch { themeSelection.collect { settings.themeSelection = it } }
@@ -140,7 +140,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun reloadRecordingDefaults() {
         resolution.value = settings.resolution
         durationSeconds.value = settings.durationSeconds
-        intervalMinutes.value = settings.intervalMinutes
+        intervalSeconds.value = settings.intervalSeconds
         loopCount.value = settings.loopCount
         saveLocationLabel.value = settings.saveLocationLabel
         // B5 — reseed from disk on resume so a value changed elsewhere (or the

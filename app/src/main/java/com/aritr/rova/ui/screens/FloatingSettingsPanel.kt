@@ -128,7 +128,7 @@ internal fun FloatingSettingsPanel(
     spinDegrees: () -> Float,
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     currentMode: String,
     editable: Boolean,
@@ -286,12 +286,12 @@ internal fun FloatingSettingsPanel(
                         SheetRowDivider()
                         StepperRow(
                             label = stringResource(R.string.settings_sheet_wait_between),
-                            value = recordWaitValue(intervalMinutes),
+                            value = recordWaitValue(intervalSeconds),
                             enabled = editable,
-                            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
-                            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
-                            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
-                            editValue = intervalMinutes,
+                            atMin = RecordSettingBounds.waitAtMin(intervalSeconds),
+                            atMax = RecordSettingBounds.waitAtMax(intervalSeconds),
+                            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalSeconds, dir)) },
+                            editValue = intervalSeconds,
                             onSetValue = { onIntervalChange(RecordSettingBounds.clampWait(it)) },
                         )
                         SheetRowDivider()

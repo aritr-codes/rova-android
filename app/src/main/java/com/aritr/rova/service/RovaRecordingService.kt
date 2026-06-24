@@ -480,7 +480,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
     // Recording config
     private var nSeconds = 10L
-    private var mMinutes = 10L
+    private var mSeconds = 60L
     private var limitLoops = -1 // -1 for continuous
     private var resolutionStr = QualityPresets.DEFAULT
     private var configuredResolution: String? = null // Track what resolution the camera is currently configured for
@@ -728,7 +728,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         fun start(
             context: Context,
             nSeconds: Float,
-            mMinutes: Float,
+            intervalSeconds: Int,
             limitLoops: Int = -1,
             resolution: String = QualityPresets.DEFAULT,
             startedBySchedule: Boolean = false,
@@ -740,7 +740,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
             }
             val intent = Intent(context, RovaRecordingService::class.java).apply {
                 putExtra("N_SECONDS", nSeconds)
-                putExtra("M_MINUTES", mMinutes)
+                putExtra("M_SECONDS", intervalSeconds)
                 putExtra("LIMIT_LOOPS", limitLoops)
                 putExtra("RESOLUTION", resolution)
                 putExtra("STARTED_BY_SCHEDULE", startedBySchedule)
@@ -1088,7 +1088,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
 
         nSeconds = intent.getFloatExtra("N_SECONDS", 10f).toLong()
-        mMinutes = intent.getFloatExtra("M_MINUTES", 10f).toLong()
+        mSeconds = if (intent.hasExtra("M_SECONDS")) {
+            intent.getIntExtra("M_SECONDS", 60).toLong()
+        } else {
+            (intent.getFloatExtra("M_MINUTES", 1f).toLong()) * 60 // ADR-0033 fallback: in-flight pre-update start
+        }
         limitLoops = intent.getIntExtra("LIMIT_LOOPS", -1)
         resolutionStr = intent.getStringExtra("RESOLUTION") ?: QualityPresets.DEFAULT
         startedBySchedule = intent.getBooleanExtra("STARTED_BY_SCHEDULE", false)
@@ -1285,9 +1289,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 val startSettings = com.aritr.rova.data.RovaSettings(this@RovaRecordingService)
                 val config = SessionConfig(
                     durationSeconds = nSeconds.toInt(),
-                    // ADR-0033 bridge: mMinutes is still minutes here (flipped to
-                    // mSeconds in the live-currency task); persist canonical seconds.
-                    intervalSeconds = mMinutes.toInt() * 60,
+                    intervalSeconds = mSeconds.toInt(),
                     resolution = resolutionStr,
                     loopCount = limitLoops,
                     captureTopology = startSettings.captureTopology,
@@ -1472,7 +1474,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                         // the mic. Setting isRecording before the cue made the HUD
                         // claim "recording" during the ~3.7 s pre-roll (cue-bleed fix).
                         _serviceState.update { it.copy(recordingError = null) }
-                        beepStart(mMinutes.toInt(), isFirstSegment = segmentCount == 0) // pre-roll cue, awaited to completion
+                        beepStart(mSeconds.toInt(), isFirstSegment = segmentCount == 0) // pre-roll cue, awaited to completion
                         _serviceState.update { it.copy(isRecording = true) }
                         lastResult = recordSegment()
                         _serviceState.update { it.copy(isRecording = false) }
@@ -1572,7 +1574,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     // legacy ROADMAP.md §"Loop"); the user-facing
                     // "Interval Between Loops" copy reads end-to-start
                     // and that is the contract going forward.
-                    val waitSeconds = (mMinutes * 60).toInt().coerceAtLeast(0)
+                    val waitSeconds = mSeconds.toInt().coerceAtLeast(0)
 
                     if (waitSeconds > 0) {
                         waitForNextSegment(waitSeconds)
@@ -4376,11 +4378,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // The MediaPlayer lifecycle runs on the main Looper: MediaPlayer is
     // not thread-safe and delivers onCompletion on the creating thread's
     // Looper. The await is suspending, so it never blocks the main thread.
-    private suspend fun beepStart(intervalMinutes: Int, isFirstSegment: Boolean) {
+    private suspend fun beepStart(intervalSeconds: Int, isFirstSegment: Boolean) {
         if (!com.aritr.rova.service.audio.shouldPlayBeep(
                 enableBeeps = RovaSettings(this).enableBeeps,
                 audioMode = currentAudioMode,
-                intervalMinutes = intervalMinutes
+                intervalSeconds = intervalSeconds
             )
         ) return
         // Differentiated cues: the FIRST segment plays the full multi-pulse start cue
