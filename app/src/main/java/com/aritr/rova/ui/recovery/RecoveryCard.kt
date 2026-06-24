@@ -245,7 +245,10 @@ fun RecoveryCard(
  */
 private fun severityColorFor(kind: RecoveryCardKind): Color = when (kind) {
     RecoveryCardKind.KILLED_BY_SYSTEM -> RovaWarnings.hard
-    RecoveryCardKind.KILLED_FORCE_STOP -> RovaWarnings.soft
+    RecoveryCardKind.SCHEDULED_END -> RovaWarnings.advisory   // neutral/informational, NOT an alarm
+    RecoveryCardKind.KILLED_FORCE_STOP,
+    RecoveryCardKind.SAFETY_STOPPED,
+    RecoveryCardKind.ERROR_STOPPED,
     RecoveryCardKind.USER_STOPPED -> RovaWarnings.soft
 }
 
@@ -259,6 +262,9 @@ private fun tagLabelResFor(kind: RecoveryCardKind): Int = when (kind) {
     RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_tag_killed_by_system
     RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_tag_force_stopped
     RecoveryCardKind.USER_STOPPED -> R.string.recovery_tag_user_stopped
+    RecoveryCardKind.SAFETY_STOPPED -> R.string.recovery_tag_auto_stopped
+    RecoveryCardKind.SCHEDULED_END -> R.string.recovery_tag_scheduled
+    RecoveryCardKind.ERROR_STOPPED -> R.string.recovery_tag_interrupted
 }
 
 @Composable

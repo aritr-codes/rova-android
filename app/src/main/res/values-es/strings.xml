@@ -691,6 +691,14 @@
     <string name="recovery_body_user_stopped">Tu última sesión terminó antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
     <string name="recovery_body_killed_by_system">La gestión de batería de tu dispositivo detuvo la grabación antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
     <string name="recovery_body_force_stopped">La app se forzó a detenerse antes de que los clips de la última sesión pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_title_safety_thermal">Pausada para enfriar</string>
+    <string name="recovery_body_safety_thermal">Tu dispositivo se calentó demasiado, así que la grabación se detuvo antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_title_safety_storage">Detenida: almacenamiento lleno</string>
+    <string name="recovery_body_safety_storage">Tu dispositivo se quedó sin almacenamiento, así que la grabación se detuvo antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_title_scheduled">Finalizó según lo programado</string>
+    <string name="recovery_body_scheduled">Esta grabación terminó al final de su ventana programada. Los clips permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
+    <string name="recovery_title_error">La grabación se interrumpió</string>
+    <string name="recovery_body_error">La grabación se detuvo inesperadamente antes de que los clips pudieran combinarse. Los clips recuperados permanecen en tu dispositivo hasta que elijas Descartar grabación. Esta acción es permanente.</string>
     <!-- CTA labels -->
     <string name="recovery_discard_label">Descartar grabación</string>
     <string name="recovery_merge_label">Combinar clips</string>
@@ -713,6 +721,9 @@
     <string name="recovery_tag_killed_by_system">Detenida por el sistema</string>
     <string name="recovery_tag_force_stopped">Forzada a detenerse</string>
     <string name="recovery_tag_user_stopped">Detenida por el usuario</string>
+    <string name="recovery_tag_auto_stopped">Detención automática</string>
+    <string name="recovery_tag_scheduled">Programada</string>
+    <string name="recovery_tag_interrupted">Interrumpida</string>
     <!-- Progress strip -->
     <string name="recovery_progress_header_merging">COMBINANDO</string>
     <string name="recovery_progress_header_recovered">CLIPS RECUPERADOS</string>

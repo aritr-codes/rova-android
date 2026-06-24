@@ -4,6 +4,9 @@ import androidx.annotation.StringRes
 import com.aritr.rova.R
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.StopCategory
+import com.aritr.rova.data.StopCategoryClassifier
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
 import com.aritr.rova.service.recovery.Anomaly
 import com.aritr.rova.service.recovery.DiscardEligibility
@@ -39,13 +42,16 @@ data class RecoverySessionView(
 )
 
 /**
- * Card kind. Maps 1:1 to the renderable [Terminated] values; [Terminated.COMPLETED]
- * has no card and is never represented here.
+ * Card kind. Maps to the renderable [Terminated] × [StopReason] combinations;
+ * [Terminated.COMPLETED] has no card and is never represented here.
  */
 enum class RecoveryCardKind {
     USER_STOPPED,
+    SAFETY_STOPPED,
+    SCHEDULED_END,
+    ERROR_STOPPED,
     KILLED_BY_SYSTEM,
-    KILLED_FORCE_STOP
+    KILLED_FORCE_STOP,
 }
 
 /**
@@ -179,19 +185,23 @@ object RecoveryUiStateMapper {
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return null
         if (view.manifest.exportState == ExportState.FINALIZED) return null
 
-        val kind = when (terminated) {
-            Terminated.USER_STOPPED -> RecoveryCardKind.USER_STOPPED
-            Terminated.KILLED_BY_SYSTEM -> RecoveryCardKind.KILLED_BY_SYSTEM
-            Terminated.KILLED_FORCE_STOP -> RecoveryCardKind.KILLED_FORCE_STOP
-            Terminated.COMPLETED -> return null
-            Terminated.MULTI_SEGMENT_KEPT -> return null   // Phase 4.3 — defensive (isEligible already filters)
+        val stopReason = view.manifest.stopReason
+        val kind = when (StopCategoryClassifier.categorize(terminated, stopReason)) {
+            StopCategory.SAFETY_STOPPED -> RecoveryCardKind.SAFETY_STOPPED
+            StopCategory.SCHEDULED_END -> RecoveryCardKind.SCHEDULED_END
+            StopCategory.ERROR_STOPPED -> RecoveryCardKind.ERROR_STOPPED
+            StopCategory.USER_STOPPED -> RecoveryCardKind.USER_STOPPED
+            StopCategory.INTERRUPTED ->
+                if (terminated == Terminated.KILLED_BY_SYSTEM) RecoveryCardKind.KILLED_BY_SYSTEM
+                else RecoveryCardKind.KILLED_FORCE_STOP
+            StopCategory.RECOVERED, StopCategory.COMPLETED -> return null // isEligible already filters
         }
 
         return RecoveryCardState(
             sessionId = view.manifest.sessionId,
             kind = kind,
-            titleRes = titleResFor(kind),
-            bodyRes = bodyResFor(kind),
+            titleRes = titleResFor(kind, stopReason),
+            bodyRes = bodyResFor(kind, stopReason),
             discardLabelRes = R.string.recovery_discard_label,
             showVendorHelpSlot = (kind == RecoveryCardKind.KILLED_BY_SYSTEM),
             survivingArtifacts = summarize(view.classification),
@@ -201,17 +211,27 @@ object RecoveryUiStateMapper {
     }
 
     @StringRes
-    private fun titleResFor(kind: RecoveryCardKind): Int = when (kind) {
+    private fun titleResFor(kind: RecoveryCardKind, stopReason: StopReason): Int = when (kind) {
         RecoveryCardKind.USER_STOPPED -> R.string.recovery_title_user_stopped
         RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_title_killed_by_system
         RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_title_force_stopped
+        RecoveryCardKind.SAFETY_STOPPED ->
+            if (stopReason == StopReason.LOW_STORAGE) R.string.recovery_title_safety_storage
+            else R.string.recovery_title_safety_thermal
+        RecoveryCardKind.SCHEDULED_END -> R.string.recovery_title_scheduled
+        RecoveryCardKind.ERROR_STOPPED -> R.string.recovery_title_error
     }
 
     @StringRes
-    private fun bodyResFor(kind: RecoveryCardKind): Int = when (kind) {
+    private fun bodyResFor(kind: RecoveryCardKind, stopReason: StopReason): Int = when (kind) {
         RecoveryCardKind.USER_STOPPED -> R.string.recovery_body_user_stopped
         RecoveryCardKind.KILLED_BY_SYSTEM -> R.string.recovery_body_killed_by_system
         RecoveryCardKind.KILLED_FORCE_STOP -> R.string.recovery_body_force_stopped
+        RecoveryCardKind.SAFETY_STOPPED ->
+            if (stopReason == StopReason.LOW_STORAGE) R.string.recovery_body_safety_storage
+            else R.string.recovery_body_safety_thermal
+        RecoveryCardKind.SCHEDULED_END -> R.string.recovery_body_scheduled
+        RecoveryCardKind.ERROR_STOPPED -> R.string.recovery_body_error
     }
 
     private fun summarize(c: SessionClassification): List<UiText> {

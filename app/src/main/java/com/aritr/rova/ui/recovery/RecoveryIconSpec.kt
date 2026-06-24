@@ -30,13 +30,21 @@ internal object RecoveryIconSpec {
      *    pipeline, so [RovaIcons.Interrupted] applies for the same reason.
      *  - [RecoveryCardKind.USER_STOPPED]: the user deliberately stopped the recording. The session
      *    terminated as intended; the recovery card exists because raw segments were not yet merged.
-     *    There is no "interrupted" connotation and no "recovered" state yet (the card is offering
-     *    to merge or discard, not confirming recovery). Returning `null` keeps the generic
+     *    There is no "interrupted" connotation. Returning `null` keeps the generic
      *    [RovaIcons.Recovery] emblem with its role = Secondary tint, which is correct here.
+     *  - [RecoveryCardKind.SAFETY_STOPPED]: device auto-stopped due to thermal or storage pressure —
+     *    the copy + tag (Auto-stopped) carry the distinction; generic emblem is appropriate.
+     *  - [RecoveryCardKind.SCHEDULED_END]: recording ended on schedule — informational, no alert
+     *    connotation; generic emblem is appropriate.
+     *  - [RecoveryCardKind.ERROR_STOPPED]: recording stopped unexpectedly due to an error —
+     *    the copy + tag (Interrupted) carry the distinction; generic emblem is appropriate.
      */
     fun statusGlyphFor(kind: RecoveryCardKind): RovaIcon? = when (kind) {
         RecoveryCardKind.KILLED_BY_SYSTEM -> RovaIcons.Interrupted
         RecoveryCardKind.KILLED_FORCE_STOP -> RovaIcons.Interrupted
         RecoveryCardKind.USER_STOPPED -> null
+        RecoveryCardKind.SAFETY_STOPPED -> null
+        RecoveryCardKind.SCHEDULED_END -> null
+        RecoveryCardKind.ERROR_STOPPED -> null
     }
 }
