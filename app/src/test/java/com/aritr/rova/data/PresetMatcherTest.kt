@@ -7,7 +7,7 @@ import org.junit.Test
 class PresetMatcherTest {
 
     @Test fun exactStandardMatches() {
-        assertEquals("builtin.standard", PresetMatcher.match(30, 2, 20, "FHD"))
+        assertEquals("builtin.standard", PresetMatcher.match(30, 120, 20, "FHD"))
     }
 
     @Test fun continuousSentinelMatches() {
@@ -16,11 +16,11 @@ class PresetMatcherTest {
 
     @Test fun legacyResolutionAliasCanonicalizes() {
         // "1080p" is the legacy alias for FHD — Standard should still match.
-        assertEquals("builtin.standard", PresetMatcher.match(30, 2, 20, "1080p"))
+        assertEquals("builtin.standard", PresetMatcher.match(30, 120, 20, "1080p"))
     }
 
     @Test fun noMatchReturnsNull() {
-        assertNull(PresetMatcher.match(25, 2, 20, "FHD"))
+        assertNull(PresetMatcher.match(25, 120, 20, "FHD"))
     }
 
     @Test fun continuousDoesNotMatchFiniteLoop() {
@@ -30,52 +30,52 @@ class PresetMatcherTest {
 
     @Test fun nullResolutionDoesNotMatch() {
         // Must NOT coerce null to the FHD default (would falsely match Standard).
-        assertNull(PresetMatcher.match(30, 2, 20, null))
+        assertNull(PresetMatcher.match(30, 120, 20, null))
     }
 
     @Test fun unknownResolutionDoesNotMatch() {
-        assertNull(PresetMatcher.match(30, 2, 20, "garbage"))
+        assertNull(PresetMatcher.match(30, 120, 20, "garbage"))
     }
 
     private fun custom(
         name: String, d: Int, i: Int, l: Int, r: String, id: String,
-    ) = RovaPreset(name = name, duration = d, interval = i, loopCount = l, resolution = r, id = id)
+    ) = RovaPreset(name = name, duration = d, intervalSeconds = i, loopCount = l, resolution = r, id = id)
 
     @Test fun listOverloadMatchesFirstByValue() {
-        val list = listOf(custom("A", 15, 3, 5, "FHD", "custom.a"))
-        assertEquals("custom.a", PresetMatcher.match(list, 15, 3, 5, "FHD"))
+        val list = listOf(custom("A", 15, 180, 5, "FHD", "custom.a"))
+        assertEquals("custom.a", PresetMatcher.match(list, 15, 180, 5, "FHD"))
     }
 
     @Test fun listOverloadCanonicalizesResolution() {
-        val list = listOf(custom("A", 15, 3, 5, "FHD", "custom.a"))
-        assertEquals("custom.a", PresetMatcher.match(list, 15, 3, 5, "1080p"))
+        val list = listOf(custom("A", 15, 180, 5, "FHD", "custom.a"))
+        assertEquals("custom.a", PresetMatcher.match(list, 15, 180, 5, "1080p"))
     }
 
     @Test fun listOverloadNoMatchReturnsNull() {
-        val list = listOf(custom("A", 15, 3, 5, "FHD", "custom.a"))
-        assertNull(PresetMatcher.match(list, 99, 3, 5, "FHD"))
+        val list = listOf(custom("A", 15, 180, 5, "FHD", "custom.a"))
+        assertNull(PresetMatcher.match(list, 99, 180, 5, "FHD"))
     }
 
     @Test fun matchActiveBuiltInTakesPrecedence() {
-        val customs = listOf(custom("Mine", 30, 2, 20, "FHD", "custom.mine"))
-        assertEquals("builtin.standard", PresetMatcher.matchActive(customs, 30, 2, 20, "FHD"))
+        val customs = listOf(custom("Mine", 30, 120, 20, "FHD", "custom.mine"))
+        assertEquals("builtin.standard", PresetMatcher.matchActive(customs, 30, 120, 20, "FHD"))
     }
 
     @Test fun matchActiveFallsBackToCustom() {
-        val customs = listOf(custom("Mine", 15, 3, 5, "FHD", "custom.mine"))
-        assertEquals("custom.mine", PresetMatcher.matchActive(customs, 15, 3, 5, "FHD"))
+        val customs = listOf(custom("Mine", 10, 120, 20, "FHD", "custom.mine"))
+        assertEquals("custom.mine", PresetMatcher.matchActive(customs, 10, 120, 20, "FHD"))
     }
 
     @Test fun matchActiveDuplicateTupleReturnsFirst() {
         val customs = listOf(
-            custom("First", 15, 3, 5, "FHD", "custom.first"),
-            custom("Second", 15, 3, 5, "FHD", "custom.second"),
+            custom("First", 15, 180, 5, "FHD", "custom.first"),
+            custom("Second", 15, 180, 5, "FHD", "custom.second"),
         )
-        assertEquals("custom.first", PresetMatcher.matchActive(customs, 15, 3, 5, "FHD"))
+        assertEquals("custom.first", PresetMatcher.matchActive(customs, 15, 180, 5, "FHD"))
     }
 
     @Test fun matchActiveNoMatchReturnsNull() {
-        val customs = listOf(custom("Mine", 15, 3, 5, "FHD", "custom.mine"))
-        assertNull(PresetMatcher.matchActive(customs, 99, 9, 9, "FHD"))
+        val customs = listOf(custom("Mine", 15, 180, 5, "FHD", "custom.mine"))
+        assertNull(PresetMatcher.matchActive(customs, 99, 540, 9, "FHD"))
     }
 }

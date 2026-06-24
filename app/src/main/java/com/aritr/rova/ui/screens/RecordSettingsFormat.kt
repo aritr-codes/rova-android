@@ -16,11 +16,13 @@ internal fun recordClipValue(seconds: Int): String = when {
 internal fun recordRepeatsValue(loopCount: Int): String =
     if (loopCount < 0) "Until you stop" else loopCount.toString()
 
-internal fun recordWaitValue(intervalMinutes: Int): String = when {
-    intervalMinutes <= 0 -> "None"
-    intervalMinutes == 60 -> "1 h"
-    intervalMinutes % 60 == 0 -> "${intervalMinutes / 60} h"
-    else -> "$intervalMinutes m"
+internal fun recordWaitValue(intervalSeconds: Int): String = when {
+    intervalSeconds <= 0 -> "None"
+    intervalSeconds < 60 -> "$intervalSeconds s"
+    intervalSeconds == 60 -> "1 m"
+    intervalSeconds % 3600 == 0 -> "${intervalSeconds / 3600} h"
+    intervalSeconds % 60 == 0 -> "${intervalSeconds / 60} m"
+    else -> "$intervalSeconds s"
 }
 
 /**

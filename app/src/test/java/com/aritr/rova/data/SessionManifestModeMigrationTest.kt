@@ -139,13 +139,14 @@ class SessionManifestModeMigrationTest {
     }
 
     @Test
-    fun `SCHEMA_VERSION is 12`() {
+    fun `SCHEMA_VERSION is 13`() {
+        // 12 -> 13: ADR-0033 intervalSeconds.
         // Bumped 11 -> 12 for ADR-0032 per-segment startedAtWallClock.
         // Previously: 10 -> 11 ADR-0029 PR-γ captureTopology/orientationPolicy axes;
         // 9 -> 10 ADR-0029 PR-α per-segment effectiveTargetRotation;
         // 8 -> 9 ADR-0027 daily-window schedule fields;
         // 7 -> 8 commit-before-finalize move-out pointers;
         // 6 -> 7 vault fields; 5 -> 6 ADR-0024 SAF target fields.
-        assertEquals(12, SessionManifest.SCHEMA_VERSION)
+        assertEquals(13, SessionManifest.SCHEMA_VERSION)
     }
 }

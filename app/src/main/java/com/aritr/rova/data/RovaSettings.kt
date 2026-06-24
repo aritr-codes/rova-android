@@ -50,15 +50,24 @@ class RovaSettings(context: Context) {
         if (prefs.contains("mode")) {
             prefs.edit { remove("mode") }
         }
+
+        // ADR-0033 — one-shot interval unit migration. The legacy "interval" key
+        // stored MINUTES; seconds live under the NEW "interval_seconds" key so a
+        // stored `5` is never reinterpreted as 5 seconds. Guarded => idempotent;
+        // runs at construction (not in the getter) so reads never write.
+        if (!prefs.contains("interval_seconds") && prefs.contains("interval")) {
+            prefs.edit { putInt("interval_seconds", prefs.getInt("interval", 1) * 60) }
+        }
     }
 
     var durationSeconds: Int
         get() = prefs.getInt("duration", 10)
         set(value) = prefs.edit { putInt("duration", value) }
 
-    var intervalMinutes: Int
-        get() = prefs.getInt("interval", 1)
-        set(value) = prefs.edit { putInt("interval", value) }
+    /** ADR-0033 — recording interval in SECONDS (migrated from legacy minutes in init). Default 60 s. */
+    var intervalSeconds: Int
+        get() = prefs.getInt("interval_seconds", 60)
+        set(value) = prefs.edit { putInt("interval_seconds", value) }
 
     var resolution: String
         get() = prefs.getString("resolution", QualityPresets.DEFAULT) ?: QualityPresets.DEFAULT
@@ -286,6 +295,7 @@ class RovaSettings(context: Context) {
     /** True if any recording-default pref key has ever been written (existing user). */
     fun hasAnyRecordingPref(): Boolean =
         prefs.contains("duration") || prefs.contains("interval") ||
+            prefs.contains("interval_seconds") ||
             prefs.contains("loop_count") || prefs.contains("resolution")
 
     // Storage retention — Keep latest N finalized recordings.
@@ -357,7 +367,7 @@ class RovaSettings(context: Context) {
 data class RovaPreset(
     val name: String,
     val duration: Int,
-    val interval: Int,
+    val intervalSeconds: Int, // ADR-0033 — seconds (was minutes prior to schema v3)
     val loopCount: Int, // -1 for infinite
     val resolution: String,
     /** Stable identity. Built-ins use the reserved `builtin.*` prefix; customs use `custom.*`. */

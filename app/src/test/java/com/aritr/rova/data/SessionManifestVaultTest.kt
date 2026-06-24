@@ -50,9 +50,10 @@ class SessionManifestVaultTest {
     }
 
     @Test
-    fun schemaVersion_isTwelve() {
+    fun schemaVersion_isThirteen() {
+        // 12 -> 13: ADR-0033 intervalSeconds.
         // 11 -> 12: ADR-0032 per-segment startedAtWallClock.
-        assertEquals(12, SessionManifest.SCHEMA_VERSION)
+        assertEquals(13, SessionManifest.SCHEMA_VERSION)
     }
 
     // B5 / ADR-0025 commit-before-finalize follow-up: the in-flight public

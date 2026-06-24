@@ -17,8 +17,8 @@ import com.aritr.rova.data.SessionConfig
  * - **Repeats** is [SessionConfig.loopCount]. The continuous sentinel
  *   `-1` (and any other negative value, defensively) renders as
  *   "Until you stop" so the dialog never surfaces a raw `-1`.
- * - **Wait** is [SessionConfig.intervalMinutes]. `0` renders as "None"
- *   per the chip vocabulary; multiples of 60 are rendered in hours.
+ * - **Wait** is [SessionConfig.intervalSeconds]. `0` renders as "None"
+ *   per the chip vocabulary; values below 60 render in seconds, multiples of 3600 in hours.
  * - **Quality** is [SessionConfig.resolution] — already a picker
  *   label (`"SD" / "HD" / "FHD" / "4K"`) per the `SessionConfig`
  *   KDoc; only trim + blank-fallback is applied.
@@ -42,13 +42,14 @@ internal object LibrarySessionConfigFormatters {
     fun formatRepeats(loopCount: Int): String =
         if (loopCount < 0) "Until you stop" else loopCount.toString()
 
-    fun formatWait(intervalMinutes: Int): String {
-        val m = intervalMinutes.coerceAtLeast(0)
-        if (m == 0) return "None"
-        if (m < 60) return "$m min"
-        val hours = m / 60
-        val mins = m % 60
-        return if (mins == 0) "$hours h" else "$hours h $mins min"
+    fun formatWait(intervalSeconds: Int): String {
+        val s = intervalSeconds.coerceAtLeast(0)
+        if (s == 0) return "None"
+        if (s < 60) return "$s s"
+        if (s % 3600 == 0) return "${s / 3600} h"
+        val minutes = s / 60
+        val rem = s % 60
+        return if (rem == 0) "$minutes min" else "$minutes min $rem s"
     }
 
     fun formatQuality(resolution: String): String =

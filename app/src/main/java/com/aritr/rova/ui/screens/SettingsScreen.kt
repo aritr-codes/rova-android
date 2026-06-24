@@ -134,7 +134,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
     val resolution by settingsViewModel.resolution.collectAsStateWithLifecycle()
     val durationSeconds by settingsViewModel.durationSeconds.collectAsStateWithLifecycle()
-    val intervalMinutes by settingsViewModel.intervalMinutes.collectAsStateWithLifecycle()
+    val intervalSeconds by settingsViewModel.intervalSeconds.collectAsStateWithLifecycle()
     val loopCount by settingsViewModel.loopCount.collectAsStateWithLifecycle()
     val themeSelection by settingsViewModel.themeSelection.collectAsStateWithLifecycle()
     val hideInVault by settingsViewModel.hideInVault.collectAsStateWithLifecycle()
@@ -324,7 +324,7 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     glyph = RovaIcons.Interval,
                     label = stringResource(R.string.settings_interval_label),
                     supporting = stringResource(R.string.settings_interval_supporting),
-                    value = recordWaitValue(intervalMinutes),
+                    value = recordWaitValue(intervalSeconds),
                     onClick = { openSheet = RecordingDefaultSheet.INTERVAL },
                     trailing = { ChevronTrailing() },
                 )
@@ -698,12 +698,12 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
         )
         RecordingDefaultSheet.INTERVAL -> SettingsStepperSheet(
             title = stringResource(R.string.settings_interval_label),
-            valueLabel = recordWaitValue(intervalMinutes),
-            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
-            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
+            valueLabel = recordWaitValue(intervalSeconds),
+            atMin = RecordSettingBounds.waitAtMin(intervalSeconds),
+            atMax = RecordSettingBounds.waitAtMax(intervalSeconds),
             onStep = { dir ->
-                settingsViewModel.intervalMinutes.value =
-                    RecordSettingBounds.stepWait(intervalMinutes, dir)
+                settingsViewModel.intervalSeconds.value =
+                    RecordSettingBounds.stepWait(intervalSeconds, dir)
             },
             onDismiss = { openSheet = null },
         )

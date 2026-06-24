@@ -52,7 +52,7 @@ class PlayerUriResolverVaultTest {
         startedAt = 1_715_000_000_000L,
         config = SessionConfig(
             durationSeconds = durationSeconds,
-            intervalMinutes = 0,
+            intervalSeconds = 0,
             resolution = "FHD",
             loopCount = segments.size.coerceAtLeast(1),
             captureTopology = mode

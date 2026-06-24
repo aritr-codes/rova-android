@@ -52,7 +52,7 @@ class SessionStoreExportMutatorsTest {
         initial = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -592,7 +592,7 @@ class SessionStoreExportMutatorsTest {
         val secondSession = store.createSession(
             config = SessionConfig(
                 durationSeconds = 60,
-                intervalMinutes = 10,
+                intervalSeconds = 600,
                 resolution = "HD",
                 loopCount = 2
             )

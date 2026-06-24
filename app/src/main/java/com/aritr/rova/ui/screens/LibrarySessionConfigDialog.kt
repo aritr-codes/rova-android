@@ -67,7 +67,7 @@ fun LibrarySessionConfigDialog(
                 HorizontalDivider(color = divider)
                 ConfigRow(
                     label = stringResource(R.string.history_config_wait),
-                    value = LibrarySessionConfigFormatters.formatWait(config.intervalMinutes)
+                    value = LibrarySessionConfigFormatters.formatWait(config.intervalSeconds)
                 )
                 HorizontalDivider(color = divider)
                 ConfigRow(

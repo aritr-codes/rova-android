@@ -114,7 +114,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Recording settings (A1: survive configuration changes) ---
     val duration = MutableStateFlow(settings.durationSeconds)
-    val interval = MutableStateFlow(settings.intervalMinutes)
+    val interval = MutableStateFlow(settings.intervalSeconds)
     val loopCount = MutableStateFlow(settings.loopCount)
     val resolution = MutableStateFlow(settings.resolution)
     val flashMode = MutableStateFlow(RovaRecordingService.FLASH_MODE_OFF)
@@ -177,7 +177,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
         // A1: Persist any settings changes back to SharedPreferences
         viewModelScope.launch { duration.collect { settings.durationSeconds = it } }
-        viewModelScope.launch { interval.collect { settings.intervalMinutes = it } }
+        viewModelScope.launch { interval.collect { settings.intervalSeconds = it } }
         viewModelScope.launch { loopCount.collect { settings.loopCount = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
 
@@ -213,11 +213,11 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         if (FirstRunSeedPolicy.shouldSeed(settings.presetSeeded, settings.hasAnyRecordingPref())) {
             val std = BuiltInPresets.default
             settings.durationSeconds = std.duration
-            settings.intervalMinutes = std.interval
+            settings.intervalSeconds = std.intervalSeconds
             settings.loopCount = std.loopCount
             settings.resolution = std.resolution
             duration.value = std.duration
-            interval.value = std.interval
+            interval.value = std.intervalSeconds
             loopCount.value = std.loopCount
             resolution.value = std.resolution
         }
@@ -240,7 +240,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         val s = _serviceState.value
         if (s.isPeriodicActive || s.isMerging) return
         duration.value = settings.durationSeconds
-        interval.value = settings.intervalMinutes
+        interval.value = settings.intervalSeconds
         loopCount.value = settings.loopCount
         resolution.value = settings.resolution
     }
@@ -376,7 +376,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         // shown when activePresetId == null), but guard the API anyway.
         if (PresetMatcher.matchActive(current, d, i, l, r) != null) return
         val updated = current + RovaPreset(
-            name = trimmed, duration = d, interval = i, loopCount = l, resolution = r,
+            name = trimmed, duration = d, intervalSeconds = i, loopCount = l, resolution = r,
         )
         _customPresets.value = updated
         persistPresets(updated) // encode() stamps a stable custom.* id
@@ -404,7 +404,7 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         val s = _serviceState.value
         if (s.isPeriodicActive || s.isMerging) return
         duration.value = preset.duration
-        interval.value = preset.interval
+        interval.value = preset.intervalSeconds
         loopCount.value = preset.loopCount
         resolution.value = preset.resolution
     }

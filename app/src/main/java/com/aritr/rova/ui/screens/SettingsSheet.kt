@@ -129,7 +129,7 @@ fun SettingsSheet(
     visible: Boolean,
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     currentMode: String,
     editable: Boolean,
@@ -169,7 +169,7 @@ fun SettingsSheet(
             visible = visible,
             durationSeconds = durationSeconds,
             loopCount = loopCount,
-            intervalMinutes = intervalMinutes,
+            intervalSeconds = intervalSeconds,
             quality = quality,
             currentMode = currentMode,
             editable = editable,
@@ -197,7 +197,7 @@ fun SettingsSheet(
             visible = visible,
             durationSeconds = durationSeconds,
             loopCount = loopCount,
-            intervalMinutes = intervalMinutes,
+            intervalSeconds = intervalSeconds,
             quality = quality,
             currentMode = currentMode,
             editable = editable,
@@ -234,7 +234,7 @@ private fun SettingsBottomSheet(
     visible: Boolean,
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     currentMode: String,
     editable: Boolean,
@@ -331,7 +331,7 @@ private fun SettingsBottomSheet(
                 SettingsContent(
                     durationSeconds = durationSeconds,
                     loopCount = loopCount,
-                    intervalMinutes = intervalMinutes,
+                    intervalSeconds = intervalSeconds,
                     quality = quality,
                     currentMode = currentMode,
                     editable = editable,
@@ -387,7 +387,7 @@ private fun SettingsSidePanel(
     visible: Boolean,
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     currentMode: String,
     editable: Boolean,
@@ -466,7 +466,7 @@ private fun SettingsSidePanel(
                 SettingsContent(
                     durationSeconds = durationSeconds,
                     loopCount = loopCount,
-                    intervalMinutes = intervalMinutes,
+                    intervalSeconds = intervalSeconds,
                     quality = quality,
                     currentMode = currentMode,
                     editable = editable,
@@ -603,7 +603,7 @@ private fun SettingsPeek(
 private fun SettingsContent(
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
     currentMode: String,
     editable: Boolean,
@@ -663,7 +663,7 @@ private fun SettingsContent(
                 presetName = activeName,
                 durationSeconds = durationSeconds,
                 loopCount = loopCount,
-                intervalMinutes = intervalMinutes,
+                intervalSeconds = intervalSeconds,
                 quality = quality,
             )
             Spacer(Modifier.height(SettingsSheetTokens.summaryBottomGap))
@@ -700,12 +700,12 @@ private fun SettingsContent(
         SheetRowDivider()
         StepperRow(
             label = stringResource(R.string.settings_sheet_wait_between),
-            value = recordWaitValue(intervalMinutes),
+            value = recordWaitValue(intervalSeconds),
             enabled = editable,
-            atMin = RecordSettingBounds.waitAtMin(intervalMinutes),
-            atMax = RecordSettingBounds.waitAtMax(intervalMinutes),
-            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalMinutes, dir)) },
-            editValue = intervalMinutes,
+            atMin = RecordSettingBounds.waitAtMin(intervalSeconds),
+            atMax = RecordSettingBounds.waitAtMax(intervalSeconds),
+            onStep = { dir -> onIntervalChange(RecordSettingBounds.stepWait(intervalSeconds, dir)) },
+            editValue = intervalSeconds,
             onSetValue = { onIntervalChange(RecordSettingBounds.clampWait(it)) },
         )
         SheetRowDivider()
@@ -1189,12 +1189,12 @@ private fun SettingsSummary(
     presetName: String?,
     durationSeconds: Int,
     loopCount: Int,
-    intervalMinutes: Int,
+    intervalSeconds: Int,
     quality: String,
 ) {
     val clips = stringResource(R.string.settings_summary_clips, recordClipValue(durationSeconds))
-    val every = if (intervalMinutes > 0) {
-        stringResource(R.string.settings_summary_every, recordWaitValue(intervalMinutes))
+    val every = if (intervalSeconds > 0) {
+        stringResource(R.string.settings_summary_every, recordWaitValue(intervalSeconds))
     } else {
         null
     }
@@ -1518,10 +1518,14 @@ private fun NewPresetTile(onClick: () -> Unit) {
 @Composable
 private fun presetSpokenDescription(p: RovaPreset): String {
     val clipPhrase = pluralStringResource(R.plurals.preset_cd_clip_seconds, p.duration, p.duration)
-    val waitPhrase = if (p.interval <= 0) {
-        stringResource(R.string.preset_cd_no_gap)
-    } else {
-        pluralStringResource(R.plurals.preset_cd_every_minutes, p.interval, p.interval)
+    val waitPhrase = when {
+        p.intervalSeconds <= 0 -> stringResource(R.string.preset_cd_no_gap)
+        p.intervalSeconds < 60 ->
+            pluralStringResource(R.plurals.preset_cd_every_seconds, p.intervalSeconds, p.intervalSeconds)
+        else -> {
+            val mins = p.intervalSeconds / 60
+            pluralStringResource(R.plurals.preset_cd_every_minutes, mins, mins)
+        }
     }
     val repeatsPhrase = if (p.loopCount < 0) {
         stringResource(R.string.preset_cd_until_stop)

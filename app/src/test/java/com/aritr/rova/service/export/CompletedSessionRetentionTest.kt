@@ -112,7 +112,7 @@ class CompletedSessionRetentionTest {
             startedAt = STARTED_AT,
             config = SessionConfig(
                 durationSeconds = 5,
-                intervalMinutes = 1,
+                intervalSeconds = 60,
                 resolution = "720p",
                 loopCount = 0
             ),

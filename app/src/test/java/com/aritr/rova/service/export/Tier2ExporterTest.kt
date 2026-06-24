@@ -63,7 +63,7 @@ class Tier2ExporterTest {
         initial = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -332,7 +332,7 @@ class Tier2ExporterTest {
         val seed = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )
@@ -369,7 +369,7 @@ class Tier2ExporterTest {
         val seed = store.createSession(
             config = SessionConfig(
                 durationSeconds = 30,
-                intervalMinutes = 5,
+                intervalSeconds = 300,
                 resolution = "FHD",
                 loopCount = 4
             )

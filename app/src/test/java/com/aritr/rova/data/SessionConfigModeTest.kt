@@ -8,13 +8,13 @@ import org.junit.Test
 class SessionConfigModeTest {
 
     private fun base(topology: String = "Single") = SessionConfig(
-        durationSeconds = 5, intervalMinutes = 0, resolution = "FHD", loopCount = 2,
+        durationSeconds = 5, intervalSeconds = 0, resolution = "FHD", loopCount = 2,
         captureTopology = topology,
     )
 
     @Test
     fun defaults_areSingle_followDevice_noLock_noLegacy() {
-        val c = SessionConfig(durationSeconds = 5, intervalMinutes = 0, resolution = "FHD", loopCount = 2)
+        val c = SessionConfig(durationSeconds = 5, intervalSeconds = 0, resolution = "FHD", loopCount = 2)
         assertEquals("Single", c.captureTopology)
         assertEquals("FollowDevice", c.orientationPolicy)
         assertEquals(-1, c.orientationLockRotation)

@@ -26,8 +26,8 @@ class RovaSettingsTest {
         assertEquals(10, settings().durationSeconds)
     }
 
-    @Test fun `intervalMinutes default is 1`() {
-        assertEquals(1, settings().intervalMinutes)
+    @Test fun `intervalSeconds default is 60`() {
+        assertEquals(60, settings().intervalSeconds)
     }
 
     @Test fun `resolution default is QualityPresets DEFAULT`() {
@@ -79,9 +79,23 @@ class RovaSettingsTest {
         assertEquals(30, s.durationSeconds)
     }
 
-    @Test fun `intervalMinutes round-trip`() {
-        val s = settings(); s.intervalMinutes = 5
-        assertEquals(5, s.intervalMinutes)
+    @Test fun `intervalSeconds round-trip`() {
+        val s = settings(); s.intervalSeconds = 120
+        assertEquals(120, s.intervalSeconds)
+    }
+
+    @Test fun intervalSeconds_migratesLegacyMinutesOnce() {
+        val main = hashMapOf<String, Any?>("interval" to 5) // old "interval"=5 minutes
+        // Pass the SAME map instance (settings() copies it) so the init-time
+        // migration's write-back is observable on `main`.
+        val s = settingsWithRuntime(main = main, runtime = HashMap())
+        assertEquals(300, s.intervalSeconds)
+        assertEquals(300, main["interval_seconds"])
+    }
+
+    @Test fun intervalSeconds_newKeyWins_overLegacy() {
+        val main = hashMapOf<String, Any?>("interval" to 5, "interval_seconds" to 30)
+        assertEquals(30, settings(main).intervalSeconds)
     }
 
     @Test fun `resolution round-trip`() {
@@ -284,7 +298,7 @@ class RovaSettingsTest {
 
         // 10 pre-existing keys round-trip from the blob
         assertEquals(30, s.durationSeconds)
-        assertEquals(5, s.intervalMinutes)
+        assertEquals(300, s.intervalSeconds) // legacy "interval"=5 minutes → migrated to 300 seconds
         assertEquals(QualityPresets.HD, s.resolution)
         assertEquals(100, s.loopCount)
         assertFalse(s.enableBeeps)

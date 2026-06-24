@@ -18,7 +18,7 @@ import kotlin.math.absoluteValue
  */
 object PresetJson {
 
-    private const val VERSION = 2
+    private const val VERSION = 3
 
     fun encode(customs: List<RovaPreset>): String {
         val arr = JSONArray()
@@ -27,7 +27,7 @@ object PresetJson {
                 put("id", ensureCustomId(p.id, p))
                 put("name", p.name)
                 put("duration", p.duration)
-                put("interval", p.interval)
+                put("interval", p.intervalSeconds) // key name kept; meaning now seconds (presetSchemaVersion=3)
                 put("loopCount", p.loopCount)
                 put("resolution", p.resolution)
             })
@@ -40,15 +40,21 @@ object PresetJson {
 
     fun decode(raw: String): List<RovaPreset> {
         val trimmed = raw.trim()
+        val version: Int
         val array: JSONArray = try {
             when {
-                trimmed.startsWith("[") -> JSONArray(trimmed)
-                trimmed.startsWith("{") -> JSONObject(trimmed).optJSONArray("presets") ?: JSONArray()
+                trimmed.startsWith("[") -> { version = 1; JSONArray(trimmed) }
+                trimmed.startsWith("{") -> {
+                    val root = JSONObject(trimmed)
+                    version = root.optInt("presetSchemaVersion", 1)
+                    root.optJSONArray("presets") ?: JSONArray()
+                }
                 else -> return emptyList()
             }
         } catch (e: Exception) {
             return emptyList()
         }
+        val toSeconds: (Int) -> Int = if (version >= 3) { v -> v } else { v -> v * 60 } // v<3 stored minutes
         val out = ArrayList<RovaPreset>(array.length())
         for (i in 0 until array.length()) {
             val obj = array.optJSONObject(i) ?: continue
@@ -56,10 +62,10 @@ object PresetJson {
                 RovaPreset(
                     name = obj.getString("name"),
                     duration = obj.getInt("duration"),
-                    interval = obj.getInt("interval"),
+                    intervalSeconds = toSeconds(obj.getInt("interval")),
                     loopCount = obj.getInt("loopCount"),
                     resolution = obj.getString("resolution"),
-                    id = "", // assigned below
+                    id = "",
                     isBuiltIn = false,
                 )
             } catch (e: Exception) {
@@ -74,7 +80,7 @@ object PresetJson {
     private fun ensureCustomId(rawId: String, p: RovaPreset): String {
         if (rawId.isNotEmpty() && rawId.startsWith("custom.")) return rawId
         // Missing, blank, or reserved `builtin.` -> derive a stable custom id.
-        val key = "${p.name}|${p.duration}|${p.interval}|${p.loopCount}|${p.resolution}"
+        val key = "${p.name}|${p.duration}|${p.intervalSeconds}|${p.loopCount}|${p.resolution}"
         // toLong() before absoluteValue: Int.MIN_VALUE.absoluteValue overflows to a
         // negative Int; widening to Long first keeps the derived id non-negative (review).
         return "custom." + key.hashCode().toLong().absoluteValue.toString(16)

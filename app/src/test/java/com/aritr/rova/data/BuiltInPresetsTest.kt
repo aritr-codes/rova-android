@@ -24,7 +24,7 @@ class BuiltInPresetsTest {
     @Test fun valueTuplesArePairwiseDistinct() {
         // Required so "modified -> Custom" is observable from values alone.
         val tuples = BuiltInPresets.all.map {
-            listOf(it.duration, it.interval, it.loopCount, QualityPresets.canonicalizeOrDefault(it.resolution))
+            listOf(it.duration, it.intervalSeconds, it.loopCount, QualityPresets.canonicalizeOrDefault(it.resolution))
         }
         assertEquals(tuples.size, tuples.toSet().size)
     }
@@ -32,12 +32,20 @@ class BuiltInPresetsTest {
     @Test fun valuesAreWithinBounds() {
         BuiltInPresets.all.forEach { p ->
             assertTrue(p.duration in RecordSettingBounds.CLIP_MIN..RecordSettingBounds.CLIP_MAX)
-            assertTrue(p.interval in RecordSettingBounds.WAIT_MIN..RecordSettingBounds.WAIT_MAX)
+            assertTrue(p.intervalSeconds in RecordSettingBounds.WAIT_ALLOWED)
             val loopOk = p.loopCount == RecordSettingBounds.REPEATS_CONTINUOUS ||
                 p.loopCount in RecordSettingBounds.REPEATS_MIN..RecordSettingBounds.REPEATS_MAX
             assertTrue("loopCount ${p.loopCount} out of bounds", loopOk)
             assertEquals(p.resolution, QualityPresets.canonicalizeOrDefault(p.resolution))
         }
+    }
+
+    @Test fun intervalSeconds_valuesMatchSpec() {
+        val byId = BuiltInPresets.all.associateBy { it.id }
+        assertEquals(60, byId["builtin.quick_sample"]!!.intervalSeconds)
+        assertEquals(120, byId["builtin.standard"]!!.intervalSeconds)
+        assertEquals(300, byId["builtin.long_session"]!!.intervalSeconds)
+        assertEquals(0, byId["builtin.continuous"]!!.intervalSeconds)
     }
 
     @Test fun standardIsDefaultId() {
