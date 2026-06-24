@@ -47,6 +47,7 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.LocalSecureFlagController
+import com.aritr.rova.ui.components.RecordHudFormatters
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.screens.HistoryRowFormatters
 import com.aritr.rova.ui.theme.IconRole
@@ -358,29 +359,111 @@ private fun InfoRow(state: PlayerUiState.Ready, progress: PlaybackProgress) {
     val currentClipDurationMs =
         state.segmentDurationsMs.getOrElse(math.currentClipIndex - 1) { state.perClipDurationMs }
     val perClipText = formatPerClip(currentClipDurationMs)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(
+                    R.string.player_position_per_clip,
+                    formatMmSs(progress.positionMs),
+                    perClipText
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.45f)
+            )
+            Text(
+                text = stringResource(
+                    R.string.player_clip_n_of_m,
+                    math.currentClipIndex,
+                    math.totalClips
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.72f)
+            )
+        }
+        WallClockReadout(state = state, positionMs = progress.positionMs)
+    }
+}
+
+/**
+ * PR-6b (ADR-0032) — wall-clock time-of-day readout for the current playhead
+ * position. Shows the real-world recording time (e.g. "2:47:03 PM") and an
+ * optional inter-clip gap chip when the player crosses a gap between segments.
+ *
+ * Approx prefix (~) is shown when the current segment's wall-start was
+ * synthesized (legacy schema or recovered orphan) — see [PlayerUiState.Ready.wallStartIsApproxMask].
+ *
+ * The readout is display-only (no clickable) to avoid requiring a semantics Role.
+ * The gap chip is static (no animation). Any future animated transition must gate
+ * on [com.aritr.rova.ui.components.rememberReduceMotion] per ADR-0020 /
+ * checkA11yAnimationGated.
+ */
+@Composable
+private fun WallClockReadout(state: PlayerUiState.Ready, positionMs: Long) {
+    val context = LocalContext.current
+
+    val zone = remember { java.util.TimeZone.getDefault() }
+    val locale = remember(context) { context.resources.configuration.locales[0] }
+    val is24h = remember(context) { android.text.format.DateFormat.is24HourFormat(context) }
+
+    val starts = state.segmentWallStartsMs
+    val durations = state.segmentDurationsMs
+    val approxMask = state.wallStartIsApproxMask
+
+    val spansMidnight = remember(starts, durations, zone) {
+        if (starts.isEmpty()) false
+        else WallClockTimeline.spansMidnight(
+            starts.first(),
+            starts.last() + (durations.lastOrNull() ?: 0L),
+            zone
+        )
+    }
+
+    val readout = remember(starts, durations, approxMask, positionMs) {
+        WallClockTimeline.readoutAt(starts, durations, approxMask, positionMs)
+    }
+
+    val timeText = remember(readout.instantMs, zone, locale, is24h, spansMidnight) {
+        RecordHudFormatters.formatTimeOfDay(readout.instantMs, zone, locale, is24h, spansMidnight)
+    }
+
+    val displayText = if (readout.isApprox) {
+        stringResource(R.string.player_wallclock_approx_prefix, timeText)
+    } else {
+        timeText
+    }
+    val cdText = stringResource(R.string.player_wallclock_cd, timeText)
+
+    val gapBeforeMs = readout.gapBeforeMs
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = stringResource(
-                R.string.player_position_per_clip,
-                formatMmSs(progress.positionMs),
-                perClipText
-            ),
+            text = displayText,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.45f)
+            color = Color.White.copy(alpha = 0.72f),
+            modifier = Modifier.semantics { contentDescription = cdText }
         )
-        Text(
-            text = stringResource(
-                R.string.player_clip_n_of_m,
-                math.currentClipIndex,
-                math.totalClips
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.72f)
-        )
+        if (gapBeforeMs != null) {
+            val gapText = RecordHudFormatters.formatWallClockGap(gapBeforeMs).resolve()
+            // Gap chip is static (no animation); if a future slice adds a
+            // fade-in it must read rememberReduceMotion() and gate with
+            // snap() when true (ADR-0020 / checkA11yAnimationGated).
+            Text(
+                text = gapText,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.55f)
+            )
+        }
     }
 }
 
