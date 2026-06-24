@@ -29,3 +29,7 @@ Users want Rova to record automatically on a daily time window (e.g. weekdays 09
 - The product is "tap once at the scheduled moment, walk away" — not zero-touch. This is the platform ceiling, set honestly in settings copy, not a design shortcut.
 - Future Android tightening only touches the notification seam; the trigger (alarm) and start (Activity→FGS) layers stay decoupled.
 - If the user denies notifications, the one-tap prompt is invisible — surfaced via the global `NOTIFICATIONS_DENIED` warning plus the Settings inline note + an on-enable permission request.
+
+## Presentation (2026-06-24)
+
+A `StopReason.SCHEDULE_WINDOW` stop reads as a planned success ("Ended on schedule"), NOT an alarm: no exceptional Library badge (a planned end is not exceptional), and a neutral-accent (`RovaWarnings.advisory`, blue) `RecoveryCardKind.SCHEDULED_END` recovery card. Display-only; terminal classification stays `Terminated.USER_STOPPED` + `StopReason.SCHEDULE_WINDOW` per decision 5/6 above. Taxonomy seam `data/StopCategory.kt`. See ADR-0016, ADR-0030, and `docs/superpowers/specs/2026-06-24-safety-stop-distinction-design.md`.

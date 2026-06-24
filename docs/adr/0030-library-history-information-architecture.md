@@ -49,6 +49,10 @@ Two design decisions need a recorded invariant.
 5. **Captions/badges over thumbnails carry a structural scrim** guaranteeing ≥4.5:1 (≥3:1 large) at the worst
    pixel — not a token gate (the background is an arbitrary video frame).
 
+## Amendment (2026-06-24): safety-stop badge
+
+A third exceptional badge `LibraryBadge.AUTO_STOPPED` (safety stops: `THERMAL` / `LOW_STORAGE`, both persisted as `USER_STOPPED` with a distinct `StopReason`) joins `RECOVERED` / `INTERRUPTED`. It reuses the locked `IconStatus.Interrupted` color (no new locked color — `checkStatusColorLocked` clean) with a reason-aware glyph (thermometer for thermal, storage for low-storage). Scheduled-window stops (`SCHEDULE_WINDOW`) remain badge-less — a planned end is not "exceptional" (decision 3 logic extended). This refines decision 3's badge set; the taxonomy is centralized in `data/StopCategory.kt` and shared with the recovery card. Display-only — no schema change. See ADR-0016, ADR-0027, and `docs/superpowers/specs/2026-06-24-safety-stop-distinction-design.md`.
+
 ## Consequences
 - No manifest schema change; no migration. Legacy file-scan rows (no manifest) gain favorite/rename for free
   (the sidecar keys on `stableKey`, which exists for every row).
