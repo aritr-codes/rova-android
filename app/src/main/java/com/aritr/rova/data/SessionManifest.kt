@@ -185,7 +185,9 @@ data class SessionManifest(
         // 9->10: SegmentRecord.effectiveTargetRotation per-clip device-driven
         //        orientation (ADR-0029 PR-α). Schema-<10 segments read null.
         // 10->11: captureTopology/orientationPolicy axes, legacy mode read-only (ADR-0029 PR-γ §6)
-        const val SCHEMA_VERSION = 11   // 6->7: vault fields (B5 / ADR-0025)
+        // 11->12: SegmentRecord.startedAtWallClock per-segment wall-clock start
+        //         (ADR-0032). Schema-<12 segments read null.
+        const val SCHEMA_VERSION = 12   // 6->7: vault fields (B5 / ADR-0025)
 
         fun fromJson(json: JSONObject): SessionManifest = SessionManifest(
             sessionId = json.getString("sessionId"),
@@ -337,6 +339,15 @@ data class SegmentRecord(
      * Recovery treats it as informational only (never a deletion input).
      */
     val effectiveTargetRotation: Int? = null,
+    /**
+     * PR-6b (ADR-0032) — epoch-ms wall-clock when this clip STARTED recording,
+     * sampled at segment start and threaded to finalize. `null` for legacy
+     * (schema < 12) records and recovered orphans with no start source.
+     * Informational only — never a recovery deletion/classification input
+     * (same status as [effectiveTargetRotation]). DualShot PORTRAIT/LANDSCAPE
+     * of the same loop carry the SAME value.
+     */
+    val startedAtWallClock: Long? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("filename", filename)
@@ -346,6 +357,8 @@ data class SegmentRecord(
         side?.let { put("side", it.name) }
         // PR-α — emit only when set so schema-9 single-rotation records keep byte-shape.
         effectiveTargetRotation?.let { put("effectiveTargetRotation", it) }
+        // PR-6b — emit only when set so schema-<12 records keep byte-shape.
+        startedAtWallClock?.let { put("startedAtWallClock", it) }
     }
 
     companion object {
@@ -360,6 +373,12 @@ data class SegmentRecord(
             // schema-9 records lack this key -> null (never fabricated).
             effectiveTargetRotation = if (json.has("effectiveTargetRotation")) {
                 json.getInt("effectiveTargetRotation")
+            } else {
+                null
+            },
+            // schema-<12 records lack this key -> null (never fabricated).
+            startedAtWallClock = if (json.has("startedAtWallClock")) {
+                json.getLong("startedAtWallClock")
             } else {
                 null
             },
