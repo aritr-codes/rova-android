@@ -20,6 +20,8 @@ import com.aritr.rova.service.export.VaultMoverBuilder
 import com.aritr.rova.ui.library.LibraryFilter
 import com.aritr.rova.ui.library.LibraryMetadataEntry
 import com.aritr.rova.ui.library.LibraryRow
+import com.aritr.rova.ui.library.PruneKeepSet
+import com.aritr.rova.ui.library.RecordingIdentity
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryUiState
@@ -313,7 +315,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
-            val mapped = rows.map { item -> toLibraryRow(item, snapshot[item.stableKey], locale, tz) }
+            val mapped = rows.map { item ->
+                val key = RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
+                val canonical = snapshot[key.canonical]
+                val legacy = key.legacy?.takeIf { it != key.canonical }?.let { snapshot[it] }
+                val meta = LibraryMetadataEntry.merge(canonical, legacy)
+                toLibraryRow(item, meta, locale, tz)
+            }
             // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
             LibraryUiState(
                 rows = mapped,
@@ -370,11 +378,21 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * optimistically flipped, so there is no desync to roll back — we log and raise
      * a non-blocking error signal. Off-main.
      */
+    private fun metaKeyForStableKey(stableKey: String): RecordingIdentity.MetaKey? {
+        val item = items.value.firstOrNull { it.stableKey == stableKey } ?: return null
+        return RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
+    }
+
     fun toggleFavorite(stableKey: String) {
         val store = libraryStore ?: return
+        val key = metaKeyForStableKey(stableKey) ?: run {
+            RovaLog.e("HistoryViewModel.toggleFavorite: item not in current list for $stableKey")
+            _sidecarWriteError.update { it + 1 }
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(stableKey) { it.copy(favorite = !it.favorite) }
+                store.update(key) { it.copy(favorite = !it.favorite) }
                 _sidecarRevision.update { it + 1 } // success → recompute reads the new snapshot
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.toggleFavorite: sidecar write failed for $stableKey", t)
@@ -390,10 +408,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun renameSession(stableKey: String, newTitle: String) {
         val store = libraryStore ?: return
+        val key = metaKeyForStableKey(stableKey) ?: run {
+            RovaLog.e("HistoryViewModel.renameSession: item not in current list for $stableKey")
+            _sidecarWriteError.update { it + 1 }
+            return
+        }
         val trimmed = newTitle.trim()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(stableKey) { it.copy(customTitle = trimmed.ifBlank { null }) }
+                store.update(key) { it.copy(customTitle = trimmed.ifBlank { null }) }
                 _sidecarRevision.update { it + 1 }
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
@@ -458,6 +481,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                     newItems = loadItemsList(emitPartial = true)
                 }
                 _items.value = newItems
+                pruneSidecar(newItems)
             } finally {
                 // Always clear the first-load latch, even if loadItemsList
                 // threw (filesystem / MediaMetadataRetriever failure) before
@@ -467,6 +491,34 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // state. Idempotent with the partial first-paint flip inside
                 // loadItemsList (which clears it earlier when rows exist).
                 _hasLoaded.value = true
+            }
+        }
+    }
+
+    /**
+     * Prunes orphaned sidecar entries after each successful items refresh.
+     * Keeps ALL finalized sessions on disk (including vaulted — durable) plus
+     * every legacy key visible in the current Library. Off-main; fire-and-forget.
+     */
+    private fun pruneSidecar(visibleItems: List<VideoItem>) {
+        val store = libraryStore ?: return
+        val rovaApp = getApplication<Application>() as? RovaApp ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val sessionStore = runCatching { rovaApp.sessionStore }.getOrNull() ?: return@launch
+                val allManifests: List<SessionManifest> = sessionStore.listSessionIds()
+                    .mapNotNull { sid -> runCatching { sessionStore.loadManifest(sid) }.getOrNull() }
+                // A session key survives prune only if its manifest loads here; keep this the sole
+                // source of finalized session ids so a transient load failure can't widen the prune.
+                val finalizedIds = HistoryArtifactMapper.finalizedManifests(allManifests)
+                    .map { it.sessionId }
+                val visibleLegacy = visibleItems.map {
+                    RecordingIdentity.legacyKey(it.file?.absolutePath, it.docUri?.toString())
+                }
+                val existing = store.snapshot().keys
+                store.prune(PruneKeepSet.build(finalizedIds, visibleLegacy, existing))
+            } catch (t: Throwable) {
+                RovaLog.e("HistoryViewModel.pruneSidecar failed", t)
             }
         }
     }

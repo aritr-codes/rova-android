@@ -2,18 +2,12 @@ package com.aritr.rova.ui.library
 
 import org.json.JSONObject
 
-/**
- * ADR-0030 — pure (de)serialize of the sidecar `stableKey → entry` map.
- * Uses org.json (real impl on testImplementation, so this is JVM-testable).
- * Tolerant: any parse failure yields an empty map (the sidecar is best-effort
- * cosmetic metadata — a corrupt file must never crash the Library).
- */
 object LibraryMetadataCodec {
-
     private const val FAVORITE = "favorite"
     private const val CUSTOM_TITLE = "customTitle"
     private const val LAST_PLAYED_AT = "lastPlayedAt"
-    private const val POSITION_MS = "positionMs"
+    private const val POSITIONS_BY_SIDE = "positionsBySide"
+    private const val LEGACY_POSITION_MS = "positionMs" // read-only back-compat (#127 interim)
 
     fun toJson(map: Map<String, LibraryMetadataEntry>): String {
         val root = JSONObject()
@@ -23,7 +17,12 @@ object LibraryMetadataCodec {
             if (e.favorite) obj.put(FAVORITE, true)
             if (e.customTitle != null) obj.put(CUSTOM_TITLE, e.customTitle)
             if (e.lastPlayedAt != null) obj.put(LAST_PLAYED_AT, e.lastPlayedAt)
-            e.positionMs?.let { if (it > 0L) obj.put(POSITION_MS, it) }
+            val positive = e.positionsBySide.filterValues { it > 0L }
+            if (positive.isNotEmpty()) {
+                val pos = JSONObject()
+                for ((slot, v) in positive) pos.put(slot, v)
+                obj.put(POSITIONS_BY_SIDE, pos)
+            }
             root.put(key, obj)
         }
         return root.toString()
@@ -40,17 +39,34 @@ object LibraryMetadataCodec {
                         favorite = obj.optBoolean(FAVORITE, false),
                         customTitle = if (obj.has(CUSTOM_TITLE) && !obj.isNull(CUSTOM_TITLE)) obj.getString(CUSTOM_TITLE) else null,
                         lastPlayedAt = if (obj.has(LAST_PLAYED_AT) && !obj.isNull(LAST_PLAYED_AT)) obj.getLong(LAST_PLAYED_AT) else null,
-                        positionMs = if (obj.has(POSITION_MS)) obj.optLong(POSITION_MS).takeIf { it > 0L } else null,
+                        positionsBySide = readPositions(obj),
                     )
                     if (!entry.isEmpty()) put(key, entry)
                 }
             }
         } catch (e: Exception) {
-            emptyMap()
+            emptyMap() // Tolerant: corrupt sidecar never crashes the Library.
         }
     }
 
-    /** Drop empty entries and any key absent from [keep] (deleted rows). */
+    private fun readPositions(obj: JSONObject): Map<String, Long> {
+        val nested = obj.optJSONObject(POSITIONS_BY_SIDE)
+        if (nested != null) {
+            val out = LinkedHashMap<String, Long>()
+            for (slot in nested.keys()) {
+                val v = nested.optLong(slot)
+                if (v > 0L) out[slot] = v
+            }
+            return out
+        }
+        // Back-compat: old flat positionMs → single slot.
+        if (obj.has(LEGACY_POSITION_MS)) {
+            val v = obj.optLong(LEGACY_POSITION_MS)
+            if (v > 0L) return mapOf("" to v)
+        }
+        return emptyMap()
+    }
+
     fun prune(map: Map<String, LibraryMetadataEntry>, keep: Set<String>): Map<String, LibraryMetadataEntry> =
         map.filter { (k, v) -> k in keep && !v.isEmpty() }
 }
