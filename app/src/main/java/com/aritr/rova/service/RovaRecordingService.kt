@@ -2775,6 +2775,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             recordingFinalized = CompletableDeferred()
             val recordingResult = CompletableDeferred<Boolean>()
 
+            // PR-6b (ADR-0032): per-iteration wall-clock stamp captured immediately
+            // before start so it is isolated to this segment's closure. A service-level
+            // var would be clobbered by the next iteration before finalize fires.
+            val segmentStartWallClock = System.currentTimeMillis()
+
             currentRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
@@ -2828,6 +2833,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                                     filename = capturedFilename,
                                     durationMs = capturedDurationMs,
                                     effectiveTargetRotation = segmentRotation,
+                                    startedAtWallClock = segmentStartWallClock,
                                 )
                                 pendingPersistJobs.add(deferred)
                                 // PR-α (ADR-0029 §Decision 2) — carry this clip's
@@ -3064,6 +3070,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var watchdogSid: String? = null
         var watchdogArmed = false
 
+        // PR-6b (ADR-0032): per-iteration wall-clock stamp captured immediately
+        // before start so it is isolated to this segment's closure. A service-level
+        // var would be clobbered by the next iteration before finalize fires.
+        // Both PORTRAIT and LANDSCAPE sides of this iteration share the same value
+        // (they start simultaneously from the same recorder.start() call).
+        val segmentStartWallClock = System.currentTimeMillis()
+
         try {
             currentDualRecording = recorder.start(
                 outputs = output,
@@ -3076,6 +3089,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     landscapeFile = landscapeFile,
                     durationMs = durationMs,
                     recordingResult = recordingResult,
+                    segmentStartWallClock = segmentStartWallClock,
                 )
             }
 
@@ -3189,6 +3203,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         landscapeFile: java.io.File,
         durationMs: Long,
         recordingResult: CompletableDeferred<Boolean>,
+        segmentStartWallClock: Long,
     ) {
         when (event) {
             is com.aritr.rova.service.dualrecord.DualRecordEvent.Start -> {
@@ -3216,6 +3231,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             sizeBytes = pFile.length(),
                             sha1 = com.aritr.rova.data.SessionStore.sha1Of(pFile),
                             side = com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT,
+                            startedAtWallClock = segmentStartWallClock,
                         )
                         sessionStore.appendSegment(sessionId, rec)
                         rec
@@ -3231,6 +3247,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
                             sizeBytes = lFile.length(),
                             sha1 = com.aritr.rova.data.SessionStore.sha1Of(lFile),
                             side = com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE,
+                            startedAtWallClock = segmentStartWallClock,
                         )
                         sessionStore.appendSegment(sessionId, rec)
                         rec
