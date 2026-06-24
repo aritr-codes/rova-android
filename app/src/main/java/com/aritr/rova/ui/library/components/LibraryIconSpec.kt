@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.library.components
 
+import com.aritr.rova.data.StopReason
 import com.aritr.rova.ui.library.LibraryBadge
 import com.aritr.rova.ui.theme.IconStatus
 import com.aritr.rova.ui.theme.RovaGlyph
@@ -32,11 +33,14 @@ internal object LibraryIconSpec {
      * compile time. Callers render via the single-layer [SemanticIcon] imageVector overload with
      * `status = badgeGlyph(badge).status`; no raw tint, no role (status wins).
      */
-    fun badgeGlyph(badge: LibraryBadge): RovaIcon = when (badge) {
+    fun badgeGlyph(badge: LibraryBadge, stopReason: StopReason? = null): RovaIcon = when (badge) {
         LibraryBadge.RECOVERED -> RovaIcons.Recovered
         LibraryBadge.INTERRUPTED -> RovaIcons.Interrupted
-        // Safety auto-stop: thermal glyph with the locked Interrupted color. Task 4 refines
-        // the glyph to be reason-aware (thermometer vs storage). No `.copy` — checkStatusColorLocked clean.
-        LibraryBadge.AUTO_STOPPED -> RovaIcon(RovaGlyphs.Thermal.outline, status = IconStatus.Interrupted)
+        // Reason-aware safety glyph: thermometer for THERMAL, storage for LOW_STORAGE, both with
+        // the locked Interrupted color. No `.copy` — checkStatusColorLocked clean.
+        LibraryBadge.AUTO_STOPPED -> when (stopReason) {
+            StopReason.LOW_STORAGE -> RovaIcon(RovaGlyphs.Storage.outline, status = IconStatus.Interrupted)
+            else -> RovaIcon(RovaGlyphs.Thermal.outline, status = IconStatus.Interrupted)
+        }
     }
 }

@@ -67,8 +67,8 @@ fun OverlayPill(text: String, modifier: Modifier = Modifier) {
  * Semantics cleared at the pill level — the merged tile description is the authoritative a11y node.
  */
 @Composable
-fun StatusBadgePill(badge: LibraryBadge, text: String, modifier: Modifier = Modifier) {
-    val icon = LibraryIconSpec.badgeGlyph(badge)
+fun StatusBadgePill(badge: LibraryBadge, text: String, stopReason: com.aritr.rova.data.StopReason? = null, modifier: Modifier = Modifier) {
+    val icon = LibraryIconSpec.badgeGlyph(badge, stopReason)
     Row(
         modifier
             .clearAndSetSemantics {}

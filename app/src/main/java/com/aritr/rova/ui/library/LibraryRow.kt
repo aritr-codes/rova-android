@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.library
 
 import com.aritr.rova.data.CaptureTopology
+import com.aritr.rova.data.StopReason
 
 /**
  * ADR-0030 — pure row model the Library grid/list/hero render and [LibraryQuery]
@@ -32,6 +33,8 @@ data class LibraryRow(
      * resolution. null = no verdict (square / legacy / SAF) → the card renders no glyph.
      */
     val orientation: LibraryOrientation? = null,
+    /** When [badge] == AUTO_STOPPED, the gate reason (THERMAL/LOW_STORAGE) that picks the badge glyph. Else null. */
+    val badgeStopReason: StopReason? = null,
 )
 
 /** Sort options for the Library (decision C). */

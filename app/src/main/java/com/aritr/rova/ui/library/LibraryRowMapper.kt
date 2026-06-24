@@ -41,6 +41,7 @@ object LibraryRowMapper {
         val durationMs = input.segmentDurationsMs.sum()
         val derived = SmartTitle.derive(input.startedAtMillis, locale, tz)
         val title = input.customTitle?.takeIf { it.isNotBlank() } ?: derived
+        val badge = StatusBadgePolicy.badgeFor(input.terminated, input.stopReason, input.exportState)
         return LibraryRow(
             stableKey = input.stableKey,
             title = title,
@@ -52,7 +53,8 @@ object LibraryRowMapper {
             // clip-count chip hides; the persisted-segment list = exactly the player's playable clips.
             clipCount = input.segmentDurationsMs.size,
             topology = CaptureTopology.fromPersisted(input.topologyPersisted),
-            badge = StatusBadgePolicy.badgeFor(input.terminated, input.stopReason, input.exportState),
+            badge = badge,
+            badgeStopReason = if (badge == LibraryBadge.AUTO_STOPPED) input.stopReason else null,
             favorite = input.favorite,
             orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
         )
