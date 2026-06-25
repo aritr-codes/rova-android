@@ -69,8 +69,7 @@ internal fun rulePresetNoOrientation(files: List<SourceFile>): String? {
  * Verbatim lift of checkNoLegacyModeStrings.
  * Forbid "Portrait"|"Landscape"|"PortraitLandscape" string literals in .kt files,
  * except in the three legacy read-compat allowlisted paths.
- * Comment-skip: lines starting with // or * or starting with slash-star (after trimStart)
- * are skipped — old gate had: t.startsWith("//") || t.startsWith("*") || t.startsWith(slash-star).
+ * Comment handling: detection on f.strippedLines (CommentStripper); string literals kept so real mode-string literals still match; report uses the raw line.
  * Empty input: null (forbid gate, no files = no offenders).
  */
 internal fun ruleNoLegacyModeStrings(files: List<SourceFile>): String? {
@@ -85,9 +84,9 @@ internal fun ruleNoLegacyModeStrings(files: List<SourceFile>): String? {
         val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
         if (allow.any { rel.endsWith(it) }) return@forEach
         f.lines.forEachIndexed { i, line ->
-            val t = line.trimStart()
-            if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-            if (legacyMode.containsMatchIn(line)) {
+            // Detect on the comment-stripped line (string literals kept verbatim,
+            // so a real "Portrait" literal still matches); report the RAW line.
+            if (legacyMode.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) {
                 offenders += "$rel:${i + 1}: ${line.trim()}"
             }
         }
@@ -130,7 +129,7 @@ internal fun ruleSetTargetRotationBoundaryOnly(files: List<SourceFile>): String?
 /**
  * Verbatim lift of checkFrontBackCapabilityGated.
  * Forbid "FrontBack" outside data/CaptureTopology.kt and ui/screens/CaptureModes.kt.
- * Comment-skip: lines starting with // or * or slash-star (after trimStart) are skipped.
+ * Comment handling: detection on f.strippedLines (CommentStripper).
  * Empty input: null (forbid gate, no files = no offenders).
  */
 internal fun ruleFrontBackCapabilityGated(files: List<SourceFile>): String? {
@@ -140,9 +139,8 @@ internal fun ruleFrontBackCapabilityGated(files: List<SourceFile>): String? {
         val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
         if (allow.any { rel.endsWith(it) }) return@forEach
         f.lines.forEachIndexed { i, line ->
-            val t = line.trimStart()
-            if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-            if (line.contains("FrontBack")) offenders += "$rel:${i + 1}"
+            // Detect on the comment-stripped line; report is "$rel:line" (no content).
+            if (f.strippedLines.getOrElse(i) { "" }.contains("FrontBack")) offenders += "$rel:${i + 1}"
         }
     }
     if (offenders.isNotEmpty()) {

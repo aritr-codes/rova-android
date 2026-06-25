@@ -198,7 +198,9 @@ class ModeRotationRulesTest {
         // Lines starting with // * or slash-star are skipped.
         val body = """
             // val mode = "Portrait"
-            * "Landscape" — legacy
+            /*
+             * "Landscape" — legacy
+             */
             /* "PortraitLandscape" was the old value */
         """.trimIndent()
         val files = listOf(
@@ -233,6 +235,17 @@ class ModeRotationRulesTest {
             src("app/src/main/java/com/aritr/rova/data/RovaSettings.kt", body)
         )
         assertNull(RovaGateRules.run("checkNoLegacyModeStrings", files))
+    }
+
+    @Test
+    fun noLegacyModeStrings_catchesLiteralAfterInlineBlockComment() {
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt"
+        val body = "    /* legacy */ val m = \"Portrait\""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkNoLegacyModeStrings", files)
+        val expected = "ADR-0029 PR-γ §6: legacy mode strings in live paths (use CaptureTopology):\n" +
+            "ui/screens/SomeScreen.kt:1: /* legacy */ val m = \"Portrait\""
+        assertEquals(expected, msg)
     }
 
     // ─── checkSetTargetRotationBoundaryOnly ───────────────────────────────────
@@ -334,7 +347,9 @@ class ModeRotationRulesTest {
         // Lines starting with // * or slash-star are skipped.
         val body = """
             // FrontBack is not supported
-            * FrontBack — deferred
+            /*
+             * FrontBack — deferred
+             */
             /* val fb = FrontBack */
         """.trimIndent()
         val files = listOf(
@@ -361,5 +376,16 @@ class ModeRotationRulesTest {
             src("app/src/main/java/com/aritr/rova/ui/screens/CaptureModes.kt", body)
         )
         assertNull(RovaGateRules.run("checkFrontBackCapabilityGated", files))
+    }
+
+    @Test
+    fun frontBackCapabilityGated_catchesAfterInlineBlockComment() {
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt"
+        val body = "    /* note */ val t = FrontBack"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkFrontBackCapabilityGated", files)
+        val expected = "ADR-0029 §5: FrontBack outside the capability-gated registry:\n" +
+            "ui/screens/SomeScreen.kt:1"
+        assertEquals(expected, msg)
     }
 }
