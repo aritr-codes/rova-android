@@ -436,4 +436,46 @@ class A11yI18nRulesTest {
         )
         assertNull(RovaGateRules.run("checkA11yTargetSizeToken", files))
     }
+
+    @Test
+    fun a11yTargetSizeToken_catchesTokenAfterInlineBlockComment() {
+        // F2 hole: `/* … */` then a sub-floor token on one line used to be
+        // dropped wholesale by the startsWith("/*") skip.
+        val relPath = "app/src/main/java/com/aritr/rova/ui/theme/RovaTokens.kt"
+        val body = "    /* tweaked */ val camControlSize = 20.dp"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkA11yTargetSizeToken", files)
+        val expected = "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 2.5.8 Target " +
+            "Size (Minimum)): an interactive-target size token is below " +
+            "the 24.dp accessibility floor. A tappable control's size " +
+            "token (button diameter / tap box / FAB / tile) " +
+            "must be >= 24.dp. (Material 3's 48dp is a guideline; 24dp is " +
+            "the WCAG AA bar.) Raise the token, or — if the 24dp touch " +
+            "floor is met by call-site padding/`heightIn` rather than the " +
+            "token itself — add `// a11y-opt-out: <reason>` (reason " +
+            "required) on the token line.\nOffenders:\n" +
+            "  $relPath:1: /* tweaked */ val camControlSize = 20.dp"
+        assertEquals(expected, msg)
+    }
+
+    @Test
+    fun a11yTargetSizeToken_stringSlashStarDoesNotDisableGate() {
+        // F1 hole: a `/*` inside a string literal used to set inBlock=true and
+        // never clear, silently disabling the gate for the rest of the file.
+        val relPath = "app/src/main/java/com/aritr/rova/ui/theme/RovaTokens.kt"
+        val body = "    val label = \"a /* not a comment\"\n    val camControlSize = 18.dp"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkA11yTargetSizeToken", files)
+        val expected = "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 2.5.8 Target " +
+            "Size (Minimum)): an interactive-target size token is below " +
+            "the 24.dp accessibility floor. A tappable control's size " +
+            "token (button diameter / tap box / FAB / tile) " +
+            "must be >= 24.dp. (Material 3's 48dp is a guideline; 24dp is " +
+            "the WCAG AA bar.) Raise the token, or — if the 24dp touch " +
+            "floor is met by call-site padding/`heightIn` rather than the " +
+            "token itself — add `// a11y-opt-out: <reason>` (reason " +
+            "required) on the token line.\nOffenders:\n" +
+            "  $relPath:2: val camControlSize = 18.dp"
+        assertEquals(expected, msg)
+    }
 }
