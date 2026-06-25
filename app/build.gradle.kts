@@ -1093,14 +1093,6 @@ val checkSingleColorSchemeSource = tasks.register<com.aritr.rova.gradle.SourceCh
     sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSingleColorSchemeSource.ok"))
 }
 
-// shared: a `// colorscheme-source-opt-out` on the same or previous line waives a hit
-fun waived(text: String, idx: Int): Boolean {
-    val lineStart = text.lastIndexOf('\n', idx).let { if (it < 0) 0 else it }
-    val lineEnd = text.indexOf('\n', idx).let { if (it < 0) text.length else it }
-    val prevStart = text.lastIndexOf('\n', (lineStart - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it }
-    return text.substring(prevStart, lineEnd).contains("colorscheme-source-opt-out")
-}
-
 val checkRecordSurfaceNoBlur = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecordSurfaceNoBlur") {
     group = "verification"
     description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
@@ -1141,7 +1133,10 @@ val checkRecordChromeLockSingleSite = tasks.register<com.aritr.rova.gradle.Sourc
     sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecordChromeLockSingleSite.ok"))
 }
 
-afterEvaluate {
+// preBuild gate wiring — pluginManager.withPlugin (not afterEvaluate) so it fires
+// once AGP has registered preBuild, without the fragile afterEvaluate ordering
+// (config-cache-safe; the 46 gates are typed SourceCheckTasks in build-logic).
+pluginManager.withPlugin("com.android.application") {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
         dependsOn(checkScheduleReceiverNoFgsStart)
