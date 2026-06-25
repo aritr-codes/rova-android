@@ -814,43 +814,14 @@ val checkLocaleConfigNoPseudolocale = tasks.register<com.aritr.rova.gradle.Sourc
 // ADR-0026 — a preset is a config bundle ONLY; orientation/mode must never become
 // a RovaPreset field, or the preset/orientation vocabulary collision returns.
 // Scans the two preset source files for an orientation/mode property declaration.
-val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
+val checkPresetNoOrientation = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkPresetNoOrientation") {
     group = "verification"
     description = "Forbid an orientation/mode field on RovaPreset/BuiltInPresets — preset = config bundle only (ADR-0026)."
-    val files = listOf(
-        file("src/main/java/com/aritr/rova/data/RovaSettings.kt"),
-        file("src/main/java/com/aritr/rova/data/BuiltInPresets.kt"),
-    )
-    inputs.files(files).withPropertyName("presetSources")
-    doLast {
-        // `val mode`/`var mode`/`val orientation` etc. as a declared property.
-        val offendingProp = Regex("""(^|\s)(val|var)\s+(mode|orientation)\b""")
-        // RovaPreset's parameter list must not name a mode/orientation field.
-        val ctorParam = Regex("""\b(mode|orientation)\s*:""")
-        val rovaPresetSrc = files[0]
-        if (!rovaPresetSrc.exists()) {
-            throw GradleException("checkPresetNoOrientation: source missing: $rovaPresetSrc")
-        }
-        // Narrow to the RovaPreset declaration block to avoid matching unrelated
-        // `mode` usage elsewhere in RovaSettings.kt (e.g. the legacy `mode` pref).
-        val text = rovaPresetSrc.readText()
-        val start = text.indexOf("data class RovaPreset")
-        if (start >= 0) {
-            val end = text.indexOf(")", start).let { if (it < 0) text.length else it }
-            val block = text.substring(start, end)
-            if (ctorParam.containsMatchIn(block)) {
-                throw GradleException(
-                    "checkPresetNoOrientation: RovaPreset must not declare a mode/orientation field (ADR-0026)."
-                )
-            }
-        }
-        val builtIns = files[1]
-        if (builtIns.exists() && offendingProp.containsMatchIn(builtIns.readText())) {
-            throw GradleException(
-                "checkPresetNoOrientation: BuiltInPresets must not declare a mode/orientation property (ADR-0026)."
-            )
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/data/RovaSettings.kt"))
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/data/BuiltInPresets.kt"))
+    checkId.set("checkPresetNoOrientation")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkPresetNoOrientation.ok"))
 }
 
 // ADR-0030 gate (42nd) — Library/History UI must never mutate a SessionManifest.
@@ -1009,80 +980,43 @@ val checkStatusColorLocked = tasks.register("checkStatusColorLocked") {
 // orientation-carrying mode strings; read-compat sites are allowlisted (§6).
 // Comment/KDoc lines are skipped: documenting a legacy value is legal,
 // branching on one is not.
-val checkNoLegacyModeStrings = tasks.register("checkNoLegacyModeStrings") {
+val checkNoLegacyModeStrings = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkNoLegacyModeStrings") {
     group = "verification"
     description = "Forbid \"Portrait\"/\"Landscape\"/\"PortraitLandscape\" string literals outside legacy read-compat (ADR-0029 PR-γ §6)."
-    val allow = setOf(
-        "data/SessionManifest.kt",   // legacy "mode" JSON read-tolerance
-        "data/ModeMigration.kt",     // the migration mapper itself
-        "data/RovaSettings.kt",      // one-shot prefs migration
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
     )
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            if (allow.any { rel.endsWith(it) }) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                if (Regex("\"(Portrait|Landscape|PortraitLandscape)\"").containsMatchIn(line)) {
-                    offenders += "$rel:${i + 1}: ${line.trim()}"
-                }
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0029 PR-γ §6: legacy mode strings in live paths (use CaptureTopology):\n" +
-                    offenders.joinToString("\n")
-            )
-        }
-    }
+    checkId.set("checkNoLegacyModeStrings")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkNoLegacyModeStrings.ok"))
 }
 
 // ADR-0029 PR-γ gate 2 — rotation applies only at segment boundaries (§3):
 // setTargetRotation is reachable only from the allowlisted capture files.
-val checkSetTargetRotationBoundaryOnly = tasks.register("checkSetTargetRotationBoundaryOnly") {
+val checkSetTargetRotationBoundaryOnly = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSetTargetRotationBoundaryOnly") {
     group = "verification"
     description = "setTargetRotation only in RovaRecordingService/dualrecord (ADR-0029 §3 segment-boundary rule)."
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            val allowed = rel.endsWith("service/RovaRecordingService.kt") || rel.contains("service/dualrecord/")
-            if (allowed) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                if (line.contains("setTargetRotation(")) offenders += "$rel:${i + 1}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §3: setTargetRotation outside boundary-owning files:\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
+    )
+    checkId.set("checkSetTargetRotationBoundaryOnly")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSetTargetRotationBoundaryOnly.ok"))
 }
 
 // ADR-0029 PR-γ gate 3 — FrontBack construction is capability-gated (§5):
 // the topology may be referenced only by its declaration and the registry
 // that owns the capability gate. PR-δ extends the allowlist with the
 // concurrent-camera module it builds.
-val checkFrontBackCapabilityGated = tasks.register("checkFrontBackCapabilityGated") {
+val checkFrontBackCapabilityGated = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkFrontBackCapabilityGated") {
     group = "verification"
     description = "\"FrontBack\" referenced only in CaptureTopology/CaptureModes (capability gate site) (ADR-0029 §5)."
-    val allow = setOf("data/CaptureTopology.kt", "ui/screens/CaptureModes.kt")
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            if (allow.any { rel.endsWith(it) }) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                if (line.contains("FrontBack")) offenders += "$rel:${i + 1}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §5: FrontBack outside the capability-gated registry:\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
+    )
+    checkId.set("checkFrontBackCapabilityGated")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkFrontBackCapabilityGated.ok"))
 }
 
 // ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).

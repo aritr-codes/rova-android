@@ -43,6 +43,10 @@ object RovaGateRules {
         put("checkA11yAnimationGated", ::ruleA11yAnimationGated)
         put("checkA11yClickableHasRole", ::ruleA11yClickableHasRole)
         put("checkA11yTargetSizeToken", ::ruleA11yTargetSizeToken)
+        put("checkPresetNoOrientation", ::rulePresetNoOrientation)
+        put("checkNoLegacyModeStrings", ::ruleNoLegacyModeStrings)
+        put("checkSetTargetRotationBoundaryOnly", ::ruleSetTargetRotationBoundaryOnly)
+        put("checkFrontBackCapabilityGated", ::ruleFrontBackCapabilityGated)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {
