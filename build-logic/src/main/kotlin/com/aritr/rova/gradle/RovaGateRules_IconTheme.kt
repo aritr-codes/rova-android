@@ -178,8 +178,7 @@ internal fun ruleRecordChromeLockSingleSite(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkLibraryNoManifestWrite.
  * Scope: files under ui/library/ or ui/screens/ containing "History" or "Library".
- * Comment-skip: lines starting with //, *, or slash-star (after trimStart).
- * Inline // stripped via substringBefore("//").
+ * Comment handling: detection on f.strippedLines (CommentStripper); report uses the raw line.
  */
 internal fun ruleLibraryNoManifestWrite(files: List<SourceFile>): String? {
     val forbidden = listOf(
@@ -203,9 +202,10 @@ internal fun ruleLibraryNoManifestWrite(files: List<SourceFile>): String? {
             (rel.startsWith("ui/screens/") && (rel.contains("History") || rel.contains("Library")))
         if (!inScope) return@forEach
         f.lines.forEachIndexed { i, line ->
-            val t = line.trimStart()
-            if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-            val code = line.substringBefore("//")
+            // Detect on the comment-stripped line (shared CommentStripper) so a
+            // `/* … */`-then-code line or a string-literal marker can no longer
+            // hide a forbidden manifest write. Report the RAW line (bytes unchanged).
+            val code = f.strippedLines.getOrElse(i) { "" }
             if (callRegex.containsMatchIn(code)) offenders += "$rel:${i + 1}: ${line.trim()}"
         }
     }
