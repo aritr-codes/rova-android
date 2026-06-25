@@ -176,6 +176,13 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
  * Non-comment text: lines filtered by trimStart() not starting with "//", "*", or
  * block-comment opener, joined with "\n".
  *
+ * NOTE (comment-strip hardening 2026-06-25): NOT migrated to CommentStripper.
+ * This is a co-presence REQUIRE; its comment-prefix skip filter (trimStart
+ * startsWith "//", "*", or a block-comment opener) only ever causes
+ * over-strictness (a token hidden after a same-line block comment is dropped →
+ * the require false-FAILS), never a false-PASS. Migrating would shift behavior
+ * in the lenient direction — out of scope for the false-pass-hardening track.
+ *
  * EMPTY-INPUT REASONING: if no file in the set calls resolver.query(, the gate passes
  * vacuously (null). This matches the old behaviour: the old code returned early with no
  * offenders if no file matched the query pattern.

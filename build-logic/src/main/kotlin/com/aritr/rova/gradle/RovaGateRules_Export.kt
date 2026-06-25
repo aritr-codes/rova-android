@@ -259,6 +259,12 @@ internal fun ruleExportNoCopyToPublicMovies(files: List<SourceFile>): String? {
  * block-comment opener before token checks, so a doc-only mention does not
  * satisfy the gate; the gate must be exercised by code.
  *
+ * NOTE (comment-strip hardening 2026-06-25): NOT migrated to CommentStripper —
+ * same rationale as ruleExportPendingVisibilityOnQuery. This is a co-presence
+ * REQUIRE; the block-opener prefix-skip edge only over-strictly FAILS (never
+ * false-PASSES), so closing it would change behavior in the lenient direction,
+ * out of scope here.
+ *
  * Required tokens (5):
  *   AUTO_DISCARD_ELIGIBLE, privateTempPath, RetryableFailure, ManifestWriteFailed, QueryFailed
  */
