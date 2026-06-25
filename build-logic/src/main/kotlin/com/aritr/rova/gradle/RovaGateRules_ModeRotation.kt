@@ -1,0 +1,153 @@
+package com.aritr.rova.gradle
+
+/**
+ * Verbatim lifts of four former app/build.gradle.kts inline gate bodies
+ * (mode/rotation/preset gates — ADR-0026, ADR-0029).
+ * Mechanical swaps only vs the inline body:
+ *   - iterate [files] parameter instead of fileTree("src/main/java") / listOf(file(...))
+ *   - f.lines / f.text / f.relPath instead of readLines() / readText() / relativeTo(rootDir)
+ *   - return message instead of throw GradleException(message); return null to pass
+ *   - #1 (checkPresetNoOrientation): two-file structural; empty input -> return null (no
+ *     source to check); file-missing check preserved for RovaSettings.kt via firstOrNull
+ *   - #2 (checkNoLegacyModeStrings): forbid gate; exclusion by relPath suffix; comment-skip
+ *   - #3 (checkSetTargetRotationBoundaryOnly): forbid gate; exclusion by relPath suffix; NO
+ *     comment-skip (scans ALL lines including comments — old gate had no skip logic)
+ *   - #4 (checkFrontBackCapabilityGated): forbid gate; exclusion by relPath suffix; comment-skip
+ *   - Separator note: relPath preserves platform separator (Windows '\', Linux '/').
+ *     Local .replace('\\','/') is used ONLY for suffix matching (same as old gate);
+ *     the reported relPath is never normalised — byte-identical to old gate output.
+ */
+
+// ─── checkPresetNoOrientation ─────────────────────────────────────────────────
+
+/**
+ * Verbatim lift of checkPresetNoOrientation.
+ * Scope: two specific files — RovaSettings.kt (RovaPreset param-block check) and
+ * BuiltInPresets.kt (property-decl check).
+ * NO comment-skip (old gate had none — confirm: the inline body had no trimStart/startsWith
+ * guard before the regex match in either check).
+ * Empty input: return null (no source files to check).
+ * RovaSettings.kt missing: return "source missing" message (old gate threw on !exists()).
+ */
+internal fun rulePresetNoOrientation(files: List<SourceFile>): String? {
+    val offendingProp = Regex("""(^|\s)(val|var)\s+(mode|orientation)\b""")
+    val ctorParam = Regex("""\b(mode|orientation)\s*:""")
+
+    val rovaSettingsSuffix = "data/RovaSettings.kt"
+    val builtInsSuffix = "data/BuiltInPresets.kt"
+
+    val rovaPresetSrc = files.firstOrNull {
+        it.relPath.replace('\\', '/').endsWith(rovaSettingsSuffix)
+    } ?: return "checkPresetNoOrientation: source missing: " +
+        "src/main/java/com/aritr/rova/data/RovaSettings.kt"
+
+    // Narrow to the RovaPreset declaration block to avoid matching unrelated
+    // `mode` usage elsewhere in RovaSettings.kt (e.g. the legacy `mode` pref).
+    val text = rovaPresetSrc.text
+    val start = text.indexOf("data class RovaPreset")
+    if (start >= 0) {
+        val end = text.indexOf(")", start).let { if (it < 0) text.length else it }
+        val block = text.substring(start, end)
+        if (ctorParam.containsMatchIn(block)) {
+            return "checkPresetNoOrientation: RovaPreset must not declare a mode/orientation field (ADR-0026)."
+        }
+    }
+
+    val builtIns = files.firstOrNull {
+        it.relPath.replace('\\', '/').endsWith(builtInsSuffix)
+    }
+    if (builtIns != null && offendingProp.containsMatchIn(builtIns.text)) {
+        return "checkPresetNoOrientation: BuiltInPresets must not declare a mode/orientation property (ADR-0026)."
+    }
+
+    return null
+}
+
+// ─── checkNoLegacyModeStrings ─────────────────────────────────────────────────
+
+/**
+ * Verbatim lift of checkNoLegacyModeStrings.
+ * Forbid "Portrait"|"Landscape"|"PortraitLandscape" string literals in .kt files,
+ * except in the three legacy read-compat allowlisted paths.
+ * Comment-skip: lines starting with // or * or starting with slash-star (after trimStart)
+ * are skipped — old gate had: t.startsWith("//") || t.startsWith("*") || t.startsWith(slash-star).
+ * Empty input: null (forbid gate, no files = no offenders).
+ */
+internal fun ruleNoLegacyModeStrings(files: List<SourceFile>): String? {
+    val allow = setOf(
+        "data/SessionManifest.kt",
+        "data/ModeMigration.kt",
+        "data/RovaSettings.kt",
+    )
+    val legacyMode = Regex("\"(Portrait|Landscape|PortraitLandscape)\"")
+    val offenders = mutableListOf<String>()
+    files.forEach { f ->
+        val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
+        if (allow.any { rel.endsWith(it) }) return@forEach
+        f.lines.forEachIndexed { i, line ->
+            val t = line.trimStart()
+            if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
+            if (legacyMode.containsMatchIn(line)) {
+                offenders += "$rel:${i + 1}: ${line.trim()}"
+            }
+        }
+    }
+    if (offenders.isNotEmpty()) {
+        return "ADR-0029 PR-γ §6: legacy mode strings in live paths (use CaptureTopology):\n" +
+            offenders.joinToString("\n")
+    }
+    return null
+}
+
+// ─── checkSetTargetRotationBoundaryOnly ───────────────────────────────────────
+
+/**
+ * Verbatim lift of checkSetTargetRotationBoundaryOnly.
+ * Forbid setTargetRotation( outside service/RovaRecordingService.kt and service/dualrecord/.
+ * NO comment-skip — old gate scanned ALL lines including comments (no trimStart guard present).
+ * Empty input: null (forbid gate, no files = no offenders).
+ */
+internal fun ruleSetTargetRotationBoundaryOnly(files: List<SourceFile>): String? {
+    val offenders = mutableListOf<String>()
+    files.forEach { f ->
+        val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
+        val allowed = rel.endsWith("service/RovaRecordingService.kt") ||
+            rel.contains("service/dualrecord/")
+        if (allowed) return@forEach
+        f.lines.forEachIndexed { i, line ->
+            if (line.contains("setTargetRotation(")) offenders += "$rel:${i + 1}"
+        }
+    }
+    if (offenders.isNotEmpty()) {
+        return "ADR-0029 §3: setTargetRotation outside boundary-owning files:\n" +
+            offenders.joinToString("\n")
+    }
+    return null
+}
+
+// ─── checkFrontBackCapabilityGated ────────────────────────────────────────────
+
+/**
+ * Verbatim lift of checkFrontBackCapabilityGated.
+ * Forbid "FrontBack" outside data/CaptureTopology.kt and ui/screens/CaptureModes.kt.
+ * Comment-skip: lines starting with // or * or slash-star (after trimStart) are skipped.
+ * Empty input: null (forbid gate, no files = no offenders).
+ */
+internal fun ruleFrontBackCapabilityGated(files: List<SourceFile>): String? {
+    val allow = setOf("data/CaptureTopology.kt", "ui/screens/CaptureModes.kt")
+    val offenders = mutableListOf<String>()
+    files.forEach { f ->
+        val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
+        if (allow.any { rel.endsWith(it) }) return@forEach
+        f.lines.forEachIndexed { i, line ->
+            val t = line.trimStart()
+            if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
+            if (line.contains("FrontBack")) offenders += "$rel:${i + 1}"
+        }
+    }
+    if (offenders.isNotEmpty()) {
+        return "ADR-0029 §5: FrontBack outside the capability-gated registry:\n" +
+            offenders.joinToString("\n")
+    }
+    return null
+}

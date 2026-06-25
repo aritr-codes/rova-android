@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.aritr.rova.checks")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -135,45 +136,16 @@ configurations.configureEach {
 // contexts (alarms qualify), so all alarm targets must be BroadcastReceivers.
 // Scope is restricted to service/scheduler/** because RovaRecordingService
 // legitimately uses PendingIntent.getService for stop-action notifications.
-val checkSchedulerNoGetService = tasks.register("checkSchedulerNoGetService") {
+val checkSchedulerNoGetService = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSchedulerNoGetService") {
     group = "verification"
     description = "Forbid PendingIntent.getService in alarm scheduler sources."
-    val schedulerDir = file("src/main/java/com/aritr/rova/service/scheduler")
-    inputs.dir(schedulerDir).withPropertyName("schedulerSources")
-    doLast {
-        if (!schedulerDir.exists()) {
-            throw GradleException("Scheduler dir missing: $schedulerDir")
-        }
-        val offenders = schedulerDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        // Match getService( on PendingIntent. Comment lines
-                        // (// or *) are ignored so the doc reference in
-                        // AlarmScheduler.kt does not trip the rule.
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("PendingIntent.getService(") ||
-                            Regex("""\bgetService\s*\(""").containsMatchIn(line) &&
-                            line.contains("PendingIntent")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "PendingIntent.getService is forbidden in alarm scheduler sources " +
-                    "(Android 12+ forbids FGS starts from background contexts). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/scheduler")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSchedulerNoGetService")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSchedulerNoGetService.ok"))
 }
 // Phase 1.3 — broader CI lint (ROADMAP_v6.md §"Lint / CI Rules Summary"):
 // PendingIntent.getService is forbidden anywhere in app sources.
@@ -190,84 +162,32 @@ val checkSchedulerNoGetService = tasks.register("checkSchedulerNoGetService") {
 // `serviceBinder?.getService()` in RecordViewModel — are not flagged.
 // Comment lines (`//`, `*`) are skipped so KDoc references and rationale
 // comments do not trip the rule.
-val checkStopNoGetService = tasks.register("checkStopNoGetService") {
+val checkStopNoGetService = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkStopNoGetService") {
     group = "verification"
     description = "Forbid PendingIntent.getService — STOP and tick actions must use broadcast (Android 12+ FGS-from-background restriction)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Rova source dir missing: $srcDir")
-        }
-        val pattern = Regex("""PendingIntent\s*\.\s*getService\b""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "PendingIntent.getService is forbidden — use PendingIntent.getBroadcast " +
-                    "with a BroadcastReceiver (Android 12+ disallows FGS starts from " +
-                    "alarm/notification background contexts). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkStopNoGetService")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkStopNoGetService.ok"))
 }
 
 // ADR-0027 — the daily-window receivers must NEVER start the camera FGS.
 // Android 14+ forbids starting a while-in-use FGS from the background; the
 // only legal camera-start site is MainActivity on the user's notification tap.
 // Forbid getService / startForegroundService / startService under service/schedule/.
-val checkScheduleReceiverNoFgsStart = tasks.register("checkScheduleReceiverNoFgsStart") {
+val checkScheduleReceiverNoFgsStart = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkScheduleReceiverNoFgsStart") {
     group = "verification"
     description = "Schedule receivers (service/schedule/) must never start the camera FGS (ADR-0027)."
-    val srcDir = file("src/main/java/com/aritr/rova/service/schedule")
-    inputs.dir(srcDir).withPropertyName("scheduleSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Schedule source dir missing: $srcDir")
-        }
-        val pattern = Regex("""PendingIntent\s*\.\s*getService\b|\bstartForegroundService\s*\(|\bstartService\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Schedule receivers must not start a foreground service (ADR-0027): the " +
-                    "camera FGS is started only from MainActivity on the user's notification " +
-                    "tap. Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/schedule")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkScheduleReceiverNoFgsStart")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkScheduleReceiverNoFgsStart.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #1:
@@ -282,50 +202,19 @@ val checkScheduleReceiverNoFgsStart = tasks.register("checkScheduleReceiverNoFgs
 // substrings: ".delete(", ".deleteRecursively(", ".discardSession(".
 // Comment lines (// or *) are skipped so KDoc references and rationale
 // comments do not trip the rule.
-val checkRecoveryNoDeletion = tasks.register("checkRecoveryNoDeletion") {
+val checkRecoveryNoDeletion = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoveryNoDeletion") {
     group = "verification"
     description = "Forbid deletion APIs in Phase 1.5 sources (ADR 0005 — emits flags, never deletes)."
-    val recoveryDir = file("src/main/java/com/aritr/rova/service/recovery")
-    val rovaAppFile = file("src/main/java/com/aritr/rova/RovaApp.kt")
-    inputs.dir(recoveryDir).withPropertyName("recoverySources")
-    inputs.file(rovaAppFile).withPropertyName("rovaAppSource")
-    doLast {
-        if (!recoveryDir.exists()) {
-            throw GradleException("Phase 1.5 recovery dir missing: $recoveryDir")
-        }
-        val forbidden = listOf(
-            ".delete(",
-            ".deleteRecursively(",
-            ".discardSession(",
-        )
-        val targets = recoveryDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .toList() + listOfNotNull(rovaAppFile.takeIf { it.exists() })
-        val offenders = targets
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else forbidden.any { line.contains(it) }
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Phase 1.5 sources must not call deletion APIs (ADR 0005 — " +
-                    "Phase 1.5 emits DiscardEligibility flags only; deletion is " +
-                    "owned by Phase 1.7 post-export-recovery cleanup or by " +
-                    "explicit user action). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/recovery")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/RovaApp.kt")
+    )
+    checkId.set("checkRecoveryNoDeletion")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoveryNoDeletion.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #2:
@@ -338,44 +227,16 @@ val checkRecoveryNoDeletion = tasks.register("checkRecoveryNoDeletion") {
 // reachable substring of any wrong abbreviation; `segment_` itself does
 // NOT contain `seg_` because the underscore lands after `segment`, not
 // after `seg`).
-val checkRecoverySegmentRegex = tasks.register("checkRecoverySegmentRegex") {
+val checkRecoverySegmentRegex = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoverySegmentRegex") {
     group = "verification"
     description = "Forbid `seg_` variant in Phase 1.5 sources; canonical pattern is `segment_NNNN.mp4` (ADR 0005)."
-    val recoveryDir = file("src/main/java/com/aritr/rova/service/recovery")
-    inputs.dir(recoveryDir).withPropertyName("recoverySources")
-    doLast {
-        if (!recoveryDir.exists()) {
-            throw GradleException("Phase 1.5 recovery dir missing: $recoveryDir")
-        }
-        val offenders = recoveryDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        // Comment lines are scanned too — a stale rationale
-                        // referring to `seg_` is itself a code-rot signal.
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("seg_")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "`seg_` is forbidden in Phase 1.5 recovery sources — the " +
-                    "canonical segment filename pattern is `segment_NNNN.mp4` " +
-                    "(SessionStore.nextSegmentFilename, ADR 0005). " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/recovery")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecoverySegmentRegex")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoverySegmentRegex.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #3:
@@ -384,44 +245,16 @@ val checkRecoverySegmentRegex = tasks.register("checkRecoverySegmentRegex") {
 // a receiver, a scheduled job, MainActivity directly — would defeat
 // Guard A (latch reset on throw) and the trigger-boundary invariant
 // designed in round 2. Forbid every reference outside RovaApp.kt.
-val checkScanTriggerSingleSite = tasks.register("checkScanTriggerSingleSite") {
+val checkScanTriggerSingleSite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkScanTriggerSingleSite") {
     group = "verification"
     description = "Forbid runRecoveryScan references outside RovaApp.kt (ADR 0005 §Scan Trigger Boundary)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val allowedFile = file("src/main/java/com/aritr/rova/RovaApp.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Rova source dir missing: $srcDir")
-        }
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .filter { it.canonicalFile != allowedFile }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("runRecoveryScan")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "`runRecoveryScan` is owned exclusively by RovaApp; the only " +
-                    "trigger is RovaApp.triggerRecoveryScanIfNeeded called from " +
-                    "MainActivity.onCreate (ADR 0005 §Scan Trigger Boundary). " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkScanTriggerSingleSite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkScanTriggerSingleSite.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Concurrency Invariants" item 3 (Guard B):
@@ -443,72 +276,16 @@ val checkScanTriggerSingleSite = tasks.register("checkScanTriggerSingleSite") {
 // articulate a reason (e.g., `// guard-b-opt-out: synchronous receiver,
 // no coroutine launched`). Mirrors the documented-annotation/comment
 // option in ADR 0005 §Acceptance Criteria.
-val checkRecoveryReceiverCounter = tasks.register("checkRecoveryReceiverCounter") {
+val checkRecoveryReceiverCounter = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoveryReceiverCounter") {
     group = "verification"
     description = "Verify Guard B (ADR 0005): receivers using goAsync() must increment activeReceiverWork before goAsync() and decrement in finally."
-    val serviceDir = file("src/main/java/com/aritr/rova/service")
-    inputs.dir(serviceDir).withPropertyName("serviceSources")
-    doLast {
-        if (!serviceDir.exists()) {
-            throw GradleException("Service dir missing: $serviceDir")
-        }
-        val offenders = serviceDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-
-                // Find first non-comment goAsync() call line.
-                val goAsyncIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("goAsync()")
-                }
-                if (goAsyncIdx < 0) return@mapNotNull null  // no goAsync — not a receiver-async pattern
-
-                // Opt-out: any file marker `guard-b-opt-out:` (with reason)
-                // skips the check.
-                val hasOptOut = lines.any { it.contains("guard-b-opt-out:") }
-                if (hasOptOut) return@mapNotNull null
-
-                val problems = mutableListOf<String>()
-
-                // Increment: first non-comment line that contains the
-                // synchronous incrementAndGet on activeReceiverWork.
-                val incIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("activeReceiverWork.incrementAndGet")
-                }
-                val hasDec = lines.any { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("activeReceiverWork.decrementAndGet")
-                }
-
-                if (incIdx < 0) {
-                    problems += "missing activeReceiverWork.incrementAndGet() before goAsync() (line ${goAsyncIdx + 1})"
-                } else if (incIdx >= goAsyncIdx) {
-                    problems += "activeReceiverWork.incrementAndGet() (line ${incIdx + 1}) must precede goAsync() (line ${goAsyncIdx + 1}); the gap between goAsync() and the launched coroutine body is the race window"
-                }
-                if (!hasDec) {
-                    problems += "missing activeReceiverWork.decrementAndGet() — must run in the launched coroutine's finally so every exit path releases the counter"
-                }
-
-                if (problems.isEmpty()) null else f to problems
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, problems) ->
-                problems.joinToString("\n") { "  ${f.relativeTo(rootDir)}: $it" }
-            }
-            throw GradleException(
-                "Guard B violations (ADR 0005 §Concurrency Invariants item 3):\n$report\n" +
-                    "Add a documented opt-out marker `// guard-b-opt-out: <reason>` " +
-                    "to the file (with a reason) only if the receiver does no " +
-                    "asynchronous work and never races the recovery scan."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecoveryReceiverCounter")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoveryReceiverCounter.ok"))
 }
 
 // ============================================================
@@ -523,53 +300,16 @@ val checkRecoveryReceiverCounter = tasks.register("checkRecoveryReceiverCounter"
  * §"Migration table". Only KILLED_* and merge-success COMPLETED writers
  * pass NONE.
  */
-val checkAtomicTerminalWriteForbiddenPair = tasks.register("checkAtomicTerminalWriteForbiddenPair") {
+val checkAtomicTerminalWriteForbiddenPair = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkAtomicTerminalWriteForbiddenPair") {
     group = "verification"
     description = "Forbid markTerminated(USER_STOPPED, NONE) literal pair (ADR 0006 B16)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        // Pattern matches any markTerminated call that mentions both
-        // USER_STOPPED and NONE on the same line OR within a 3-line window.
-        // We use a multi-line scan: find every `markTerminated(` opener
-        // and inspect the next 3 lines for the forbidden pair.
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Int>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    if (!line.contains("markTerminated(")) continue
-                    if (line.contains("terminal-ordering-opt-out:")) continue
-                    // Window of up to 3 lines covers multi-line invocations.
-                    val window = (i..minOf(i + 3, lines.lastIndex))
-                        .joinToString("\n") { lines[it] }
-                    val hasUserStopped = window.contains("Terminated.USER_STOPPED") ||
-                        window.contains(", USER_STOPPED")
-                    val hasReasonNone = window.contains("StopReason.NONE") ||
-                        window.contains(", NONE")
-                    if (hasUserStopped && hasReasonNone) {
-                        hits += i + 1
-                    }
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ls) ->
-                "  ${f.relativeTo(rootDir)}: lines ${ls.joinToString(", ")}"
-            }
-            throw GradleException(
-                "Forbidden pair markTerminated(USER_STOPPED, NONE) detected (ADR 0006 B16):\n$report\n" +
-                    "USER_STOPPED writers must pass a real StopReason " +
-                    "(USER, INIT_FAILED, PERMISSION_REVOKED, LOW_STORAGE). " +
-                    "Only KILLED_* and merge-success COMPLETED pass NONE."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkAtomicTerminalWriteForbiddenPair")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAtomicTerminalWriteForbiddenPair.ok"))
 }
 
 /**
@@ -579,39 +319,16 @@ val checkAtomicTerminalWriteForbiddenPair = tasks.register("checkAtomicTerminalW
  * `SessionStore(Context)` constructor uses it inside a fallback that
  * itself errors out.
  */
-val checkExternalRootShared = tasks.register("checkExternalRootShared") {
+val checkExternalRootShared = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExternalRootShared") {
     group = "verification"
     description = "Only RovaApp.resolveExternalRoot may reference getExternalFilesDir(null) (ADR 0006 B21)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val allowedFiles = setOf("RovaApp.kt", "SessionStore.kt")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { it.name !in allowedFiles }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Int>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    if (line.contains("getExternalFilesDir(null)")) hits += i + 1
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ls) ->
-                "  ${f.relativeTo(rootDir)}: lines ${ls.joinToString(", ")}"
-            }
-            throw GradleException(
-                "External-root drift detected (ADR 0006 B21):\n$report\n" +
-                    "Use RovaApp.videosRoot or RovaApp.externalRoot instead. " +
-                    "Only RovaApp and SessionStore are allowed direct references."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExternalRootShared")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExternalRootShared.ok"))
 }
 
 /**
@@ -620,45 +337,16 @@ val checkExternalRootShared = tasks.register("checkExternalRootShared") {
  * same source file. Forbidden: hardcoded `CAMERA | MICROPHONE` without
  * an audio-mode gate. Caught Round 6 B20 as draft-residue regression.
  */
-val checkAudioModeFgsTypeMatch = tasks.register("checkAudioModeFgsTypeMatch") {
+val checkAudioModeFgsTypeMatch = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkAudioModeFgsTypeMatch") {
     group = "verification"
     description = "FGS_TYPE_MICROPHONE must be gated by audioMode (ADR 0006 B18 + B20)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val micIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
-                }
-                if (micIdx < 0) return@mapNotNull null
-                if (lines.any { it.contains("audio-mode-opt-out:") }) return@mapNotNull null
-                // Search lines BEFORE the MIC literal for an audioMode
-                // reference (variable read, AudioMode enum, when branch).
-                val hasAudioModeBefore = (0 until micIdx).any { i ->
-                    val s = lines[i]
-                    s.contains("audioMode") || s.contains("AudioMode.")
-                }
-                if (hasAudioModeBefore) null else f to micIdx + 1
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, line) ->
-                "  ${f.relativeTo(rootDir)}: line $line — FGS MIC type without audioMode gate"
-            }
-            throw GradleException(
-                "FGS-type / audio-mode coupling violation (ADR 0006 B18 + B20):\n$report\n" +
-                    "FOREGROUND_SERVICE_TYPE_MICROPHONE must be gated by an " +
-                    "audioMode == AudioMode.VIDEO_AUDIO check. Hardcoding the " +
-                    "type bitfield risks SecurityException on Android 14+."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkAudioModeFgsTypeMatch")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAudioModeFgsTypeMatch.ok"))
 }
 
 /**
@@ -669,66 +357,16 @@ val checkAudioModeFgsTypeMatch = tasks.register("checkAudioModeFgsTypeMatch") {
  * block must reference `Build.VERSION.SDK_INT >= Build.VERSION_CODES.S`
  * before any `is ForegroundServiceStartNotAllowedException` check.
  */
-val checkFGSStartGuarded = tasks.register("checkFGSStartGuarded") {
+val checkFGSStartGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkFGSStartGuarded") {
     group = "verification"
     description = "FGS start sites must catch IllegalStateException + SecurityException with SDK-gated is-check (ADR 0006 B10 + B11 + B20)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val offenders = mutableListOf<Pair<File, String>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { f ->
-                // Skip RovaTickReceiver / RovaStopReceiver — they have
-                // documentation comments referencing startForegroundService
-                // but no actual call.
-                val text = f.readText()
-                text.contains("startForegroundService(") || text.contains("startForeground(")
-            }
-            .forEach { f ->
-                val lines = f.readLines()
-                if (lines.any { it.contains("fgs-guard-opt-out:") }) return@forEach
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    val isCallerSide = line.contains("startForegroundService(")
-                    val isServiceSide = line.contains("startForeground(") &&
-                        !line.contains("startForegroundService(")
-                    if (!isCallerSide && !isServiceSide) continue
-                    // Look forward up to 60 lines for catch arms.
-                    val end = minOf(i + 60, lines.lastIndex)
-                    val window = lines.subList(i, end + 1).joinToString("\n")
-                    val hasIseCatch = window.contains("catch (e: IllegalStateException)") ||
-                        window.contains("catch(e: IllegalStateException)") ||
-                        window.contains("catch (e:IllegalStateException)")
-                    val hasSdkGate = window.contains("Build.VERSION.SDK_INT") &&
-                        window.contains("Build.VERSION_CODES.S")
-                    val hasIsCheck = window.contains("ForegroundServiceStartNotAllowedException")
-                    val hasSecurityCatch = window.contains("catch (e: SecurityException)") ||
-                        window.contains("catch(e: SecurityException)")
-                    if (!hasIseCatch) {
-                        offenders += f to "line ${i + 1}: missing catch (e: IllegalStateException)"
-                    } else {
-                        if (!hasSdkGate) offenders += f to "line ${i + 1}: catch is not SDK-gated (Build.VERSION.SDK_INT >= S)"
-                        if (!hasIsCheck) offenders += f to "line ${i + 1}: missing ForegroundServiceStartNotAllowedException is-check"
-                    }
-                    if (isServiceSide && !hasSecurityCatch) {
-                        offenders += f to "line ${i + 1}: service-side startForeground missing catch (e: SecurityException) (B18 + B20)"
-                    }
-                }
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, msg) ->
-                "  ${f.relativeTo(rootDir)}: $msg"
-            }
-            throw GradleException(
-                "FGS guard violations (ADR 0006 B10 + B11 + B20):\n$report\n" +
-                    "Caller-side: catch IllegalStateException, SDK-gate the is-check.\n" +
-                    "Service-side: also catch SecurityException for FGS-type / permission mismatch."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkFGSStartGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkFGSStartGuarded.ok"))
 }
 
 /**
@@ -746,70 +384,15 @@ val checkFGSStartGuarded = tasks.register("checkFGSStartGuarded") {
  * opt-out marker `// terminal-ordering-opt-out:` skips the check for
  * any file requiring exemption.
  */
-val checkUserStoppedBeforeMerge = tasks.register("checkUserStoppedBeforeMerge") {
+val checkUserStoppedBeforeMerge = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkUserStoppedBeforeMerge") {
     group = "verification"
     description = "USER_STOPPED markTerminated must precede merge call sites in RovaRecordingService.kt (ADR 0006 B3); COMPLETED must follow them (B7)."
-    val targetFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
-    inputs.file(targetFile).withPropertyName("recordingServiceSource")
-    doLast {
-        if (!targetFile.exists()) {
-            throw GradleException("Target file missing: $targetFile")
-        }
-        val lines = targetFile.readLines()
-        if (lines.any { it.contains("terminal-ordering-opt-out:") }) return@doLast
-
-        // Collect line indices for USER_STOPPED writes, COMPLETED writes,
-        // and merge call sites (performMerge / mergeSegments / VideoMerger
-        // references that aren't comments).
-        val userStoppedLines = mutableListOf<Int>()
-        val completedLines = mutableListOf<Int>()
-        val mergeLines = mutableListOf<Int>()
-        for ((i, raw) in lines.withIndex()) {
-            val trimmed = raw.trimStart()
-            if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-            // markTerminated(... USER_STOPPED ...) within a 3-line window
-            if (raw.contains("markTerminated(")) {
-                val window = (i..minOf(i + 3, lines.lastIndex))
-                    .joinToString("\n") { lines[it] }
-                if (window.contains("Terminated.USER_STOPPED")) userStoppedLines += i + 1
-                if (window.contains("Terminated.COMPLETED")) completedLines += i + 1
-            }
-            // Merge call detection — function call to performMerge,
-            // VideoMerger.mergeSegments, or VideoMerger reference.
-            // Skip the function definition itself.
-            val isMergeCall = (raw.contains("performMerge(") &&
-                !raw.contains("private suspend fun performMerge")) ||
-                raw.contains("VideoMerger.mergeSegments(") ||
-                raw.contains(".mergeSegments(")
-            if (isMergeCall) mergeLines += i + 1
-        }
-
-        if (mergeLines.isEmpty()) {
-            // No merge call sites — nothing to check.
-            return@doLast
-        }
-        val firstMerge = mergeLines.min()
-        val lastMerge = mergeLines.max()
-        val problems = mutableListOf<String>()
-
-        // B3: every USER_STOPPED write must precede the FIRST merge call.
-        userStoppedLines.filter { it >= firstMerge }.forEach { line ->
-            problems += "USER_STOPPED markTerminated at line $line appears AT OR AFTER merge call at line $firstMerge — eager-write rule (B3) violated"
-        }
-        // B7: every COMPLETED write must follow the LAST merge call.
-        completedLines.filter { it <= lastMerge }.forEach { line ->
-            problems += "COMPLETED markTerminated at line $line appears AT OR BEFORE the last merge call at line $lastMerge — merge-success-only rule (B7) violated"
-        }
-
-        if (problems.isNotEmpty()) {
-            throw GradleException(
-                "Terminal-write ordering violations in ${targetFile.relativeTo(rootDir)} (ADR 0006 B3 + B7):\n" +
-                    problems.joinToString("\n") { "  $it" } +
-                    "\nFix: USER_STOPPED writes go BEFORE merge entry; COMPLETED only at merge-success commit point.\n" +
-                    "Opt-out marker: // terminal-ordering-opt-out: <reason>"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
+    )
+    checkId.set("checkUserStoppedBeforeMerge")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkUserStoppedBeforeMerge.ok"))
 }
 
 // ============================================================
@@ -828,42 +411,16 @@ val checkUserStoppedBeforeMerge = tasks.register("checkUserStoppedBeforeMerge") 
  * `stopReason`, `terminated`). This lint forbids any regression to the
  * strict `getString("exportTier")` form.
  */
-val checkExportTierReadTolerant = tasks.register("checkExportTierReadTolerant") {
+val checkExportTierReadTolerant = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportTierReadTolerant") {
     group = "verification"
     description = "Forbid getString(\"exportTier\") — schema-2 manifests lack the field; use opt + runCatching + currentExportTier() fallback (ADR 0003 §FD Mode Amendment partner)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val pattern = Regex("""\bgetString\s*\(\s*"exportTier"\s*\)""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Strict getString(\"exportTier\") is forbidden — schema-2 " +
-                    "manifests lack the field and would throw JSONException. " +
-                    "Use the optString + runCatching + currentExportTier() " +
-                    "fallback pattern (ADR 0003 §FD Mode Amendment partner). " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportTierReadTolerant")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportTierReadTolerant.ok"))
 }
 
 /**
@@ -880,46 +437,16 @@ val checkExportTierReadTolerant = tasks.register("checkExportTierReadTolerant") 
  *
  * Allow-list: `MediaScanWaiter.kt` is the single legitimate call site.
  */
-val checkScanFileBoundedWait = tasks.register("checkScanFileBoundedWait") {
+val checkScanFileBoundedWait = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkScanFileBoundedWait") {
     group = "verification"
     description = "MediaScannerConnection.scanFile must only be called inside the bounded MediaScanWaiter helper (Phase 1.7 Patch 2)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val allowedFile = file(
-        "src/main/java/com/aritr/rova/service/export/MediaScanWaiter.kt"
-    ).canonicalFile
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val pattern = Regex("""\bMediaScannerConnection\s*\.\s*scanFile\b""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { it.canonicalFile != allowedFile }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "MediaScannerConnection.scanFile is forbidden outside " +
-                    "MediaScanWaiter.kt — every call must be bounded by " +
-                    "MediaScanWaiter.scanAndWait (Phase 1.7 Patch 2; " +
-                    "naked awaits hang the foreground service if the " +
-                    "scan callback never fires). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkScanFileBoundedWait")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkScanFileBoundedWait.ok"))
 }
 
 /**
@@ -937,40 +464,16 @@ val checkScanFileBoundedWait = tasks.register("checkScanFileBoundedWait") {
  * for residual `"w"`. Avoids false positives on `"rw"` (which contains
  * `w` but not the standalone `"w"` literal).
  */
-val checkPendingFdModeIsRW = tasks.register("checkPendingFdModeIsRW") {
+val checkPendingFdModeIsRW = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkPendingFdModeIsRW") {
     group = "verification"
     description = "Tier 1 sources must use openFileDescriptor mode \"rw\"; \"w\" is non-seekable and breaks MediaMuxer.stop() (ADR 0003 §FD Mode Amendment)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name.startsWith("Tier1") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.replace("\"rw\"", "").contains("\"w\"")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Forbidden openFileDescriptor mode \"w\" in Tier 1 sources " +
-                    "(ADR 0003 §FD Mode Amendment — \"w\" is non-seekable; " +
-                    "MediaMuxer.stop() rewrites the moov atom and requires a " +
-                    "seekable FD). Use \"rw\" instead. Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkPendingFdModeIsRW")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkPendingFdModeIsRW.ok"))
 }
 
 /**
@@ -984,46 +487,16 @@ val checkPendingFdModeIsRW = tasks.register("checkPendingFdModeIsRW") {
  * only — Phase 1's pre-existing `PreviewActivity` / `RovaRecordingService`
  * call sites are commit-7's deletion target and stay outside this lint.
  */
-val checkExportIsPendingGuarded = tasks.register("checkExportIsPendingGuarded") {
+val checkExportIsPendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportIsPendingGuarded") {
     group = "verification"
     description = "IS_PENDING references in service/export/ must be SDK-gated to API 29+ (ADR 0003 Tier 1)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bIS_PENDING\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val text = f.readText()
-                val hits = f.readLines().withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) return@mapNotNull null
-                val hasFileGuard = text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
-                    text.contains("@RequiresApi(Build.VERSION_CODES.R)") ||
-                    text.contains("@RequiresApi(android.os.Build.VERSION_CODES.Q)") ||
-                    (text.contains("Build.VERSION.SDK_INT") && text.contains("Build.VERSION_CODES.Q"))
-                if (hasFileGuard) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "IS_PENDING used without SDK gating in service/export/ — " +
-                    "the file must be annotated @RequiresApi(Build.VERSION_CODES.Q) " +
-                    "or guard the reference with `Build.VERSION.SDK_INT >= " +
-                    "Build.VERSION_CODES.Q`. Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportIsPendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportIsPendingGuarded.ok"))
 }
 
 /**
@@ -1034,47 +507,16 @@ val checkExportIsPendingGuarded = tasks.register("checkExportIsPendingGuarded") 
  * SDK branch (≤30 lines from a `VERSION_CODES.R` token), forcing the
  * call to live in the `< R` arm of an SDK comparison.
  */
-val checkExportSetIncludePendingGuarded = tasks.register("checkExportSetIncludePendingGuarded") {
+val checkExportSetIncludePendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportSetIncludePendingGuarded") {
     group = "verification"
     description = "setIncludePending references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; deprecated/forbidden API 30+)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bsetIncludePending\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Pair<Int, String>>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                    if (!pattern.containsMatchIn(line)) continue
-                    val window = lines.subList(
-                        maxOf(0, i - 30),
-                        minOf(lines.size, i + 30)
-                    ).joinToString("\n")
-                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
-                        window.contains("Build.VERSION.SDK_INT")
-                    if (!hasSdkBranch) hits += i + 1 to line.trim()
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:$i: $line"
-                }
-            }
-            throw GradleException(
-                "setIncludePending used without an SDK branch against " +
-                    "Build.VERSION_CODES.R — must run only on API 29 (deprecated " +
-                    "and unreliable on API 30+). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportSetIncludePendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportSetIncludePendingGuarded.ok"))
 }
 
 /**
@@ -1084,47 +526,16 @@ val checkExportSetIncludePendingGuarded = tasks.register("checkExportSetIncludeP
  * `>= R` arm. A reference outside an SDK guard would `NoSuchFieldError`
  * on Android Q.
  */
-val checkExportQueryArgMatchPendingGuarded = tasks.register("checkExportQueryArgMatchPendingGuarded") {
+val checkExportQueryArgMatchPendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportQueryArgMatchPendingGuarded") {
     group = "verification"
     description = "QUERY_ARG_MATCH_PENDING references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; API 30+ only)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bQUERY_ARG_MATCH_PENDING\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Pair<Int, String>>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                    if (!pattern.containsMatchIn(line)) continue
-                    val window = lines.subList(
-                        maxOf(0, i - 30),
-                        minOf(lines.size, i + 30)
-                    ).joinToString("\n")
-                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
-                        window.contains("Build.VERSION.SDK_INT")
-                    if (!hasSdkBranch) hits += i + 1 to line.trim()
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:$i: $line"
-                }
-            }
-            throw GradleException(
-                "QUERY_ARG_MATCH_PENDING used without an SDK branch against " +
-                    "Build.VERSION_CODES.R — must run only on API 30+ " +
-                    "(NoSuchFieldError on Q). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportQueryArgMatchPendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportQueryArgMatchPendingGuarded.ok"))
 }
 
 /**
@@ -1150,54 +561,16 @@ val checkExportQueryArgMatchPendingGuarded = tasks.register("checkExportQueryArg
  * extracted `filterPendingOwned` test verifies the post-cursor
  * defense pass at runtime.
  */
-val checkExportPendingVisibilityOnQuery = tasks.register("checkExportPendingVisibilityOnQuery") {
+val checkExportPendingVisibilityOnQuery = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportPendingVisibilityOnQuery") {
     group = "verification"
     description = "Files in service/export/ that call resolver.query(...) must use BOTH visibility mechanisms AND an explicit IS_PENDING = 1 SQL selection (Tier 1; commit-5 NO-GO patch)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val queryPattern = Regex("""resolver\s*\.\s*query\s*\(""")
-        // Match `IS_PENDING = 1` (with or without `}` from string-template
-        // closure) and tolerate whitespace.
-        val isPendingFilterPattern = Regex("""IS_PENDING\}?\s*=\s*1\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val text = f.readText()
-                val nonCommentText = f.readLines()
-                    .filter {
-                        val t = it.trimStart()
-                        !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
-                    }
-                    .joinToString("\n")
-                if (!queryPattern.containsMatchIn(nonCommentText)) return@mapNotNull null
-                val hasIncludePending = text.contains("setIncludePending")
-                val hasMatchPending = text.contains("QUERY_ARG_MATCH_PENDING")
-                val hasIsPendingFilter = isPendingFilterPattern.containsMatchIn(nonCommentText)
-                if (hasIncludePending && hasMatchPending && hasIsPendingFilter) null
-                else f to listOfNotNull(
-                    if (!hasIncludePending) "missing setIncludePending (API 29 visibility)" else null,
-                    if (!hasMatchPending) "missing QUERY_ARG_MATCH_PENDING (API 30+ visibility)" else null,
-                    if (!hasIsPendingFilter) "missing explicit IS_PENDING = 1 SQL selection (defense in depth — visibility flags alone are not enough)" else null
-                )
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, problems) ->
-                problems.joinToString("\n") { p -> "  ${f.relativeTo(rootDir)}: $p" }
-            }
-            throw GradleException(
-                "Pending-visibility-on-query rule violated in service/export/ — " +
-                    "any file calling resolver.query(...) must wire BOTH visibility " +
-                    "mechanisms AND an explicit IS_PENDING = 1 SQL selection. The " +
-                    "visibility flags alone do not exclude non-pending rows on API 29 " +
-                    "(setIncludePending = \"include in addition\", not \"only\") and " +
-                    "OEM MediaStore behavior on MATCH_ONLY varies. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportPendingVisibilityOnQuery")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportPendingVisibilityOnQuery.ok"))
 }
 
 /**
@@ -1219,54 +592,15 @@ val checkExportPendingVisibilityOnQuery = tasks.register("checkExportPendingVisi
  * Allow-list: only `ExportCleanupPredicate.kt` is required to contain
  * all four tokens. The check runs against that one file.
  */
-val checkExportCleanupPredicate = tasks.register("checkExportCleanupPredicate") {
+val checkExportCleanupPredicate = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportCleanupPredicate") {
     group = "verification"
     description = "ExportCleanupPredicate must reference all four cleanup gates (ADR 0006 §Ownership table + commit-6 NO-GO patch)."
-    val targetFile = file(
-        "src/main/java/com/aritr/rova/service/export/ExportCleanupPredicate.kt"
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/export/ExportCleanupPredicate.kt")
     )
-    inputs.file(targetFile).withPropertyName("exportCleanupPredicate")
-    doLast {
-        if (!targetFile.exists()) {
-            throw GradleException(
-                "Phase 1.7 commit-6 source missing: ${targetFile.relativeTo(rootDir)}"
-            )
-        }
-        // Strip comment lines so a doc-only mention doesn't satisfy the
-        // gate; the gate must be exercised by code.
-        val codeText = targetFile.readLines()
-            .filter {
-                val t = it.trimStart()
-                !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
-            }
-            .joinToString("\n")
-        val problems = mutableListOf<String>()
-        if (!codeText.contains("AUTO_DISCARD_ELIGIBLE")) {
-            problems += "missing AUTO_DISCARD_ELIGIBLE (Phase 1.5 eligibility gate)"
-        }
-        if (!codeText.contains("privateTempPath")) {
-            problems += "missing privateTempPath check (Tier 2/3 deferred-scan retention gate)"
-        }
-        if (!codeText.contains("RetryableFailure")) {
-            problems += "missing RetryableFailure check (per-session recovery clean gate)"
-        }
-        if (!codeText.contains("ManifestWriteFailed")) {
-            problems += "missing ManifestWriteFailed check (per-session recovery clean gate)"
-        }
-        if (!codeText.contains("QueryFailed")) {
-            problems += "missing QueryFailed check (sweep clean gate; commit-6 NO-GO patch)"
-        }
-        if (problems.isNotEmpty()) {
-            val report = problems.joinToString("\n") { "  $it" }
-            throw GradleException(
-                "ExportCleanupPredicate cleanup gate violation (ADR 0006 §Ownership table " +
-                    "+ commit-6 NO-GO patch):\n$report\n" +
-                    "All four gates MUST be referenced in the predicate source. " +
-                    "Dropping any gate risks deleting a manifest still needed to " +
-                    "protect a referenced pending row."
-            )
-        }
-    }
+    checkId.set("checkExportCleanupPredicate")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportCleanupPredicate.ok"))
 }
 
 /**
@@ -1277,37 +611,16 @@ val checkExportCleanupPredicate = tasks.register("checkExportCleanupPredicate") 
  * merge-then-publish anti-pattern that splits artifact authority
  * between the merger and the exporter. Lock the symbol out.
  */
-val checkExportNoCopyToPublicMovies = tasks.register("checkExportNoCopyToPublicMovies") {
+val checkExportNoCopyToPublicMovies = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportNoCopyToPublicMovies") {
     group = "verification"
     description = "Forbid copyToPublicMovies symbol (Phase 1.7 commit-7)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("copyToPublicMovies")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "copyToPublicMovies symbol is forbidden (Phase 1.7 commit-7). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportNoCopyToPublicMovies")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportNoCopyToPublicMovies.ok"))
 }
 
 /**
@@ -1320,77 +633,16 @@ val checkExportNoCopyToPublicMovies = tasks.register("checkExportNoCopyToPublicM
  *     the public mux surface so a future edit cannot bypass the tier
  *     pipeline by directly invoking the mux helper.
  */
-val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEntry") {
+val checkExportPipelineSingleEntry = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportPipelineSingleEntry") {
     group = "verification"
     description = "ExportPipeline.export single call site in RovaRecordingService.kt; VideoMerger mux callers restricted to service/export/ (Phase 1.7 commit-7)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
-    val videoMergerPath = "src/main/java/com/aritr/rova/utils/VideoMerger.kt"
-    val exportPathFragment = "service/export/"
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val recordingServiceFile = file(recordingServicePath).canonicalFile
-        val videoMergerFile = file(videoMergerPath).canonicalFile
-
-        // Invariant 1 — exactly one ExportPipeline.export( call site,
-        // and it must live in RovaRecordingService.kt.
-        val pipelineCalls = mutableListOf<Pair<File, Int>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .forEach { f ->
-                f.readLines().forEachIndexed { i, line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                    if (line.contains("ExportPipeline.export(")) {
-                        pipelineCalls += f to (i + 1)
-                    }
-                }
-            }
-        val problems = mutableListOf<String>()
-        when (pipelineCalls.size) {
-            0 -> problems += "ExportPipeline.export(...) not called anywhere — performMerge must dispatch to the pipeline."
-            1 -> {
-                val (f, line) = pipelineCalls.single()
-                if (f.canonicalFile != recordingServiceFile) {
-                    problems += "${f.relativeTo(rootDir)}:$line — only RovaRecordingService.performMerge may call ExportPipeline.export."
-                }
-            }
-            else -> pipelineCalls.forEach { (f, line) ->
-                problems += "${f.relativeTo(rootDir)}:$line — ExportPipeline.export has more than one call site."
-            }
-        }
-
-        // Invariant 2 — VideoMerger mux callers restricted to
-        // service/export/ + the definition file.
-        val muxPattern = Regex("""\bVideoMerger\s*\.\s*(mergeSegments|mergeSegmentsToFd)\s*\(""")
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { it.canonicalFile != videoMergerFile }
-            .forEach { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else muxPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) return@forEach
-                val pathStr = f.relativeTo(rootDir).path.replace('\\', '/')
-                if (pathStr.contains(exportPathFragment)) return@forEach
-                hits.forEach { (i, line) ->
-                    problems += "${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()} — VideoMerger mux callers must live under service/export/"
-                }
-            }
-
-        if (problems.isNotEmpty()) {
-            throw GradleException(
-                "Single-entry rule violated for the tier export pipeline (Phase 1.7 commit-7):\n" +
-                    problems.joinToString("\n") { "  $it" } +
-                    "\nFix: live publish goes through ExportPipeline.export from " +
-                    "RovaRecordingService.performMerge ONLY. VideoMerger mux helpers " +
-                    "are pipeline internals; consumers must live under service/export/."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportPipelineSingleEntry")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportPipelineSingleEntry.ok"))
 }
 
 // ADR-0024 §commit-before-stream — a SAF byte write (openOutputStream / the
@@ -1398,38 +650,16 @@ val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEn
 // setExportSafTarget / setSafTarget commit so the target doc Uri is durable in
 // the manifest before any byte is written (crash-safe validate-before-delete
 // recovery depends on it). SafAndroidOps.kt is the raw-stream seam and exempt.
-val checkSafTargetCommittedBeforeStream = tasks.register("checkSafTargetCommittedBeforeStream") {
+val checkSafTargetCommittedBeforeStream = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSafTargetCommittedBeforeStream") {
     group = "verification"
     description = "SAF openOutputStream/copy must be preceded by a setExportSafTarget commit (ADR-0024 §commit-before-stream)."
-    val srcDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(srcDir).withPropertyName("exportSrc")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("export source dir missing: $srcDir")
-        val offenders = mutableListOf<String>()
-        srcDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            val lines = f.readLines()
-            val streamIdx = lines.indexOfFirst {
-                val t = it.trimStart()
-                !t.startsWith("//") && !t.startsWith("*") &&
-                    (it.contains("copyFileToDocument(") || it.contains("openOutputStream("))
-            }
-            if (streamIdx >= 0) {
-                val commitsBefore = lines.take(streamIdx).any {
-                    it.contains("setExportSafTarget") || it.contains("setSafTarget(")
-                }
-                // SafAndroidOps.kt holds the raw stream op (the seam) and is exempt.
-                if (!commitsBefore && f.name != "SafAndroidOps.kt") {
-                    offenders += "${f.relativeTo(rootDir)}:${streamIdx + 1}: SAF stream op without a prior setExportSafTarget commit"
-                }
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0024 §commit-before-stream violation:\n" + offenders.joinToString("\n") { "  $it" } +
-                    "\nThe SAF target doc Uri MUST be committed to the manifest before any byte is written to it."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSafTargetCommittedBeforeStream")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSafTargetCommittedBeforeStream.ok"))
 }
 
 /**
@@ -1447,68 +677,16 @@ val checkSafTargetCommittedBeforeStream = tasks.register("checkSafTargetCommitte
  * never appears within 3 lines of `markTerminated(` — the lint passes
  * vacuously for that idiom (mirrors `checkUserStoppedBeforeMerge`).
  */
-val checkCompletedWriteOnlyFromPerformMerge = tasks.register("checkCompletedWriteOnlyFromPerformMerge") {
+val checkCompletedWriteOnlyFromPerformMerge = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkCompletedWriteOnlyFromPerformMerge") {
     group = "verification"
     description = "markTerminated(...,Terminated.COMPLETED,...) writes outside performMerge require an explicit completed-write-opt-out file marker (ADR 0006 B7)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val recordingServiceFile = file(recordingServicePath).canonicalFile
-        val offenders = mutableListOf<Pair<File, String>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .forEach { f ->
-                val lines = f.readLines()
-                val hasOptOut = lines.any { it.contains("completed-write-opt-out:") }
-                val isRecordingService = f.canonicalFile == recordingServiceFile
-                if (hasOptOut && !isRecordingService) return@forEach
-
-                lines.forEachIndexed { i, raw ->
-                    val trimmed = raw.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                    if (!raw.contains("markTerminated(")) return@forEachIndexed
-                    val window = (i..minOf(i + 3, lines.lastIndex))
-                        .joinToString("\n") { lines[it] }
-                    if (!window.contains("Terminated.COMPLETED")) return@forEachIndexed
-                    if (isRecordingService) {
-                        // Must lie inside performMerge body.
-                        val perfMergeStart = lines.indexOfFirst { line ->
-                            line.contains("private suspend fun performMerge(")
-                        }
-                        if (perfMergeStart < 0) {
-                            offenders += f to "line ${i + 1}: COMPLETED write but performMerge declaration missing"
-                            return@forEachIndexed
-                        }
-                        val fnDeclPattern = Regex("""^    (private suspend fun|private fun|suspend fun|fun) \w+""")
-                        var nextFnAbs = lines.size
-                        for (j in (perfMergeStart + 1) until lines.size) {
-                            if (fnDeclPattern.containsMatchIn(lines[j])) {
-                                nextFnAbs = j
-                                break
-                            }
-                        }
-                        if (i in (perfMergeStart + 1)..(nextFnAbs - 1)) return@forEachIndexed
-                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) outside performMerge body"
-                    } else {
-                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) — only performMerge may write COMPLETED. Add `// completed-write-opt-out: <reason>` for late-terminal reconciliation."
-                    }
-                }
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, msg) ->
-                "  ${f.relativeTo(rootDir)}: $msg"
-            }
-            throw GradleException(
-                "B7 violation (ADR 0006 §Terminal-Write Ordering) — " +
-                    "Terminated.COMPLETED writes restricted to performMerge:\n$report\n" +
-                    "Fix: write COMPLETED only from RovaRecordingService.performMerge. " +
-                    "Late-terminal reconciliation (ExportRecoveryRunner) must carry " +
-                    "`// completed-write-opt-out: <reason>` marker."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkCompletedWriteOnlyFromPerformMerge")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkCompletedWriteOnlyFromPerformMerge.ok"))
 }
 
 /**
@@ -1525,38 +703,14 @@ val checkCompletedWriteOnlyFromPerformMerge = tasks.register("checkCompletedWrit
  * Allowed forms: `.acquire(<expr>)` where `<expr>` is any non-empty
  * argument — typically [WakeLockPolicy.ACQUIRE_TIMEOUT_MS].
  */
-val checkWakeLockBoundedAcquire = tasks.register("checkWakeLockBoundedAcquire") {
+val checkWakeLockBoundedAcquire = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkWakeLockBoundedAcquire") {
     group = "verification"
     description = "Forbid no-arg WakeLock.acquire() — Phase 1.8 / C17 bounded-acquire discipline."
-    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
-    val policyFile = file("src/main/java/com/aritr/rova/service/wakelock/WakeLockPolicy.kt")
-    inputs.file(serviceFile).withPropertyName("recordingService")
-    inputs.file(policyFile).withPropertyName("wakeLockPolicy")
-    doLast {
-        val targets = listOf(serviceFile, policyFile).filter { it.exists() }
-        if (targets.isEmpty()) {
-            throw GradleException("checkWakeLockBoundedAcquire: no source files found.")
-        }
-        val unboundedAcquire = Regex("""\.acquire\s*\(\s*\)""")
-        val offenders = mutableListOf<String>()
-        targets.forEach { f ->
-            f.readLines().forEachIndexed { idx, raw ->
-                val trimmed = raw.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                if (unboundedAcquire.containsMatchIn(raw)) {
-                    offenders += "  ${f.relativeTo(rootDir)}:${idx + 1}: ${trimmed.take(120)}"
-                }
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "C17 violation (Phase 1.8 §WakeLock Discipline) — " +
-                    "WakeLock.acquire() must pass a timeout. Use " +
-                    "acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS):\n" +
-                    offenders.joinToString("\n")
-            )
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt"))
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/service/wakelock/WakeLockPolicy.kt"))
+    checkId.set("checkWakeLockBoundedAcquire")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkWakeLockBoundedAcquire.ok"))
 }
 
 /**
@@ -1577,47 +731,13 @@ val checkWakeLockBoundedAcquire = tasks.register("checkWakeLockBoundedAcquire") 
  * `acquireWakeLock()` in [RovaRecordingService.kt]. Drop it and the
  * lint fails preBuild.
  */
-val checkWakeLockHeldRefresh = tasks.register("checkWakeLockHeldRefresh") {
+val checkWakeLockHeldRefresh = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkWakeLockHeldRefresh") {
     group = "verification"
     description = "Require held-wakelock refresh inside acquireWakeLock — Phase 1.8 / C17 round-2 fix."
-    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
-    inputs.file(serviceFile).withPropertyName("recordingService")
-    doLast {
-        if (!serviceFile.exists()) {
-            throw GradleException("checkWakeLockHeldRefresh: source file missing: $serviceFile")
-        }
-        val lines = serviceFile.readLines()
-        val fnStart = lines.indexOfFirst { it.contains("private fun acquireWakeLock()") }
-        if (fnStart < 0) {
-            throw GradleException(
-                "checkWakeLockHeldRefresh: acquireWakeLock() declaration not found in " +
-                    serviceFile.relativeTo(rootDir)
-            )
-        }
-        // Walk forward to the first matching `}` at the function's
-        // opening-brace indent. acquireWakeLock is declared with 4-space
-        // indent, so its closing brace is `    }` exactly.
-        val fnEnd = (fnStart + 1 until lines.size).firstOrNull { lines[it] == "    }" }
-            ?: throw GradleException(
-                "checkWakeLockHeldRefresh: could not locate end of acquireWakeLock() body."
-            )
-        val body = lines.subList(fnStart, fnEnd + 1).joinToString("\n")
-        val hasHeldGuard = body.contains("existing?.isHeld == true")
-        val hasRefresh = body.contains("existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)")
-        if (!hasHeldGuard || !hasRefresh) {
-            throw GradleException(
-                "C17 round-2 violation (Phase 1.8 §WakeLock Discipline) — " +
-                    "acquireWakeLock() must refresh the bounded timeout on the " +
-                    "held branch.\n" +
-                    "Required statements inside the function body:\n" +
-                    "  - `existing?.isHeld == true` guard: ${if (hasHeldGuard) "OK" else "MISSING"}\n" +
-                    "  - `existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)`: ${if (hasRefresh) "OK" else "MISSING"}\n" +
-                    "Fix: in the `if (existing?.isHeld == true)` branch, call " +
-                    "`existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)` before " +
-                    "returning so continuous sessions cannot outlive the timeout."
-            )
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt"))
+    checkId.set("checkWakeLockHeldRefresh")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkWakeLockHeldRefresh.ok"))
 }
 
 /**
@@ -1636,40 +756,13 @@ val checkWakeLockHeldRefresh = tasks.register("checkWakeLockHeldRefresh") {
  * after the `waitForNextSegment` call, with `acquireWakeLock()` inside
  * the lookahead window. Drop the else branch and preBuild fails.
  */
-val checkWakeLockZeroGapRefresh = tasks.register("checkWakeLockZeroGapRefresh") {
+val checkWakeLockZeroGapRefresh = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkWakeLockZeroGapRefresh") {
     group = "verification"
     description = "Require WakeLock refresh on the zero-gap continuing-loop path — Phase 1.8 / C17 round-3 fix."
-    val serviceFile = file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
-    inputs.file(serviceFile).withPropertyName("recordingService")
-    doLast {
-        if (!serviceFile.exists()) {
-            throw GradleException("checkWakeLockZeroGapRefresh: source file missing: $serviceFile")
-        }
-        val lines = serviceFile.readLines()
-        val ifIdx = lines.indexOfFirst { it.contains("if (waitSeconds > 0)") }
-        if (ifIdx < 0) {
-            throw GradleException(
-                "checkWakeLockZeroGapRefresh: `if (waitSeconds > 0)` not found in " +
-                    serviceFile.relativeTo(rootDir)
-            )
-        }
-        val window = lines.subList(ifIdx, minOf(ifIdx + 20, lines.size)).joinToString("\n")
-        val hasElse = Regex("""\}\s*else\s*\{""").containsMatchIn(window)
-        val hasRefresh = window.contains("acquireWakeLock()")
-        if (!hasElse || !hasRefresh) {
-            throw GradleException(
-                "C17 round-3 violation (Phase 1.8 §WakeLock Discipline) — " +
-                    "the `if (waitSeconds > 0) { waitForNextSegment(...) }` block must " +
-                    "have an `else { acquireWakeLock() }` clause so back-to-back " +
-                    "(interval <= duration) sessions still refresh the bounded " +
-                    "WakeLock timeout.\n" +
-                    "  - `} else {` clause: ${if (hasElse) "OK" else "MISSING"}\n" +
-                    "  - `acquireWakeLock()` in window: ${if (hasRefresh) "OK" else "MISSING"}\n" +
-                    "Fix: add `} else { acquireWakeLock() }` after the " +
-                    "`waitForNextSegment` call inside the recording loop."
-            )
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt"))
+    checkId.set("checkWakeLockZeroGapRefresh")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkWakeLockZeroGapRefresh.ok"))
 }
 
 // B3 i18n externalization (ADR-0022 §No Hardcoded UI Strings):
@@ -1695,125 +788,40 @@ val checkWakeLockZeroGapRefresh = tasks.register("checkWakeLockZeroGapRefresh") 
 // sites only. A literal that lives on a continuation line below `Text(` /
 // `text =` is a known blind spot, accepted because the goal is catching the
 // common copy-paste regression, not proving total absence.
-val checkNoHardcodedUiStrings = tasks.register("checkNoHardcodedUiStrings") {
+val checkNoHardcodedUiStrings = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkNoHardcodedUiStrings") {
     group = "verification"
     description = "Forbid hardcoded user-facing string literals at Text(/contentDescription call sites — externalize to res/values/strings.xml (ADR-0022 §No Hardcoded UI Strings)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkNoHardcodedUiStrings: Rova source dir missing: $srcDir")
-        }
-        // `Text("` or `Text(text = "` — require `"` as the next non-space token
-        // so `Text(stringResource(...))` / `Text(text = getString(...))` don't match.
-        val textLiteral = Regex("""(^|[^A-Za-z0-9_])Text\(\s*(text\s*=\s*)?"""")
-        // `contentDescription = "` (with or without spaces around `=`).
-        val contentDescLiteral = Regex("""contentDescription\s*=\s*"""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        if (line.contains("i18n-opt-out")) return@filter false
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else textLiteral.containsMatchIn(line) ||
-                            contentDescLiteral.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Hardcoded user-facing string literal(s) found at Compose " +
-                    "`Text(`/`contentDescription =` call sites. User-facing copy " +
-                    "must live in `res/values/strings.xml` and be read via " +
-                    "`stringResource(...)` / `getString(...)` (ADR-0022 §No " +
-                    "Hardcoded UI Strings). For a genuinely non-user-facing " +
-                    "literal or @Preview-only sample data, add a " +
-                    "`// i18n-opt-out: <reason>` marker on the line to skip it. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkNoHardcodedUiStrings")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkNoHardcodedUiStrings.ok"))
 }
 
-val checkLocaleConfigNoPseudolocale = tasks.register("checkLocaleConfigNoPseudolocale") {
+val checkLocaleConfigNoPseudolocale = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkLocaleConfigNoPseudolocale") {
     group = "verification"
     description = "Forbid pseudolocale tags (en-XA/ar-XB) in res/xml/locales_config.xml — they must never reach the system per-app-language list (ADR-0023 §No Pseudolocale In LocaleConfig)."
-    val configFile = file("src/main/res/xml/locales_config.xml")
-    inputs.file(configFile).withPropertyName("localesConfig")
-    doLast {
-        if (!configFile.exists()) {
-            throw GradleException("checkLocaleConfigNoPseudolocale: locales_config.xml missing: $configFile")
-        }
-        // Match pseudolocale tags only inside android:name="..." attribute values.
-        // Covers BCP-47 forms: en-XA, en-rXA, ar-XB, ar-rXB (case-insensitive).
-        val pseudo = Regex("""android:name\s*=\s*"[^"]*\b(en|ar)-r?X[AB]\b[^"]*"""", RegexOption.IGNORE_CASE)
-        val offenders = configFile.readLines()
-            .withIndex()
-            .filter { (_, line) -> pseudo.containsMatchIn(line) }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (i, line) ->
-                "  ${configFile.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-            }
-            throw GradleException(
-                "Pseudolocale tag(s) found in locales_config.xml. Pseudolocales " +
-                    "(en_XA / ar_XB) are a DEBUG-ONLY QA tool and must never be " +
-                    "advertised as a user language (ADR-0023 §No Pseudolocale In " +
-                    "LocaleConfig). Remove them; keep generateLocaleConfig OFF. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.file("src/main/res/xml/locales_config.xml")
+    )
+    checkId.set("checkLocaleConfigNoPseudolocale")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkLocaleConfigNoPseudolocale.ok"))
 }
 
 // ADR-0026 — a preset is a config bundle ONLY; orientation/mode must never become
 // a RovaPreset field, or the preset/orientation vocabulary collision returns.
 // Scans the two preset source files for an orientation/mode property declaration.
-val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
+val checkPresetNoOrientation = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkPresetNoOrientation") {
     group = "verification"
     description = "Forbid an orientation/mode field on RovaPreset/BuiltInPresets — preset = config bundle only (ADR-0026)."
-    val files = listOf(
-        file("src/main/java/com/aritr/rova/data/RovaSettings.kt"),
-        file("src/main/java/com/aritr/rova/data/BuiltInPresets.kt"),
-    )
-    inputs.files(files).withPropertyName("presetSources")
-    doLast {
-        // `val mode`/`var mode`/`val orientation` etc. as a declared property.
-        val offendingProp = Regex("""(^|\s)(val|var)\s+(mode|orientation)\b""")
-        // RovaPreset's parameter list must not name a mode/orientation field.
-        val ctorParam = Regex("""\b(mode|orientation)\s*:""")
-        val rovaPresetSrc = files[0]
-        if (!rovaPresetSrc.exists()) {
-            throw GradleException("checkPresetNoOrientation: source missing: $rovaPresetSrc")
-        }
-        // Narrow to the RovaPreset declaration block to avoid matching unrelated
-        // `mode` usage elsewhere in RovaSettings.kt (e.g. the legacy `mode` pref).
-        val text = rovaPresetSrc.readText()
-        val start = text.indexOf("data class RovaPreset")
-        if (start >= 0) {
-            val end = text.indexOf(")", start).let { if (it < 0) text.length else it }
-            val block = text.substring(start, end)
-            if (ctorParam.containsMatchIn(block)) {
-                throw GradleException(
-                    "checkPresetNoOrientation: RovaPreset must not declare a mode/orientation field (ADR-0026)."
-                )
-            }
-        }
-        val builtIns = files[1]
-        if (builtIns.exists() && offendingProp.containsMatchIn(builtIns.readText())) {
-            throw GradleException(
-                "checkPresetNoOrientation: BuiltInPresets must not declare a mode/orientation property (ADR-0026)."
-            )
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/data/RovaSettings.kt"))
+    sources.from(layout.projectDirectory.file("src/main/java/com/aritr/rova/data/BuiltInPresets.kt"))
+    checkId.set("checkPresetNoOrientation")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkPresetNoOrientation.ok"))
 }
 
 // ADR-0030 gate (42nd) — Library/History UI must never mutate a SessionManifest.
@@ -1828,253 +836,101 @@ val checkPresetNoOrientation = tasks.register("checkPresetNoOrientation") {
 // gate asserts that marker appears exactly once, in HistoryScreen.kt, on a
 // markTerminated call — a stray marker anywhere else is itself a failure. Matching is
 // regex (`\bname\s*\(`) so a forbidden call survives reformatting (e.g. `name (`).
-val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") {
+val checkLibraryNoManifestWrite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkLibraryNoManifestWrite") {
     group = "verification"
-    // Exception-free since Slice 3 (ADR-0030 §2 amendment): the lone sanctioned write (recovery-keep
-    // markTerminated) relocated to ui/recovery/RecoveryViewModelFactory.kt — out of scope — so this gate now
-    // asserts ZERO manifest mutations in Library/History UI, full stop. Recovery-owned writes belong in
-    // ui/recovery/ (ADR-0005), never here.
     description = "Library/History UI must not call SessionManifest-mutating SessionStore APIs (ADR-0030 §2)."
-    // Method names (no paren) of every SessionManifest-mutating SessionStore API.
-    val forbidden = listOf(
-        "markTerminated", "appendSegment", "submitPersistFinalizedSegment",
-        "setExportPending", "setExportPrivateTarget", "setExportCopying",
-        "setExportSafPrivateTemp", "setExportSafTarget", "setExportFinalized",
-        "setExportFailed", "setMediaScanCompleted", "incrementSafTransientRetry",
-        "setExportPendingForSide", "setExportPrivateTargetForSide",
-        "setExportSafPrivateTempForSide", "setExportSafTargetForSide",
-        "setExportFinalizedForSide", "setMediaScanCompletedForSide",
-        "setVaultFinalized", "setVaultFinalizedForSide", "setVaultState",
-        "setVaultMovedOut", "setVaultStateVaultedAndClearPublic",
-        "setPendingMoveOutTier1", "setPendingMoveOutPreQ", "setStopRequested",
-        "writeManifestAtomic",
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
     )
-    val callRegex = Regex("\\b(${forbidden.joinToString("|")})\\s*\\(")
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            val inScope = rel.startsWith("ui/library/") ||
-                (rel.startsWith("ui/screens/") && (rel.contains("History") || rel.contains("Library")))
-            if (!inScope) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                // Match only the code before an inline `//` so a commented-out example call
-                // (e.g. `x // markTerminated(`) cannot false-fail.
-                val code = line.substringBefore("//")
-                if (callRegex.containsMatchIn(code)) offenders += "$rel:${i + 1}: ${line.trim()}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0030 §2: Library/History UI must not mutate SessionManifest — use LibraryMetadataStore " +
-                    "(recovery-owned writes belong in ui/recovery/):\n" + offenders.joinToString("\n")
-            )
-        }
-    }
+    checkId.set("checkLibraryNoManifestWrite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkLibraryNoManifestWrite.ok"))
 }
 
 // ADR-0031 §4 (P0) — every in-app glyph tint flows through the SemanticIcon seam. A raw Color literal
 // bound to a `tint =` argument bypasses the theme engine's single icon-color contract. Keyed on the
 // `tint =` argument (offenders are multi-line Icon(...) calls), scanned over a 3-line window so a
 // wrapped/conditional Color value is still caught. The seam file is allowlisted by canonical path.
-val checkSemanticIconNoRawAlpha = tasks.register("checkSemanticIconNoRawAlpha") {
+val checkSemanticIconNoRawAlpha = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSemanticIconNoRawAlpha") {
     group = "verification"
     description = "Forbid a raw Color literal as an Icon tint outside the SemanticIcon seam — all glyph " +
         "color must flow through SemanticIcon/SemanticIconSpec (ADR-0031 §4)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val seamFile = file("src/main/java/com/aritr/rova/ui/components/SemanticIcon.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkSemanticIconNoRawAlpha: Rova source dir missing: $srcDir")
-        }
-        // `\bColor\s*[.(]` matches a standalone `Color` token (word boundary) followed by `.` or `(`,
-        // so theme-derived tints (`tint = palette.textHigh`, `tint = LocalContentColor.current`,
-        // `tint = RecordChromeTokens.navIcon`, `tint = severityColor`) are NOT flagged. Non-greedy `.*?`
-        // stops at the first Color token.
-        val rawTintPattern = Regex("""tint\s*=.*?\bColor\s*[.(]""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != seamFile }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = lines.indices.mapNotNull { i ->
-                    val line = lines[i]
-                    if (line.contains("semanticicon-opt-out")) return@mapNotNull null
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@mapNotNull null
-                    if (!line.contains("tint")) return@mapNotNull null
-                    val window = (i until minOf(i + 3, lines.size)).joinToString(" ") { lines[it] }
-                    if (rawTintPattern.containsMatchIn(window)) i to line else null
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0031 §4 violation: raw Color literal used as an Icon tint outside the SemanticIcon " +
-                    "seam. Route glyph color through `SemanticIcon(role = …, status = …)` / " +
-                    "`SemanticIconSpec` so the theme engine drives icon color from one place. " +
-                    "For a genuinely non-themed glyph, add `// semanticicon-opt-out: <reason>` on the line.\n" +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSemanticIconNoRawAlpha")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSemanticIconNoRawAlpha.ok"))
 }
 
 // ADR-0031 §3 (P0) — locked semantic status colors. A RovaSemantics color is exact and used at full
 // opacity; mutating it at a call-site (.copy of alpha or any channel) breaks the lock. The status→
 // RovaSemantics mapping itself is covered by SemanticIconSpecTest; this gate enforces no-mutation everywhere.
-val checkStatusColorLocked = tasks.register("checkStatusColorLocked") {
+val checkStatusColorLocked = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkStatusColorLocked") {
     group = "verification"
     description = "Forbid per-call mutation (.copy of alpha or any channel) of a locked RovaSemantics " +
         "status color — status colors are exact, used at full locked opacity, always paired with shape " +
         "(ADR-0031 §3, WCAG 1.4.1)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkStatusColorLocked: Rova source dir missing: $srcDir")
-        }
-        // The `.copy(` opener sits on the `RovaSemantics.<member>` line even when args wrap, so this
-        // also catches the multiline / positional-arg (`copy(0.6f)`) cases an alpha-only regex misses.
-        val dilutePattern = Regex("""RovaSemantics\s*\.\s*\w+\s*\.copy\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else dilutePattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0031 §3 violation: a locked RovaSemantics status color is mutated (.copy) at the " +
-                    "call-site. Status colors render exact, at full locked opacity (and are paired with " +
-                    "shape, WCAG 1.4.1). Use the color directly, or vary emphasis with shape/size.\n" +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkStatusColorLocked")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkStatusColorLocked.ok"))
 }
 
 // ADR-0029 PR-γ gate 1 — live capture paths must not branch on the legacy
 // orientation-carrying mode strings; read-compat sites are allowlisted (§6).
 // Comment/KDoc lines are skipped: documenting a legacy value is legal,
 // branching on one is not.
-val checkNoLegacyModeStrings = tasks.register("checkNoLegacyModeStrings") {
+val checkNoLegacyModeStrings = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkNoLegacyModeStrings") {
     group = "verification"
     description = "Forbid \"Portrait\"/\"Landscape\"/\"PortraitLandscape\" string literals outside legacy read-compat (ADR-0029 PR-γ §6)."
-    val allow = setOf(
-        "data/SessionManifest.kt",   // legacy "mode" JSON read-tolerance
-        "data/ModeMigration.kt",     // the migration mapper itself
-        "data/RovaSettings.kt",      // one-shot prefs migration
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
     )
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            if (allow.any { rel.endsWith(it) }) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                if (Regex("\"(Portrait|Landscape|PortraitLandscape)\"").containsMatchIn(line)) {
-                    offenders += "$rel:${i + 1}: ${line.trim()}"
-                }
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0029 PR-γ §6: legacy mode strings in live paths (use CaptureTopology):\n" +
-                    offenders.joinToString("\n")
-            )
-        }
-    }
+    checkId.set("checkNoLegacyModeStrings")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkNoLegacyModeStrings.ok"))
 }
 
 // ADR-0029 PR-γ gate 2 — rotation applies only at segment boundaries (§3):
 // setTargetRotation is reachable only from the allowlisted capture files.
-val checkSetTargetRotationBoundaryOnly = tasks.register("checkSetTargetRotationBoundaryOnly") {
+val checkSetTargetRotationBoundaryOnly = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSetTargetRotationBoundaryOnly") {
     group = "verification"
     description = "setTargetRotation only in RovaRecordingService/dualrecord (ADR-0029 §3 segment-boundary rule)."
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            val allowed = rel.endsWith("service/RovaRecordingService.kt") || rel.contains("service/dualrecord/")
-            if (allowed) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                if (line.contains("setTargetRotation(")) offenders += "$rel:${i + 1}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §3: setTargetRotation outside boundary-owning files:\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
+    )
+    checkId.set("checkSetTargetRotationBoundaryOnly")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSetTargetRotationBoundaryOnly.ok"))
 }
 
 // ADR-0029 PR-γ gate 3 — FrontBack construction is capability-gated (§5):
 // the topology may be referenced only by its declaration and the registry
 // that owns the capability gate. PR-δ extends the allowlist with the
 // concurrent-camera module it builds.
-val checkFrontBackCapabilityGated = tasks.register("checkFrontBackCapabilityGated") {
+val checkFrontBackCapabilityGated = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkFrontBackCapabilityGated") {
     group = "verification"
     description = "\"FrontBack\" referenced only in CaptureTopology/CaptureModes (capability gate site) (ADR-0029 §5)."
-    val allow = setOf("data/CaptureTopology.kt", "ui/screens/CaptureModes.kt")
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            if (allow.any { rel.endsWith(it) }) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                if (line.contains("FrontBack")) offenders += "$rel:${i + 1}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §5: FrontBack outside the capability-gated registry:\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
+    )
+    checkId.set("checkFrontBackCapabilityGated")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkFrontBackCapabilityGated.ok"))
 }
 
 // ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).
-val checkUserCopyVocabulary = tasks.register("checkUserCopyVocabulary") {
+val checkUserCopyVocabulary = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkUserCopyVocabulary") {
     group = "verification"
     description = "No loop/repeat/segment vocabulary in user-visible string VALUES, en+es (ADR-0029 §C terminology)."
-    val banned = Regex("(?i)\\b(loops?|repeats?|segments?|ciclos?|segmentos?|repeticion(es)?|bucles?)\\b")
-    // Allowlist by resource NAME for justified exceptions (none expected at γ).
-    val allowNames = setOf<String>()
-    doLast {
-        val offenders = mutableListOf<String>()
-        listOf("src/main/res/values/strings.xml", "src/main/res/values-es/strings.xml").forEach { p ->
-            val text = file(p).readText()
-            val nameRe = Regex("""<string name="([^"]+)"[^>]*>(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
-            val matches = nameRe.findAll(text).toList()
-            val declared = Regex("<string ").findAll(text).count()
-            if (declared != matches.size) {
-                throw GradleException("checkUserCopyVocabulary: parser matched ${matches.size}/$declared strings in $p — fix the regex")
-            }
-            matches.forEach { m ->
-                val (name, value) = m.destructured
-                if (name in allowNames) return@forEach
-                if (banned.containsMatchIn(value)) offenders += "$p: $name = ${value.trim()}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §C: banned vocabulary in user copy (use clip/session):\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/res/values/strings.xml"))
+    sources.from(layout.projectDirectory.file("src/main/res/values-es/strings.xml"))
+    checkId.set("checkUserCopyVocabulary")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkUserCopyVocabulary.ok"))
 }
 
 // ADR-0020 §Decision-3 (WCAG 2.2 AA — SC 2.3.3 "Animation from Interactions" /
@@ -2106,54 +962,16 @@ val checkUserCopyVocabulary = tasks.register("checkUserCopyVocabulary") {
 // animation in one composable and an ungated one in another passes. The
 // centralized seam makes per-file co-presence a strong signal; per-composable
 // proximity was rejected as brittle.
-val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
+val checkA11yAnimationGated = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yAnimationGated") {
     group = "verification"
     description = "Require a reduced-motion seam read in any file using rememberInfiniteTransition/infiniteRepeatable — WCAG 2.2 AA SC 2.3.3/2.2.2 (ADR-0020 §Decision-3)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkA11yAnimationGated: Rova source dir missing: $srcDir")
-        }
-        // `\s*\(` tolerates the legal `rememberInfiniteTransition (` spacing variant.
-        val rawPrimitive = Regex("""rememberInfiniteTransition\s*\(|infiniteRepeatable\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val triggers = lines.withIndex().filter { (_, line) ->
-                    if (line.contains("a11y-opt-out")) return@filter false
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else rawPrimitive.containsMatchIn(line)
-                }
-                if (triggers.isEmpty()) return@mapNotNull null
-                val hasSeam = lines.any {
-                    it.contains("rememberReduceMotion(") || it.contains("ReducedMotion.isReduced")
-                }
-                if (hasSeam) null else f to triggers
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-3 violation (WCAG 2.2 AA — SC 2.3.3 Animation " +
-                    "from Interactions / SC 2.2.2 Pause, Stop, Hide): looping/" +
-                    "auto-playing animation primitive(s) used without a " +
-                    "reduced-motion guard in the same file. Every file that uses " +
-                    "`rememberInfiniteTransition` / `infiniteRepeatable` must also " +
-                    "read the reduced-motion seam (`rememberReduceMotion()` or " +
-                    "`ReducedMotion.isReduced`) and select a static value when " +
-                    "motion is reduced. For a genuinely static or @Preview-only " +
-                    "animation, add `// a11y-opt-out: <reason>` on the primitive " +
-                    "line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yAnimationGated")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yAnimationGated.ok"))
 }
 
 // ADR-0020 §Decision-1 — checkA11yClickableHasRole (WCAG 2.2 AA SC 4.1.2 Name,
@@ -2182,69 +1000,16 @@ val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
 // `role = GlassRole.…` arg does NOT count — see roleAssign below.) This fails
 // SAFE — toward false-pass (a missed regression), never false-fail (a blocked
 // legit build).
-val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
+val checkA11yClickableHasRole = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yClickableHasRole") {
     group = "verification"
     description = "Require an accessibility role on custom Modifier.clickable/combinedClickable — WCAG 2.2 AA SC 4.1.2 (ADR-0020 §Decision-1)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkA11yClickableHasRole: Rova source dir missing: $srcDir")
-        }
-        // `.clickable(`/`.combinedClickable(` (paren) or `… {` (trailing lambda).
-        val clickable = Regex("""\.(clickable|combinedClickable)\s*[({]""")
-        // Require a literal `Role.` so the design-system `role = GlassRole.…`
-        // Liquid Glass arg does NOT satisfy the a11y-role requirement.
-        val roleAssign = Regex("""\brole\s*=\s*Role\.""")
-        // Opt-out is honored only when a non-empty reason follows the colon.
-        val optOut = Regex("""a11y-opt-out:\s*\S""")
-        // Window spans the modifier chain in BOTH directions: a chain's
-        // `.semantics { role }` can sit either AFTER the clickable (forward) or
-        // BEFORE it (e.g. a tab whose `.semantics { selected; role = Role.Tab }`
-        // precedes a conditional `.let { … clickable … }` ~10 lines further down).
-        // Both spans are generous so such a legitimately-roled chain is never
-        // false-FAILED (a blocked legit build). The trade-off is the SAFE
-        // direction: an unrelated role within the span can over-reach into a
-        // false-PASS (a missed regression), never a false-fail.
-        val backWindow = 15
-        val forwardWindow = 20
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = lines.withIndex().filter { (idx, line) ->
-                    if (optOut.containsMatchIn(line)) return@filter false
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@filter false
-                    if (!clickable.containsMatchIn(line)) return@filter false
-                    val from = maxOf(0, idx - backWindow)
-                    val to = minOf(lines.size - 1, idx + forwardWindow)
-                    !roleAssign.containsMatchIn(lines.subList(from, to + 1).joinToString("\n"))
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 4.1.2 Name, " +
-                    "Role, Value): custom Modifier.clickable / combinedClickable " +
-                    "used without an accessibility role on the same modifier " +
-                    "chain. A custom clickable container (Row/Box/Surface/Column) " +
-                    "must declare a role so TalkBack announces it as actionable — " +
-                    "either `clickable(role = Role.Button, …)` or an adjacent " +
-                    "`.semantics { role = … }` / `.clearAndSetSemantics { role = … }`. " +
-                    "Material Button/IconButton supply a role already. For toggles/" +
-                    "selections use toggleable/selectable (out of scope here). For a " +
-                    "genuinely role-exempt case, add `// a11y-opt-out: <reason>` " +
-                    "(reason required) on the clickable line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yClickableHasRole")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yClickableHasRole.ok"))
 }
 
 // ADR-0020 §Decision-1 — checkA11yTargetSizeToken (WCAG 2.2 AA SC 2.5.8 Target
@@ -2272,333 +1037,82 @@ val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
 // false-failing a legit rename. Opt-out: a token line bearing
 // `// a11y-opt-out: <reason>` (reason required) is skipped — for a control whose
 // 24dp touch floor is met by call-site padding/`heightIn` rather than the token.
-val checkA11yTargetSizeToken = tasks.register("checkA11yTargetSizeToken") {
+val checkA11yTargetSizeToken = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yTargetSizeToken") {
     group = "verification"
     description = "Require interactive-target size tokens >= 24.dp — WCAG 2.2 AA SC 2.5.8 (ADR-0020 §Decision-1)."
-    val themeDir = file("src/main/java/com/aritr/rova/ui/theme")
-    inputs.dir(themeDir).withPropertyName("rovaThemeTokens")
-    doLast {
-        if (!themeDir.exists()) {
-            throw GradleException("checkA11yTargetSizeToken: theme token dir missing: $themeDir")
-        }
-        // Enumerated interactive-target size tokens (bare `val` names; the same
-        // name declared in two token objects — e.g. camControlSize in RovaTokens
-        // and RecordChromeTokens — is checked in both). EXTEND this set when a
-        // new tappable control gets a size token.
-        val interactiveSizeTokens = setOf(
-            "camControlSize",    // cam-ctrl-btn diameter
-            "stepperButtonSize", // stepper +/- button (RovaTokens)
-            "stepBtnSize",       // stepper +/- button (SettingsSheetTokens)
-            "primaryActionSize", // Start FAB
-            "stopActionSize",    // Stop FAB
-            "fabSize",           // record-chrome FAB
-            "navIconBoxSize",    // bottom-nav item tap box
-            "tileMinHeight",     // preset tile
-            // NOT pinned: cellSlot — it is a 44dp VISUAL slot whose 24dp touch
-            // floor is owned by the parent card's `heightIn(min = 48.dp)` at the
-            // call site, not by the token. Pinning a proxy here would assert the
-            // wrong thing; the call-site floor is a separate (future) invariant.
-        )
-        val minTargetDp = 24.0
-        // `val NAME [: Dp] = <number>.dp` — tolerates the optional `: Dp` type.
-        val tokenDecl = Regex("""\bval\s+(\w+)\s*(?::\s*Dp\s*)?=\s*(\d+(?:\.\d+)?)\s*\.dp\b""")
-        val optOut = Regex("""a11y-opt-out:\s*\S""")
-        val offenders = themeDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .flatMap { f ->
-                var inBlock = false // inside a /* … */ (incl. /** KDoc */) block
-                f.readLines().withIndex().mapNotNull inner@{ (idx, line) ->
-                    // Track block-comment state so a commented-out
-                    // `val NAME = N.dp` can NEVER false-fail (trailing marker
-                    // wins; a same-line `/* … */` is skipped by the `/*` prefix
-                    // check below). KDoc inner `*` lines are skipped too.
-                    val wasInBlock = inBlock
-                    val opens = line.lastIndexOf("/*")
-                    val closes = line.lastIndexOf("*/")
-                    if (opens >= 0 || closes >= 0) inBlock = opens > closes
-                    if (wasInBlock) return@inner null
-                    if (optOut.containsMatchIn(line)) return@inner null
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") ||
-                        trimmed.startsWith("/*")
-                    ) return@inner null
-                    val m = tokenDecl.find(line) ?: return@inner null
-                    if (m.groupValues[1] !in interactiveSizeTokens) return@inner null
-                    if (m.groupValues[2].toDouble() >= minTargetDp) null
-                    else Triple(f, idx + 1, line.trim())
-                }
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ln, line) ->
-                "  ${f.relativeTo(rootDir)}:$ln: $line"
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 2.5.8 Target " +
-                    "Size (Minimum)): an interactive-target size token is below " +
-                    "the 24.dp accessibility floor. A tappable control's size " +
-                    "token (button diameter / tap box / FAB / tile) " +
-                    "must be >= 24.dp. (Material 3's 48dp is a guideline; 24dp is " +
-                    "the WCAG AA bar.) Raise the token, or — if the 24dp touch " +
-                    "floor is met by call-site padding/`heightIn` rather than the " +
-                    "token itself — add `// a11y-opt-out: <reason>` (reason " +
-                    "required) on the token line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui/theme")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yTargetSizeToken")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yTargetSizeToken.ok"))
 }
 
 // B5 / ADR-0025 — the core privacy invariant, mechanically enforced:
 // VaultExporter must never reach a public-publish API. A vaulted recording
 // stays app-private; any MediaStore insert / media scan / public-dir write
 // inside VaultExporter.kt would silently make it gallery-visible.
-val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPublicPublish") {
+val checkVaultExporterNoPublicPublish = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkVaultExporterNoPublicPublish") {
     group = "verification"
     description = "Forbid public-publish APIs in VaultExporter (ADR-0025 — vault recordings never publish)."
-    val vaultExporter = file("src/main/java/com/aritr/rova/service/export/VaultExporter.kt")
-    inputs.file(vaultExporter).withPropertyName("vaultExporterSource")
-    doLast {
-        if (!vaultExporter.exists()) {
-            throw GradleException("checkVaultExporterNoPublicPublish: VaultExporter.kt missing: $vaultExporter")
-        }
-        val forbidden = listOf(
-            "MediaStore",
-            "MediaScannerConnection",
-            "insertPendingRow",
-            "scanAndWait",
-            "DIRECTORY_MOVIES",
-            "IS_PENDING",
-            ".insert(",
-            "getExternalStoragePublicDirectory",
-        )
-        val hits = vaultExporter.readLines().withIndex().filter { (_, line) ->
-            val t = line.trimStart()
-            if (t.startsWith("//") || t.startsWith("*")) false
-            else forbidden.any { line.contains(it) }
-        }
-        if (hits.isNotEmpty()) {
-            val report = hits.joinToString("\n") { (i, line) -> "  VaultExporter.kt:${i + 1}: ${line.trim()}" }
-            throw GradleException(
-                "ADR-0025: VaultExporter must not reference any public-publish API " +
-                    "(vault recordings stay app-private). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/export/VaultExporter.kt")
+    )
+    checkId.set("checkVaultExporterNoPublicPublish")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkVaultExporterNoPublicPublish.ok"))
 }
 
 // ADR-0031 §5 (P1) — bespoke ImageVectors have one home. `ImageVector.Builder(` may appear only in
 // RovaGlyphs.kt; folding RecordChromeIcons in here removed the second declaration site. This subsumes
 // the old RecordChromeIcons.kt allowance in checkRecordSurfaceNoBlur.
-val checkRovaGlyphHome = tasks.register("checkRovaGlyphHome") {
+val checkRovaGlyphHome = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRovaGlyphHome") {
     group = "verification"
     description = "Bespoke ImageVectors must be declared only in RovaGlyphs.kt — one home for " +
         "hand-authored glyphs so the icon family + theme engine resolve from a single source (ADR-0031 §5)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val homeFile = file("src/main/java/com/aritr/rova/ui/theme/RovaGlyphs.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkRovaGlyphHome: Rova source dir missing: $srcDir")
-        }
-        // Whole-file scan (NOT per-line): `\s` then matches a newline, so a builder split across
-        // lines (`ImageVector.\n    Builder(`) is still caught (codex-flagged false-negative). Strip
-        // block + line comments first (preserving line counts) so KDoc/examples never false-fire.
-        val builderPattern = Regex("""\bImageVector\s*\.\s*Builder\s*\(""")
-        fun stripComments(src: String): String {
-            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
-            return noBlock.lines().joinToString("\n") { line ->
-                val i = line.indexOf("//"); if (i >= 0) line.substring(0, i) else line
-            }
-        }
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != homeFile }
-            .mapNotNull { f ->
-                val text = stripComments(f.readText())
-                val hits = builderPattern.findAll(text)
-                    .map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }
-                    .toList()
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { line -> "  ${f.relativeTo(rootDir)}:$line" }
-            }
-            throw GradleException(
-                "ADR-0031 §5 violation: a bespoke ImageVector is declared outside RovaGlyphs.kt. " +
-                    "All hand-authored glyphs live in ui/theme/RovaGlyphs.kt so the icon family and the " +
-                    "theme engine resolve glyphs from one place. Move the vector there.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRovaGlyphHome")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRovaGlyphHome.ok"))
 }
 
-val checkSingleColorSchemeSource = tasks.register("checkSingleColorSchemeSource") {
+val checkSingleColorSchemeSource = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSingleColorSchemeSource") {
     group = "verification"
     description = "The Material ColorScheme is constructed in exactly one place — the engine " +
         "(Theme.kt builds it from PaletteColorScheme; PaletteColorScheme.kt holds the factory base). " +
         "No other file may call darkColorScheme(/lightColorScheme( or pass MaterialTheme(colorScheme=…) " +
         "(ADR-0028 amendment 2026-06-18). // colorscheme-source-opt-out to waive a line."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val allow = setOf(
-        file("src/main/java/com/aritr/rova/ui/theme/Theme.kt").canonicalFile,
-        file("src/main/java/com/aritr/rova/ui/theme/PaletteColorScheme.kt").canonicalFile,
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
     )
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkSingleColorSchemeSource: Rova source dir missing: $srcDir")
-        }
-        // Strip block + line comments AND string literals (preserve newlines for line numbers) so a
-        // `colorScheme =` inside a comment/string never matches.
-        fun strip(src: String): String {
-            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
-            val noLine = noBlock.lines().joinToString("\n") { line ->
-                val i = line.indexOf("//")
-                if (i >= 0) line.substring(0, i) + " ".repeat(line.length - i) else line
-            }
-            // blank out double-quoted string contents (keep quotes + length)
-            val noStr = Regex(""""[^"\\]*(?:\\.[^"\\]*)*"""").replace(noLine) { m -> "\"" + " ".repeat((m.value.length - 2).coerceAtLeast(0)) + "\"" }
-            // blank char literals too — a Kotlin '(' or ')' must not corrupt the balanced-paren scan (codex).
-            // Preserve length (escaped literals like '\n' are 4 chars) so raw-offset waiver stays 1:1.
-            return Regex("""'(\\.|[^'\\])'""").replace(noStr) { m -> "'" + " ".repeat(m.value.length - 2) + "'" }
-        }
-        fun lineAt(text: String, idx: Int) = text.substring(0, idx).count { it == '\n' } + 1
-        val factory = Regex("""\b(dark|light)ColorScheme\s*\(""")
-        val mt = Regex("""\bMaterialTheme\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile !in allow }
-            .mapNotNull { f ->
-                val raw = f.readText()
-                val text = strip(raw)
-                val hits = mutableListOf<Int>()
-                factory.findAll(text).forEach { m ->
-                    if (!waived(raw, m.range.first)) hits += lineAt(text, m.range.first)
-                }
-                // Balanced-paren scan from each MaterialTheme( — inspect only THAT call's args for colorScheme=
-                mt.findAll(text).forEach { m ->
-                    val open = text.indexOf('(', m.range.first)
-                    if (open < 0) return@forEach
-                    var depth = 0; var i = open; var close = -1
-                    while (i < text.length) {
-                        when (text[i]) { '(' -> depth++; ')' -> { depth--; if (depth == 0) { close = i; break } } }
-                        i++
-                    }
-                    if (close < 0) return@forEach
-                    val args = text.substring(open + 1, close)
-                    if (Regex("""\bcolorScheme\s*=""").containsMatchIn(args) && !waived(raw, m.range.first)) {
-                        hits += lineAt(text, m.range.first)
-                    }
-                }
-                if (hits.isEmpty()) null else f to hits.sorted()
-            }.toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { "  ${f.relativeTo(rootDir)}:$it" }
-            }
-            throw GradleException(
-                "ADR-0028 amendment: the Material ColorScheme must be built only by the theme engine " +
-                    "(Theme.kt / PaletteColorScheme.kt). A surface constructs or overrides its own scheme " +
-                    "— route it through the active palette instead.\nOffenders:\n$report"
-            )
-        }
-    }
+    checkId.set("checkSingleColorSchemeSource")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSingleColorSchemeSource.ok"))
 }
 
-// shared: a `// colorscheme-source-opt-out` on the same or previous line waives a hit
-fun waived(text: String, idx: Int): Boolean {
-    val lineStart = text.lastIndexOf('\n', idx).let { if (it < 0) 0 else it }
-    val lineEnd = text.indexOf('\n', idx).let { if (it < 0) text.length else it }
-    val prevStart = text.lastIndexOf('\n', (lineStart - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it }
-    return text.substring(prevStart, lineEnd).contains("colorscheme-source-opt-out")
-}
-
-val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
+val checkRecordSurfaceNoBlur = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecordSurfaceNoBlur") {
     group = "verification"
     description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkRecordSurfaceNoBlur: Rova source dir missing: $srcDir")
-        }
-        // Record-chrome rendering files (confirmed real). DualPreviewZone is
-        // deliberately EXCLUDED — it's the camera preview/carve-out, not chrome.
-        val recordChromeNames = setOf(
-            "RecordScreen.kt", "RecordChrome.kt",
-        )
-        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name in recordChromeNames }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val t = line.trimStart()
-                    if (t.startsWith("//") || t.startsWith("*")) false
-                    else blurPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0028 §2.3 violation: record-chrome files must not blur. Record glass " +
-                    "renders through GlassRole.RecordChrome, whose resolver returns " +
-                    "blurRadius=0 (fill + scrim + edge + opaque text capsule instead). " +
-                    "DualPreviewZone's RenderEffect on non-recorded margins is the only " +
-                    "documented carve-out and is not record chrome.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecordSurfaceNoBlur")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecordSurfaceNoBlur.ok"))
 }
 
-val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
+val checkGlassSurfaceRoleUsage = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkGlassSurfaceRoleUsage") {
     group = "verification"
     description = "Modifier.blur is permitted only in GlassSurface.kt (resolver-driven glass), the DualPreviewZone carve-out, and pre-existing glow-bloom (WarningSheetV3/RecoveryCall). All new glass goes through GlassSurface(role=…) (ADR-0028 §2.1/§5)."
-    val srcDir = file("src/main/java/com/aritr/rova/ui")
-    inputs.dir(srcDir).withPropertyName("rovaUiSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkGlassSurfaceRoleUsage: Rova ui source dir missing: $srcDir")
-        }
-        // GlassSurface = sanctioned glass blur. DualPreviewZone = ADR carve-out
-        // (RenderEffect on non-recorded margins). WarningSheetV3 + RecoveryCard =
-        // pre-existing decorative icon-glow bloom; TODO(PR6/PR9): revisit when
-        // those surfaces migrate to GlassSurface.
-        val allowlist = setOf(
-            "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheetV3.kt", "RecoveryCard.kt",
-        )
-        // Aligned with checkRecordSurfaceNoBlur: also catch RenderEffect/backdrop
-        // blur so the "all glass through GlassSurface" invariant stays airtight as
-        // later PRs migrate surfaces (the only current RenderEffect site is the
-        // allowlisted DualPreviewZone carve-out).
-        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name !in allowlist }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val t = line.trimStart()
-                    if (t.startsWith("//") || t.startsWith("*")) false
-                    else blurPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0028 §2.1/§5 violation: Modifier.blur outside the sanctioned glass " +
-                    "wrapper. All translucent glass must render through " +
-                    "GlassSurface(role=…) so the GlassResolver owns the blur/fallback " +
-                    "decision. Permitted only in GlassSurface.kt, the DualPreviewZone.kt " +
-                    "carve-out, and the pre-existing glow-bloom sites.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkGlassSurfaceRoleUsage")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkGlassSurfaceRoleUsage.ok"))
 }
 
 // PR-ε — ADR-0029 §B″ (single lock writer): `requestedOrientation` on the UI
@@ -2608,51 +1122,21 @@ val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
 // Comments are stripped before matching (block/KDoc + line) because prose
 // mentions are legal — e.g. DualShotPortraitGate.kt documents the legacy
 // lock in KDoc.
-val checkRecordChromeLockSingleSite = tasks.register("checkRecordChromeLockSingleSite") {
+val checkRecordChromeLockSingleSite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecordChromeLockSingleSite") {
     group = "verification"
     description = "Forbid requestedOrientation writes in ui/ outside RecordScreen.kt (ADR-0029 §B″ single lock writer)."
-    val uiDir = file("src/main/java/com/aritr/rova/ui")
-    inputs.dir(uiDir).withPropertyName("rovaUiSources")
-    doLast {
-        if (!uiDir.exists()) {
-            throw GradleException("checkRecordChromeLockSingleSite: Rova ui source dir missing: $uiDir")
-        }
-        // Blank out block/KDoc comments but keep their newlines so reported
-        // line numbers stay true to the file on disk.
-        val blockComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-        // Canonical-path compare (checkScanTriggerSingleSite precedent) — a
-        // second RecordScreen.kt in another ui/ subpackage must not slip through.
-        val allowedWriter = file("src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt").canonicalFile
-        val offenders = uiDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != allowedWriter }
-            .mapNotNull { f ->
-                val stripped = blockComment.replace(f.readText()) { m ->
-                    m.value.filter { ch -> ch == '\n' }
-                }
-                val hits = stripped.lines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        line.substringBefore("//").contains("requestedOrientation")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0029 §B″ violation: requestedOrientation touched on the UI side " +
-                    "outside RecordScreen.kt. The unified DisposableEffect in " +
-                    "RecordScreen is the ONLY UI-layer requestedOrientation writer; " +
-                    "RecordChromeLockPolicy.shouldLock is the sole decision point. " +
-                    "A second writer reintroduces lock/unlock races.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecordChromeLockSingleSite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecordChromeLockSingleSite.ok"))
 }
 
-afterEvaluate {
+// preBuild gate wiring — pluginManager.withPlugin (not afterEvaluate) so it fires
+// once AGP has registered preBuild, without the fragile afterEvaluate ordering
+// (config-cache-safe; the 46 gates are typed SourceCheckTasks in build-logic).
+pluginManager.withPlugin("com.android.application") {
     tasks.matching { it.name == "preBuild" }.configureEach {
         dependsOn(checkSchedulerNoGetService)
         dependsOn(checkScheduleReceiverNoFgsStart)
