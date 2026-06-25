@@ -162,84 +162,32 @@ val checkSchedulerNoGetService = tasks.register<com.aritr.rova.gradle.SourceChec
 // `serviceBinder?.getService()` in RecordViewModel — are not flagged.
 // Comment lines (`//`, `*`) are skipped so KDoc references and rationale
 // comments do not trip the rule.
-val checkStopNoGetService = tasks.register("checkStopNoGetService") {
+val checkStopNoGetService = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkStopNoGetService") {
     group = "verification"
     description = "Forbid PendingIntent.getService — STOP and tick actions must use broadcast (Android 12+ FGS-from-background restriction)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Rova source dir missing: $srcDir")
-        }
-        val pattern = Regex("""PendingIntent\s*\.\s*getService\b""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "PendingIntent.getService is forbidden — use PendingIntent.getBroadcast " +
-                    "with a BroadcastReceiver (Android 12+ disallows FGS starts from " +
-                    "alarm/notification background contexts). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkStopNoGetService")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkStopNoGetService.ok"))
 }
 
 // ADR-0027 — the daily-window receivers must NEVER start the camera FGS.
 // Android 14+ forbids starting a while-in-use FGS from the background; the
 // only legal camera-start site is MainActivity on the user's notification tap.
 // Forbid getService / startForegroundService / startService under service/schedule/.
-val checkScheduleReceiverNoFgsStart = tasks.register("checkScheduleReceiverNoFgsStart") {
+val checkScheduleReceiverNoFgsStart = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkScheduleReceiverNoFgsStart") {
     group = "verification"
     description = "Schedule receivers (service/schedule/) must never start the camera FGS (ADR-0027)."
-    val srcDir = file("src/main/java/com/aritr/rova/service/schedule")
-    inputs.dir(srcDir).withPropertyName("scheduleSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Schedule source dir missing: $srcDir")
-        }
-        val pattern = Regex("""PendingIntent\s*\.\s*getService\b|\bstartForegroundService\s*\(|\bstartService\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Schedule receivers must not start a foreground service (ADR-0027): the " +
-                    "camera FGS is started only from MainActivity on the user's notification " +
-                    "tap. Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/schedule")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkScheduleReceiverNoFgsStart")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkScheduleReceiverNoFgsStart.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #1:
@@ -254,50 +202,19 @@ val checkScheduleReceiverNoFgsStart = tasks.register("checkScheduleReceiverNoFgs
 // substrings: ".delete(", ".deleteRecursively(", ".discardSession(".
 // Comment lines (// or *) are skipped so KDoc references and rationale
 // comments do not trip the rule.
-val checkRecoveryNoDeletion = tasks.register("checkRecoveryNoDeletion") {
+val checkRecoveryNoDeletion = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoveryNoDeletion") {
     group = "verification"
     description = "Forbid deletion APIs in Phase 1.5 sources (ADR 0005 — emits flags, never deletes)."
-    val recoveryDir = file("src/main/java/com/aritr/rova/service/recovery")
-    val rovaAppFile = file("src/main/java/com/aritr/rova/RovaApp.kt")
-    inputs.dir(recoveryDir).withPropertyName("recoverySources")
-    inputs.file(rovaAppFile).withPropertyName("rovaAppSource")
-    doLast {
-        if (!recoveryDir.exists()) {
-            throw GradleException("Phase 1.5 recovery dir missing: $recoveryDir")
-        }
-        val forbidden = listOf(
-            ".delete(",
-            ".deleteRecursively(",
-            ".discardSession(",
-        )
-        val targets = recoveryDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .toList() + listOfNotNull(rovaAppFile.takeIf { it.exists() })
-        val offenders = targets
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else forbidden.any { line.contains(it) }
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Phase 1.5 sources must not call deletion APIs (ADR 0005 — " +
-                    "Phase 1.5 emits DiscardEligibility flags only; deletion is " +
-                    "owned by Phase 1.7 post-export-recovery cleanup or by " +
-                    "explicit user action). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/recovery")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/RovaApp.kt")
+    )
+    checkId.set("checkRecoveryNoDeletion")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoveryNoDeletion.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #2:
@@ -310,44 +227,16 @@ val checkRecoveryNoDeletion = tasks.register("checkRecoveryNoDeletion") {
 // reachable substring of any wrong abbreviation; `segment_` itself does
 // NOT contain `seg_` because the underscore lands after `segment`, not
 // after `seg`).
-val checkRecoverySegmentRegex = tasks.register("checkRecoverySegmentRegex") {
+val checkRecoverySegmentRegex = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoverySegmentRegex") {
     group = "verification"
     description = "Forbid `seg_` variant in Phase 1.5 sources; canonical pattern is `segment_NNNN.mp4` (ADR 0005)."
-    val recoveryDir = file("src/main/java/com/aritr/rova/service/recovery")
-    inputs.dir(recoveryDir).withPropertyName("recoverySources")
-    doLast {
-        if (!recoveryDir.exists()) {
-            throw GradleException("Phase 1.5 recovery dir missing: $recoveryDir")
-        }
-        val offenders = recoveryDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        // Comment lines are scanned too — a stale rationale
-                        // referring to `seg_` is itself a code-rot signal.
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("seg_")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "`seg_` is forbidden in Phase 1.5 recovery sources — the " +
-                    "canonical segment filename pattern is `segment_NNNN.mp4` " +
-                    "(SessionStore.nextSegmentFilename, ADR 0005). " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/recovery")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecoverySegmentRegex")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoverySegmentRegex.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Acceptance Criteria" lint #3:
@@ -356,44 +245,16 @@ val checkRecoverySegmentRegex = tasks.register("checkRecoverySegmentRegex") {
 // a receiver, a scheduled job, MainActivity directly — would defeat
 // Guard A (latch reset on throw) and the trigger-boundary invariant
 // designed in round 2. Forbid every reference outside RovaApp.kt.
-val checkScanTriggerSingleSite = tasks.register("checkScanTriggerSingleSite") {
+val checkScanTriggerSingleSite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkScanTriggerSingleSite") {
     group = "verification"
     description = "Forbid runRecoveryScan references outside RovaApp.kt (ADR 0005 §Scan Trigger Boundary)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val allowedFile = file("src/main/java/com/aritr/rova/RovaApp.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("Rova source dir missing: $srcDir")
-        }
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .filter { it.canonicalFile != allowedFile }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("runRecoveryScan")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "`runRecoveryScan` is owned exclusively by RovaApp; the only " +
-                    "trigger is RovaApp.triggerRecoveryScanIfNeeded called from " +
-                    "MainActivity.onCreate (ADR 0005 §Scan Trigger Boundary). " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkScanTriggerSingleSite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkScanTriggerSingleSite.ok"))
 }
 
 // Phase 1.5 — ADR 0005 §"Concurrency Invariants" item 3 (Guard B):

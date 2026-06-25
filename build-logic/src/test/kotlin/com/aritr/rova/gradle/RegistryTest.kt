@@ -25,6 +25,13 @@ class RegistryTest {
 
     companion object {
         // Grows per batch; Task N (final wiring) asserts all 46.
-        val EXPECTED_IDS = sortedSetOf("checkSchedulerNoGetService")
+        val EXPECTED_IDS = sortedSetOf(
+            "checkRecoveryNoDeletion",
+            "checkRecoverySegmentRegex",
+            "checkScanTriggerSingleSite",
+            "checkScheduleReceiverNoFgsStart",
+            "checkSchedulerNoGetService",
+            "checkStopNoGetService",
+        )
     }
 }
