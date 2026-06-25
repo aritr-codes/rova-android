@@ -247,11 +247,18 @@ internal fun ruleA11yClickableHasRole(files: List<SourceFile>): String? {
 // ─── checkA11yTargetSizeToken ─────────────────────────────────────────────────
 
 /**
- * Verbatim lift of checkA11yTargetSizeToken.
+ * Verbatim lift of checkA11yTargetSizeToken (comment detection hardened 2026-06-25).
  * Structural: val NAME = N.dp token decls in a curated interactive-token set must be >= 24.0.
- * Block-comment state tracking: /* ... */ blocks are skipped (including KDoc).
- * Opt-out: line matching a11y-opt-out:\s*\S is skipped.
- * Comment-skip: lines starting with // or * or /+ are skipped.
+ * Comment handling: detection runs on `f.strippedLines` (shared CommentStripper —
+ * block + line comments blanked, string/char literals kept), so a block-comment-
+ * then-code line or a string-literal comment opener can neither hide a token nor
+ * disable the gate.
+ * Opt-out (`a11y-opt-out:\s*\S`) is read from the RAW line; offenders REPORT the RAW line.
+ * F4 (accepted, documented): the value regex matches only a numeric literal
+ * `\d+(\.\d+)?\.dp`, so a curated token redefined as an alias/expression
+ * (`val primaryActionSize = fabSize`) is NOT range-checked. Widening to flag
+ * aliases is deliberately out of scope — it could newly reject legitimate
+ * indirection (invariant violation) and would need separate owner sign-off.
  * Empty input: null (no files = no interactive tokens = passes).
  */
 internal fun ruleA11yTargetSizeToken(files: List<SourceFile>): String? {
@@ -280,26 +287,19 @@ internal fun ruleA11yTargetSizeToken(files: List<SourceFile>): String? {
     val offenders = files
         .filter { it.relPath.endsWith(".kt") || it.relPath.endsWith(".java") }
         .flatMap { f ->
-            var inBlock = false // inside a /* … */ (incl. /** KDoc */) block
-            f.lines.withIndex().mapNotNull inner@{ (idx, line) ->
-                // Track block-comment state so a commented-out
-                // `val NAME = N.dp` can NEVER false-fail (trailing marker
-                // wins; a same-line `/* … */` is skipped by the `/*` prefix
-                // check below). KDoc inner `*` lines are skipped too.
-                val wasInBlock = inBlock
-                val opens = line.lastIndexOf("/*")
-                val closes = line.lastIndexOf("*/")
-                if (opens >= 0 || closes >= 0) inBlock = opens > closes
-                if (wasInBlock) return@inner null
-                if (optOut.containsMatchIn(line)) return@inner null
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*") ||
-                    trimmed.startsWith("/*")
-                ) return@inner null
-                val m = tokenDecl.find(line) ?: return@inner null
+            f.lines.withIndex().mapNotNull inner@{ (idx, raw) ->
+                // Opt-out marker lives in a `//` comment → read it from the RAW line.
+                if (optOut.containsMatchIn(raw)) return@inner null
+                // Detect the token decl on the comment-stripped line (shared
+                // CommentStripper) so a block-comment-then-code line OR a comment
+                // opener inside a string literal can neither hide a token nor
+                // disable the gate (F1/F2 holes). REPORT the RAW line so message
+                // bytes are unchanged.
+                val strippedLine = f.strippedLines.getOrElse(idx) { "" }
+                val m = tokenDecl.find(strippedLine) ?: return@inner null
                 if (m.groupValues[1] !in interactiveSizeTokens) return@inner null
                 if (m.groupValues[2].toDouble() >= minTargetDp) null
-                else Triple(f, idx + 1, line.trim())
+                else Triple(f, idx + 1, raw.trim())
             }
         }
         .toList()

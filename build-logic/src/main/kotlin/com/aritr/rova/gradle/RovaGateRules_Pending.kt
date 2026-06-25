@@ -33,8 +33,7 @@ package com.aritr.rova.gradle
  * Verbatim lift of checkExportIsPendingGuarded.
  *
  * Regex: \bIS_PENDING\b
- * Comment-skip: lines whose trimStart() starts with "//", "*", or block-comment
- * opener are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); file-level guard via raw f.text.
  * Guard: the FILE (via readText) must contain at least one of:
  *   - @RequiresApi(Build.VERSION_CODES.Q)
  *   - @RequiresApi(Build.VERSION_CODES.R)
@@ -49,10 +48,11 @@ internal fun ruleExportIsPendingGuarded(files: List<SourceFile>): String? {
         .filter { it.relPath.endsWith(".kt") }
         .mapNotNull { f ->
             val hits = f.lines.withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) false
-                    else pattern.containsMatchIn(line)
+                .filter { (idx, _) ->
+                    // Detect IS_PENDING on the comment-stripped line so a
+                    // `/* … */`-then-code line or a string-literal marker can't
+                    // hide it. The file-level guard check below stays on raw text.
+                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
                 }
             if (hits.isEmpty()) return@mapNotNull null
             val hasFileGuard = f.text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
@@ -80,8 +80,7 @@ internal fun ruleExportIsPendingGuarded(files: List<SourceFile>): String? {
  * Verbatim lift of checkExportSetIncludePendingGuarded.
  *
  * Regex: \bsetIncludePending\b
- * Comment-skip: lines whose trimStart() starts with "//", "*", or block-comment
- * opener are skipped via `continue`.
+ * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window stays raw.
  * Window: ±30 lines around each hit. Both Build.VERSION_CODES.R AND
  * Build.VERSION.SDK_INT must be present in the window.
  * Scope: .kt files in [files] (export dir).
@@ -94,9 +93,9 @@ internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String
             val lines = f.lines
             val hits = mutableListOf<Pair<Int, String>>()
             for ((i, line) in lines.withIndex()) {
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                if (!pattern.containsMatchIn(line)) continue
+                // Detect the hit on the comment-stripped line; the ±30 SDK-branch
+                // window below stays RAW (guards are code, byte-identical to today).
+                if (!pattern.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) continue
                 val window = lines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
@@ -125,8 +124,7 @@ internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String
  * Verbatim lift of checkExportQueryArgMatchPendingGuarded.
  *
  * Regex: \bQUERY_ARG_MATCH_PENDING\b
- * Comment-skip: lines whose trimStart() starts with "//", "*", or block-comment
- * opener are skipped via `continue`.
+ * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window stays raw.
  * Window: ±30 lines around each hit. Both Build.VERSION_CODES.R AND
  * Build.VERSION.SDK_INT must be present in the window.
  * Scope: .kt files in [files] (export dir).
@@ -139,9 +137,9 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
             val lines = f.lines
             val hits = mutableListOf<Pair<Int, String>>()
             for ((i, line) in lines.withIndex()) {
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                if (!pattern.containsMatchIn(line)) continue
+                // Detect the hit on the comment-stripped line; the ±30 SDK-branch
+                // window below stays RAW (guards are code, byte-identical to today).
+                if (!pattern.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) continue
                 val window = lines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
@@ -177,6 +175,13 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
  *
  * Non-comment text: lines filtered by trimStart() not starting with "//", "*", or
  * block-comment opener, joined with "\n".
+ *
+ * NOTE (comment-strip hardening 2026-06-25): NOT migrated to CommentStripper.
+ * This is a co-presence REQUIRE; its comment-prefix skip filter (trimStart
+ * startsWith "//", "*", or a block-comment opener) only ever causes
+ * over-strictness (a token hidden after a same-line block comment is dropped →
+ * the require false-FAILS), never a false-PASS. Migrating would shift behavior
+ * in the lenient direction — out of scope for the false-pass-hardening track.
  *
  * EMPTY-INPUT REASONING: if no file in the set calls resolver.query(, the gate passes
  * vacuously (null). This matches the old behaviour: the old code returned early with no

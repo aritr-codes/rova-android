@@ -60,8 +60,10 @@ class PendingRulesTest {
         // All three comment-skip prefixes: //, *, and block-comment opener
         val body = """
             // values.put(MediaStore.MediaColumns.IS_PENDING, 1)
-            * IS_PENDING mention in doc
-            /* IS_PENDING block
+            /*
+             * IS_PENDING mention in doc
+             */
+            /* IS_PENDING block */
         """.trimIndent()
         val files = listOf(src(
             "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt",
@@ -73,6 +75,21 @@ class PendingRulesTest {
     @Test
     fun isPendingGuarded_passesOnEmptyInput() {
         assertNull(RovaGateRules.run("checkExportIsPendingGuarded", emptyList()))
+    }
+
+    @Test
+    fun exportIsPendingGuarded_catchesAfterInlineBlockComment_whenUnguarded() {
+        // Unguarded IS_PENDING hidden after a same-line block comment used to escape.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = "    /* set */ values.put(IS_PENDING, 0)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportIsPendingGuarded", files)
+        val expected = "IS_PENDING used without SDK gating in service/export/ — " +
+            "the file must be annotated @RequiresApi(Build.VERSION_CODES.Q) " +
+            "or guard the reference with `Build.VERSION.SDK_INT >= " +
+            "Build.VERSION_CODES.Q`. Offenders:\n" +
+            "  $relPath:1: /* set */ values.put(IS_PENDING, 0)"
+        assertEquals(expected, msg)
     }
 
     // ─── checkExportSetIncludePendingGuarded ──────────────────────────────────
@@ -109,8 +126,10 @@ class PendingRulesTest {
     fun setIncludePendingGuarded_skipsCommentLines() {
         val body = """
             // MediaStore.setIncludePending(uri) — do not call
-            * setIncludePending note
-            /* setIncludePending block
+            /*
+             * setIncludePending note
+             */
+            /* setIncludePending block */
         """.trimIndent()
         val files = listOf(src(
             "app/src/main/java/com/aritr/rova/service/export/Tier1AndroidOps.kt",
@@ -122,6 +141,19 @@ class PendingRulesTest {
     @Test
     fun setIncludePendingGuarded_passesOnEmptyInput() {
         assertNull(RovaGateRules.run("checkExportSetIncludePendingGuarded", emptyList()))
+    }
+
+    @Test
+    fun exportSetIncludePendingGuarded_catchesAfterInlineBlockComment_whenNoSdkBranch() {
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = "    /* x */ builder.setIncludePending(1)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportSetIncludePendingGuarded", files)
+        val expected = "setIncludePending used without an SDK branch against " +
+            "Build.VERSION_CODES.R — must run only on API 29 (deprecated " +
+            "and unreliable on API 30+). Offenders:\n" +
+            "  $relPath:1: /* x */ builder.setIncludePending(1)"
+        assertEquals(expected, msg)
     }
 
     // ─── checkExportQueryArgMatchPendingGuarded ───────────────────────────────
@@ -166,6 +198,19 @@ class PendingRulesTest {
     @Test
     fun queryArgMatchPendingGuarded_passesOnEmptyInput() {
         assertNull(RovaGateRules.run("checkExportQueryArgMatchPendingGuarded", emptyList()))
+    }
+
+    @Test
+    fun exportQueryArgMatchPendingGuarded_catchesAfterInlineBlockComment_whenNoSdkBranch() {
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = "    /* x */ args.putInt(QUERY_ARG_MATCH_PENDING, 1)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportQueryArgMatchPendingGuarded", files)
+        val expected = "QUERY_ARG_MATCH_PENDING used without an SDK branch against " +
+            "Build.VERSION_CODES.R — must run only on API 30+ " +
+            "(NoSuchFieldError on Q). Offenders:\n" +
+            "  $relPath:1: /* x */ args.putInt(QUERY_ARG_MATCH_PENDING, 1)"
+        assertEquals(expected, msg)
     }
 
     // ─── checkExportPendingVisibilityOnQuery ──────────────────────────────────

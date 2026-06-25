@@ -345,6 +345,18 @@ class IconThemeRulesTest {
     }
 
     @Test
+    fun libraryNoManifestWrite_catchesCallAfterInlineBlockComment() {
+        val relPath = "app/src/main/java/com/aritr/rova/ui/library/LibraryScreen.kt"
+        val body = "    /* tidy */ writeManifestAtomic(m)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkLibraryNoManifestWrite", files)
+        val expected = "ADR-0030 §2: Library/History UI must not mutate SessionManifest — use LibraryMetadataStore " +
+            "(recovery-owned writes belong in ui/recovery/):\n" +
+            "ui/library/LibraryScreen.kt:1: /* tidy */ writeManifestAtomic(m)"
+        assertEquals(expected, msg)
+    }
+
+    @Test
     fun libraryNoManifestWrite_passesForNonScopedFile() {
         // A file outside ui/library/ and not History/Library in ui/screens/ is not scoped
         val body = "    store.markTerminated(id)"
