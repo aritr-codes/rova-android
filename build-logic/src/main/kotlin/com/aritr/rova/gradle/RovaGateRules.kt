@@ -47,6 +47,15 @@ object RovaGateRules {
         put("checkNoLegacyModeStrings", ::ruleNoLegacyModeStrings)
         put("checkSetTargetRotationBoundaryOnly", ::ruleSetTargetRotationBoundaryOnly)
         put("checkFrontBackCapabilityGated", ::ruleFrontBackCapabilityGated)
+        put("checkVaultExporterNoPublicPublish", ::ruleVaultExporterNoPublicPublish)
+        put("checkRecordSurfaceNoBlur", ::ruleRecordSurfaceNoBlur)
+        put("checkGlassSurfaceRoleUsage", ::ruleGlassSurfaceRoleUsage)
+        put("checkRecordChromeLockSingleSite", ::ruleRecordChromeLockSingleSite)
+        put("checkLibraryNoManifestWrite", ::ruleLibraryNoManifestWrite)
+        put("checkSemanticIconNoRawAlpha", ::ruleSemanticIconNoRawAlpha)
+        put("checkStatusColorLocked", ::ruleStatusColorLocked)
+        put("checkRovaGlyphHome", ::ruleRovaGlyphHome)
+        put("checkSingleColorSchemeSource", ::ruleSingleColorSchemeSource)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {

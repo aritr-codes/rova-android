@@ -24,7 +24,7 @@ class RegistryTest {
     }
 
     companion object {
-        // Grows per batch; Task N (final wiring) asserts all 46.
+        // All 46 gate ids — final registry.
         val EXPECTED_IDS = sortedSetOf(
             "checkA11yAnimationGated",
             "checkA11yClickableHasRole",
@@ -43,23 +43,32 @@ class RegistryTest {
             "checkExternalRootShared",
             "checkFGSStartGuarded",
             "checkFrontBackCapabilityGated",
+            "checkGlassSurfaceRoleUsage",
+            "checkLibraryNoManifestWrite",
             "checkLocaleConfigNoPseudolocale",
             "checkNoHardcodedUiStrings",
             "checkNoLegacyModeStrings",
             "checkPendingFdModeIsRW",
             "checkPresetNoOrientation",
+            "checkRecordChromeLockSingleSite",
+            "checkRecordSurfaceNoBlur",
             "checkRecoveryNoDeletion",
             "checkRecoveryReceiverCounter",
             "checkRecoverySegmentRegex",
+            "checkRovaGlyphHome",
             "checkSafTargetCommittedBeforeStream",
             "checkScanFileBoundedWait",
             "checkScanTriggerSingleSite",
             "checkScheduleReceiverNoFgsStart",
             "checkSchedulerNoGetService",
+            "checkSemanticIconNoRawAlpha",
             "checkSetTargetRotationBoundaryOnly",
+            "checkSingleColorSchemeSource",
+            "checkStatusColorLocked",
             "checkStopNoGetService",
             "checkUserCopyVocabulary",
             "checkUserStoppedBeforeMerge",
+            "checkVaultExporterNoPublicPublish",
             "checkWakeLockBoundedAcquire",
             "checkWakeLockHeldRefresh",
             "checkWakeLockZeroGapRefresh",

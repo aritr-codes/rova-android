@@ -836,144 +836,47 @@ val checkPresetNoOrientation = tasks.register<com.aritr.rova.gradle.SourceCheckT
 // gate asserts that marker appears exactly once, in HistoryScreen.kt, on a
 // markTerminated call — a stray marker anywhere else is itself a failure. Matching is
 // regex (`\bname\s*\(`) so a forbidden call survives reformatting (e.g. `name (`).
-val checkLibraryNoManifestWrite = tasks.register("checkLibraryNoManifestWrite") {
+val checkLibraryNoManifestWrite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkLibraryNoManifestWrite") {
     group = "verification"
-    // Exception-free since Slice 3 (ADR-0030 §2 amendment): the lone sanctioned write (recovery-keep
-    // markTerminated) relocated to ui/recovery/RecoveryViewModelFactory.kt — out of scope — so this gate now
-    // asserts ZERO manifest mutations in Library/History UI, full stop. Recovery-owned writes belong in
-    // ui/recovery/ (ADR-0005), never here.
     description = "Library/History UI must not call SessionManifest-mutating SessionStore APIs (ADR-0030 §2)."
-    // Method names (no paren) of every SessionManifest-mutating SessionStore API.
-    val forbidden = listOf(
-        "markTerminated", "appendSegment", "submitPersistFinalizedSegment",
-        "setExportPending", "setExportPrivateTarget", "setExportCopying",
-        "setExportSafPrivateTemp", "setExportSafTarget", "setExportFinalized",
-        "setExportFailed", "setMediaScanCompleted", "incrementSafTransientRetry",
-        "setExportPendingForSide", "setExportPrivateTargetForSide",
-        "setExportSafPrivateTempForSide", "setExportSafTargetForSide",
-        "setExportFinalizedForSide", "setMediaScanCompletedForSide",
-        "setVaultFinalized", "setVaultFinalizedForSide", "setVaultState",
-        "setVaultMovedOut", "setVaultStateVaultedAndClearPublic",
-        "setPendingMoveOutTier1", "setPendingMoveOutPreQ", "setStopRequested",
-        "writeManifestAtomic",
+    sources.from(
+        layout.projectDirectory.dir("src/main/java").asFileTree.matching { include("**/*.kt") }
     )
-    val callRegex = Regex("\\b(${forbidden.joinToString("|")})\\s*\\(")
-    doLast {
-        val offenders = mutableListOf<String>()
-        fileTree("src/main/java") { include("**/*.kt") }.forEach { f ->
-            val rel = f.path.replace('\\', '/').substringAfter("com/aritr/rova/")
-            val inScope = rel.startsWith("ui/library/") ||
-                (rel.startsWith("ui/screens/") && (rel.contains("History") || rel.contains("Library")))
-            if (!inScope) return@forEach
-            f.readLines().forEachIndexed { i, line ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*")) return@forEachIndexed
-                // Match only the code before an inline `//` so a commented-out example call
-                // (e.g. `x // markTerminated(`) cannot false-fail.
-                val code = line.substringBefore("//")
-                if (callRegex.containsMatchIn(code)) offenders += "$rel:${i + 1}: ${line.trim()}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0030 §2: Library/History UI must not mutate SessionManifest — use LibraryMetadataStore " +
-                    "(recovery-owned writes belong in ui/recovery/):\n" + offenders.joinToString("\n")
-            )
-        }
-    }
+    checkId.set("checkLibraryNoManifestWrite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkLibraryNoManifestWrite.ok"))
 }
 
 // ADR-0031 §4 (P0) — every in-app glyph tint flows through the SemanticIcon seam. A raw Color literal
 // bound to a `tint =` argument bypasses the theme engine's single icon-color contract. Keyed on the
 // `tint =` argument (offenders are multi-line Icon(...) calls), scanned over a 3-line window so a
 // wrapped/conditional Color value is still caught. The seam file is allowlisted by canonical path.
-val checkSemanticIconNoRawAlpha = tasks.register("checkSemanticIconNoRawAlpha") {
+val checkSemanticIconNoRawAlpha = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSemanticIconNoRawAlpha") {
     group = "verification"
     description = "Forbid a raw Color literal as an Icon tint outside the SemanticIcon seam — all glyph " +
         "color must flow through SemanticIcon/SemanticIconSpec (ADR-0031 §4)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val seamFile = file("src/main/java/com/aritr/rova/ui/components/SemanticIcon.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkSemanticIconNoRawAlpha: Rova source dir missing: $srcDir")
-        }
-        // `\bColor\s*[.(]` matches a standalone `Color` token (word boundary) followed by `.` or `(`,
-        // so theme-derived tints (`tint = palette.textHigh`, `tint = LocalContentColor.current`,
-        // `tint = RecordChromeTokens.navIcon`, `tint = severityColor`) are NOT flagged. Non-greedy `.*?`
-        // stops at the first Color token.
-        val rawTintPattern = Regex("""tint\s*=.*?\bColor\s*[.(]""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != seamFile }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = lines.indices.mapNotNull { i ->
-                    val line = lines[i]
-                    if (line.contains("semanticicon-opt-out")) return@mapNotNull null
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@mapNotNull null
-                    if (!line.contains("tint")) return@mapNotNull null
-                    val window = (i until minOf(i + 3, lines.size)).joinToString(" ") { lines[it] }
-                    if (rawTintPattern.containsMatchIn(window)) i to line else null
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0031 §4 violation: raw Color literal used as an Icon tint outside the SemanticIcon " +
-                    "seam. Route glyph color through `SemanticIcon(role = …, status = …)` / " +
-                    "`SemanticIconSpec` so the theme engine drives icon color from one place. " +
-                    "For a genuinely non-themed glyph, add `// semanticicon-opt-out: <reason>` on the line.\n" +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSemanticIconNoRawAlpha")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSemanticIconNoRawAlpha.ok"))
 }
 
 // ADR-0031 §3 (P0) — locked semantic status colors. A RovaSemantics color is exact and used at full
 // opacity; mutating it at a call-site (.copy of alpha or any channel) breaks the lock. The status→
 // RovaSemantics mapping itself is covered by SemanticIconSpecTest; this gate enforces no-mutation everywhere.
-val checkStatusColorLocked = tasks.register("checkStatusColorLocked") {
+val checkStatusColorLocked = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkStatusColorLocked") {
     group = "verification"
     description = "Forbid per-call mutation (.copy of alpha or any channel) of a locked RovaSemantics " +
         "status color — status colors are exact, used at full locked opacity, always paired with shape " +
         "(ADR-0031 §3, WCAG 1.4.1)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkStatusColorLocked: Rova source dir missing: $srcDir")
-        }
-        // The `.copy(` opener sits on the `RovaSemantics.<member>` line even when args wrap, so this
-        // also catches the multiline / positional-arg (`copy(0.6f)`) cases an alpha-only regex misses.
-        val dilutePattern = Regex("""RovaSemantics\s*\.\s*\w+\s*\.copy\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else dilutePattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0031 §3 violation: a locked RovaSemantics status color is mutated (.copy) at the " +
-                    "call-site. Status colors render exact, at full locked opacity (and are paired with " +
-                    "shape, WCAG 1.4.1). Use the color directly, or vary emphasis with shape/size.\n" +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkStatusColorLocked")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkStatusColorLocked.ok"))
 }
 
 // ADR-0029 PR-γ gate 1 — live capture paths must not branch on the legacy
@@ -1150,157 +1053,44 @@ val checkA11yTargetSizeToken = tasks.register<com.aritr.rova.gradle.SourceCheckT
 // VaultExporter must never reach a public-publish API. A vaulted recording
 // stays app-private; any MediaStore insert / media scan / public-dir write
 // inside VaultExporter.kt would silently make it gallery-visible.
-val checkVaultExporterNoPublicPublish = tasks.register("checkVaultExporterNoPublicPublish") {
+val checkVaultExporterNoPublicPublish = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkVaultExporterNoPublicPublish") {
     group = "verification"
     description = "Forbid public-publish APIs in VaultExporter (ADR-0025 — vault recordings never publish)."
-    val vaultExporter = file("src/main/java/com/aritr/rova/service/export/VaultExporter.kt")
-    inputs.file(vaultExporter).withPropertyName("vaultExporterSource")
-    doLast {
-        if (!vaultExporter.exists()) {
-            throw GradleException("checkVaultExporterNoPublicPublish: VaultExporter.kt missing: $vaultExporter")
-        }
-        val forbidden = listOf(
-            "MediaStore",
-            "MediaScannerConnection",
-            "insertPendingRow",
-            "scanAndWait",
-            "DIRECTORY_MOVIES",
-            "IS_PENDING",
-            ".insert(",
-            "getExternalStoragePublicDirectory",
-        )
-        val hits = vaultExporter.readLines().withIndex().filter { (_, line) ->
-            val t = line.trimStart()
-            if (t.startsWith("//") || t.startsWith("*")) false
-            else forbidden.any { line.contains(it) }
-        }
-        if (hits.isNotEmpty()) {
-            val report = hits.joinToString("\n") { (i, line) -> "  VaultExporter.kt:${i + 1}: ${line.trim()}" }
-            throw GradleException(
-                "ADR-0025: VaultExporter must not reference any public-publish API " +
-                    "(vault recordings stay app-private). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/export/VaultExporter.kt")
+    )
+    checkId.set("checkVaultExporterNoPublicPublish")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkVaultExporterNoPublicPublish.ok"))
 }
 
 // ADR-0031 §5 (P1) — bespoke ImageVectors have one home. `ImageVector.Builder(` may appear only in
 // RovaGlyphs.kt; folding RecordChromeIcons in here removed the second declaration site. This subsumes
 // the old RecordChromeIcons.kt allowance in checkRecordSurfaceNoBlur.
-val checkRovaGlyphHome = tasks.register("checkRovaGlyphHome") {
+val checkRovaGlyphHome = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRovaGlyphHome") {
     group = "verification"
     description = "Bespoke ImageVectors must be declared only in RovaGlyphs.kt — one home for " +
         "hand-authored glyphs so the icon family + theme engine resolve from a single source (ADR-0031 §5)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val homeFile = file("src/main/java/com/aritr/rova/ui/theme/RovaGlyphs.kt").canonicalFile
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkRovaGlyphHome: Rova source dir missing: $srcDir")
-        }
-        // Whole-file scan (NOT per-line): `\s` then matches a newline, so a builder split across
-        // lines (`ImageVector.\n    Builder(`) is still caught (codex-flagged false-negative). Strip
-        // block + line comments first (preserving line counts) so KDoc/examples never false-fire.
-        val builderPattern = Regex("""\bImageVector\s*\.\s*Builder\s*\(""")
-        fun stripComments(src: String): String {
-            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
-            return noBlock.lines().joinToString("\n") { line ->
-                val i = line.indexOf("//"); if (i >= 0) line.substring(0, i) else line
-            }
-        }
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != homeFile }
-            .mapNotNull { f ->
-                val text = stripComments(f.readText())
-                val hits = builderPattern.findAll(text)
-                    .map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }
-                    .toList()
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { line -> "  ${f.relativeTo(rootDir)}:$line" }
-            }
-            throw GradleException(
-                "ADR-0031 §5 violation: a bespoke ImageVector is declared outside RovaGlyphs.kt. " +
-                    "All hand-authored glyphs live in ui/theme/RovaGlyphs.kt so the icon family and the " +
-                    "theme engine resolve glyphs from one place. Move the vector there.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRovaGlyphHome")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRovaGlyphHome.ok"))
 }
 
-val checkSingleColorSchemeSource = tasks.register("checkSingleColorSchemeSource") {
+val checkSingleColorSchemeSource = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSingleColorSchemeSource") {
     group = "verification"
     description = "The Material ColorScheme is constructed in exactly one place — the engine " +
         "(Theme.kt builds it from PaletteColorScheme; PaletteColorScheme.kt holds the factory base). " +
         "No other file may call darkColorScheme(/lightColorScheme( or pass MaterialTheme(colorScheme=…) " +
         "(ADR-0028 amendment 2026-06-18). // colorscheme-source-opt-out to waive a line."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val allow = setOf(
-        file("src/main/java/com/aritr/rova/ui/theme/Theme.kt").canonicalFile,
-        file("src/main/java/com/aritr/rova/ui/theme/PaletteColorScheme.kt").canonicalFile,
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
     )
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkSingleColorSchemeSource: Rova source dir missing: $srcDir")
-        }
-        // Strip block + line comments AND string literals (preserve newlines for line numbers) so a
-        // `colorScheme =` inside a comment/string never matches.
-        fun strip(src: String): String {
-            val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m -> m.value.replace(Regex("[^\n]"), " ") }
-            val noLine = noBlock.lines().joinToString("\n") { line ->
-                val i = line.indexOf("//")
-                if (i >= 0) line.substring(0, i) + " ".repeat(line.length - i) else line
-            }
-            // blank out double-quoted string contents (keep quotes + length)
-            val noStr = Regex(""""[^"\\]*(?:\\.[^"\\]*)*"""").replace(noLine) { m -> "\"" + " ".repeat((m.value.length - 2).coerceAtLeast(0)) + "\"" }
-            // blank char literals too — a Kotlin '(' or ')' must not corrupt the balanced-paren scan (codex).
-            // Preserve length (escaped literals like '\n' are 4 chars) so raw-offset waiver stays 1:1.
-            return Regex("""'(\\.|[^'\\])'""").replace(noStr) { m -> "'" + " ".repeat(m.value.length - 2) + "'" }
-        }
-        fun lineAt(text: String, idx: Int) = text.substring(0, idx).count { it == '\n' } + 1
-        val factory = Regex("""\b(dark|light)ColorScheme\s*\(""")
-        val mt = Regex("""\bMaterialTheme\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile !in allow }
-            .mapNotNull { f ->
-                val raw = f.readText()
-                val text = strip(raw)
-                val hits = mutableListOf<Int>()
-                factory.findAll(text).forEach { m ->
-                    if (!waived(raw, m.range.first)) hits += lineAt(text, m.range.first)
-                }
-                // Balanced-paren scan from each MaterialTheme( — inspect only THAT call's args for colorScheme=
-                mt.findAll(text).forEach { m ->
-                    val open = text.indexOf('(', m.range.first)
-                    if (open < 0) return@forEach
-                    var depth = 0; var i = open; var close = -1
-                    while (i < text.length) {
-                        when (text[i]) { '(' -> depth++; ')' -> { depth--; if (depth == 0) { close = i; break } } }
-                        i++
-                    }
-                    if (close < 0) return@forEach
-                    val args = text.substring(open + 1, close)
-                    if (Regex("""\bcolorScheme\s*=""").containsMatchIn(args) && !waived(raw, m.range.first)) {
-                        hits += lineAt(text, m.range.first)
-                    }
-                }
-                if (hits.isEmpty()) null else f to hits.sorted()
-            }.toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { "  ${f.relativeTo(rootDir)}:$it" }
-            }
-            throw GradleException(
-                "ADR-0028 amendment: the Material ColorScheme must be built only by the theme engine " +
-                    "(Theme.kt / PaletteColorScheme.kt). A surface constructs or overrides its own scheme " +
-                    "— route it through the active palette instead.\nOffenders:\n$report"
-            )
-        }
-    }
+    checkId.set("checkSingleColorSchemeSource")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSingleColorSchemeSource.ok"))
 }
 
 // shared: a `// colorscheme-source-opt-out` on the same or previous line waives a hit
@@ -1311,92 +1101,26 @@ fun waived(text: String, idx: Int): Boolean {
     return text.substring(prevStart, lineEnd).contains("colorscheme-source-opt-out")
 }
 
-val checkRecordSurfaceNoBlur = tasks.register("checkRecordSurfaceNoBlur") {
+val checkRecordSurfaceNoBlur = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecordSurfaceNoBlur") {
     group = "verification"
     description = "Record-chrome files must not apply Modifier.blur/RenderEffect — record glass uses GlassRole.RecordChrome (blurRadius=0). DualPreviewZone is the preview/carve-out, not chrome (ADR-0028 §2.3)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkRecordSurfaceNoBlur: Rova source dir missing: $srcDir")
-        }
-        // Record-chrome rendering files (confirmed real). DualPreviewZone is
-        // deliberately EXCLUDED — it's the camera preview/carve-out, not chrome.
-        val recordChromeNames = setOf(
-            "RecordScreen.kt", "RecordChrome.kt",
-        )
-        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name in recordChromeNames }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val t = line.trimStart()
-                    if (t.startsWith("//") || t.startsWith("*")) false
-                    else blurPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0028 §2.3 violation: record-chrome files must not blur. Record glass " +
-                    "renders through GlassRole.RecordChrome, whose resolver returns " +
-                    "blurRadius=0 (fill + scrim + edge + opaque text capsule instead). " +
-                    "DualPreviewZone's RenderEffect on non-recorded margins is the only " +
-                    "documented carve-out and is not record chrome.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecordSurfaceNoBlur")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecordSurfaceNoBlur.ok"))
 }
 
-val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
+val checkGlassSurfaceRoleUsage = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkGlassSurfaceRoleUsage") {
     group = "verification"
     description = "Modifier.blur is permitted only in GlassSurface.kt (resolver-driven glass), the DualPreviewZone carve-out, and pre-existing glow-bloom (WarningSheetV3/RecoveryCall). All new glass goes through GlassSurface(role=…) (ADR-0028 §2.1/§5)."
-    val srcDir = file("src/main/java/com/aritr/rova/ui")
-    inputs.dir(srcDir).withPropertyName("rovaUiSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkGlassSurfaceRoleUsage: Rova ui source dir missing: $srcDir")
-        }
-        // GlassSurface = sanctioned glass blur. DualPreviewZone = ADR carve-out
-        // (RenderEffect on non-recorded margins). WarningSheetV3 + RecoveryCard =
-        // pre-existing decorative icon-glow bloom; TODO(PR6/PR9): revisit when
-        // those surfaces migrate to GlassSurface.
-        val allowlist = setOf(
-            "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheetV3.kt", "RecoveryCard.kt",
-        )
-        // Aligned with checkRecordSurfaceNoBlur: also catch RenderEffect/backdrop
-        // blur so the "all glass through GlassSurface" invariant stays airtight as
-        // later PRs migrate surfaces (the only current RenderEffect site is the
-        // allowlisted DualPreviewZone carve-out).
-        val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.name !in allowlist }
-            .mapNotNull { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val t = line.trimStart()
-                    if (t.startsWith("//") || t.startsWith("*")) false
-                    else blurPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0028 §2.1/§5 violation: Modifier.blur outside the sanctioned glass " +
-                    "wrapper. All translucent glass must render through " +
-                    "GlassSurface(role=…) so the GlassResolver owns the blur/fallback " +
-                    "decision. Permitted only in GlassSurface.kt, the DualPreviewZone.kt " +
-                    "carve-out, and the pre-existing glow-bloom sites.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkGlassSurfaceRoleUsage")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkGlassSurfaceRoleUsage.ok"))
 }
 
 // PR-ε — ADR-0029 §B″ (single lock writer): `requestedOrientation` on the UI
@@ -1406,48 +1130,15 @@ val checkGlassSurfaceRoleUsage = tasks.register("checkGlassSurfaceRoleUsage") {
 // Comments are stripped before matching (block/KDoc + line) because prose
 // mentions are legal — e.g. DualShotPortraitGate.kt documents the legacy
 // lock in KDoc.
-val checkRecordChromeLockSingleSite = tasks.register("checkRecordChromeLockSingleSite") {
+val checkRecordChromeLockSingleSite = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecordChromeLockSingleSite") {
     group = "verification"
     description = "Forbid requestedOrientation writes in ui/ outside RecordScreen.kt (ADR-0029 §B″ single lock writer)."
-    val uiDir = file("src/main/java/com/aritr/rova/ui")
-    inputs.dir(uiDir).withPropertyName("rovaUiSources")
-    doLast {
-        if (!uiDir.exists()) {
-            throw GradleException("checkRecordChromeLockSingleSite: Rova ui source dir missing: $uiDir")
-        }
-        // Blank out block/KDoc comments but keep their newlines so reported
-        // line numbers stay true to the file on disk.
-        val blockComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-        // Canonical-path compare (checkScanTriggerSingleSite precedent) — a
-        // second RecordScreen.kt in another ui/ subpackage must not slip through.
-        val allowedWriter = file("src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt").canonicalFile
-        val offenders = uiDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" && it.canonicalFile != allowedWriter }
-            .mapNotNull { f ->
-                val stripped = blockComment.replace(f.readText()) { m ->
-                    m.value.filter { ch -> ch == '\n' }
-                }
-                val hits = stripped.lines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        line.substringBefore("//").contains("requestedOrientation")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) -> "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}" }
-            }
-            throw GradleException(
-                "ADR-0029 §B″ violation: requestedOrientation touched on the UI side " +
-                    "outside RecordScreen.kt. The unified DisposableEffect in " +
-                    "RecordScreen is the ONLY UI-layer requestedOrientation writer; " +
-                    "RecordChromeLockPolicy.shouldLock is the sole decision point. " +
-                    "A second writer reintroduces lock/unlock races.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui").asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecordChromeLockSingleSite")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecordChromeLockSingleSite.ok"))
 }
 
 afterEvaluate {
