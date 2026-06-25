@@ -50,6 +50,9 @@ class RegistryTest {
             "checkSchedulerNoGetService",
             "checkStopNoGetService",
             "checkUserStoppedBeforeMerge",
+            "checkWakeLockBoundedAcquire",
+            "checkWakeLockHeldRefresh",
+            "checkWakeLockZeroGapRefresh",
         )
     }
 }

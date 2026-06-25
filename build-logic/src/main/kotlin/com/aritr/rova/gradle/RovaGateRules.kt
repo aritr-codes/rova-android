@@ -34,6 +34,9 @@ object RovaGateRules {
         put("checkExportPipelineSingleEntry", ::ruleExportPipelineSingleEntry)
         put("checkSafTargetCommittedBeforeStream", ::ruleSafTargetCommittedBeforeStream)
         put("checkCompletedWriteOnlyFromPerformMerge", ::ruleCompletedWriteOnlyFromPerformMerge)
+        put("checkWakeLockBoundedAcquire", ::ruleWakeLockBoundedAcquire)
+        put("checkWakeLockHeldRefresh", ::ruleWakeLockHeldRefresh)
+        put("checkWakeLockZeroGapRefresh", ::ruleWakeLockZeroGapRefresh)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {
