@@ -26,7 +26,12 @@ class RegistryTest {
     companion object {
         // Grows per batch; Task N (final wiring) asserts all 46.
         val EXPECTED_IDS = sortedSetOf(
+            "checkAtomicTerminalWriteForbiddenPair",
+            "checkAudioModeFgsTypeMatch",
+            "checkExternalRootShared",
+            "checkFGSStartGuarded",
             "checkRecoveryNoDeletion",
+            "checkRecoveryReceiverCounter",
             "checkRecoverySegmentRegex",
             "checkScanTriggerSingleSite",
             "checkScheduleReceiverNoFgsStart",

@@ -276,72 +276,16 @@ val checkScanTriggerSingleSite = tasks.register<com.aritr.rova.gradle.SourceChec
 // articulate a reason (e.g., `// guard-b-opt-out: synchronous receiver,
 // no coroutine launched`). Mirrors the documented-annotation/comment
 // option in ADR 0005 §Acceptance Criteria.
-val checkRecoveryReceiverCounter = tasks.register("checkRecoveryReceiverCounter") {
+val checkRecoveryReceiverCounter = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkRecoveryReceiverCounter") {
     group = "verification"
     description = "Verify Guard B (ADR 0005): receivers using goAsync() must increment activeReceiverWork before goAsync() and decrement in finally."
-    val serviceDir = file("src/main/java/com/aritr/rova/service")
-    inputs.dir(serviceDir).withPropertyName("serviceSources")
-    doLast {
-        if (!serviceDir.exists()) {
-            throw GradleException("Service dir missing: $serviceDir")
-        }
-        val offenders = serviceDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-
-                // Find first non-comment goAsync() call line.
-                val goAsyncIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("goAsync()")
-                }
-                if (goAsyncIdx < 0) return@mapNotNull null  // no goAsync — not a receiver-async pattern
-
-                // Opt-out: any file marker `guard-b-opt-out:` (with reason)
-                // skips the check.
-                val hasOptOut = lines.any { it.contains("guard-b-opt-out:") }
-                if (hasOptOut) return@mapNotNull null
-
-                val problems = mutableListOf<String>()
-
-                // Increment: first non-comment line that contains the
-                // synchronous incrementAndGet on activeReceiverWork.
-                val incIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("activeReceiverWork.incrementAndGet")
-                }
-                val hasDec = lines.any { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("activeReceiverWork.decrementAndGet")
-                }
-
-                if (incIdx < 0) {
-                    problems += "missing activeReceiverWork.incrementAndGet() before goAsync() (line ${goAsyncIdx + 1})"
-                } else if (incIdx >= goAsyncIdx) {
-                    problems += "activeReceiverWork.incrementAndGet() (line ${incIdx + 1}) must precede goAsync() (line ${goAsyncIdx + 1}); the gap between goAsync() and the launched coroutine body is the race window"
-                }
-                if (!hasDec) {
-                    problems += "missing activeReceiverWork.decrementAndGet() — must run in the launched coroutine's finally so every exit path releases the counter"
-                }
-
-                if (problems.isEmpty()) null else f to problems
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, problems) ->
-                problems.joinToString("\n") { "  ${f.relativeTo(rootDir)}: $it" }
-            }
-            throw GradleException(
-                "Guard B violations (ADR 0005 §Concurrency Invariants item 3):\n$report\n" +
-                    "Add a documented opt-out marker `// guard-b-opt-out: <reason>` " +
-                    "to the file (with a reason) only if the receiver does no " +
-                    "asynchronous work and never races the recovery scan."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkRecoveryReceiverCounter")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkRecoveryReceiverCounter.ok"))
 }
 
 // ============================================================
@@ -356,53 +300,16 @@ val checkRecoveryReceiverCounter = tasks.register("checkRecoveryReceiverCounter"
  * §"Migration table". Only KILLED_* and merge-success COMPLETED writers
  * pass NONE.
  */
-val checkAtomicTerminalWriteForbiddenPair = tasks.register("checkAtomicTerminalWriteForbiddenPair") {
+val checkAtomicTerminalWriteForbiddenPair = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkAtomicTerminalWriteForbiddenPair") {
     group = "verification"
     description = "Forbid markTerminated(USER_STOPPED, NONE) literal pair (ADR 0006 B16)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        // Pattern matches any markTerminated call that mentions both
-        // USER_STOPPED and NONE on the same line OR within a 3-line window.
-        // We use a multi-line scan: find every `markTerminated(` opener
-        // and inspect the next 3 lines for the forbidden pair.
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Int>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    if (!line.contains("markTerminated(")) continue
-                    if (line.contains("terminal-ordering-opt-out:")) continue
-                    // Window of up to 3 lines covers multi-line invocations.
-                    val window = (i..minOf(i + 3, lines.lastIndex))
-                        .joinToString("\n") { lines[it] }
-                    val hasUserStopped = window.contains("Terminated.USER_STOPPED") ||
-                        window.contains(", USER_STOPPED")
-                    val hasReasonNone = window.contains("StopReason.NONE") ||
-                        window.contains(", NONE")
-                    if (hasUserStopped && hasReasonNone) {
-                        hits += i + 1
-                    }
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ls) ->
-                "  ${f.relativeTo(rootDir)}: lines ${ls.joinToString(", ")}"
-            }
-            throw GradleException(
-                "Forbidden pair markTerminated(USER_STOPPED, NONE) detected (ADR 0006 B16):\n$report\n" +
-                    "USER_STOPPED writers must pass a real StopReason " +
-                    "(USER, INIT_FAILED, PERMISSION_REVOKED, LOW_STORAGE). " +
-                    "Only KILLED_* and merge-success COMPLETED pass NONE."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkAtomicTerminalWriteForbiddenPair")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAtomicTerminalWriteForbiddenPair.ok"))
 }
 
 /**
@@ -412,39 +319,16 @@ val checkAtomicTerminalWriteForbiddenPair = tasks.register("checkAtomicTerminalW
  * `SessionStore(Context)` constructor uses it inside a fallback that
  * itself errors out.
  */
-val checkExternalRootShared = tasks.register("checkExternalRootShared") {
+val checkExternalRootShared = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExternalRootShared") {
     group = "verification"
     description = "Only RovaApp.resolveExternalRoot may reference getExternalFilesDir(null) (ADR 0006 B21)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val allowedFiles = setOf("RovaApp.kt", "SessionStore.kt")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { it.name !in allowedFiles }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Int>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    if (line.contains("getExternalFilesDir(null)")) hits += i + 1
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ls) ->
-                "  ${f.relativeTo(rootDir)}: lines ${ls.joinToString(", ")}"
-            }
-            throw GradleException(
-                "External-root drift detected (ADR 0006 B21):\n$report\n" +
-                    "Use RovaApp.videosRoot or RovaApp.externalRoot instead. " +
-                    "Only RovaApp and SessionStore are allowed direct references."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExternalRootShared")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExternalRootShared.ok"))
 }
 
 /**
@@ -453,45 +337,16 @@ val checkExternalRootShared = tasks.register("checkExternalRootShared") {
  * same source file. Forbidden: hardcoded `CAMERA | MICROPHONE` without
  * an audio-mode gate. Caught Round 6 B20 as draft-residue regression.
  */
-val checkAudioModeFgsTypeMatch = tasks.register("checkAudioModeFgsTypeMatch") {
+val checkAudioModeFgsTypeMatch = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkAudioModeFgsTypeMatch") {
     group = "verification"
     description = "FGS_TYPE_MICROPHONE must be gated by audioMode (ADR 0006 B18 + B20)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val micIdx = lines.indexOfFirst { line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
-                }
-                if (micIdx < 0) return@mapNotNull null
-                if (lines.any { it.contains("audio-mode-opt-out:") }) return@mapNotNull null
-                // Search lines BEFORE the MIC literal for an audioMode
-                // reference (variable read, AudioMode enum, when branch).
-                val hasAudioModeBefore = (0 until micIdx).any { i ->
-                    val s = lines[i]
-                    s.contains("audioMode") || s.contains("AudioMode.")
-                }
-                if (hasAudioModeBefore) null else f to micIdx + 1
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, line) ->
-                "  ${f.relativeTo(rootDir)}: line $line — FGS MIC type without audioMode gate"
-            }
-            throw GradleException(
-                "FGS-type / audio-mode coupling violation (ADR 0006 B18 + B20):\n$report\n" +
-                    "FOREGROUND_SERVICE_TYPE_MICROPHONE must be gated by an " +
-                    "audioMode == AudioMode.VIDEO_AUDIO check. Hardcoding the " +
-                    "type bitfield risks SecurityException on Android 14+."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkAudioModeFgsTypeMatch")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAudioModeFgsTypeMatch.ok"))
 }
 
 /**
@@ -502,66 +357,16 @@ val checkAudioModeFgsTypeMatch = tasks.register("checkAudioModeFgsTypeMatch") {
  * block must reference `Build.VERSION.SDK_INT >= Build.VERSION_CODES.S`
  * before any `is ForegroundServiceStartNotAllowedException` check.
  */
-val checkFGSStartGuarded = tasks.register("checkFGSStartGuarded") {
+val checkFGSStartGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkFGSStartGuarded") {
     group = "verification"
     description = "FGS start sites must catch IllegalStateException + SecurityException with SDK-gated is-check (ADR 0006 B10 + B11 + B20)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val offenders = mutableListOf<Pair<File, String>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { f ->
-                // Skip RovaTickReceiver / RovaStopReceiver — they have
-                // documentation comments referencing startForegroundService
-                // but no actual call.
-                val text = f.readText()
-                text.contains("startForegroundService(") || text.contains("startForeground(")
-            }
-            .forEach { f ->
-                val lines = f.readLines()
-                if (lines.any { it.contains("fgs-guard-opt-out:") }) return@forEach
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                    val isCallerSide = line.contains("startForegroundService(")
-                    val isServiceSide = line.contains("startForeground(") &&
-                        !line.contains("startForegroundService(")
-                    if (!isCallerSide && !isServiceSide) continue
-                    // Look forward up to 60 lines for catch arms.
-                    val end = minOf(i + 60, lines.lastIndex)
-                    val window = lines.subList(i, end + 1).joinToString("\n")
-                    val hasIseCatch = window.contains("catch (e: IllegalStateException)") ||
-                        window.contains("catch(e: IllegalStateException)") ||
-                        window.contains("catch (e:IllegalStateException)")
-                    val hasSdkGate = window.contains("Build.VERSION.SDK_INT") &&
-                        window.contains("Build.VERSION_CODES.S")
-                    val hasIsCheck = window.contains("ForegroundServiceStartNotAllowedException")
-                    val hasSecurityCatch = window.contains("catch (e: SecurityException)") ||
-                        window.contains("catch(e: SecurityException)")
-                    if (!hasIseCatch) {
-                        offenders += f to "line ${i + 1}: missing catch (e: IllegalStateException)"
-                    } else {
-                        if (!hasSdkGate) offenders += f to "line ${i + 1}: catch is not SDK-gated (Build.VERSION.SDK_INT >= S)"
-                        if (!hasIsCheck) offenders += f to "line ${i + 1}: missing ForegroundServiceStartNotAllowedException is-check"
-                    }
-                    if (isServiceSide && !hasSecurityCatch) {
-                        offenders += f to "line ${i + 1}: service-side startForeground missing catch (e: SecurityException) (B18 + B20)"
-                    }
-                }
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, msg) ->
-                "  ${f.relativeTo(rootDir)}: $msg"
-            }
-            throw GradleException(
-                "FGS guard violations (ADR 0006 B10 + B11 + B20):\n$report\n" +
-                    "Caller-side: catch IllegalStateException, SDK-gate the is-check.\n" +
-                    "Service-side: also catch SecurityException for FGS-type / permission mismatch."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkFGSStartGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkFGSStartGuarded.ok"))
 }
 
 /**

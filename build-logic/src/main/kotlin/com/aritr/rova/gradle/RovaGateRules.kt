@@ -16,6 +16,11 @@ object RovaGateRules {
         put("checkRecoveryNoDeletion", ::ruleRecoveryNoDeletion)
         put("checkRecoverySegmentRegex", ::ruleRecoverySegmentRegex)
         put("checkScanTriggerSingleSite", ::ruleScanTriggerSingleSite)
+        put("checkRecoveryReceiverCounter", ::ruleRecoveryReceiverCounter)
+        put("checkAtomicTerminalWriteForbiddenPair", ::ruleAtomicTerminalWriteForbiddenPair)
+        put("checkExternalRootShared", ::ruleExternalRootShared)
+        put("checkAudioModeFgsTypeMatch", ::ruleAudioModeFgsTypeMatch)
+        put("checkFGSStartGuarded", ::ruleFGSStartGuarded)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {
