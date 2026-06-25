@@ -25,6 +25,6 @@ class RegistryTest {
 
     companion object {
         // Grows per batch; Task N (final wiring) asserts all 46.
-        val EXPECTED_IDS = sortedSetOf<String>()
+        val EXPECTED_IDS = sortedSetOf("checkSchedulerNoGetService")
     }
 }

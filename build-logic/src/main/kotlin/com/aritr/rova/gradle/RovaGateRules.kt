@@ -10,7 +10,7 @@ object RovaGateRules {
 
     /** id -> pure rule. Assembled from family maps; immutable, no mutable state. */
     val registry: Map<String, (List<SourceFile>) -> String?> = buildMap {
-        // populated batch-by-batch in later tasks
+        put("checkSchedulerNoGetService", ::ruleSchedulerNoGetService)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {

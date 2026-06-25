@@ -51,15 +51,19 @@ abstract class SourceCheckTask : DefaultTask() {
 
     @TaskAction
     fun run() {
-        val base = reportBaseDir.get().asFile.toPath()
+        val base = reportBaseDir.get().asFile
         // Deterministic order (codex): sort by relPath so multi-offender reports
         // are stable across OS/FS instead of inheriting walkTopDown() order.
+        // relPath MUST use the platform separator (java.io.File) so the offender
+        // report is byte-identical to the old gates' `f.relativeTo(rootDir)` on
+        // every OS (Windows '\', Linux '/'). Do NOT normalize to '/' — that
+        // diverges from today's Windows output (verified by golden capture).
         val files = sources.files
             .filter { it.isFile }
             .map { f ->
                 val text = f.readText(Charsets.UTF_8)
                 SourceFile(
-                    relPath = base.relativize(f.toPath()).toString().replace('\\', '/'),
+                    relPath = f.relativeTo(base).path,
                     lines = f.readLines(Charsets.UTF_8),
                     text = text,
                 )

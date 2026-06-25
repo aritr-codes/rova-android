@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.aritr.rova.checks")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -135,45 +136,16 @@ configurations.configureEach {
 // contexts (alarms qualify), so all alarm targets must be BroadcastReceivers.
 // Scope is restricted to service/scheduler/** because RovaRecordingService
 // legitimately uses PendingIntent.getService for stop-action notifications.
-val checkSchedulerNoGetService = tasks.register("checkSchedulerNoGetService") {
+val checkSchedulerNoGetService = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSchedulerNoGetService") {
     group = "verification"
     description = "Forbid PendingIntent.getService in alarm scheduler sources."
-    val schedulerDir = file("src/main/java/com/aritr/rova/service/scheduler")
-    inputs.dir(schedulerDir).withPropertyName("schedulerSources")
-    doLast {
-        if (!schedulerDir.exists()) {
-            throw GradleException("Scheduler dir missing: $schedulerDir")
-        }
-        val offenders = schedulerDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        // Match getService( on PendingIntent. Comment lines
-                        // (// or *) are ignored so the doc reference in
-                        // AlarmScheduler.kt does not trip the rule.
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else line.contains("PendingIntent.getService(") ||
-                            Regex("""\bgetService\s*\(""").containsMatchIn(line) &&
-                            line.contains("PendingIntent")
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "PendingIntent.getService is forbidden in alarm scheduler sources " +
-                    "(Android 12+ forbids FGS starts from background contexts). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/scheduler")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSchedulerNoGetService")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSchedulerNoGetService.ok"))
 }
 // Phase 1.3 — broader CI lint (ROADMAP_v6.md §"Lint / CI Rules Summary"):
 // PendingIntent.getService is forbidden anywhere in app sources.
