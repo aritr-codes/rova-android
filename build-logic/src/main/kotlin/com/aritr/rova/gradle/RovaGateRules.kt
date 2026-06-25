@@ -37,6 +37,12 @@ object RovaGateRules {
         put("checkWakeLockBoundedAcquire", ::ruleWakeLockBoundedAcquire)
         put("checkWakeLockHeldRefresh", ::ruleWakeLockHeldRefresh)
         put("checkWakeLockZeroGapRefresh", ::ruleWakeLockZeroGapRefresh)
+        put("checkNoHardcodedUiStrings", ::ruleNoHardcodedUiStrings)
+        put("checkLocaleConfigNoPseudolocale", ::ruleLocaleConfigNoPseudolocale)
+        put("checkUserCopyVocabulary", ::ruleUserCopyVocabulary)
+        put("checkA11yAnimationGated", ::ruleA11yAnimationGated)
+        put("checkA11yClickableHasRole", ::ruleA11yClickableHasRole)
+        put("checkA11yTargetSizeToken", ::ruleA11yTargetSizeToken)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {

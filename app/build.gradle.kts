@@ -788,83 +788,27 @@ val checkWakeLockZeroGapRefresh = tasks.register<com.aritr.rova.gradle.SourceChe
 // sites only. A literal that lives on a continuation line below `Text(` /
 // `text =` is a known blind spot, accepted because the goal is catching the
 // common copy-paste regression, not proving total absence.
-val checkNoHardcodedUiStrings = tasks.register("checkNoHardcodedUiStrings") {
+val checkNoHardcodedUiStrings = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkNoHardcodedUiStrings") {
     group = "verification"
     description = "Forbid hardcoded user-facing string literals at Text(/contentDescription call sites — externalize to res/values/strings.xml (ADR-0022 §No Hardcoded UI Strings)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkNoHardcodedUiStrings: Rova source dir missing: $srcDir")
-        }
-        // `Text("` or `Text(text = "` — require `"` as the next non-space token
-        // so `Text(stringResource(...))` / `Text(text = getString(...))` don't match.
-        val textLiteral = Regex("""(^|[^A-Za-z0-9_])Text\(\s*(text\s*=\s*)?"""")
-        // `contentDescription = "` (with or without spaces around `=`).
-        val contentDescLiteral = Regex("""contentDescription\s*=\s*"""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val hits = f.readLines()
-                    .withIndex()
-                    .filter { (_, line) ->
-                        if (line.contains("i18n-opt-out")) return@filter false
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                        else textLiteral.containsMatchIn(line) ||
-                            contentDescLiteral.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "Hardcoded user-facing string literal(s) found at Compose " +
-                    "`Text(`/`contentDescription =` call sites. User-facing copy " +
-                    "must live in `res/values/strings.xml` and be read via " +
-                    "`stringResource(...)` / `getString(...)` (ADR-0022 §No " +
-                    "Hardcoded UI Strings). For a genuinely non-user-facing " +
-                    "literal or @Preview-only sample data, add a " +
-                    "`// i18n-opt-out: <reason>` marker on the line to skip it. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkNoHardcodedUiStrings")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkNoHardcodedUiStrings.ok"))
 }
 
-val checkLocaleConfigNoPseudolocale = tasks.register("checkLocaleConfigNoPseudolocale") {
+val checkLocaleConfigNoPseudolocale = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkLocaleConfigNoPseudolocale") {
     group = "verification"
     description = "Forbid pseudolocale tags (en-XA/ar-XB) in res/xml/locales_config.xml — they must never reach the system per-app-language list (ADR-0023 §No Pseudolocale In LocaleConfig)."
-    val configFile = file("src/main/res/xml/locales_config.xml")
-    inputs.file(configFile).withPropertyName("localesConfig")
-    doLast {
-        if (!configFile.exists()) {
-            throw GradleException("checkLocaleConfigNoPseudolocale: locales_config.xml missing: $configFile")
-        }
-        // Match pseudolocale tags only inside android:name="..." attribute values.
-        // Covers BCP-47 forms: en-XA, en-rXA, ar-XB, ar-rXB (case-insensitive).
-        val pseudo = Regex("""android:name\s*=\s*"[^"]*\b(en|ar)-r?X[AB]\b[^"]*"""", RegexOption.IGNORE_CASE)
-        val offenders = configFile.readLines()
-            .withIndex()
-            .filter { (_, line) -> pseudo.containsMatchIn(line) }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (i, line) ->
-                "  ${configFile.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-            }
-            throw GradleException(
-                "Pseudolocale tag(s) found in locales_config.xml. Pseudolocales " +
-                    "(en_XA / ar_XB) are a DEBUG-ONLY QA tool and must never be " +
-                    "advertised as a user language (ADR-0023 §No Pseudolocale In " +
-                    "LocaleConfig). Remove them; keep generateLocaleConfig OFF. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.file("src/main/res/xml/locales_config.xml")
+    )
+    checkId.set("checkLocaleConfigNoPseudolocale")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkLocaleConfigNoPseudolocale.ok"))
 }
 
 // ADR-0026 — a preset is a config bundle ONLY; orientation/mode must never become
@@ -1142,32 +1086,14 @@ val checkFrontBackCapabilityGated = tasks.register("checkFrontBackCapabilityGate
 }
 
 // ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).
-val checkUserCopyVocabulary = tasks.register("checkUserCopyVocabulary") {
+val checkUserCopyVocabulary = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkUserCopyVocabulary") {
     group = "verification"
     description = "No loop/repeat/segment vocabulary in user-visible string VALUES, en+es (ADR-0029 §C terminology)."
-    val banned = Regex("(?i)\\b(loops?|repeats?|segments?|ciclos?|segmentos?|repeticion(es)?|bucles?)\\b")
-    // Allowlist by resource NAME for justified exceptions (none expected at γ).
-    val allowNames = setOf<String>()
-    doLast {
-        val offenders = mutableListOf<String>()
-        listOf("src/main/res/values/strings.xml", "src/main/res/values-es/strings.xml").forEach { p ->
-            val text = file(p).readText()
-            val nameRe = Regex("""<string name="([^"]+)"[^>]*>(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
-            val matches = nameRe.findAll(text).toList()
-            val declared = Regex("<string ").findAll(text).count()
-            if (declared != matches.size) {
-                throw GradleException("checkUserCopyVocabulary: parser matched ${matches.size}/$declared strings in $p — fix the regex")
-            }
-            matches.forEach { m ->
-                val (name, value) = m.destructured
-                if (name in allowNames) return@forEach
-                if (banned.containsMatchIn(value)) offenders += "$p: $name = ${value.trim()}"
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException("ADR-0029 §C: banned vocabulary in user copy (use clip/session):\n" + offenders.joinToString("\n"))
-        }
-    }
+    sources.from(layout.projectDirectory.file("src/main/res/values/strings.xml"))
+    sources.from(layout.projectDirectory.file("src/main/res/values-es/strings.xml"))
+    checkId.set("checkUserCopyVocabulary")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkUserCopyVocabulary.ok"))
 }
 
 // ADR-0020 §Decision-3 (WCAG 2.2 AA — SC 2.3.3 "Animation from Interactions" /
@@ -1199,54 +1125,16 @@ val checkUserCopyVocabulary = tasks.register("checkUserCopyVocabulary") {
 // animation in one composable and an ungated one in another passes. The
 // centralized seam makes per-file co-presence a strong signal; per-composable
 // proximity was rejected as brittle.
-val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
+val checkA11yAnimationGated = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yAnimationGated") {
     group = "verification"
     description = "Require a reduced-motion seam read in any file using rememberInfiniteTransition/infiniteRepeatable — WCAG 2.2 AA SC 2.3.3/2.2.2 (ADR-0020 §Decision-3)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkA11yAnimationGated: Rova source dir missing: $srcDir")
-        }
-        // `\s*\(` tolerates the legal `rememberInfiniteTransition (` spacing variant.
-        val rawPrimitive = Regex("""rememberInfiniteTransition\s*\(|infiniteRepeatable\s*\(""")
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val triggers = lines.withIndex().filter { (_, line) ->
-                    if (line.contains("a11y-opt-out")) return@filter false
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else rawPrimitive.containsMatchIn(line)
-                }
-                if (triggers.isEmpty()) return@mapNotNull null
-                val hasSeam = lines.any {
-                    it.contains("rememberReduceMotion(") || it.contains("ReducedMotion.isReduced")
-                }
-                if (hasSeam) null else f to triggers
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-3 violation (WCAG 2.2 AA — SC 2.3.3 Animation " +
-                    "from Interactions / SC 2.2.2 Pause, Stop, Hide): looping/" +
-                    "auto-playing animation primitive(s) used without a " +
-                    "reduced-motion guard in the same file. Every file that uses " +
-                    "`rememberInfiniteTransition` / `infiniteRepeatable` must also " +
-                    "read the reduced-motion seam (`rememberReduceMotion()` or " +
-                    "`ReducedMotion.isReduced`) and select a static value when " +
-                    "motion is reduced. For a genuinely static or @Preview-only " +
-                    "animation, add `// a11y-opt-out: <reason>` on the primitive " +
-                    "line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yAnimationGated")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yAnimationGated.ok"))
 }
 
 // ADR-0020 §Decision-1 — checkA11yClickableHasRole (WCAG 2.2 AA SC 4.1.2 Name,
@@ -1275,69 +1163,16 @@ val checkA11yAnimationGated = tasks.register("checkA11yAnimationGated") {
 // `role = GlassRole.…` arg does NOT count — see roleAssign below.) This fails
 // SAFE — toward false-pass (a missed regression), never false-fail (a blocked
 // legit build).
-val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
+val checkA11yClickableHasRole = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yClickableHasRole") {
     group = "verification"
     description = "Require an accessibility role on custom Modifier.clickable/combinedClickable — WCAG 2.2 AA SC 4.1.2 (ADR-0020 §Decision-1)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    inputs.dir(srcDir).withPropertyName("rovaSources")
-    doLast {
-        if (!srcDir.exists()) {
-            throw GradleException("checkA11yClickableHasRole: Rova source dir missing: $srcDir")
-        }
-        // `.clickable(`/`.combinedClickable(` (paren) or `… {` (trailing lambda).
-        val clickable = Regex("""\.(clickable|combinedClickable)\s*[({]""")
-        // Require a literal `Role.` so the design-system `role = GlassRole.…`
-        // Liquid Glass arg does NOT satisfy the a11y-role requirement.
-        val roleAssign = Regex("""\brole\s*=\s*Role\.""")
-        // Opt-out is honored only when a non-empty reason follows the colon.
-        val optOut = Regex("""a11y-opt-out:\s*\S""")
-        // Window spans the modifier chain in BOTH directions: a chain's
-        // `.semantics { role }` can sit either AFTER the clickable (forward) or
-        // BEFORE it (e.g. a tab whose `.semantics { selected; role = Role.Tab }`
-        // precedes a conditional `.let { … clickable … }` ~10 lines further down).
-        // Both spans are generous so such a legitimately-roled chain is never
-        // false-FAILED (a blocked legit build). The trade-off is the SAFE
-        // direction: an unrelated role within the span can over-reach into a
-        // false-PASS (a missed regression), never a false-fail.
-        val backWindow = 15
-        val forwardWindow = 20
-        val offenders = srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = lines.withIndex().filter { (idx, line) ->
-                    if (optOut.containsMatchIn(line)) return@filter false
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@filter false
-                    if (!clickable.containsMatchIn(line)) return@filter false
-                    val from = maxOf(0, idx - backWindow)
-                    val to = minOf(lines.size - 1, idx + forwardWindow)
-                    !roleAssign.containsMatchIn(lines.subList(from, to + 1).joinToString("\n"))
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 4.1.2 Name, " +
-                    "Role, Value): custom Modifier.clickable / combinedClickable " +
-                    "used without an accessibility role on the same modifier " +
-                    "chain. A custom clickable container (Row/Box/Surface/Column) " +
-                    "must declare a role so TalkBack announces it as actionable — " +
-                    "either `clickable(role = Role.Button, …)` or an adjacent " +
-                    "`.semantics { role = … }` / `.clearAndSetSemantics { role = … }`. " +
-                    "Material Button/IconButton supply a role already. For toggles/" +
-                    "selections use toggleable/selectable (out of scope here). For a " +
-                    "genuinely role-exempt case, add `// a11y-opt-out: <reason>` " +
-                    "(reason required) on the clickable line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yClickableHasRole")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yClickableHasRole.ok"))
 }
 
 // ADR-0020 §Decision-1 — checkA11yTargetSizeToken (WCAG 2.2 AA SC 2.5.8 Target
@@ -1365,80 +1200,16 @@ val checkA11yClickableHasRole = tasks.register("checkA11yClickableHasRole") {
 // false-failing a legit rename. Opt-out: a token line bearing
 // `// a11y-opt-out: <reason>` (reason required) is skipped — for a control whose
 // 24dp touch floor is met by call-site padding/`heightIn` rather than the token.
-val checkA11yTargetSizeToken = tasks.register("checkA11yTargetSizeToken") {
+val checkA11yTargetSizeToken = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkA11yTargetSizeToken") {
     group = "verification"
     description = "Require interactive-target size tokens >= 24.dp — WCAG 2.2 AA SC 2.5.8 (ADR-0020 §Decision-1)."
-    val themeDir = file("src/main/java/com/aritr/rova/ui/theme")
-    inputs.dir(themeDir).withPropertyName("rovaThemeTokens")
-    doLast {
-        if (!themeDir.exists()) {
-            throw GradleException("checkA11yTargetSizeToken: theme token dir missing: $themeDir")
-        }
-        // Enumerated interactive-target size tokens (bare `val` names; the same
-        // name declared in two token objects — e.g. camControlSize in RovaTokens
-        // and RecordChromeTokens — is checked in both). EXTEND this set when a
-        // new tappable control gets a size token.
-        val interactiveSizeTokens = setOf(
-            "camControlSize",    // cam-ctrl-btn diameter
-            "stepperButtonSize", // stepper +/- button (RovaTokens)
-            "stepBtnSize",       // stepper +/- button (SettingsSheetTokens)
-            "primaryActionSize", // Start FAB
-            "stopActionSize",    // Stop FAB
-            "fabSize",           // record-chrome FAB
-            "navIconBoxSize",    // bottom-nav item tap box
-            "tileMinHeight",     // preset tile
-            // NOT pinned: cellSlot — it is a 44dp VISUAL slot whose 24dp touch
-            // floor is owned by the parent card's `heightIn(min = 48.dp)` at the
-            // call site, not by the token. Pinning a proxy here would assert the
-            // wrong thing; the call-site floor is a separate (future) invariant.
-        )
-        val minTargetDp = 24.0
-        // `val NAME [: Dp] = <number>.dp` — tolerates the optional `: Dp` type.
-        val tokenDecl = Regex("""\bval\s+(\w+)\s*(?::\s*Dp\s*)?=\s*(\d+(?:\.\d+)?)\s*\.dp\b""")
-        val optOut = Regex("""a11y-opt-out:\s*\S""")
-        val offenders = themeDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .flatMap { f ->
-                var inBlock = false // inside a /* … */ (incl. /** KDoc */) block
-                f.readLines().withIndex().mapNotNull inner@{ (idx, line) ->
-                    // Track block-comment state so a commented-out
-                    // `val NAME = N.dp` can NEVER false-fail (trailing marker
-                    // wins; a same-line `/* … */` is skipped by the `/*` prefix
-                    // check below). KDoc inner `*` lines are skipped too.
-                    val wasInBlock = inBlock
-                    val opens = line.lastIndexOf("/*")
-                    val closes = line.lastIndexOf("*/")
-                    if (opens >= 0 || closes >= 0) inBlock = opens > closes
-                    if (wasInBlock) return@inner null
-                    if (optOut.containsMatchIn(line)) return@inner null
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") ||
-                        trimmed.startsWith("/*")
-                    ) return@inner null
-                    val m = tokenDecl.find(line) ?: return@inner null
-                    if (m.groupValues[1] !in interactiveSizeTokens) return@inner null
-                    if (m.groupValues[2].toDouble() >= minTargetDp) null
-                    else Triple(f, idx + 1, line.trim())
-                }
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, ln, line) ->
-                "  ${f.relativeTo(rootDir)}:$ln: $line"
-            }
-            throw GradleException(
-                "ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 2.5.8 Target " +
-                    "Size (Minimum)): an interactive-target size token is below " +
-                    "the 24.dp accessibility floor. A tappable control's size " +
-                    "token (button diameter / tap box / FAB / tile) " +
-                    "must be >= 24.dp. (Material 3's 48dp is a guideline; 24dp is " +
-                    "the WCAG AA bar.) Raise the token, or — if the 24dp touch " +
-                    "floor is met by call-site padding/`heightIn` rather than the " +
-                    "token itself — add `// a11y-opt-out: <reason>` (reason " +
-                    "required) on the token line.\nOffenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/ui/theme")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkA11yTargetSizeToken")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkA11yTargetSizeToken.ok"))
 }
 
 // B5 / ADR-0025 — the core privacy invariant, mechanically enforced:
