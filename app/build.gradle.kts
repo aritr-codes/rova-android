@@ -487,46 +487,16 @@ val checkPendingFdModeIsRW = tasks.register<com.aritr.rova.gradle.SourceCheckTas
  * only — Phase 1's pre-existing `PreviewActivity` / `RovaRecordingService`
  * call sites are commit-7's deletion target and stay outside this lint.
  */
-val checkExportIsPendingGuarded = tasks.register("checkExportIsPendingGuarded") {
+val checkExportIsPendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportIsPendingGuarded") {
     group = "verification"
     description = "IS_PENDING references in service/export/ must be SDK-gated to API 29+ (ADR 0003 Tier 1)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bIS_PENDING\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val text = f.readText()
-                val hits = f.readLines().withIndex()
-                    .filter { (_, line) ->
-                        val trimmed = line.trimStart()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) false
-                        else pattern.containsMatchIn(line)
-                    }
-                if (hits.isEmpty()) return@mapNotNull null
-                val hasFileGuard = text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
-                    text.contains("@RequiresApi(Build.VERSION_CODES.R)") ||
-                    text.contains("@RequiresApi(android.os.Build.VERSION_CODES.Q)") ||
-                    (text.contains("Build.VERSION.SDK_INT") && text.contains("Build.VERSION_CODES.Q"))
-                if (hasFileGuard) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()}"
-                }
-            }
-            throw GradleException(
-                "IS_PENDING used without SDK gating in service/export/ — " +
-                    "the file must be annotated @RequiresApi(Build.VERSION_CODES.Q) " +
-                    "or guard the reference with `Build.VERSION.SDK_INT >= " +
-                    "Build.VERSION_CODES.Q`. Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportIsPendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportIsPendingGuarded.ok"))
 }
 
 /**
@@ -537,47 +507,16 @@ val checkExportIsPendingGuarded = tasks.register("checkExportIsPendingGuarded") 
  * SDK branch (≤30 lines from a `VERSION_CODES.R` token), forcing the
  * call to live in the `< R` arm of an SDK comparison.
  */
-val checkExportSetIncludePendingGuarded = tasks.register("checkExportSetIncludePendingGuarded") {
+val checkExportSetIncludePendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportSetIncludePendingGuarded") {
     group = "verification"
     description = "setIncludePending references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; deprecated/forbidden API 30+)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bsetIncludePending\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Pair<Int, String>>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                    if (!pattern.containsMatchIn(line)) continue
-                    val window = lines.subList(
-                        maxOf(0, i - 30),
-                        minOf(lines.size, i + 30)
-                    ).joinToString("\n")
-                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
-                        window.contains("Build.VERSION.SDK_INT")
-                    if (!hasSdkBranch) hits += i + 1 to line.trim()
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:$i: $line"
-                }
-            }
-            throw GradleException(
-                "setIncludePending used without an SDK branch against " +
-                    "Build.VERSION_CODES.R — must run only on API 29 (deprecated " +
-                    "and unreliable on API 30+). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportSetIncludePendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportSetIncludePendingGuarded.ok"))
 }
 
 /**
@@ -587,47 +526,16 @@ val checkExportSetIncludePendingGuarded = tasks.register("checkExportSetIncludeP
  * `>= R` arm. A reference outside an SDK guard would `NoSuchFieldError`
  * on Android Q.
  */
-val checkExportQueryArgMatchPendingGuarded = tasks.register("checkExportQueryArgMatchPendingGuarded") {
+val checkExportQueryArgMatchPendingGuarded = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportQueryArgMatchPendingGuarded") {
     group = "verification"
     description = "QUERY_ARG_MATCH_PENDING references in service/export/ must be SDK-gated against Build.VERSION_CODES.R (Tier 1; API 30+ only)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val pattern = Regex("""\bQUERY_ARG_MATCH_PENDING\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val lines = f.readLines()
-                val hits = mutableListOf<Pair<Int, String>>()
-                for ((i, line) in lines.withIndex()) {
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue
-                    if (!pattern.containsMatchIn(line)) continue
-                    val window = lines.subList(
-                        maxOf(0, i - 30),
-                        minOf(lines.size, i + 30)
-                    ).joinToString("\n")
-                    val hasSdkBranch = window.contains("Build.VERSION_CODES.R") &&
-                        window.contains("Build.VERSION.SDK_INT")
-                    if (!hasSdkBranch) hits += i + 1 to line.trim()
-                }
-                if (hits.isEmpty()) null else f to hits
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, hits) ->
-                hits.joinToString("\n") { (i, line) ->
-                    "  ${f.relativeTo(rootDir)}:$i: $line"
-                }
-            }
-            throw GradleException(
-                "QUERY_ARG_MATCH_PENDING used without an SDK branch against " +
-                    "Build.VERSION_CODES.R — must run only on API 30+ " +
-                    "(NoSuchFieldError on Q). Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportQueryArgMatchPendingGuarded")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportQueryArgMatchPendingGuarded.ok"))
 }
 
 /**
@@ -653,54 +561,16 @@ val checkExportQueryArgMatchPendingGuarded = tasks.register("checkExportQueryArg
  * extracted `filterPendingOwned` test verifies the post-cursor
  * defense pass at runtime.
  */
-val checkExportPendingVisibilityOnQuery = tasks.register("checkExportPendingVisibilityOnQuery") {
+val checkExportPendingVisibilityOnQuery = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportPendingVisibilityOnQuery") {
     group = "verification"
     description = "Files in service/export/ that call resolver.query(...) must use BOTH visibility mechanisms AND an explicit IS_PENDING = 1 SQL selection (Tier 1; commit-5 NO-GO patch)."
-    val exportDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(exportDir).withPropertyName("exportSources")
-    doLast {
-        if (!exportDir.exists()) throw GradleException("Export dir missing: $exportDir")
-        val queryPattern = Regex("""resolver\s*\.\s*query\s*\(""")
-        // Match `IS_PENDING = 1` (with or without `}` from string-template
-        // closure) and tolerate whitespace.
-        val isPendingFilterPattern = Regex("""IS_PENDING\}?\s*=\s*1\b""")
-        val offenders = exportDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { f ->
-                val text = f.readText()
-                val nonCommentText = f.readLines()
-                    .filter {
-                        val t = it.trimStart()
-                        !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
-                    }
-                    .joinToString("\n")
-                if (!queryPattern.containsMatchIn(nonCommentText)) return@mapNotNull null
-                val hasIncludePending = text.contains("setIncludePending")
-                val hasMatchPending = text.contains("QUERY_ARG_MATCH_PENDING")
-                val hasIsPendingFilter = isPendingFilterPattern.containsMatchIn(nonCommentText)
-                if (hasIncludePending && hasMatchPending && hasIsPendingFilter) null
-                else f to listOfNotNull(
-                    if (!hasIncludePending) "missing setIncludePending (API 29 visibility)" else null,
-                    if (!hasMatchPending) "missing QUERY_ARG_MATCH_PENDING (API 30+ visibility)" else null,
-                    if (!hasIsPendingFilter) "missing explicit IS_PENDING = 1 SQL selection (defense in depth — visibility flags alone are not enough)" else null
-                )
-            }
-            .toList()
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, problems) ->
-                problems.joinToString("\n") { p -> "  ${f.relativeTo(rootDir)}: $p" }
-            }
-            throw GradleException(
-                "Pending-visibility-on-query rule violated in service/export/ — " +
-                    "any file calling resolver.query(...) must wire BOTH visibility " +
-                    "mechanisms AND an explicit IS_PENDING = 1 SQL selection. The " +
-                    "visibility flags alone do not exclude non-pending rows on API 29 " +
-                    "(setIncludePending = \"include in addition\", not \"only\") and " +
-                    "OEM MediaStore behavior on MATCH_ONLY varies. " +
-                    "Offenders:\n$report"
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportPendingVisibilityOnQuery")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportPendingVisibilityOnQuery.ok"))
 }
 
 /**
@@ -763,77 +633,16 @@ val checkExportNoCopyToPublicMovies = tasks.register<com.aritr.rova.gradle.Sourc
  *     the public mux surface so a future edit cannot bypass the tier
  *     pipeline by directly invoking the mux helper.
  */
-val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEntry") {
+val checkExportPipelineSingleEntry = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkExportPipelineSingleEntry") {
     group = "verification"
     description = "ExportPipeline.export single call site in RovaRecordingService.kt; VideoMerger mux callers restricted to service/export/ (Phase 1.7 commit-7)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
-    val videoMergerPath = "src/main/java/com/aritr/rova/utils/VideoMerger.kt"
-    val exportPathFragment = "service/export/"
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val recordingServiceFile = file(recordingServicePath).canonicalFile
-        val videoMergerFile = file(videoMergerPath).canonicalFile
-
-        // Invariant 1 — exactly one ExportPipeline.export( call site,
-        // and it must live in RovaRecordingService.kt.
-        val pipelineCalls = mutableListOf<Pair<File, Int>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .forEach { f ->
-                f.readLines().forEachIndexed { i, line ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                    if (line.contains("ExportPipeline.export(")) {
-                        pipelineCalls += f to (i + 1)
-                    }
-                }
-            }
-        val problems = mutableListOf<String>()
-        when (pipelineCalls.size) {
-            0 -> problems += "ExportPipeline.export(...) not called anywhere — performMerge must dispatch to the pipeline."
-            1 -> {
-                val (f, line) = pipelineCalls.single()
-                if (f.canonicalFile != recordingServiceFile) {
-                    problems += "${f.relativeTo(rootDir)}:$line — only RovaRecordingService.performMerge may call ExportPipeline.export."
-                }
-            }
-            else -> pipelineCalls.forEach { (f, line) ->
-                problems += "${f.relativeTo(rootDir)}:$line — ExportPipeline.export has more than one call site."
-            }
-        }
-
-        // Invariant 2 — VideoMerger mux callers restricted to
-        // service/export/ + the definition file.
-        val muxPattern = Regex("""\bVideoMerger\s*\.\s*(mergeSegments|mergeSegmentsToFd)\s*\(""")
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .filter { it.canonicalFile != videoMergerFile }
-            .forEach { f ->
-                val hits = f.readLines().withIndex().filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else muxPattern.containsMatchIn(line)
-                }
-                if (hits.isEmpty()) return@forEach
-                val pathStr = f.relativeTo(rootDir).path.replace('\\', '/')
-                if (pathStr.contains(exportPathFragment)) return@forEach
-                hits.forEach { (i, line) ->
-                    problems += "${f.relativeTo(rootDir)}:${i + 1}: ${line.trim()} — VideoMerger mux callers must live under service/export/"
-                }
-            }
-
-        if (problems.isNotEmpty()) {
-            throw GradleException(
-                "Single-entry rule violated for the tier export pipeline (Phase 1.7 commit-7):\n" +
-                    problems.joinToString("\n") { "  $it" } +
-                    "\nFix: live publish goes through ExportPipeline.export from " +
-                    "RovaRecordingService.performMerge ONLY. VideoMerger mux helpers " +
-                    "are pipeline internals; consumers must live under service/export/."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkExportPipelineSingleEntry")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkExportPipelineSingleEntry.ok"))
 }
 
 // ADR-0024 §commit-before-stream — a SAF byte write (openOutputStream / the
@@ -841,38 +650,16 @@ val checkExportPipelineSingleEntry = tasks.register("checkExportPipelineSingleEn
 // setExportSafTarget / setSafTarget commit so the target doc Uri is durable in
 // the manifest before any byte is written (crash-safe validate-before-delete
 // recovery depends on it). SafAndroidOps.kt is the raw-stream seam and exempt.
-val checkSafTargetCommittedBeforeStream = tasks.register("checkSafTargetCommittedBeforeStream") {
+val checkSafTargetCommittedBeforeStream = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkSafTargetCommittedBeforeStream") {
     group = "verification"
     description = "SAF openOutputStream/copy must be preceded by a setExportSafTarget commit (ADR-0024 §commit-before-stream)."
-    val srcDir = file("src/main/java/com/aritr/rova/service/export")
-    inputs.dir(srcDir).withPropertyName("exportSrc")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("export source dir missing: $srcDir")
-        val offenders = mutableListOf<String>()
-        srcDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            val lines = f.readLines()
-            val streamIdx = lines.indexOfFirst {
-                val t = it.trimStart()
-                !t.startsWith("//") && !t.startsWith("*") &&
-                    (it.contains("copyFileToDocument(") || it.contains("openOutputStream("))
-            }
-            if (streamIdx >= 0) {
-                val commitsBefore = lines.take(streamIdx).any {
-                    it.contains("setExportSafTarget") || it.contains("setSafTarget(")
-                }
-                // SafAndroidOps.kt holds the raw stream op (the seam) and is exempt.
-                if (!commitsBefore && f.name != "SafAndroidOps.kt") {
-                    offenders += "${f.relativeTo(rootDir)}:${streamIdx + 1}: SAF stream op without a prior setExportSafTarget commit"
-                }
-            }
-        }
-        if (offenders.isNotEmpty()) {
-            throw GradleException(
-                "ADR-0024 §commit-before-stream violation:\n" + offenders.joinToString("\n") { "  $it" } +
-                    "\nThe SAF target doc Uri MUST be committed to the manifest before any byte is written to it."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova/service/export")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkSafTargetCommittedBeforeStream")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkSafTargetCommittedBeforeStream.ok"))
 }
 
 /**
@@ -890,68 +677,16 @@ val checkSafTargetCommittedBeforeStream = tasks.register("checkSafTargetCommitte
  * never appears within 3 lines of `markTerminated(` — the lint passes
  * vacuously for that idiom (mirrors `checkUserStoppedBeforeMerge`).
  */
-val checkCompletedWriteOnlyFromPerformMerge = tasks.register("checkCompletedWriteOnlyFromPerformMerge") {
+val checkCompletedWriteOnlyFromPerformMerge = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkCompletedWriteOnlyFromPerformMerge") {
     group = "verification"
     description = "markTerminated(...,Terminated.COMPLETED,...) writes outside performMerge require an explicit completed-write-opt-out file marker (ADR 0006 B7)."
-    val srcDir = file("src/main/java/com/aritr/rova")
-    val recordingServicePath = "src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
-    inputs.dir(srcDir).withPropertyName("srcAll")
-    doLast {
-        if (!srcDir.exists()) throw GradleException("Source dir missing: $srcDir")
-        val recordingServiceFile = file(recordingServicePath).canonicalFile
-        val offenders = mutableListOf<Pair<File, String>>()
-        srcDir.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .forEach { f ->
-                val lines = f.readLines()
-                val hasOptOut = lines.any { it.contains("completed-write-opt-out:") }
-                val isRecordingService = f.canonicalFile == recordingServiceFile
-                if (hasOptOut && !isRecordingService) return@forEach
-
-                lines.forEachIndexed { i, raw ->
-                    val trimmed = raw.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                    if (!raw.contains("markTerminated(")) return@forEachIndexed
-                    val window = (i..minOf(i + 3, lines.lastIndex))
-                        .joinToString("\n") { lines[it] }
-                    if (!window.contains("Terminated.COMPLETED")) return@forEachIndexed
-                    if (isRecordingService) {
-                        // Must lie inside performMerge body.
-                        val perfMergeStart = lines.indexOfFirst { line ->
-                            line.contains("private suspend fun performMerge(")
-                        }
-                        if (perfMergeStart < 0) {
-                            offenders += f to "line ${i + 1}: COMPLETED write but performMerge declaration missing"
-                            return@forEachIndexed
-                        }
-                        val fnDeclPattern = Regex("""^    (private suspend fun|private fun|suspend fun|fun) \w+""")
-                        var nextFnAbs = lines.size
-                        for (j in (perfMergeStart + 1) until lines.size) {
-                            if (fnDeclPattern.containsMatchIn(lines[j])) {
-                                nextFnAbs = j
-                                break
-                            }
-                        }
-                        if (i in (perfMergeStart + 1)..(nextFnAbs - 1)) return@forEachIndexed
-                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) outside performMerge body"
-                    } else {
-                        offenders += f to "line ${i + 1}: markTerminated(...,Terminated.COMPLETED,...) — only performMerge may write COMPLETED. Add `// completed-write-opt-out: <reason>` for late-terminal reconciliation."
-                    }
-                }
-            }
-        if (offenders.isNotEmpty()) {
-            val report = offenders.joinToString("\n") { (f, msg) ->
-                "  ${f.relativeTo(rootDir)}: $msg"
-            }
-            throw GradleException(
-                "B7 violation (ADR 0006 §Terminal-Write Ordering) — " +
-                    "Terminated.COMPLETED writes restricted to performMerge:\n$report\n" +
-                    "Fix: write COMPLETED only from RovaRecordingService.performMerge. " +
-                    "Late-terminal reconciliation (ExportRecoveryRunner) must carry " +
-                    "`// completed-write-opt-out: <reason>` marker."
-            )
-        }
-    }
+    sources.from(
+        layout.projectDirectory.dir("src/main/java/com/aritr/rova")
+            .asFileTree.matching { include("**/*.kt", "**/*.java") }
+    )
+    checkId.set("checkCompletedWriteOnlyFromPerformMerge")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkCompletedWriteOnlyFromPerformMerge.ok"))
 }
 
 /**

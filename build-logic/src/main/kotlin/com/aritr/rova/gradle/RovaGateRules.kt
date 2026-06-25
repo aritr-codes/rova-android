@@ -27,6 +27,13 @@ object RovaGateRules {
         put("checkPendingFdModeIsRW", ::rulePendingFdModeIsRW)
         put("checkExportNoCopyToPublicMovies", ::ruleExportNoCopyToPublicMovies)
         put("checkExportCleanupPredicate", ::ruleExportCleanupPredicate)
+        put("checkExportIsPendingGuarded", ::ruleExportIsPendingGuarded)
+        put("checkExportSetIncludePendingGuarded", ::ruleExportSetIncludePendingGuarded)
+        put("checkExportQueryArgMatchPendingGuarded", ::ruleExportQueryArgMatchPendingGuarded)
+        put("checkExportPendingVisibilityOnQuery", ::ruleExportPendingVisibilityOnQuery)
+        put("checkExportPipelineSingleEntry", ::ruleExportPipelineSingleEntry)
+        put("checkSafTargetCommittedBeforeStream", ::ruleSafTargetCommittedBeforeStream)
+        put("checkCompletedWriteOnlyFromPerformMerge", ::ruleCompletedWriteOnlyFromPerformMerge)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {
