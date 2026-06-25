@@ -16,4 +16,17 @@ data class SourceFile(
     val relPath: String,
     val lines: List<String>,
     val text: String,
-)
+) {
+    /**
+     * [text] with `//` and `/* */` comments blanked to spaces (string/char/raw
+     * literals kept verbatim), newlines + length preserved. Computed once.
+     */
+    val strippedText: String by lazy { CommentStripper.strip(text) }
+
+    /**
+     * [strippedText] split with identical reader semantics to `File.readLines()`
+     * (the source of [lines]) so `strippedLines[i]` corresponds to the same
+     * source line as `lines[i]`. Rules detect on this, but REPORT from [lines].
+     */
+    val strippedLines: List<String> by lazy { strippedText.reader().readLines() }
+}
