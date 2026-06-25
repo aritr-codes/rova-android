@@ -21,6 +21,12 @@ object RovaGateRules {
         put("checkExternalRootShared", ::ruleExternalRootShared)
         put("checkAudioModeFgsTypeMatch", ::ruleAudioModeFgsTypeMatch)
         put("checkFGSStartGuarded", ::ruleFGSStartGuarded)
+        put("checkUserStoppedBeforeMerge", ::ruleUserStoppedBeforeMerge)
+        put("checkExportTierReadTolerant", ::ruleExportTierReadTolerant)
+        put("checkScanFileBoundedWait", ::ruleScanFileBoundedWait)
+        put("checkPendingFdModeIsRW", ::rulePendingFdModeIsRW)
+        put("checkExportNoCopyToPublicMovies", ::ruleExportNoCopyToPublicMovies)
+        put("checkExportCleanupPredicate", ::ruleExportCleanupPredicate)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {

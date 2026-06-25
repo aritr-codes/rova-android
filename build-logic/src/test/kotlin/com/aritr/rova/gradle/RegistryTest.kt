@@ -28,15 +28,21 @@ class RegistryTest {
         val EXPECTED_IDS = sortedSetOf(
             "checkAtomicTerminalWriteForbiddenPair",
             "checkAudioModeFgsTypeMatch",
+            "checkExportCleanupPredicate",
+            "checkExportNoCopyToPublicMovies",
+            "checkExportTierReadTolerant",
             "checkExternalRootShared",
             "checkFGSStartGuarded",
+            "checkPendingFdModeIsRW",
             "checkRecoveryNoDeletion",
             "checkRecoveryReceiverCounter",
             "checkRecoverySegmentRegex",
+            "checkScanFileBoundedWait",
             "checkScanTriggerSingleSite",
             "checkScheduleReceiverNoFgsStart",
             "checkSchedulerNoGetService",
             "checkStopNoGetService",
+            "checkUserStoppedBeforeMerge",
         )
     }
 }
