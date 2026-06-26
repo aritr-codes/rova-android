@@ -2,6 +2,7 @@ package com.aritr.rova.gradle
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServiceRulesTest {
@@ -404,5 +405,58 @@ class ServiceRulesTest {
             "Caller-side: catch IllegalStateException, SDK-gate the is-check.\n" +
             "Service-side: also catch SecurityException for FGS-type / permission mismatch."
         assertEquals(expected, msg)
+    }
+
+    // ─── hole-close golden tests (CommentStripper migration) ─────────────────
+
+    @Test
+    fun receiverCounter_detectsGoAsyncAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy startsWith("*") skipped it (false-pass).
+        // CommentStripper blanks only `*/`, leaving goAsync() visible on stripped.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaTickReceiver.kt"
+        val body = "        */ val pending = goAsync()"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkRecoveryReceiverCounter", files)
+        assertTrue(msg != null && msg.contains("Guard B violations"))
+    }
+
+    @Test
+    fun atomicTerminalPair_detectsMarkTerminatedAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy false-pass; stripped keeps the call.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = "        */ store.markTerminated(session, Terminated.USER_STOPPED, StopReason.NONE)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkAtomicTerminalWriteForbiddenPair", files)
+        assertTrue(msg != null && msg.contains("Forbidden pair markTerminated(USER_STOPPED, NONE) detected"))
+    }
+
+    @Test
+    fun externalRootShared_detectsAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy false-pass; stripped keeps the call.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = "        */ val dir = context.getExternalFilesDir(null)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExternalRootShared", files)
+        assertTrue(msg != null && msg.contains("External-root drift detected"))
+    }
+
+    @Test
+    fun audioModeFgsType_detectsMicAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy false-pass; stripped keeps the literal.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = "        */ startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkAudioModeFgsTypeMatch", files)
+        assertTrue(msg != null && msg.contains("FGS-type / audio-mode coupling violation"))
+    }
+
+    @Test
+    fun fgsStartGuarded_detectsStartForegroundServiceAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy false-pass; stripped keeps the call.
+        val relPath = "app/src/main/java/com/aritr/rova/MainActivity.kt"
+        val body = "        */ ctx.startForegroundService(intent)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkFGSStartGuarded", files)
+        assertTrue(msg != null && msg.contains("FGS guard violations"))
     }
 }

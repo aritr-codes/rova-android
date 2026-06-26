@@ -21,6 +21,7 @@ package com.aritr.rova.gradle
  * File-level opt-out marker: `guard-b-opt-out:` (with reason) skips the file.
  * Logic: find first non-comment goAsync() line; find increment/decrement of
  * activeReceiverWork around it; report ordering/missing problems.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
     val offenders = files
@@ -28,11 +29,9 @@ internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val lines = f.lines
 
-            // Find first non-comment goAsync() call line.
-            val goAsyncIdx = lines.indexOfFirst { line ->
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else line.contains("goAsync()")
+            // Find first non-comment goAsync() call line (detect on stripped).
+            val goAsyncIdx = lines.indices.indexOfFirst { i ->
+                f.strippedLines.getOrElse(i) { "" }.contains("goAsync()")
             }
             if (goAsyncIdx < 0) return@mapNotNull null  // no goAsync — not a receiver-async pattern
 
@@ -44,16 +43,12 @@ internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
             val problems = mutableListOf<String>()
 
             // Increment: first non-comment line that contains the
-            // synchronous incrementAndGet on activeReceiverWork.
-            val incIdx = lines.indexOfFirst { line ->
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else line.contains("activeReceiverWork.incrementAndGet")
+            // synchronous incrementAndGet on activeReceiverWork (detect on stripped).
+            val incIdx = lines.indices.indexOfFirst { i ->
+                f.strippedLines.getOrElse(i) { "" }.contains("activeReceiverWork.incrementAndGet")
             }
-            val hasDec = lines.any { line ->
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else line.contains("activeReceiverWork.decrementAndGet")
+            val hasDec = lines.indices.any { i ->
+                f.strippedLines.getOrElse(i) { "" }.contains("activeReceiverWork.decrementAndGet")
             }
 
             if (incIdx < 0) {
@@ -82,10 +77,11 @@ internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
 
 /**
  * Verbatim lift of checkAtomicTerminalWriteForbiddenPair.
- * Window: markTerminated( opener → inspect current line + next 3 lines.
+ * Window: markTerminated( opener -> inspect current line + next 3 lines.
  * Line-level opt-out: `terminal-ordering-opt-out:` on the opener line skips it.
  * Forbidden pair: Terminated.USER_STOPPED (or ", USER_STOPPED") AND
  *   StopReason.NONE (or ", NONE") in the same 4-line window.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleAtomicTerminalWriteForbiddenPair(files: List<SourceFile>): String? {
     val offenders = files
@@ -94,9 +90,7 @@ internal fun ruleAtomicTerminalWriteForbiddenPair(files: List<SourceFile>): Stri
             val lines = f.lines
             val hits = mutableListOf<Int>()
             for ((i, line) in lines.withIndex()) {
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                if (!line.contains("markTerminated(")) continue
+                if (!f.strippedLines.getOrElse(i) { "" }.contains("markTerminated(")) continue
                 if (line.contains("terminal-ordering-opt-out:")) continue
                 // Window of up to 3 lines covers multi-line invocations.
                 val window = (i..minOf(i + 3, lines.lastIndex))
@@ -130,6 +124,7 @@ internal fun ruleAtomicTerminalWriteForbiddenPair(files: List<SourceFile>): Stri
  * Old gate used `it.name !in allowedFiles` (just the filename, not path).
  * We reproduce that by extracting the trailing component of relPath after
  * normalising separators.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleExternalRootShared(files: List<SourceFile>): String? {
     val allowedFiles = setOf("RovaApp.kt", "SessionStore.kt")
@@ -144,9 +139,7 @@ internal fun ruleExternalRootShared(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = mutableListOf<Int>()
             for ((i, line) in f.lines.withIndex()) {
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                if (line.contains("getExternalFilesDir(null)")) hits += i + 1
+                if (f.strippedLines.getOrElse(i) { "" }.contains("getExternalFilesDir(null)")) hits += i + 1
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -168,16 +161,15 @@ internal fun ruleExternalRootShared(files: List<SourceFile>): String? {
  * Logic: find first non-comment FOREGROUND_SERVICE_TYPE_MICROPHONE line;
  * require that at least one of the preceding lines contains "audioMode" or
  * "AudioMode.".
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
     val offenders = files
         .filter { it.relPath.endsWith(".kt") }
         .mapNotNull { f ->
             val lines = f.lines
-            val micIdx = lines.indexOfFirst { line ->
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else line.contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
+            val micIdx = lines.indices.indexOfFirst { i ->
+                f.strippedLines.getOrElse(i) { "" }.contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
             }
             if (micIdx < 0) return@mapNotNull null
             if (lines.any { it.contains("audio-mode-opt-out:") }) return@mapNotNull null
@@ -208,6 +200,7 @@ internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
  * Logic: for each file containing startForegroundService( or startForeground(,
  * for each non-comment line that contains a call site, look forward up to 60
  * lines for catch arms, SDK gate, is-check, and (service-side) SecurityException.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
     val offenders = mutableListOf<Pair<SourceFile, String>>()
@@ -220,11 +213,10 @@ internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
             val lines = f.lines
             if (lines.any { it.contains("fgs-guard-opt-out:") }) return@forEach
             for ((i, line) in lines.withIndex()) {
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-                val isCallerSide = line.contains("startForegroundService(")
-                val isServiceSide = line.contains("startForeground(") &&
-                    !line.contains("startForegroundService(")
+                val stripped = f.strippedLines.getOrElse(i) { "" }
+                val isCallerSide = stripped.contains("startForegroundService(")
+                val isServiceSide = stripped.contains("startForeground(") &&
+                    !stripped.contains("startForegroundService(")
                 if (!isCallerSide && !isServiceSide) continue
                 // Look forward up to 60 lines for catch arms.
                 val end = minOf(i + 60, lines.lastIndex)
