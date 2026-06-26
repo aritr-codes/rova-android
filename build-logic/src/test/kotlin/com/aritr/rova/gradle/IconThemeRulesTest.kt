@@ -59,15 +59,26 @@ class IconThemeRulesTest {
 
     @Test
     fun vaultExporterNoPublicPublish_skipsCommentLines() {
-        // Lines starting with // or * are skipped
+        // Lines inside // or /* */ comments are ignored (CommentStripper)
         val body = """
             // val x = MediaStore.Video
-            * insertPendingRow — never call this
+            /* * insertPendingRow — never call this */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/service/export/VaultExporter.kt", body)
         )
         assertNull(RovaGateRules.run("checkVaultExporterNoPublicPublish", files))
+    }
+
+    @Test
+    fun vaultExporterNoPublicPublish_detectsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped (false-pass); CommentStripper blanks only the `*/` token
+        val body = "    */ MediaStore.Images"
+        val files = listOf(
+            src("app/src/main/java/com/aritr/rova/service/export/VaultExporter.kt", body)
+        )
+        val msg = RovaGateRules.run("checkVaultExporterNoPublicPublish", files)
+        assertTrue(msg != null && msg.startsWith("ADR-0025: VaultExporter must not reference any public-publish API"))
     }
 
     @Test
@@ -123,14 +134,25 @@ class IconThemeRulesTest {
 
     @Test
     fun recordSurfaceNoBlur_skipsCommentLines() {
+        // Lines inside // or /* */ comments are ignored (CommentStripper)
         val body = """
             // Modifier.blur(8.dp) — DO NOT USE
-            * RenderEffect is forbidden here
+            /* * RenderEffect is forbidden here */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkRecordSurfaceNoBlur", files))
+    }
+
+    @Test
+    fun recordSurfaceNoBlur_detectsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped (false-pass)
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt"
+        val body = "    */ Modifier.blur(8.dp)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkRecordSurfaceNoBlur", files)
+        assertTrue(msg != null && msg.startsWith("ADR-0028 §2.3 violation"))
     }
 
     @Test
@@ -176,14 +198,25 @@ class IconThemeRulesTest {
 
     @Test
     fun glassSurfaceRoleUsage_skipsCommentLines() {
+        // Lines inside // or /* */ comments are ignored (CommentStripper)
         val body = """
             // Modifier.blur(4.dp) — old approach
-            * RenderEffect removed
+            /* * RenderEffect removed */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkGlassSurfaceRoleUsage", files))
+    }
+
+    @Test
+    fun glassSurfaceRoleUsage_detectsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped (false-pass)
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt"
+        val body = "    */ Modifier.blur(8.dp)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkGlassSurfaceRoleUsage", files)
+        assertTrue(msg != null && msg.startsWith("ADR-0028 §2.1/§5 violation"))
     }
 
     @Test
@@ -282,6 +315,19 @@ class IconThemeRulesTest {
         assertNull(RovaGateRules.run("checkRecordChromeLockSingleSite", files))
     }
 
+    @Test
+    fun recordChromeLockSingleSite_nestingAwareStripBlanksNestedComment() {
+        // Nested block comment `/* /* */ requestedOrientation */` — the old non-nesting DOT_MATCHES_ALL
+        // regex closes on the FIRST `*/`, leaving `requestedOrientation */` as code (false-fail).
+        // CommentStripper is nesting-aware: it tracks depth=2, closes at the SECOND `*/`, blanking
+        // the whole thing — so no offender is reported.
+        val body = "    /* /* */ requestedOrientation */"
+        val files = listOf(
+            src("app/src/main/java/com/aritr/rova/ui/screens/SettingsScreen.kt", body)
+        )
+        assertNull(RovaGateRules.run("checkRecordChromeLockSingleSite", files))
+    }
+
     // ─── checkLibraryNoManifestWrite ──────────────────────────────────────────
 
     @Test
@@ -325,7 +371,7 @@ class IconThemeRulesTest {
     fun libraryNoManifestWrite_skipsCommentLines() {
         val body = """
             // store.markTerminated(id) — removed
-            * appendSegment call here was wrong
+            /* * appendSegment call here was wrong */
             /* setExportPending was here */
         """.trimIndent()
         val files = listOf(
@@ -410,14 +456,25 @@ class IconThemeRulesTest {
 
     @Test
     fun semanticIconNoRawAlpha_skipsCommentLines() {
+        // Lines inside // or /* */ comments are ignored (CommentStripper)
         val body = """
             // tint = Color.Red — old approach
-            * tint = Color(0xFF) not allowed
+            /* * tint = Color(0xFF) not allowed */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkSemanticIconNoRawAlpha", files))
+    }
+
+    @Test
+    fun semanticIconNoRawAlpha_detectsAfterBlockCommentClose() {
+        // `*/ tint = Color(` window — raw trimStart begins with `*`, legacy skipped (false-pass)
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt"
+        val body = "    */ tint = Color(0xFF0000)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkSemanticIconNoRawAlpha", files)
+        assertTrue(msg != null && msg.startsWith("ADR-0031 §4 violation"))
     }
 
     @Test
@@ -473,14 +530,25 @@ class IconThemeRulesTest {
 
     @Test
     fun statusColorLocked_skipsCommentLines() {
+        // Lines inside // or /* */ comments are ignored (CommentStripper)
         val body = """
             // RovaSemantics.recording.copy(alpha = 0.5f) — do not do this
-            * RovaSemantics.warning.copy(red = 1f)
+            /* * RovaSemantics.warning.copy(red = 1f) */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkStatusColorLocked", files))
+    }
+
+    @Test
+    fun statusColorLocked_detectsAfterBlockCommentClose() {
+        // `*/ RovaSemantics.x.copy(` — raw trimStart begins with `*`, legacy skipped (false-pass)
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt"
+        val body = "    */ RovaSemantics.recording.copy(alpha = 0.5f)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkStatusColorLocked", files)
+        assertTrue(msg != null && msg.startsWith("ADR-0031 §3 violation"))
     }
 
     // ─── checkRovaGlyphHome ───────────────────────────────────────────────────
@@ -547,6 +615,19 @@ class IconThemeRulesTest {
         val body = "    val Play = ImageVector.Builder("
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/theme/RovaGlyphs.kt", body)
+        )
+        assertNull(RovaGateRules.run("checkRovaGlyphHome", files))
+    }
+
+    @Test
+    fun rovaGlyphHome_nestingAwareStripBlanksNestedComment() {
+        // Nested block comment containing ImageVector.Builder( — the old non-nesting regex
+        // closes on the FIRST `*/`, leaving `ImageVector.Builder(` as code (false-fail).
+        // CommentStripper is nesting-aware: it tracks depth=2, closes at the SECOND `*/`,
+        // blanking the whole thing — so no offender is reported.
+        val body = "    /* /* val v = ImageVector.Builder( */ still in outer */"
+        val files = listOf(
+            src("app/src/main/java/com/aritr/rova/ui/screens/SomeScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkRovaGlyphHome", files))
     }
