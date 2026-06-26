@@ -78,15 +78,25 @@ class A11yI18nRulesTest {
 
     @Test
     fun noHardcodedUiStrings_skipsCommentLines() {
-        // Lines starting with // or * (after trimStart) are not flagged.
+        // Lines inside // or /* */ comments are not flagged (CommentStripper).
         val body = """
             // Text("debug label")
-            * contentDescription = "doc example"
+            /* * contentDescription = "doc example" */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/screens/HomeScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkNoHardcodedUiStrings", files))
+    }
+
+    @Test
+    fun noHardcodedUiStrings_detectsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/HomeScreen.kt"
+        val body = """    */ Text("hi")"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkNoHardcodedUiStrings", files)
+        assert(msg != null && msg.startsWith("Hardcoded user-facing string literal(s) found at Compose"))
     }
 
     // ─── checkLocaleConfigNoPseudolocale ──────────────────────────────────────
@@ -268,15 +278,25 @@ class A11yI18nRulesTest {
 
     @Test
     fun a11yAnimationGated_skipsCommentLines() {
-        // Commented-out primitive is not a trigger.
+        // Commented-out primitives inside // or /* */ are not triggers (CommentStripper).
         val body = """
             // val t = rememberInfiniteTransition()
-            * infiniteRepeatable(tween(500))
+            /* * infiniteRepeatable(tween(500)) */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/ui/components/BrandAnim.kt", body)
         )
         assertNull(RovaGateRules.run("checkA11yAnimationGated", files))
+    }
+
+    @Test
+    fun a11yAnimationGated_detectsAfterBlockCommentClose() {
+        // `*/ <code>` with no seam — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/ui/components/BrandAnim.kt"
+        val body = """    */ rememberInfiniteTransition()"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkA11yAnimationGated", files)
+        assert(msg != null && msg.startsWith("ADR-0020 §Decision-3 violation"))
     }
 
     // ─── checkA11yClickableHasRole ────────────────────────────────────────────
@@ -347,6 +367,16 @@ class A11yI18nRulesTest {
             src("app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt", body)
         )
         assertNull(RovaGateRules.run("checkA11yClickableHasRole", files))
+    }
+
+    @Test
+    fun a11yClickableHasRole_detectsAfterBlockCommentClose() {
+        // `*/ <code>` with no role in window — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt"
+        val body = """    */ .clickable { }"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkA11yClickableHasRole", files)
+        assert(msg != null && msg.startsWith("ADR-0020 §Decision-1 violation (WCAG 2.2 AA — SC 4.1.2 Name,"))
     }
 
     // ─── checkA11yTargetSizeToken ─────────────────────────────────────────────

@@ -28,8 +28,8 @@ package com.aritr.rova.gradle
 /**
  * Verbatim lift of checkNoHardcodedUiStrings.
  * Forbid hardcoded user-facing string literals at Text( / contentDescription = call sites.
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
- * Opt-out: line containing "i18n-opt-out" is skipped.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Opt-out: line containing "i18n-opt-out" is skipped (read from RAW line, checked first).
  * Empty input: null (forbid gate, no files = no offenders).
  */
 internal fun ruleNoHardcodedUiStrings(files: List<SourceFile>): String? {
@@ -43,12 +43,11 @@ internal fun ruleNoHardcodedUiStrings(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
+                .filter { (idx, line) ->
                     if (line.contains("i18n-opt-out")) return@filter false
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else textLiteral.containsMatchIn(line) ||
-                        contentDescLiteral.containsMatchIn(line)
+                    val stripped = f.strippedLines.getOrElse(idx) { "" }
+                    textLiteral.containsMatchIn(stripped) ||
+                        contentDescLiteral.containsMatchIn(stripped)
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -144,8 +143,8 @@ internal fun ruleUserCopyVocabulary(files: List<SourceFile>): String? {
  * Verbatim lift of checkA11yAnimationGated.
  * REQUIRE: any .kt file using rememberInfiniteTransition( / infiniteRepeatable( must
  * also contain rememberReduceMotion( or ReducedMotion.isReduced.
- * Opt-out: line containing "a11y-opt-out" is skipped.
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + seam check use the raw line.
+ * Opt-out: line containing "a11y-opt-out" is skipped (read from RAW line, checked first).
  * Empty input: null (no files, no triggers, passes).
  */
 internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
@@ -155,11 +154,10 @@ internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
         .filter { it.relPath.endsWith(".kt") || it.relPath.endsWith(".java") }
         .mapNotNull { f ->
             val lines = f.lines
-            val triggers = lines.withIndex().filter { (_, line) ->
+            val triggers = lines.withIndex().filter { (idx, line) ->
                 if (line.contains("a11y-opt-out")) return@filter false
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else rawPrimitive.containsMatchIn(line)
+                val stripped = f.strippedLines.getOrElse(idx) { "" }
+                rawPrimitive.containsMatchIn(stripped)
             }
             if (triggers.isEmpty()) return@mapNotNull null
             val hasSeam = lines.any {
@@ -193,8 +191,8 @@ internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkA11yClickableHasRole.
  * REQUIRE window: .clickable / .combinedClickable needs role = Role. in idx-15..idx+20 window.
- * Opt-out: line matching a11y-opt-out:\s*\S is skipped.
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Opt-out: line matching a11y-opt-out:\s*\S is skipped (read from RAW line, checked first).
  * Empty input: null (forbid/require gate, no files = no clickables = passes).
  */
 internal fun ruleA11yClickableHasRole(files: List<SourceFile>): String? {
@@ -213,9 +211,8 @@ internal fun ruleA11yClickableHasRole(files: List<SourceFile>): String? {
             val lines = f.lines
             val hits = lines.withIndex().filter { (idx, line) ->
                 if (optOut.containsMatchIn(line)) return@filter false
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@filter false
-                if (!clickable.containsMatchIn(line)) return@filter false
+                val stripped = f.strippedLines.getOrElse(idx) { "" }
+                if (!clickable.containsMatchIn(stripped)) return@filter false
                 val from = maxOf(0, idx - backWindow)
                 val to = minOf(lines.size - 1, idx + forwardWindow)
                 !roleAssign.containsMatchIn(lines.subList(from, to + 1).joinToString("\n"))
