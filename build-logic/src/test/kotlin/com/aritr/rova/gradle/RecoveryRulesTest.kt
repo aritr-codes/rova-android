@@ -2,6 +2,7 @@ package com.aritr.rova.gradle
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecoveryRulesTest {
@@ -209,5 +210,73 @@ class RecoveryRulesTest {
             "// runRecoveryScan() — do NOT call from here"
         ))
         assertNull(RovaGateRules.run("checkScanTriggerSingleSite", files))
+    }
+
+    // ─── hole-close: block-comment-close false-pass ──────────────────────────
+
+    @Test
+    fun stopNoGetService_failsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        // CommentStripper blanks only the `*/` portion; the token is newly visible.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaStopReceiver.kt"
+        val files = listOf(src(
+            relPath,
+            "    */ val pi = PendingIntent.getService(ctx, 0, intent, 0)"
+        ))
+        val msg = RovaGateRules.run("checkStopNoGetService", files)
+        assertTrue(msg != null &&
+            msg.startsWith("PendingIntent.getService is forbidden"))
+    }
+
+    @Test
+    fun scheduleReceiverNoFgsStart_failsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/schedule/DailyWindowReceiver.kt"
+        val files = listOf(src(
+            relPath,
+            "    */ ctx.startService(intent)"
+        ))
+        val msg = RovaGateRules.run("checkScheduleReceiverNoFgsStart", files)
+        assertTrue(msg != null &&
+            msg.startsWith("Schedule receivers must not start a foreground service"))
+    }
+
+    @Test
+    fun recoveryNoDeletion_failsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/recovery/RecoveryScanner.kt"
+        val files = listOf(src(
+            relPath,
+            "    */ segment.delete()"
+        ))
+        val msg = RovaGateRules.run("checkRecoveryNoDeletion", files)
+        assertTrue(msg != null &&
+            msg.startsWith("Phase 1.5 sources must not call deletion APIs"))
+    }
+
+    @Test
+    fun recoverySegmentRegex_failsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/recovery/RecoveryScanner.kt"
+        val files = listOf(src(
+            relPath,
+            """    */ val p = Regex("seg_\\d+.mp4")"""
+        ))
+        val msg = RovaGateRules.run("checkRecoverySegmentRegex", files)
+        assertTrue(msg != null &&
+            msg.startsWith("`seg_` is forbidden in Phase 1.5 recovery sources"))
+    }
+
+    @Test
+    fun scanTriggerSingleSite_failsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/recovery/SomeRunner.kt"
+        val files = listOf(src(
+            relPath,
+            "    */ runRecoveryScan()"
+        ))
+        val msg = RovaGateRules.run("checkScanTriggerSingleSite", files)
+        assertTrue(msg != null &&
+            msg.startsWith("`runRecoveryScan` is owned exclusively by RovaApp"))
     }
 }
