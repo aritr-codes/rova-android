@@ -28,7 +28,7 @@ package com.aritr.rova.gradle
 /**
  * Verbatim lift of checkVaultExporterNoPublicPublish.
  * Scope: single file — VaultExporter.kt (matched by relPath suffix).
- * Comment-skip: lines starting with // or * (after trimStart).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Missing file: return "source missing" message.
  * Report HARDCODES "VaultExporter.kt" (not relPath) — verbatim from old gate.
  */
@@ -47,10 +47,8 @@ internal fun ruleVaultExporterNoPublicPublish(files: List<SourceFile>): String? 
         ".insert(",
         "getExternalStoragePublicDirectory",
     )
-    val hits = vf.lines.withIndex().filter { (_, line) ->
-        val t = line.trimStart()
-        if (t.startsWith("//") || t.startsWith("*")) false
-        else forbidden.any { line.contains(it) }
+    val hits = vf.lines.withIndex().filter { (idx, _) ->
+        forbidden.any { vf.strippedLines.getOrElse(idx) { "" }.contains(it) }
     }
     if (hits.isNotEmpty()) {
         val report = hits.joinToString("\n") { (i, line) -> "  VaultExporter.kt:${i + 1}: ${line.trim()}" }
@@ -65,7 +63,7 @@ internal fun ruleVaultExporterNoPublicPublish(files: List<SourceFile>): String? 
 /**
  * Verbatim lift of checkRecordSurfaceNoBlur.
  * Scope: files whose name (last path segment) is RecordScreen.kt or RecordChrome.kt.
- * Comment-skip: lines starting with // or * (after trimStart).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleRecordSurfaceNoBlur(files: List<SourceFile>): String? {
     val recordChromeNames = setOf("RecordScreen.kt", "RecordChrome.kt")
@@ -76,10 +74,8 @@ internal fun ruleRecordSurfaceNoBlur(files: List<SourceFile>): String? {
             name in recordChromeNames
         }
         .mapNotNull { f ->
-            val hits = f.lines.withIndex().filter { (_, line) ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*")) false
-                else blurPattern.containsMatchIn(line)
+            val hits = f.lines.withIndex().filter { (idx, _) ->
+                blurPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -101,7 +97,7 @@ internal fun ruleRecordSurfaceNoBlur(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkGlassSurfaceRoleUsage.
  * Scope: ui subtree files; allowlist by filename.
- * Comment-skip: lines starting with // or * (after trimStart).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleGlassSurfaceRoleUsage(files: List<SourceFile>): String? {
     val allowlist = setOf(
@@ -114,10 +110,8 @@ internal fun ruleGlassSurfaceRoleUsage(files: List<SourceFile>): String? {
             name !in allowlist
         }
         .mapNotNull { f ->
-            val hits = f.lines.withIndex().filter { (_, line) ->
-                val t = line.trimStart()
-                if (t.startsWith("//") || t.startsWith("*")) false
-                else blurPattern.containsMatchIn(line)
+            val hits = f.lines.withIndex().filter { (idx, _) ->
+                blurPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -139,25 +133,21 @@ internal fun ruleGlassSurfaceRoleUsage(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkRecordChromeLockSingleSite.
  * Scope: ui subtree; canonical allowedWriter = ui/screens/RecordScreen.kt (suffix match).
- * Block-comment strip via Regex DOT_MATCHES_ALL (keeps newlines).
- * Inline // stripped via substringBefore("//") per line.
+ * Comment handling: detection on f.strippedLines (CommentStripper); report uses the raw line.
+ * C-consolidation: replaces the former non-nesting blockComment Regex + substringBefore("//")
+ * with CommentStripper (nesting-aware, literal-preserving). Detection input is stricter;
+ * failure-message bytes and allowedSuffix filter are unchanged.
  */
 internal fun ruleRecordChromeLockSingleSite(files: List<SourceFile>): String? {
-    val blockComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
     val allowedSuffix = "ui/screens/RecordScreen.kt"
     val offenders = files
         .filter { f ->
             !f.relPath.replace('\\', '/').endsWith(allowedSuffix)
         }
         .mapNotNull { f ->
-            val stripped = blockComment.replace(f.text) { m ->
-                m.value.filter { ch -> ch == '\n' }
-            }
-            val hits = stripped.lines()
-                .withIndex()
-                .filter { (_, line) ->
-                    line.substringBefore("//").contains("requestedOrientation")
-                }
+            val hits = f.lines.indices
+                .filter { i -> f.strippedLines.getOrElse(i) { "" }.contains("requestedOrientation") }
+                .map { i -> i to f.lines.getOrElse(i) { "" } }
             if (hits.isEmpty()) null else f to hits
         }
     if (offenders.isNotEmpty()) {
@@ -222,8 +212,8 @@ internal fun ruleLibraryNoManifestWrite(files: List<SourceFile>): String? {
  * Verbatim lift of checkSemanticIconNoRawAlpha.
  * Scope: all .kt files under rova/; canonical seam excluded by suffix.
  * 3-line window scan: any line containing "tint" triggers a window[i..i+2] check.
- * Opt-out: "semanticicon-opt-out" on the line suppresses it.
- * Comment-skip: lines starting with // or * (after trimStart).
+ * Opt-out: "semanticicon-opt-out" on the line suppresses it (read from raw).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleSemanticIconNoRawAlpha(files: List<SourceFile>): String? {
     val rawTintPattern = Regex("""tint\s*=.*?\bColor\s*[.(]""")
@@ -237,9 +227,8 @@ internal fun ruleSemanticIconNoRawAlpha(files: List<SourceFile>): String? {
             val hits = lines.indices.mapNotNull { i ->
                 val line = lines[i]
                 if (line.contains("semanticicon-opt-out")) return@mapNotNull null
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@mapNotNull null
-                if (!line.contains("tint")) return@mapNotNull null
+                val stripped = f.strippedLines.getOrElse(i) { "" }
+                if (!stripped.contains("tint")) return@mapNotNull null
                 val window = (i until minOf(i + 3, lines.size)).joinToString(" ") { lines[it] }
                 if (rawTintPattern.containsMatchIn(window)) i to line else null
             }
@@ -264,16 +253,14 @@ internal fun ruleSemanticIconNoRawAlpha(files: List<SourceFile>): String? {
  * Verbatim lift of checkStatusColorLocked.
  * Scope: all .kt files under rova/.
  * Forbid RovaSemantics.<X>.copy( (pattern catches multiline/positional cases).
- * Comment-skip: lines starting with // or * (after trimStart).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleStatusColorLocked(files: List<SourceFile>): String? {
     val dilutePattern = Regex("""RovaSemantics\s*\.\s*\w+\s*\.copy\s*\(""")
     val offenders = files
         .mapNotNull { f ->
-            val hits = f.lines.withIndex().filter { (_, line) ->
-                val trimmed = line.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                else dilutePattern.containsMatchIn(line)
+            val hits = f.lines.withIndex().filter { (idx, _) ->
+                dilutePattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -294,28 +281,21 @@ internal fun ruleStatusColorLocked(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkRovaGlyphHome.
  * Scope: all .kt files under rova/; canonical home excluded by suffix.
- * Whole-file scan after stripComments (block comments blanked preserving newlines;
- * inline // stripped). Catches ImageVector.Builder( split across lines.
+ * Comment handling: detection on CommentStripper.strip(f.text) (nesting-aware, literal-preserving,
+ * length+newline-preserving so char-offset to line-number conversion is byte-stable).
+ * C-consolidation: replaces the former non-nesting blockComment Regex + inline // strip
+ * with CommentStripper. Catches ImageVector.Builder( split across lines.
  */
 internal fun ruleRovaGlyphHome(files: List<SourceFile>): String? {
     val builderPattern = Regex("""\bImageVector\s*\.\s*Builder\s*\(""")
     val homeSuffix = "ui/theme/RovaGlyphs.kt"
-
-    fun stripComments(src: String): String {
-        val noBlock = Regex("""/\*[\s\S]*?\*/""").replace(src) { m ->
-            m.value.replace(Regex("[^\n]"), " ")
-        }
-        return noBlock.lines().joinToString("\n") { line ->
-            val i = line.indexOf("//"); if (i >= 0) line.substring(0, i) else line
-        }
-    }
 
     val offenders = files
         .filter { f ->
             !f.relPath.replace('\\', '/').endsWith(homeSuffix)
         }
         .mapNotNull { f ->
-            val text = stripComments(f.text)
+            val text = CommentStripper.strip(f.text)
             val hits = builderPattern.findAll(text)
                 .map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }
                 .toList()
@@ -341,6 +321,11 @@ internal fun ruleRovaGlyphHome(files: List<SourceFile>): String? {
  * Forbid darkColorScheme(/lightColorScheme( outside allow; forbid MaterialTheme(
  * whose balanced-paren args contain colorScheme =.
  * Opt-out: "colorscheme-source-opt-out" on same or previous line waives a hit.
+ *
+ * NOTE: not migrated onto CommentStripper — this gate's local strip() blanks string and char
+ * literals so that darkColorScheme( or lightColorScheme( inside a string literal is not
+ * detected. CommentStripper keeps literals verbatim, so migrating would newly-detect a
+ * literal occurrence — a change to WHAT the gate enforces, violating the migration invariant.
  */
 internal fun ruleSingleColorSchemeSource(files: List<SourceFile>): String? {
     val allowSuffixes = setOf(

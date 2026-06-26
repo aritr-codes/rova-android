@@ -261,6 +261,87 @@ class ExportRulesTest {
         assertNull(RovaGateRules.run("checkExportNoCopyToPublicMovies", emptyList()))
     }
 
+    // ─── hole-close golden tests ─────────────────────────────────────────────
+
+    @Test
+    fun userStoppedBeforeMerge_detectsAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        // CommentStripper blanks the `*/` but keeps the code token → gate fires.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = "    */ performMerge(segments)\n" +
+            "sessionStore.markTerminated(sid, Terminated.USER_STOPPED, reason)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkUserStoppedBeforeMerge", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("Terminal-write ordering violations in $relPath"))
+    }
+
+    @Test
+    fun exportTierReadTolerant_detectsAfterBlockCommentClose() {
+        // `*/ getString("exportTier")` — legacy skipped via trimStart `*`.
+        val relPath = "app/src/main/java/com/aritr/rova/data/SessionManifest.kt"
+        val body = """    */ val tier = getString("exportTier")"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportTierReadTolerant", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("Strict getString(\"exportTier\") is forbidden"))
+    }
+
+    @Test
+    fun scanFileBoundedWait_detectsAfterBlockCommentClose() {
+        // `*/ MediaScannerConnection.scanFile(` — legacy skipped, now detected.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier2Exporter.kt"
+        val body = "    */ MediaScannerConnection.scanFile(context, arrayOf(path), null, null)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkScanFileBoundedWait", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("MediaScannerConnection.scanFile is forbidden outside"))
+    }
+
+    @Test
+    fun pendingFdModeIsRW_detectsAfterBlockCommentClose() {
+        // `*/ openFileDescriptor(uri, "w")` in a Tier1 file — legacy skipped, now detected.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """    */ val pfd = resolver.openFileDescriptor(uri, "w")"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkPendingFdModeIsRW", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("Forbidden openFileDescriptor mode \"w\" in Tier 1 sources"))
+    }
+
+    @Test
+    fun pendingFdModeIsRW_stillDetectsWInStringOnMixedLine() {
+        // A line that has a block comment close then real code with "w" mode.
+        // CommentStripper blanks the comment portion but keeps string literals verbatim
+        // so the "w" inside the string is still visible in strippedLines.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """/* some comment */ val pfd = resolver.openFileDescriptor(uri, "w")"""
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkPendingFdModeIsRW", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("Forbidden openFileDescriptor mode \"w\" in Tier 1 sources"))
+    }
+
+    @Test
+    fun pendingFdModeIsRW_skipsFullyCommentedWMode() {
+        // "w" entirely inside a block comment — CommentStripper blanks it → not detected.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """/* val pfd = resolver.openFileDescriptor(uri, "w") */"""
+        val files = listOf(src(relPath, body))
+        assertNull(RovaGateRules.run("checkPendingFdModeIsRW", files))
+    }
+
+    @Test
+    fun exportNoCopyToPublicMovies_detectsAfterBlockCommentClose() {
+        // `*/ copyToPublicMovies(...)` — legacy skipped, now detected.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = "    */ copyToPublicMovies(mergedFile)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportNoCopyToPublicMovies", files)
+        assertNotNull(msg)
+        assert(msg!!.startsWith("copyToPublicMovies symbol is forbidden"))
+    }
+
     // ─── checkExportCleanupPredicate ─────────────────────────────────────────
 
     private fun cleanPredicateBody() = """

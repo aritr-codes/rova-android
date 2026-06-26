@@ -20,7 +20,7 @@ package com.aritr.rova.gradle
 /**
  * Verbatim lift of checkStopNoGetService.
  * Regex: PendingIntent\s*\.\s*getService\b
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleStopNoGetService(files: List<SourceFile>): String? {
     val pattern = Regex("""PendingIntent\s*\.\s*getService\b""")
@@ -29,10 +29,8 @@ internal fun ruleStopNoGetService(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else pattern.containsMatchIn(line)
+                .filter { (idx, line) ->
+                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -54,7 +52,7 @@ internal fun ruleStopNoGetService(files: List<SourceFile>): String? {
  * Verbatim lift of checkScheduleReceiverNoFgsStart.
  * Regex: PendingIntent\s*\.\s*getService\b|\bstartForegroundService\s*\(|\bstartService\s*\(
  * Scope: .kt files only (old gate filtered extension == "kt", not "java").
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleScheduleReceiverNoFgsStart(files: List<SourceFile>): String? {
     val pattern = Regex("""PendingIntent\s*\.\s*getService\b|\bstartForegroundService\s*\(|\bstartService\s*\(""")
@@ -63,10 +61,8 @@ internal fun ruleScheduleReceiverNoFgsStart(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else pattern.containsMatchIn(line)
+                .filter { (idx, line) ->
+                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -87,7 +83,7 @@ internal fun ruleScheduleReceiverNoFgsStart(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkRecoveryNoDeletion.
  * Forbidden substrings: ".delete(", ".deleteRecursively(", ".discardSession("
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Scope: recovery dir files (.kt/.java) PLUS RovaApp.kt — both passed in [files].
  */
 internal fun ruleRecoveryNoDeletion(files: List<SourceFile>): String? {
@@ -101,10 +97,8 @@ internal fun ruleRecoveryNoDeletion(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else forbidden.any { line.contains(it) }
+                .filter { (idx, line) ->
+                    forbidden.any { f.strippedLines.getOrElse(idx) { "" }.contains(it) }
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -125,12 +119,12 @@ internal fun ruleRecoveryNoDeletion(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkRecoverySegmentRegex.
  * Forbidden substring: "seg_"
- * NOTE: comment lines ARE skipped here — the old gate reads:
- *   "Comment lines are scanned too — a stale rationale referring to `seg_` is
- *    itself a code-rot signal." BUT then the filter still applies
- *    `if (trimmed.startsWith("//") || trimmed.startsWith("*")) false`
- *   So the comment in the original code was aspirational; the actual predicate
- *   skips comments exactly like the other gates. We preserve the verbatim predicate.
+ * NOTE: the original gate had an aspirational inline comment saying "Comment lines
+ * are scanned too — a stale rationale referring to seg_ is itself a code-rot signal",
+ * but the actual predicate still skipped comment lines. We now detect on
+ * f.strippedLines so that block-comment-close lines (e.g. a line whose trimStart
+ * begins with the block-close marker followed by real code) are correctly scanned.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  */
 internal fun ruleRecoverySegmentRegex(files: List<SourceFile>): String? {
     val offenders = files
@@ -138,12 +132,10 @@ internal fun ruleRecoverySegmentRegex(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
+                .filter { (idx, line) ->
                     // Comment lines are scanned too — a stale rationale
                     // referring to `seg_` is itself a code-rot signal.
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("seg_")
+                    f.strippedLines.getOrElse(idx) { "" }.contains("seg_")
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -165,7 +157,7 @@ internal fun ruleRecoverySegmentRegex(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkScanTriggerSingleSite.
  * Forbidden: any file OTHER than RovaApp.kt that contains "runRecoveryScan".
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  *
  * Canonical-path swap: old code used
  *   `filter { it.canonicalFile != allowedFile }` where allowedFile was
@@ -184,10 +176,8 @@ internal fun ruleScanTriggerSingleSite(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("runRecoveryScan")
+                .filter { (idx, line) ->
+                    f.strippedLines.getOrElse(idx) { "" }.contains("runRecoveryScan")
                 }
             if (hits.isEmpty()) null else f to hits
         }

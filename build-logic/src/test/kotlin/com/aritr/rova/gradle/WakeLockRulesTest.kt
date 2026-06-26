@@ -2,6 +2,7 @@ package com.aritr.rova.gradle
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WakeLockRulesTest {
@@ -59,15 +60,24 @@ class WakeLockRulesTest {
 
     @Test
     fun boundedAcquire_skipsCommentLines() {
-        // Lines starting with // or * are ignored.
+        // Lines inside // or /* */ comments are ignored (CommentStripper).
         val body = """
             // wakeLock.acquire()
-            * .acquire() — do not call bare
+            /* * .acquire() — do not call bare */
         """.trimIndent()
         val files = listOf(
             src("app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt", body)
         )
         assertNull(RovaGateRules.run("checkWakeLockBoundedAcquire", files))
+    }
+
+    @Test
+    fun boundedAcquire_detectsAfterBlockCommentClose() {
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = "        */ wakeLock.acquire()"  // raw trimStart begins with `*` — legacy false-pass
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkWakeLockBoundedAcquire", files)
+        assertTrue(msg != null && msg.contains("WakeLock.acquire() must pass a timeout"))
     }
 
     @Test

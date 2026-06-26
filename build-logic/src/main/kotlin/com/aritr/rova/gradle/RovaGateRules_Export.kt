@@ -41,7 +41,7 @@ package com.aritr.rova.gradle
  * Logic:
  *   B3: every USER_STOPPED markTerminated must appear BEFORE the first merge call.
  *   B7: every COMPLETED markTerminated must appear AFTER the last merge call.
- *   Comment lines (// or *) are skipped for window collection.
+ *   Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  *   Merge calls: performMerge( (not the definition), VideoMerger.mergeSegments(, .mergeSegments(
  *   USER_STOPPED / COMPLETED: detected via 3-line forward window from markTerminated(
  */
@@ -55,19 +55,18 @@ internal fun ruleUserStoppedBeforeMerge(files: List<SourceFile>): String? {
     val userStoppedLines = mutableListOf<Int>()
     val completedLines = mutableListOf<Int>()
     val mergeLines = mutableListOf<Int>()
-    for ((i, raw) in lines.withIndex()) {
-        val trimmed = raw.trimStart()
-        if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue
-        if (raw.contains("markTerminated(")) {
+    for ((i, _) in lines.withIndex()) {
+        val stripped = f.strippedLines.getOrElse(i) { "" }
+        if (stripped.contains("markTerminated(")) {
             val window = (i..minOf(i + 3, lines.lastIndex))
                 .joinToString("\n") { lines[it] }
             if (window.contains("Terminated.USER_STOPPED")) userStoppedLines += i + 1
             if (window.contains("Terminated.COMPLETED")) completedLines += i + 1
         }
-        val isMergeCall = (raw.contains("performMerge(") &&
-            !raw.contains("private suspend fun performMerge")) ||
-            raw.contains("VideoMerger.mergeSegments(") ||
-            raw.contains(".mergeSegments(")
+        val isMergeCall = (stripped.contains("performMerge(") &&
+            !stripped.contains("private suspend fun performMerge")) ||
+            stripped.contains("VideoMerger.mergeSegments(") ||
+            stripped.contains(".mergeSegments(")
         if (isMergeCall) mergeLines += i + 1
     }
 
@@ -95,7 +94,7 @@ internal fun ruleUserStoppedBeforeMerge(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkExportTierReadTolerant.
  * Regex: \bgetString\s*\(\s*"exportTier"\s*\)
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Scope: all .kt files passed in [files].
  */
 internal fun ruleExportTierReadTolerant(files: List<SourceFile>): String? {
@@ -105,10 +104,8 @@ internal fun ruleExportTierReadTolerant(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else pattern.containsMatchIn(line)
+                .filter { (idx, _) ->
+                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -131,7 +128,7 @@ internal fun ruleExportTierReadTolerant(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkScanFileBoundedWait.
  * Regex: \bMediaScannerConnection\s*\.\s*scanFile\b
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Exclusion: the single legitimate call site is MediaScanWaiter.kt.
  *   Old code: `it.canonicalFile != allowedFile` where allowedFile was
  *   `file("src/main/java/.../MediaScanWaiter.kt").canonicalFile`.
@@ -148,10 +145,8 @@ internal fun ruleScanFileBoundedWait(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else pattern.containsMatchIn(line)
+                .filter { (idx, _) ->
+                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -175,9 +170,11 @@ internal fun ruleScanFileBoundedWait(files: List<SourceFile>): String? {
  * Verbatim lift of checkPendingFdModeIsRW.
  * Scope: Tier1*.kt files only (old: `it.name.startsWith("Tier1")`).
  *   We extract the trailing filename component from relPath (normalised to /).
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
- * Detection: strip `"rw"` from each line, then check for residual `"w"`.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Detection: strip `"rw"` from each stripped line, then check for residual `"w"`.
  *   This avoids false positives on the legal `"rw"` mode.
+ *   CommentStripper keeps string literals verbatim, so "rw" and "w" inside strings
+ *   are preserved in stripped output — detection is byte-identical to the original.
  */
 internal fun rulePendingFdModeIsRW(files: List<SourceFile>): String? {
     val offenders = files
@@ -189,10 +186,8 @@ internal fun rulePendingFdModeIsRW(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.replace("\"rw\"", "").contains("\"w\"")
+                .filter { (idx, _) ->
+                    f.strippedLines.getOrElse(idx) { "" }.replace("\"rw\"", "").contains("\"w\"")
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -214,7 +209,7 @@ internal fun rulePendingFdModeIsRW(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkExportNoCopyToPublicMovies.
  * Forbidden substring: "copyToPublicMovies"
- * Comment-skip: lines starting with // or * (after trimStart) are ignored.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Scope: all .kt files passed in [files].
  */
 internal fun ruleExportNoCopyToPublicMovies(files: List<SourceFile>): String? {
@@ -223,10 +218,8 @@ internal fun ruleExportNoCopyToPublicMovies(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = f.lines
                 .withIndex()
-                .filter { (_, line) ->
-                    val trimmed = line.trimStart()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-                    else line.contains("copyToPublicMovies")
+                .filter { (idx, _) ->
+                    f.strippedLines.getOrElse(idx) { "" }.contains("copyToPublicMovies")
                 }
             if (hits.isEmpty()) null else f to hits
         }

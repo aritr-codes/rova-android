@@ -17,8 +17,8 @@ package com.aritr.rova.gradle
 /**
  * Verbatim lift of checkWakeLockBoundedAcquire.
  * Scope: RovaRecordingService.kt and WakeLockPolicy.kt.
- * Forbid bare .acquire() (no timeout arg). Comment-skip: lines starting
- * with // or * (after trimStart) are ignored.
+ * Forbid bare .acquire() (no timeout arg).
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
  * Empty input: null (no files, no offenders — forbid gate).
  */
 internal fun ruleWakeLockBoundedAcquire(files: List<SourceFile>): String? {
@@ -26,10 +26,8 @@ internal fun ruleWakeLockBoundedAcquire(files: List<SourceFile>): String? {
     val offenders = mutableListOf<String>()
     files.forEach { f ->
         f.lines.forEachIndexed { idx, raw ->
-            val trimmed = raw.trimStart()
-            if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-            if (unboundedAcquire.containsMatchIn(raw)) {
-                offenders += "  ${f.relPath}:${idx + 1}: ${trimmed.take(120)}"
+            if (unboundedAcquire.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })) {
+                offenders += "  ${f.relPath}:${idx + 1}: ${raw.trimStart().take(120)}"
             }
         }
     }

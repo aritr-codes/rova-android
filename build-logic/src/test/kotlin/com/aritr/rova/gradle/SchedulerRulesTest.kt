@@ -39,4 +39,16 @@ class SchedulerRulesTest {
         ))
         assertNull(RovaGateRules.run("checkSchedulerNoGetService", files))
     }
+
+    @Test
+    fun failsOnGetServiceAfterBlockCommentClose() {
+        // `*/ <code>` — raw trimStart begins with `*`, legacy skipped it (false-pass).
+        val files = listOf(src(
+            "app/src/main/java/com/aritr/rova/service/scheduler/AlarmScheduler.kt",
+            "    */ val x = PendingIntent.getService(ctx, 0, i, 0)"
+        ))
+        val msg = RovaGateRules.run("checkSchedulerNoGetService", files)
+        assertTrue(msg != null &&
+            msg.startsWith("PendingIntent.getService is forbidden in alarm scheduler sources"))
+    }
 }
