@@ -251,7 +251,8 @@ internal fun ruleExportPendingVisibilityOnQuery(files: List<SourceFile>): String
  *     We replace with relPath normalised-suffix check on "utils/VideoMerger.kt".
  *   - Callers outside service/export/ are flagged (normalised pathStr must contain
  *     "service/export/").
- *   - Comment-skip: "//", "*" (trimStart).
+ *   - Comment handling (inv1 + inv2): detection on f.strippedLines (CommentStripper);
+ *     file/path filters, problem messages, and line refs use the raw line.
  *
  * Allowed call site for invariant 1: relPath normalised-suffix ends with
  * "service/RovaRecordingService.kt". Unique in the tree.
@@ -264,9 +265,7 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
     for (f in files) {
         if (!f.relPath.endsWith(".kt")) continue
         f.lines.forEachIndexed { i, line ->
-            val trimmed = line.trimStart()
-            if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-            if (line.contains("ExportPipeline.export(")) {
+            if (f.strippedLines.getOrElse(i) { "" }.contains("ExportPipeline.export(")) {
                 pipelineCalls += f to (i + 1)
             }
         }
@@ -292,10 +291,8 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
         val normRelPath = f.relPath.replace('\\', '/')
         // Exclude the definition file itself.
         if (normRelPath.endsWith("utils/VideoMerger.kt")) continue
-        val hits = f.lines.withIndex().filter { (_, line) ->
-            val trimmed = line.trimStart()
-            if (trimmed.startsWith("//") || trimmed.startsWith("*")) false
-            else muxPattern.containsMatchIn(line)
+        val hits = f.lines.withIndex().filter { (idx, _) ->
+            muxPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
         }
         if (hits.isEmpty()) continue
         if (normRelPath.contains("service/export/")) continue
@@ -317,17 +314,17 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkSafTargetCommittedBeforeStream.
  *
- * For each file: find the FIRST non-comment line containing "copyFileToDocument("
- * or "openOutputStream(". If found, check whether any line BEFORE it (lines.take(streamIdx))
- * contains "setExportSafTarget" or "setSafTarget(". If not, and the file is NOT
- * SafAndroidOps.kt, report an offender.
+ * For each file: find the FIRST line containing "copyFileToDocument(" or
+ * "openOutputStream(" when checked on the comment-stripped line. If found,
+ * check whether any line BEFORE it (lines.take(streamIdx)) contains
+ * "setExportSafTarget" or "setSafTarget(". The commitsBefore window STAYS RAW.
+ * If not, and the file is NOT SafAndroidOps.kt, report an offender.
  *
  * Filename exemption: old code used `f.name != "SafAndroidOps.kt"`. We extract the
  * trailing filename component of relPath after normalising separators.
  *
- * Non-comment check for the stream line: trimStart() not starting with "//" or "*"
- * (note: old gate did NOT include block-comment opener in this check — reproduced
- * verbatim).
+ * Comment handling: detection of stream op on f.strippedLines (CommentStripper);
+ * commitsBefore window + offender report use the raw lines.
  *
  * Scope: .kt files in [files] (export dir).
  */
@@ -337,10 +334,9 @@ internal fun ruleSafTargetCommittedBeforeStream(files: List<SourceFile>): String
         .filter { it.relPath.endsWith(".kt") }
         .forEach { f ->
             val lines = f.lines
-            val streamIdx = lines.indexOfFirst {
-                val t = it.trimStart()
-                !t.startsWith("//") && !t.startsWith("*") &&
-                    (it.contains("copyFileToDocument(") || it.contains("openOutputStream("))
+            val streamIdx = lines.indices.indexOfFirst { i ->
+                val c = f.strippedLines.getOrElse(i) { "" }
+                c.contains("copyFileToDocument(") || c.contains("openOutputStream(")
             }
             if (streamIdx >= 0) {
                 val commitsBefore = lines.take(streamIdx).any {
@@ -363,8 +359,9 @@ internal fun ruleSafTargetCommittedBeforeStream(files: List<SourceFile>): String
 /**
  * Verbatim lift of checkCompletedWriteOnlyFromPerformMerge.
  *
- * Detection: any non-comment line containing "markTerminated(" whose 3-line forward
- * window (i..minOf(i+3, lastIndex)) contains "Terminated.COMPLETED".
+ * Detection: any line where the comment-stripped form contains "markTerminated("
+ * and whose 3-line forward window (i..minOf(i+3, lastIndex)) on RAW lines
+ * contains "Terminated.COMPLETED".
  *
  * File-level opt-out: if a file contains "completed-write-opt-out:" AND is NOT
  * RovaRecordingService.kt → skip the file entirely.
@@ -381,7 +378,8 @@ internal fun ruleSafTargetCommittedBeforeStream(files: List<SourceFile>): String
  * Allowed file: relPath normalised-suffix ends with "service/RovaRecordingService.kt".
  * Unique in the tree.
  *
- * Comment-skip: "//", "*" (trimStart).
+ * Comment handling: detection of markTerminated( on f.strippedLines (CommentStripper);
+ * the 3-line COMPLETED window + performMerge boundary logic + opt-out marker stay RAW.
  */
 internal fun ruleCompletedWriteOnlyFromPerformMerge(files: List<SourceFile>): String? {
     val offenders = mutableListOf<Pair<SourceFile, String>>()
@@ -395,9 +393,7 @@ internal fun ruleCompletedWriteOnlyFromPerformMerge(files: List<SourceFile>): St
             if (hasOptOut && !isRecordingService) return@forEach
 
             lines.forEachIndexed { i, raw ->
-                val trimmed = raw.trimStart()
-                if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                if (!raw.contains("markTerminated(")) return@forEachIndexed
+                if (!f.strippedLines.getOrElse(i) { "" }.contains("markTerminated(")) return@forEachIndexed
                 val window = (i..minOf(i + 3, lines.lastIndex))
                     .joinToString("\n") { lines[it] }
                 if (!window.contains("Terminated.COMPLETED")) return@forEachIndexed

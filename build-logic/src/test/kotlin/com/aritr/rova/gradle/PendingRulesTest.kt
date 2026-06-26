@@ -501,9 +501,10 @@ class PendingRulesTest {
 
     @Test
     fun completedWriteOnlyFromPerformMerge_skipsCommentLines() {
+        // Lines inside // or /* */ comments are ignored (CommentStripper).
         val body = """
             // sessionStore.markTerminated(sid, Terminated.COMPLETED, StopReason.NONE)
-            * markTerminated doc mention Terminated.COMPLETED
+            /* * markTerminated doc mention Terminated.COMPLETED */
         """.trimIndent()
         val files = listOf(src(
             "app/src/main/java/com/aritr/rova/service/export/ExportRecoveryRunner.kt",
@@ -515,5 +516,46 @@ class PendingRulesTest {
     @Test
     fun completedWriteOnlyFromPerformMerge_passesOnEmptyInput() {
         assertNull(RovaGateRules.run("checkCompletedWriteOnlyFromPerformMerge", emptyList()))
+    }
+
+    // ─── hole-close: block-comment-close false-pass ───────────────────────────
+
+    @Test
+    fun pipelineSingleEntry_detectsAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy skipped it (false-pass on inv2).
+        // A file outside service/export/ calling VideoMerger after a block-comment close.
+        val serviceFile = src(
+            "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt",
+            "return ExportPipeline.export(context, mergedFile)"
+        )
+        val offender = src(
+            "app/src/main/java/com/aritr/rova/ui/screens/HistoryScreen.kt",
+            "    */ VideoMerger.mergeSegments(segs)"
+        )
+        val msg = RovaGateRules.run("checkExportPipelineSingleEntry", listOf(serviceFile, offender))
+        assertNotNull(msg)
+        assert(msg!!.contains("VideoMerger mux callers must live under service/export/"))
+    }
+
+    @Test
+    fun safTargetCommittedBeforeStream_detectsAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/SafExporter.kt"
+        val body = "    */ openOutputStream(docUri, \"wt\")"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkSafTargetCommittedBeforeStream", files)
+        assertNotNull(msg)
+        assert(msg!!.contains("ADR-0024 §commit-before-stream violation"))
+    }
+
+    @Test
+    fun completedWriteOnlyFromPerformMerge_detectsAfterBlockCommentClose() {
+        // raw trimStart begins with `*` — legacy skipped it (false-pass).
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/ExportRecoveryRunner.kt"
+        val body = "    */ sessionStore.markTerminated(sid, Terminated.COMPLETED, StopReason.NONE)"
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkCompletedWriteOnlyFromPerformMerge", files)
+        assertNotNull(msg)
+        assert(msg!!.contains("B7 violation (ADR 0006 §Terminal-Write Ordering)"))
     }
 }
