@@ -558,4 +558,89 @@ class PendingRulesTest {
         assertNotNull(msg)
         assert(msg!!.contains("B7 violation (ADR 0006 §Terminal-Write Ordering)"))
     }
+
+    // ─── round-3 hole-close: required token only in a comment ──────────────────
+
+    @Test
+    fun isPendingGuarded_failsWhenRequiresApiOnlyInComment() {
+        // FALSE-PASS HOLE (round-3): the @RequiresApi guard exists only in a //
+        // comment; the IS_PENDING use in real code is unguarded. hasFileGuard read
+        // raw f.text so the commented annotation satisfied the guard. After
+        // hasFileGuard moves to f.strippedText the comment is blanked -> offender.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """
+            // @RequiresApi(Build.VERSION_CODES.Q)
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportIsPendingGuarded", files)
+        val expected = "IS_PENDING used without SDK gating in service/export/ — " +
+            "the file must be annotated @RequiresApi(Build.VERSION_CODES.Q) " +
+            "or guard the reference with `Build.VERSION.SDK_INT >= " +
+            "Build.VERSION_CODES.Q`. Offenders:\n" +
+            "  $relPath:2: values.put(MediaStore.MediaColumns.IS_PENDING, 1)"
+        assertEquals(expected, msg)
+    }
+
+    @Test
+    fun pendingVisibilityOnQuery_failsWhenVisibilityTokensOnlyInComments() {
+        // FALSE-PASS HOLE (round-3): both visibility mechanisms exist only in //
+        // comments; only the IS_PENDING=1 selection is real. hasIncludePending /
+        // hasMatchPending read raw f.text so the commented tokens satisfied the
+        // require. After both move to f.strippedText they are blanked -> fail.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1AndroidSweepOps.kt"
+        val body = """
+            @RequiresApi(Build.VERSION_CODES.Q)
+            fun sweep() {
+                // val pendingUri = MediaStore.setIncludePending(baseUri)
+                // bundle.putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_ONLY)
+                resolver.query(baseUri, projection, "IS_PENDING = 1", null, null)
+            }
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportPendingVisibilityOnQuery", files)
+        assertNotNull(msg)
+        assert(msg!!.contains("missing setIncludePending (API 29 visibility)"))
+        assert(msg.contains("missing QUERY_ARG_MATCH_PENDING (API 30+ visibility)"))
+    }
+
+    @Test
+    fun pendingVisibilityOnQuery_failsWhenIsPendingFilterOnlyInTrailingComment() {
+        // FALSE-PASS HOLE (round-3): the IS_PENDING=1 selection exists only in a
+        // trailing // comment on the query line. hasIsPendingFilter scanned
+        // nonCommentText, which keeps same-line trailing-comment text, so it matched.
+        // After hasIsPendingFilter moves to f.strippedText the trailing comment is
+        // blanked -> missing -> fail. (Both visibility tokens are real here.)
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1AndroidSweepOps.kt"
+        val body = """
+            @RequiresApi(Build.VERSION_CODES.Q)
+            fun sweep() {
+                val pendingUri = MediaStore.setIncludePending(baseUri)
+                bundle.putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_ONLY)
+                resolver.query(baseUri, projection, null, null, null) // IS_PENDING = 1
+            }
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportPendingVisibilityOnQuery", files)
+        assertNotNull(msg)
+        assert(msg!!.contains("missing explicit IS_PENDING = 1 SQL selection"))
+    }
+
+    @Test
+    fun pendingVisibilityOnQuery_commentedQueryDoesNotTrigger() {
+        // round-3 codex-reconcile: a resolver.query( that exists ONLY inside an
+        // inline comment on a non-comment-prefix line must NOT trigger the gate.
+        // The old nonCommentText trigger kept such lines verbatim and would
+        // spuriously fire (then newly-fail once require-tokens moved to
+        // strippedText). With the trigger on strippedText the commented query is
+        // blanked -> no trigger -> pass.
+        val body = """
+            val unused = 0 /* resolver.query(uri, proj, null, null, null) */
+        """.trimIndent()
+        val files = listOf(src(
+            "app/src/main/java/com/aritr/rova/service/export/Tier1AndroidSweepOps.kt",
+            body
+        ))
+        assertNull(RovaGateRules.run("checkExportPendingVisibilityOnQuery", files))
+    }
 }

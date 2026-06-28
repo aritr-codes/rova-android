@@ -282,4 +282,71 @@ class WakeLockRulesTest {
             "`waitForNextSegment` call inside the recording loop."
         assertEquals(expected, msg)
     }
+
+    // ─── round-3 hole-close: required statement only in a comment ──────────────
+
+    @Test
+    fun heldRefresh_failsWhenRefreshOnlyInComment() {
+        // FALSE-PASS HOLE (round-3): the held-branch refresh acquire exists only in
+        // a // comment; real code lacks it. The body was joined from RAW lines, so
+        // the commented call satisfied the REQUIRE. After the body is built from
+        // strippedLines the comment is blanked -> MISSING -> fail.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = """
+            class RovaRecordingService {
+                private fun acquireWakeLock() {
+                    val existing = wakeLock
+                    if (existing?.isHeld == true) {
+                        // existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)
+                        return
+                    }
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "tag")
+                }
+            }
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkWakeLockHeldRefresh", files)
+        assertTrue(msg != null && msg.contains("C17 round-2 violation (Phase 1.8 §WakeLock Discipline)"))
+        assertTrue(msg!!.contains("`existing.acquire(WakeLockPolicy.ACQUIRE_TIMEOUT_MS)`: MISSING"))
+    }
+
+    @Test
+    fun zeroGapRefresh_failsWhenAcquireOnlyInComment() {
+        // FALSE-PASS HOLE (round-3): acquireWakeLock() exists only in a // comment
+        // inside the else window. The window was joined from RAW lines so it
+        // satisfied the REQUIRE. After the window is built from strippedLines it is
+        // blanked -> MISSING -> fail.
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = """
+            if (waitSeconds > 0) {
+                waitForNextSegment(waitSeconds)
+            } else {
+                // acquireWakeLock()
+            }
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkWakeLockZeroGapRefresh", files)
+        assertTrue(msg != null && msg.contains("C17 round-3 violation (Phase 1.8 §WakeLock Discipline)"))
+        assertTrue(msg!!.contains("`acquireWakeLock()` in window: MISSING"))
+    }
+
+    @Test
+    fun zeroGapRefresh_elseWithInlineCommentStillFailsOnRawWindow() {
+        // round-3 codex-reconcile: hasElse stays on the RAW window. The
+        // `\}\s*else\s*\{` regex does NOT match `} /*c*/ else {` on raw (the
+        // comment is not whitespace), so this real else-clause is still reported
+        // MISSING — byte-identical to the original over-strict leaf. Proves hasElse
+        // was NOT moved to strippedLines (which would loosen it = forbidden direction).
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = """
+            if (waitSeconds > 0) {
+                waitForNextSegment(waitSeconds)
+            } /* zero-gap */ else {
+                acquireWakeLock()
+            }
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkWakeLockZeroGapRefresh", files)
+        assertTrue(msg != null && msg.contains("`} else {` clause: MISSING"))
+    }
 }

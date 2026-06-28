@@ -33,7 +33,7 @@ package com.aritr.rova.gradle
  * Verbatim lift of checkExportIsPendingGuarded.
  *
  * Regex: \bIS_PENDING\b
- * Comment handling: detection on f.strippedLines (CommentStripper); file-level guard via raw f.text.
+ * Comment handling: detection on f.strippedLines (CommentStripper); file-level guard via f.strippedText (round-3: was raw f.text).
  * Guard: the FILE (via readText) must contain at least one of:
  *   - @RequiresApi(Build.VERSION_CODES.Q)
  *   - @RequiresApi(Build.VERSION_CODES.R)
@@ -55,10 +55,12 @@ internal fun ruleExportIsPendingGuarded(files: List<SourceFile>): String? {
                     pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) return@mapNotNull null
-            val hasFileGuard = f.text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
-                f.text.contains("@RequiresApi(Build.VERSION_CODES.R)") ||
-                f.text.contains("@RequiresApi(android.os.Build.VERSION_CODES.Q)") ||
-                (f.text.contains("Build.VERSION.SDK_INT") && f.text.contains("Build.VERSION_CODES.Q"))
+            // Guard check on f.strippedText (round-3 false-pass close): a commented
+            // @RequiresApi / SDK_INT guard must NOT satisfy the require.
+            val hasFileGuard = f.strippedText.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
+                f.strippedText.contains("@RequiresApi(Build.VERSION_CODES.R)") ||
+                f.strippedText.contains("@RequiresApi(android.os.Build.VERSION_CODES.Q)") ||
+                (f.strippedText.contains("Build.VERSION.SDK_INT") && f.strippedText.contains("Build.VERSION_CODES.Q"))
             if (hasFileGuard) null else f to hits
         }
         .toList()
@@ -167,21 +169,20 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
 /**
  * Verbatim lift of checkExportPendingVisibilityOnQuery.
  *
- * REQUIRE co-presence gate: any file calling resolver.query( (in non-comment lines)
- * must also contain ALL THREE in the full file text / non-comment text:
- *   1. setIncludePending (text.contains)
- *   2. QUERY_ARG_MATCH_PENDING (text.contains)
- *   3. IS_PENDING}?=1 regex match in non-comment lines
+ * REQUIRE co-presence gate: any file whose query TRIGGER fires (a real
+ * resolver.query( in f.strippedText) must also contain ALL THREE require-tokens
+ * on f.strippedText:
+ *   1. setIncludePending (strippedText.contains)
+ *   2. QUERY_ARG_MATCH_PENDING (strippedText.contains)
+ *   3. IS_PENDING}?=1 regex match on strippedText
  *
- * Non-comment text: lines filtered by trimStart() not starting with "//", "*", or
- * block-comment opener, joined with "\n".
- *
- * NOTE (comment-strip hardening 2026-06-25): NOT migrated to CommentStripper.
- * This is a co-presence REQUIRE; its comment-prefix skip filter (trimStart
- * startsWith "//", "*", or a block-comment opener) only ever causes
- * over-strictness (a token hidden after a same-line block comment is dropped →
- * the require false-FAILS), never a false-PASS. Migrating would shift behavior
- * in the lenient direction — out of scope for the false-pass-hardening track.
+ * NOTE (round-3 hardening 2026-06-28, codex reconcile): the TRIGGER and all three
+ * REQUIRE-tokens read f.strippedText. A commented resolver.query( must not trigger
+ * the gate, and a commented setIncludePending / QUERY_ARG_MATCH_PENDING /
+ * IS_PENDING=1 must not satisfy the require — these were false-PASS holes (the
+ * requires) and a new-false-fail inconsistency (the trigger) on the old raw
+ * f.text + nonCommentText substrate. strippedText keeps all real code verbatim,
+ * so no real query/token is missed: the migration is hardening-only.
  *
  * EMPTY-INPUT REASONING: if no file in the set calls resolver.query(, the gate passes
  * vacuously (null). This matches the old behaviour: the old code returned early with no
@@ -196,16 +197,17 @@ internal fun ruleExportPendingVisibilityOnQuery(files: List<SourceFile>): String
     val offenders = files
         .filter { it.relPath.endsWith(".kt") }
         .mapNotNull { f ->
-            val nonCommentText = f.lines
-                .filter {
-                    val t = it.trimStart()
-                    !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
-                }
-                .joinToString("\n")
-            if (!queryPattern.containsMatchIn(nonCommentText)) return@mapNotNull null
-            val hasIncludePending = f.text.contains("setIncludePending")
-            val hasMatchPending = f.text.contains("QUERY_ARG_MATCH_PENDING")
-            val hasIsPendingFilter = isPendingFilterPattern.containsMatchIn(nonCommentText)
+            // Query TRIGGER on f.strippedText (round-3, codex reconcile): a commented
+            // resolver.query( must NOT trigger the gate. The old nonCommentText kept
+            // inline/trailing comments verbatim, so a commented query could spuriously
+            // trigger and — with the require-tokens now on strippedText — newly-fail a
+            // clean file. strippedText keeps all real code, so no real query is missed.
+            if (!queryPattern.containsMatchIn(f.strippedText)) return@mapNotNull null
+            // Require-tokens on f.strippedText (round-3 false-pass close): commented
+            // visibility/selection tokens must NOT satisfy the require.
+            val hasIncludePending = f.strippedText.contains("setIncludePending")
+            val hasMatchPending = f.strippedText.contains("QUERY_ARG_MATCH_PENDING")
+            val hasIsPendingFilter = isPendingFilterPattern.containsMatchIn(f.strippedText)
             if (hasIncludePending && hasMatchPending && hasIsPendingFilter) null
             else f to listOfNotNull(
                 if (!hasIncludePending) "missing setIncludePending (API 29 visibility)" else null,
