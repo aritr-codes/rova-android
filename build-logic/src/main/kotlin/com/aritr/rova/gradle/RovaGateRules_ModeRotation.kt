@@ -86,7 +86,7 @@ internal fun ruleNoLegacyModeStrings(files: List<SourceFile>): String? {
         f.lines.forEachIndexed { i, line ->
             // Detect on the comment-stripped line (string literals kept verbatim,
             // so a real "Portrait" literal still matches); report the RAW line.
-            if (legacyMode.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) {
+            if (legacyMode.containsMatchIn(f.strippedLine(i))) {
                 offenders += "$rel:${i + 1}: ${line.trim()}"
             }
         }
@@ -140,7 +140,7 @@ internal fun ruleFrontBackCapabilityGated(files: List<SourceFile>): String? {
         if (allow.any { rel.endsWith(it) }) return@forEach
         f.lines.forEachIndexed { i, line ->
             // Detect on the comment-stripped line; report is "$rel:line" (no content).
-            if (f.strippedLines.getOrElse(i) { "" }.contains("FrontBack")) offenders += "$rel:${i + 1}"
+            if (f.strippedLine(i).contains("FrontBack")) offenders += "$rel:${i + 1}"
         }
     }
     if (offenders.isNotEmpty()) {

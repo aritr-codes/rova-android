@@ -48,7 +48,7 @@ internal fun ruleVaultExporterNoPublicPublish(files: List<SourceFile>): String? 
         "getExternalStoragePublicDirectory",
     )
     val hits = vf.lines.withIndex().filter { (idx, _) ->
-        forbidden.any { vf.strippedLines.getOrElse(idx) { "" }.contains(it) }
+        forbidden.any { vf.strippedLine(idx).contains(it) }
     }
     if (hits.isNotEmpty()) {
         val report = hits.joinToString("\n") { (i, line) -> "  VaultExporter.kt:${i + 1}: ${line.trim()}" }
@@ -75,7 +75,7 @@ internal fun ruleRecordSurfaceNoBlur(files: List<SourceFile>): String? {
         }
         .mapNotNull { f ->
             val hits = f.lines.withIndex().filter { (idx, _) ->
-                blurPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                blurPattern.containsMatchIn(f.strippedLine(idx))
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -111,7 +111,7 @@ internal fun ruleGlassSurfaceRoleUsage(files: List<SourceFile>): String? {
         }
         .mapNotNull { f ->
             val hits = f.lines.withIndex().filter { (idx, _) ->
-                blurPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                blurPattern.containsMatchIn(f.strippedLine(idx))
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -146,7 +146,7 @@ internal fun ruleRecordChromeLockSingleSite(files: List<SourceFile>): String? {
         }
         .mapNotNull { f ->
             val hits = f.lines.indices
-                .filter { i -> f.strippedLines.getOrElse(i) { "" }.contains("requestedOrientation") }
+                .filter { i -> f.strippedLine(i).contains("requestedOrientation") }
                 .map { i -> i to f.lines.getOrElse(i) { "" } }
             if (hits.isEmpty()) null else f to hits
         }
@@ -195,7 +195,7 @@ internal fun ruleLibraryNoManifestWrite(files: List<SourceFile>): String? {
             // Detect on the comment-stripped line (shared CommentStripper) so a
             // `/* … */`-then-code line or a string-literal marker can no longer
             // hide a forbidden manifest write. Report the RAW line (bytes unchanged).
-            val code = f.strippedLines.getOrElse(i) { "" }
+            val code = f.strippedLine(i)
             if (callRegex.containsMatchIn(code)) offenders += "$rel:${i + 1}: ${line.trim()}"
         }
     }
@@ -227,7 +227,7 @@ internal fun ruleSemanticIconNoRawAlpha(files: List<SourceFile>): String? {
             val hits = lines.indices.mapNotNull { i ->
                 val line = lines[i]
                 if (line.contains("semanticicon-opt-out")) return@mapNotNull null
-                val stripped = f.strippedLines.getOrElse(i) { "" }
+                val stripped = f.strippedLine(i)
                 if (!stripped.contains("tint")) return@mapNotNull null
                 val window = (i until minOf(i + 3, lines.size)).joinToString(" ") { lines[it] }
                 if (rawTintPattern.containsMatchIn(window)) i to line else null
@@ -260,7 +260,7 @@ internal fun ruleStatusColorLocked(files: List<SourceFile>): String? {
     val offenders = files
         .mapNotNull { f ->
             val hits = f.lines.withIndex().filter { (idx, _) ->
-                dilutePattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                dilutePattern.containsMatchIn(f.strippedLine(idx))
             }
             if (hits.isEmpty()) null else f to hits
         }

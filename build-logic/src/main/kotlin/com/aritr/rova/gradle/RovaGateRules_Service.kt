@@ -31,7 +31,7 @@ internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
 
             // Find first non-comment goAsync() call line (detect on stripped).
             val goAsyncIdx = lines.indices.indexOfFirst { i ->
-                f.strippedLines.getOrElse(i) { "" }.contains("goAsync()")
+                f.strippedLine(i).contains("goAsync()")
             }
             if (goAsyncIdx < 0) return@mapNotNull null  // no goAsync — not a receiver-async pattern
 
@@ -45,10 +45,10 @@ internal fun ruleRecoveryReceiverCounter(files: List<SourceFile>): String? {
             // Increment: first non-comment line that contains the
             // synchronous incrementAndGet on activeReceiverWork (detect on stripped).
             val incIdx = lines.indices.indexOfFirst { i ->
-                f.strippedLines.getOrElse(i) { "" }.contains("activeReceiverWork.incrementAndGet")
+                f.strippedLine(i).contains("activeReceiverWork.incrementAndGet")
             }
             val hasDec = lines.indices.any { i ->
-                f.strippedLines.getOrElse(i) { "" }.contains("activeReceiverWork.decrementAndGet")
+                f.strippedLine(i).contains("activeReceiverWork.decrementAndGet")
             }
 
             if (incIdx < 0) {
@@ -90,7 +90,7 @@ internal fun ruleAtomicTerminalWriteForbiddenPair(files: List<SourceFile>): Stri
             val lines = f.lines
             val hits = mutableListOf<Int>()
             for ((i, line) in lines.withIndex()) {
-                if (!f.strippedLines.getOrElse(i) { "" }.contains("markTerminated(")) continue
+                if (!f.strippedLine(i).contains("markTerminated(")) continue
                 if (line.contains("terminal-ordering-opt-out:")) continue
                 // Window of up to 3 lines covers multi-line invocations.
                 val window = (i..minOf(i + 3, lines.lastIndex))
@@ -139,7 +139,7 @@ internal fun ruleExternalRootShared(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val hits = mutableListOf<Int>()
             for ((i, line) in f.lines.withIndex()) {
-                if (f.strippedLines.getOrElse(i) { "" }.contains("getExternalFilesDir(null)")) hits += i + 1
+                if (f.strippedLine(i).contains("getExternalFilesDir(null)")) hits += i + 1
             }
             if (hits.isEmpty()) null else f to hits
         }
@@ -169,7 +169,7 @@ internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
         .mapNotNull { f ->
             val lines = f.lines
             val micIdx = lines.indices.indexOfFirst { i ->
-                f.strippedLines.getOrElse(i) { "" }.contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
+                f.strippedLine(i).contains("FOREGROUND_SERVICE_TYPE_MICROPHONE")
             }
             if (micIdx < 0) return@mapNotNull null
             if (lines.any { it.contains("audio-mode-opt-out:") }) return@mapNotNull null
@@ -213,7 +213,7 @@ internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
             val lines = f.lines
             if (lines.any { it.contains("fgs-guard-opt-out:") }) return@forEach
             for ((i, line) in lines.withIndex()) {
-                val stripped = f.strippedLines.getOrElse(i) { "" }
+                val stripped = f.strippedLine(i)
                 val isCallerSide = stripped.contains("startForegroundService(")
                 val isServiceSide = stripped.contains("startForeground(") &&
                     !stripped.contains("startForegroundService(")

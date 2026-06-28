@@ -29,4 +29,12 @@ data class SourceFile(
      * source line as `lines[i]`. Rules detect on this, but REPORT from [lines].
      */
     val strippedLines: List<String> by lazy { strippedText.reader().readLines() }
+
+    /**
+     * [strippedLines] element at [idx], or `""` when out of range — the comment-
+     * stripped counterpart to `lines[idx]`, used by per-line detection in the
+     * RovaGateRules registry (DRY: replaces ~39 verbatim `strippedLines.getOrElse`
+     * call sites). REPORT offenders from raw [lines], never from this.
+     */
+    fun strippedLine(idx: Int): String = strippedLines.getOrElse(idx) { "" }
 }

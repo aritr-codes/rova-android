@@ -26,7 +26,7 @@ internal fun ruleWakeLockBoundedAcquire(files: List<SourceFile>): String? {
     val offenders = mutableListOf<String>()
     files.forEach { f ->
         f.lines.forEachIndexed { idx, raw ->
-            if (unboundedAcquire.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })) {
+            if (unboundedAcquire.containsMatchIn(f.strippedLine(idx))) {
                 offenders += "  ${f.relPath}:${idx + 1}: ${raw.trimStart().take(120)}"
             }
         }

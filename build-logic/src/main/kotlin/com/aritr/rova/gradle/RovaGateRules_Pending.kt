@@ -52,7 +52,7 @@ internal fun ruleExportIsPendingGuarded(files: List<SourceFile>): String? {
                     // Detect IS_PENDING on the comment-stripped line so a
                     // `/* … */`-then-code line or a string-literal marker can't
                     // hide it. The file-level guard check below stays on raw text.
-                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                    pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) return@mapNotNull null
             val hasFileGuard = f.text.contains("@RequiresApi(Build.VERSION_CODES.Q)") ||
@@ -95,7 +95,7 @@ internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String
             for ((i, line) in lines.withIndex()) {
                 // Detect the hit on the comment-stripped line; the ±30 SDK-branch
                 // window below stays RAW (guards are code, byte-identical to today).
-                if (!pattern.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) continue
+                if (!pattern.containsMatchIn(f.strippedLine(i))) continue
                 val window = lines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
@@ -139,7 +139,7 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
             for ((i, line) in lines.withIndex()) {
                 // Detect the hit on the comment-stripped line; the ±30 SDK-branch
                 // window below stays RAW (guards are code, byte-identical to today).
-                if (!pattern.containsMatchIn(f.strippedLines.getOrElse(i) { "" })) continue
+                if (!pattern.containsMatchIn(f.strippedLine(i))) continue
                 val window = lines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
@@ -265,7 +265,7 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
     for (f in files) {
         if (!f.relPath.endsWith(".kt")) continue
         f.lines.forEachIndexed { i, line ->
-            if (f.strippedLines.getOrElse(i) { "" }.contains("ExportPipeline.export(")) {
+            if (f.strippedLine(i).contains("ExportPipeline.export(")) {
                 pipelineCalls += f to (i + 1)
             }
         }
@@ -292,7 +292,7 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
         // Exclude the definition file itself.
         if (normRelPath.endsWith("utils/VideoMerger.kt")) continue
         val hits = f.lines.withIndex().filter { (idx, _) ->
-            muxPattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+            muxPattern.containsMatchIn(f.strippedLine(idx))
         }
         if (hits.isEmpty()) continue
         if (normRelPath.contains("service/export/")) continue
@@ -335,7 +335,7 @@ internal fun ruleSafTargetCommittedBeforeStream(files: List<SourceFile>): String
         .forEach { f ->
             val lines = f.lines
             val streamIdx = lines.indices.indexOfFirst { i ->
-                val c = f.strippedLines.getOrElse(i) { "" }
+                val c = f.strippedLine(i)
                 c.contains("copyFileToDocument(") || c.contains("openOutputStream(")
             }
             if (streamIdx >= 0) {
@@ -393,7 +393,7 @@ internal fun ruleCompletedWriteOnlyFromPerformMerge(files: List<SourceFile>): St
             if (hasOptOut && !isRecordingService) return@forEach
 
             lines.forEachIndexed { i, raw ->
-                if (!f.strippedLines.getOrElse(i) { "" }.contains("markTerminated(")) return@forEachIndexed
+                if (!f.strippedLine(i).contains("markTerminated(")) return@forEachIndexed
                 val window = (i..minOf(i + 3, lines.lastIndex))
                     .joinToString("\n") { lines[it] }
                 if (!window.contains("Terminated.COMPLETED")) return@forEachIndexed
