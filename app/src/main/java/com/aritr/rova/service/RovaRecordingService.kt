@@ -2105,15 +2105,23 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val useFirstPrinciplesRender = readUseFirstPrinciplesRender()
             val enableMatrixSnapshots = readEnableMatrixSnapshots()
 
-            // 6.1b consumer config — FHD-locked for v1; 6.1c may lookup BitrateTable per resolution.
-            val portraitSize = android.util.Size(1080, 1920)
-            val landscapeSize = android.util.Size(1920, 1080)
+            // DualShot honors the Quality preset (was FHD-locked) — per-side size
+            // from DualShotPresetResolver, bitrate from BitrateTable. 4K caps to FHD.
+            // ADR-0009 crop geometry unchanged; only output resolution/bitrate vary.
+            val sidePlan = com.aritr.rova.service.dualrecord.internal.DualShotPresetResolver
+                .forPreset(resolutionStr)
+            val portraitSize = sidePlan.portraitSize
+            val landscapeSize = sidePlan.landscapeSize
+            val portraitBitrate = com.aritr.rova.service.dualrecord.internal.BitrateTable
+                .forSize(portraitSize, com.aritr.rova.service.dualrecord.VideoCodec.H264)
+            val landscapeBitrate = com.aritr.rova.service.dualrecord.internal.BitrateTable
+                .forSize(landscapeSize, com.aritr.rova.service.dualrecord.VideoCodec.H264)
             val config = com.aritr.rova.service.dualrecord.DualVideoRecorderConfig(
                 cameraInputSize = intrinsics.size,
                 portraitOutputSize = portraitSize,
                 landscapeOutputSize = landscapeSize,
-                portraitBitrate = 8_000_000,
-                landscapeBitrate = 8_000_000,
+                portraitBitrate = portraitBitrate,
+                landscapeBitrate = landscapeBitrate,
                 videoCodec = com.aritr.rova.service.dualrecord.VideoCodec.H264,
                 audioBitrate = 128_000,
                 audioSampleRate = 48_000,
