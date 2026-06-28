@@ -143,7 +143,11 @@ internal fun ruleUserCopyVocabulary(files: List<SourceFile>): String? {
  * Verbatim lift of checkA11yAnimationGated.
  * REQUIRE: any .kt file using rememberInfiniteTransition( / infiniteRepeatable( must
  * also contain rememberReduceMotion( or ReducedMotion.isReduced.
- * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + seam check use the raw line.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out check uses the raw line.
+ *   Round-4 (2026-06-28): the reduced-motion seam REQUIRE reads f.strippedLines (was
+ *   raw lines) — a commented `rememberReduceMotion(` / `ReducedMotion.isReduced` must
+ *   NOT satisfy the require (was a false-PASS hole). `.contains` is literal so the
+ *   migration is stricter-only and keeps the trigger + seam substrate consistent.
  * Opt-out: line containing "a11y-opt-out" is skipped (read from RAW line, checked first).
  * Empty input: null (no files, no triggers, passes).
  */
@@ -160,7 +164,7 @@ internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
                 rawPrimitive.containsMatchIn(stripped)
             }
             if (triggers.isEmpty()) return@mapNotNull null
-            val hasSeam = lines.any {
+            val hasSeam = f.strippedLines.any {
                 it.contains("rememberReduceMotion(") || it.contains("ReducedMotion.isReduced")
             }
             if (hasSeam) null else f to triggers
@@ -191,7 +195,16 @@ internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
 /**
  * Verbatim lift of checkA11yClickableHasRole.
  * REQUIRE window: .clickable / .combinedClickable needs role = Role. in idx-15..idx+20 window.
- * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Comment handling: clickable TRIGGER on f.strippedLines (CommentStripper); opt-out + roleAssign window + report use the RAW line.
+ *   Round-4 (2026-06-28) LEAVE-LOOSENING (owner sign-off): the roleAssign REQUIRE
+ *   window stays on RAW lines on purpose. Its regex `\brole\s*=\s*Role\.` uses `\s*`,
+ *   so blanking a comment to spaces would let `role =` followed by a block-comment
+ *   then `Role.X` newly MATCH
+ *   (the blanked comment becomes inter-token whitespace) → the require would be
+ *   newly-SATISFIED → an offender would newly PASS = a LENIENT change (newly-accepts
+ *   code). This is the same `\s*`-across-blanked-comment hazard as
+ *   ruleWakeLockZeroGapRefresh `hasElse`; migrating is forbidden by the
+ *   stricter-only invariant, so the window stays raw.
  * Opt-out: line matching a11y-opt-out:\s*\S is skipped (read from RAW line, checked first).
  * Empty input: null (forbid/require gate, no files = no clickables = passes).
  */

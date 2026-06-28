@@ -508,4 +508,20 @@ class A11yI18nRulesTest {
             "  $relPath:2: val camControlSize = 18.dp"
         assertEquals(expected, msg)
     }
+
+    // ─── round-4 hole-close: reduced-motion seam only in a comment ─────────────
+
+    @Test
+    fun a11yAnimationGated_failsWhenSeamOnlyInComment() {
+        // round-4: the reduced-motion seam present only in a comment must NOT satisfy
+        // the require (false-PASS on raw lines.any before the strippedLines migration).
+        val relPath = "app/src/main/java/com/aritr/rova/ui/screens/RecordScreen.kt"
+        val body = """
+            // rememberReduceMotion() is read by the parent composable
+            val t = rememberInfiniteTransition()
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkA11yAnimationGated", files)
+        assert(msg != null && msg.startsWith("ADR-0020 §Decision-3 violation"))
+    }
 }

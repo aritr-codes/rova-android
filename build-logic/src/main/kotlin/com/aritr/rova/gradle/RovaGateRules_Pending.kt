@@ -82,9 +82,13 @@ internal fun ruleExportIsPendingGuarded(files: List<SourceFile>): String? {
  * Verbatim lift of checkExportSetIncludePendingGuarded.
  *
  * Regex: \bsetIncludePending\b
- * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window stays raw.
+ * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window on f.strippedLines.
  * Window: ±30 lines around each hit. Both Build.VERSION_CODES.R AND
  * Build.VERSION.SDK_INT must be present in the window.
+ *   Round-4 (2026-06-28): the ±30 SDK-branch REQUIRE window reads f.strippedLines
+ *   (was raw lines) — a commented `Build.VERSION_CODES.R` / SDK_INT must NOT satisfy
+ *   the require (was a false-PASS hole). Both checks are literal `.contains`, so the
+ *   migration is stricter-only and keeps the hit + window substrate consistent.
  * Scope: .kt files in [files] (export dir).
  */
 internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String? {
@@ -96,9 +100,10 @@ internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String
             val hits = mutableListOf<Pair<Int, String>>()
             for ((i, line) in lines.withIndex()) {
                 // Detect the hit on the comment-stripped line; the ±30 SDK-branch
-                // window below stays RAW (guards are code, byte-identical to today).
+                // REQUIRE window reads stripped too (round-4: a commented guard must
+                // not satisfy the require).
                 if (!pattern.containsMatchIn(f.strippedLine(i))) continue
-                val window = lines.subList(
+                val window = f.strippedLines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
                 ).joinToString("\n")
@@ -126,9 +131,13 @@ internal fun ruleExportSetIncludePendingGuarded(files: List<SourceFile>): String
  * Verbatim lift of checkExportQueryArgMatchPendingGuarded.
  *
  * Regex: \bQUERY_ARG_MATCH_PENDING\b
- * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window stays raw.
+ * Comment handling: hit detection on f.strippedLines (CommentStripper); ±30 SDK-branch window on f.strippedLines.
  * Window: ±30 lines around each hit. Both Build.VERSION_CODES.R AND
  * Build.VERSION.SDK_INT must be present in the window.
+ *   Round-4 (2026-06-28): the ±30 SDK-branch REQUIRE window reads f.strippedLines
+ *   (was raw lines) — a commented `Build.VERSION_CODES.R` / SDK_INT must NOT satisfy
+ *   the require (was a false-PASS hole). Both checks are literal `.contains`, so the
+ *   migration is stricter-only and keeps the hit + window substrate consistent.
  * Scope: .kt files in [files] (export dir).
  */
 internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): String? {
@@ -140,9 +149,10 @@ internal fun ruleExportQueryArgMatchPendingGuarded(files: List<SourceFile>): Str
             val hits = mutableListOf<Pair<Int, String>>()
             for ((i, line) in lines.withIndex()) {
                 // Detect the hit on the comment-stripped line; the ±30 SDK-branch
-                // window below stays RAW (guards are code, byte-identical to today).
+                // REQUIRE window reads stripped too (round-4: a commented guard must
+                // not satisfy the require).
                 if (!pattern.containsMatchIn(f.strippedLine(i))) continue
-                val window = lines.subList(
+                val window = f.strippedLines.subList(
                     maxOf(0, i - 30),
                     minOf(lines.size, i + 30)
                 ).joinToString("\n")
@@ -326,7 +336,12 @@ internal fun ruleExportPipelineSingleEntry(files: List<SourceFile>): String? {
  * trailing filename component of relPath after normalising separators.
  *
  * Comment handling: detection of stream op on f.strippedLines (CommentStripper);
- * commitsBefore window + offender report use the raw lines.
+ * offender report uses the raw lines.
+ *   Round-4 (2026-06-28): the commitsBefore REQUIRE reads f.strippedLine (was raw
+ *   lines.take) — a commented `setExportSafTarget` / `setSafTarget(` before the
+ *   stream op must NOT satisfy the commit-before-stream require (was a false-PASS
+ *   hole). `.contains` is literal so the migration is stricter-only and keeps the
+ *   stream-op trigger + commitsBefore substrate consistent.
  *
  * Scope: .kt files in [files] (export dir).
  */
@@ -341,8 +356,9 @@ internal fun ruleSafTargetCommittedBeforeStream(files: List<SourceFile>): String
                 c.contains("copyFileToDocument(") || c.contains("openOutputStream(")
             }
             if (streamIdx >= 0) {
-                val commitsBefore = lines.take(streamIdx).any {
-                    it.contains("setExportSafTarget") || it.contains("setSafTarget(")
+                val commitsBefore = (0 until streamIdx).any { i ->
+                    val c = f.strippedLine(i)
+                    c.contains("setExportSafTarget") || c.contains("setSafTarget(")
                 }
                 val normRelPath = f.relPath.replace('\\', '/')
                 val fileName = normRelPath.substringAfterLast('/')
