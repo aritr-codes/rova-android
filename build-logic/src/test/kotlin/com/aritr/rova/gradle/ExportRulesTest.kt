@@ -419,4 +419,30 @@ class ExportRulesTest {
         assertNotNull(msg)
         assert(msg!!.contains("missing AUTO_DISCARD_ELIGIBLE"))
     }
+
+    @Test
+    fun exportCleanupPredicate_doesNotCountTrailingCommentTokens() {
+        // round-4: a required token present ONLY in a TRAILING comment on a real code
+        // line. The legacy line-prefix filter (startsWith "//"/"*"/"/*") kept the whole
+        // line, so the comment token satisfied the require = false-PASS. After the
+        // strippedText migration the trailing comment is blanked -> QueryFailed missing.
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/ExportCleanupPredicate.kt"
+        val body = """
+            if (classification.eligibility != DiscardEligibility.AUTO_DISCARD_ELIGIBLE) return false
+            if (manifest.privateTempPath != null) return false
+            if (recoveryResult is RecoveryResult.RetryableFailure) return false
+            if (recoveryResult is RecoveryResult.ManifestWriteFailed) return false
+            runSweep() // OrphanSweepResult.QueryFailed handled in the sweep helper
+            return true
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportCleanupPredicate", files)
+        val expected = "ExportCleanupPredicate cleanup gate violation (ADR 0006 §Ownership table " +
+            "+ commit-6 NO-GO patch):\n" +
+            "  missing QueryFailed check (sweep clean gate; commit-6 NO-GO patch)\n" +
+            "All four gates MUST be referenced in the predicate source. " +
+            "Dropping any gate risks deleting a manifest still needed to " +
+            "protect a referenced pending row."
+        assertEquals(expected, msg)
+    }
 }

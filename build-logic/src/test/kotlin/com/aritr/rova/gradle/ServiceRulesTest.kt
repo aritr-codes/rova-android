@@ -459,4 +459,43 @@ class ServiceRulesTest {
         val msg = RovaGateRules.run("checkFGSStartGuarded", files)
         assertTrue(msg != null && msg.contains("FGS guard violations"))
     }
+
+    // ─── round-4 require-on-stripped golden tests ────────────────────────────
+
+    @Test
+    fun audioModeFgsType_failsWhenAudioModeOnlyInComment() {
+        // round-4: audioMode mentioned only in a comment BEFORE the MIC literal must
+        // NOT satisfy the require (false-PASS on raw lines[i] before the migration).
+        val relPath = "app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt"
+        val body = """
+            // audioMode gate handled elsewhere
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkAudioModeFgsTypeMatch", files)
+        val expected = "FGS-type / audio-mode coupling violation (ADR 0006 B18 + B20):\n" +
+            "  $relPath: line 2 — FGS MIC type without audioMode gate\n" +
+            "FOREGROUND_SERVICE_TYPE_MICROPHONE must be gated by an " +
+            "audioMode == AudioMode.VIDEO_AUDIO check. Hardcoding the " +
+            "type bitfield risks SecurityException on Android 14+."
+        assertEquals(expected, msg)
+    }
+
+    @Test
+    fun fgsStartGuarded_failsWhenIseCatchOnlyInComment() {
+        // round-4: the required ISE catch present only in a comment within the
+        // 60-line window must NOT satisfy the require (false-PASS on raw window).
+        val relPath = "app/src/main/java/com/aritr/rova/MainActivity.kt"
+        val body = """
+            ctx.startForegroundService(intent)
+            // catch (e: IllegalStateException) is done in the caller
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkFGSStartGuarded", files)
+        val expected = "FGS guard violations (ADR 0006 B10 + B11 + B20):\n" +
+            "  $relPath: line 1: missing catch (e: IllegalStateException)\n" +
+            "Caller-side: catch IllegalStateException, SDK-gate the is-check.\n" +
+            "Service-side: also catch SecurityException for FGS-type / permission mismatch."
+        assertEquals(expected, msg)
+    }
 }

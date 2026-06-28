@@ -643,4 +643,59 @@ class PendingRulesTest {
         ))
         assertNull(RovaGateRules.run("checkExportPendingVisibilityOnQuery", files))
     }
+
+    // ─── round-4 hole-close: SDK / commit require only in a comment ────────────
+
+    @Test
+    fun setIncludePending_failsWhenSdkGuardOnlyInComment() {
+        // round-4: SDK-branch tokens present only in a comment within the ±30 window
+        // must NOT satisfy the require (false-PASS on the raw window before migration).
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """
+            // Build.VERSION.SDK_INT and Build.VERSION_CODES.R checked upstream
+            values.setIncludePending(1)
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportSetIncludePendingGuarded", files)
+        val expected = "setIncludePending used without an SDK branch against " +
+            "Build.VERSION_CODES.R — must run only on API 29 (deprecated " +
+            "and unreliable on API 30+). Offenders:\n" +
+            "  $relPath:2: values.setIncludePending(1)"
+        assertEquals(expected, msg)
+    }
+
+    @Test
+    fun queryArgMatchPending_failsWhenSdkGuardOnlyInComment() {
+        // round-4: SDK-branch tokens present only in a comment within the ±30 window
+        // must NOT satisfy the require (false-PASS on the raw window before migration).
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/Tier1Exporter.kt"
+        val body = """
+            // Build.VERSION.SDK_INT >= Build.VERSION_CODES.R checked upstream
+            bundle.putInt(MediaStore.QUERY_ARG_MATCH_PENDING, 1)
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkExportQueryArgMatchPendingGuarded", files)
+        val expected = "QUERY_ARG_MATCH_PENDING used without an SDK branch against " +
+            "Build.VERSION_CODES.R — must run only on API 30+ " +
+            "(NoSuchFieldError on Q). Offenders:\n" +
+            "  $relPath:2: bundle.putInt(MediaStore.QUERY_ARG_MATCH_PENDING, 1)"
+        assertEquals(expected, msg)
+    }
+
+    @Test
+    fun safTargetCommittedBeforeStream_failsWhenCommitOnlyInComment() {
+        // round-4: a setExportSafTarget commit mentioned only in a comment before the
+        // stream op must NOT satisfy the require (false-PASS on raw lines.take).
+        val relPath = "app/src/main/java/com/aritr/rova/service/export/SafExporter.kt"
+        val body = """
+            // setExportSafTarget(uri) already called in the caller
+            out.copyFileToDocument(srcFile, destUri)
+        """.trimIndent()
+        val files = listOf(src(relPath, body))
+        val msg = RovaGateRules.run("checkSafTargetCommittedBeforeStream", files)
+        val expected = "ADR-0024 §commit-before-stream violation:\n" +
+            "  $relPath:2: SAF stream op without a prior setExportSafTarget commit\n" +
+            "The SAF target doc Uri MUST be committed to the manifest before any byte is written to it."
+        assertEquals(expected, msg)
+    }
 }

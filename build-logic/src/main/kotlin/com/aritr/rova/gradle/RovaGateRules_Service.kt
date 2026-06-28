@@ -161,7 +161,10 @@ internal fun ruleExternalRootShared(files: List<SourceFile>): String? {
  * Logic: find first non-comment FOREGROUND_SERVICE_TYPE_MICROPHONE line;
  * require that at least one of the preceding lines contains "audioMode" or
  * "AudioMode.".
- * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + report use the raw line.
+ *   Round-4 (2026-06-28): the preceding-line audioMode REQUIRE reads f.strippedLine
+ *   too — a commented `audioMode` mention must NOT satisfy the gate (was a false-PASS
+ *   on raw lines[i]). `.contains` is literal so the migration is stricter-only.
  */
 internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
     val offenders = files
@@ -176,7 +179,7 @@ internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
             // Search lines BEFORE the MIC literal for an audioMode
             // reference (variable read, AudioMode enum, when branch).
             val hasAudioModeBefore = (0 until micIdx).any { i ->
-                val s = lines[i]
+                val s = f.strippedLine(i)
                 s.contains("audioMode") || s.contains("AudioMode.")
             }
             if (hasAudioModeBefore) null else f to micIdx + 1
@@ -200,14 +203,20 @@ internal fun ruleAudioModeFgsTypeMatch(files: List<SourceFile>): String? {
  * Logic: for each file containing startForegroundService( or startForeground(,
  * for each non-comment line that contains a call site, look forward up to 60
  * lines for catch arms, SDK gate, is-check, and (service-side) SecurityException.
- * Comment handling: detection on f.strippedLines (CommentStripper); opt-out + window + report use the raw line.
+ * Comment handling: per-line trigger on f.strippedLines (CommentStripper); opt-out + report use the raw line.
+ *   Round-4 (2026-06-28): the file-level scan guard reads f.strippedText and the
+ *   forward 60-line catch-arm REQUIRE window reads f.strippedLines — a commented
+ *   `startForeground*(` must not select the file, and a commented `catch (e: …)` /
+ *   SDK-gate / is-check must not satisfy the require (were false-PASS holes on raw
+ *   f.text/lines). All checks are literal `.contains`, so the migration is
+ *   stricter-only; the per-line trigger and the require window now share substrate.
  */
 internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
     val offenders = mutableListOf<Pair<SourceFile, String>>()
     files
         .filter { it.relPath.endsWith(".kt") }
         .filter { f ->
-            f.text.contains("startForegroundService(") || f.text.contains("startForeground(")
+            f.strippedText.contains("startForegroundService(") || f.strippedText.contains("startForeground(")
         }
         .forEach { f ->
             val lines = f.lines
@@ -218,9 +227,10 @@ internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
                 val isServiceSide = stripped.contains("startForeground(") &&
                     !stripped.contains("startForegroundService(")
                 if (!isCallerSide && !isServiceSide) continue
-                // Look forward up to 60 lines for catch arms.
+                // Look forward up to 60 lines for catch arms (REQUIRE window on
+                // stripped lines — round-4: a commented catch must not satisfy it).
                 val end = minOf(i + 60, lines.lastIndex)
-                val window = lines.subList(i, end + 1).joinToString("\n")
+                val window = f.strippedLines.subList(i, end + 1).joinToString("\n")
                 val hasIseCatch = window.contains("catch (e: IllegalStateException)") ||
                     window.contains("catch(e: IllegalStateException)") ||
                     window.contains("catch (e:IllegalStateException)")

@@ -248,15 +248,23 @@ internal fun ruleExportNoCopyToPublicMovies(files: List<SourceFile>): String? {
  * code threw `GradleException("Phase 1.7 commit-6 source missing: ...")` when the
  * file didn't exist.
  *
- * Comment-strip: strip lines starting with a line-comment, a star, or a
- * block-comment opener before token checks, so a doc-only mention does not
- * satisfy the gate; the gate must be exercised by code.
+ * Comment-strip: the require tokens are checked on f.strippedText (CommentStripper),
+ * so a doc-only mention does not satisfy the gate; the gate must be exercised by code.
  *
- * NOTE (comment-strip hardening 2026-06-25): NOT migrated to CommentStripper —
- * same rationale as ruleExportPendingVisibilityOnQuery. This is a co-presence
- * REQUIRE; the block-opener prefix-skip edge only over-strictly FAILS (never
- * false-PASSES), so closing it would change behavior in the lenient direction,
- * out of scope here.
+ * NOTE (comment-strip ROUND-4 2026-06-28, owner sign-off + codex reconcile):
+ * MIGRATED from the legacy line-prefix filter (the old whole-line skip of lines whose
+ * trimStart began with a line-comment marker, a star, or a block-comment opener) to
+ * f.strippedText — this was the LAST S2 manual-filter holdout. The legacy filter had a
+ * real false-PASS the #145 leave-note missed: a TRAILING comment such as
+ * `someCode() (line-comment) AUTO_DISCARD_ELIGIBLE` was kept whole, so the require
+ * could be satisfied by a comment. strippedText blanks the comment (closes the
+ * false-PASS) and also keeps real code on a block-open-then-code line (fixes a
+ * symmetric false-FAIL the legacy whole-line skip had). The migration is more correct
+ * in EVERY case and never accepts a token that is absent from real code; the only
+ * lenient edge (newly accepting a block-open-then-real-TOKEN line that the legacy skip
+ * rejected) is an owner-approved correctness fix, not a loosening of WHAT is enforced.
+ * strippedText keeps string/char literals verbatim, identical to before for in-literal
+ * tokens.
  *
  * Required tokens (5):
  *   AUTO_DISCARD_ELIGIBLE, privateTempPath, RetryableFailure, ManifestWriteFailed, QueryFailed
@@ -265,12 +273,7 @@ internal fun ruleExportCleanupPredicate(files: List<SourceFile>): String? {
     val codeText = if (files.isEmpty()) {
         ""
     } else {
-        files.first().lines
-            .filter {
-                val t = it.trimStart()
-                !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
-            }
-            .joinToString("\n")
+        files.first().strippedText
     }
     val problems = mutableListOf<String>()
     if (!codeText.contains("AUTO_DISCARD_ELIGIBLE")) {
