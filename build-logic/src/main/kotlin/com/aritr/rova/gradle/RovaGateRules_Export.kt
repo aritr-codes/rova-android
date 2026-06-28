@@ -56,7 +56,7 @@ internal fun ruleUserStoppedBeforeMerge(files: List<SourceFile>): String? {
     val completedLines = mutableListOf<Int>()
     val mergeLines = mutableListOf<Int>()
     for ((i, _) in lines.withIndex()) {
-        val stripped = f.strippedLines.getOrElse(i) { "" }
+        val stripped = f.strippedLine(i)
         if (stripped.contains("markTerminated(")) {
             val window = (i..minOf(i + 3, lines.lastIndex))
                 .joinToString("\n") { lines[it] }
@@ -105,7 +105,7 @@ internal fun ruleExportTierReadTolerant(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, _) ->
-                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                    pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -146,7 +146,7 @@ internal fun ruleScanFileBoundedWait(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, _) ->
-                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                    pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -187,7 +187,7 @@ internal fun rulePendingFdModeIsRW(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, _) ->
-                    f.strippedLines.getOrElse(idx) { "" }.replace("\"rw\"", "").contains("\"w\"")
+                    f.strippedLine(idx).replace("\"rw\"", "").contains("\"w\"")
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -219,7 +219,7 @@ internal fun ruleExportNoCopyToPublicMovies(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, _) ->
-                    f.strippedLines.getOrElse(idx) { "" }.contains("copyToPublicMovies")
+                    f.strippedLine(idx).contains("copyToPublicMovies")
                 }
             if (hits.isEmpty()) null else f to hits
         }

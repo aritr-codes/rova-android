@@ -19,7 +19,7 @@ internal fun ruleSchedulerNoGetService(files: List<SourceFile>): String? {
                     // Match getService( on PendingIntent. Detection runs on the
                     // CommentStripper-blanked line so block-comment and line-comment
                     // tokens are ignored; the raw line is used only for reporting.
-                    val stripped = f.strippedLines.getOrElse(idx) { "" }
+                    val stripped = f.strippedLine(idx)
                     stripped.contains("PendingIntent.getService(") ||
                         Regex("""\bgetService\s*\(""").containsMatchIn(stripped) &&
                         stripped.contains("PendingIntent")

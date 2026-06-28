@@ -30,7 +30,7 @@ internal fun ruleStopNoGetService(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, line) ->
-                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                    pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -62,7 +62,7 @@ internal fun ruleScheduleReceiverNoFgsStart(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, line) ->
-                    pattern.containsMatchIn(f.strippedLines.getOrElse(idx) { "" })
+                    pattern.containsMatchIn(f.strippedLine(idx))
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -98,7 +98,7 @@ internal fun ruleRecoveryNoDeletion(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, line) ->
-                    forbidden.any { f.strippedLines.getOrElse(idx) { "" }.contains(it) }
+                    forbidden.any { f.strippedLine(idx).contains(it) }
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -135,7 +135,7 @@ internal fun ruleRecoverySegmentRegex(files: List<SourceFile>): String? {
                 .filter { (idx, line) ->
                     // Comment lines are scanned too — a stale rationale
                     // referring to `seg_` is itself a code-rot signal.
-                    f.strippedLines.getOrElse(idx) { "" }.contains("seg_")
+                    f.strippedLine(idx).contains("seg_")
                 }
             if (hits.isEmpty()) null else f to hits
         }
@@ -177,7 +177,7 @@ internal fun ruleScanTriggerSingleSite(files: List<SourceFile>): String? {
             val hits = f.lines
                 .withIndex()
                 .filter { (idx, line) ->
-                    f.strippedLines.getOrElse(idx) { "" }.contains("runRecoveryScan")
+                    f.strippedLine(idx).contains("runRecoveryScan")
                 }
             if (hits.isEmpty()) null else f to hits
         }

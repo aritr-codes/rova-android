@@ -45,7 +45,7 @@ internal fun ruleNoHardcodedUiStrings(files: List<SourceFile>): String? {
                 .withIndex()
                 .filter { (idx, line) ->
                     if (line.contains("i18n-opt-out")) return@filter false
-                    val stripped = f.strippedLines.getOrElse(idx) { "" }
+                    val stripped = f.strippedLine(idx)
                     textLiteral.containsMatchIn(stripped) ||
                         contentDescLiteral.containsMatchIn(stripped)
                 }
@@ -156,7 +156,7 @@ internal fun ruleA11yAnimationGated(files: List<SourceFile>): String? {
             val lines = f.lines
             val triggers = lines.withIndex().filter { (idx, line) ->
                 if (line.contains("a11y-opt-out")) return@filter false
-                val stripped = f.strippedLines.getOrElse(idx) { "" }
+                val stripped = f.strippedLine(idx)
                 rawPrimitive.containsMatchIn(stripped)
             }
             if (triggers.isEmpty()) return@mapNotNull null
@@ -211,7 +211,7 @@ internal fun ruleA11yClickableHasRole(files: List<SourceFile>): String? {
             val lines = f.lines
             val hits = lines.withIndex().filter { (idx, line) ->
                 if (optOut.containsMatchIn(line)) return@filter false
-                val stripped = f.strippedLines.getOrElse(idx) { "" }
+                val stripped = f.strippedLine(idx)
                 if (!clickable.containsMatchIn(stripped)) return@filter false
                 val from = maxOf(0, idx - backWindow)
                 val to = minOf(lines.size - 1, idx + forwardWindow)
@@ -292,7 +292,7 @@ internal fun ruleA11yTargetSizeToken(files: List<SourceFile>): String? {
                 // opener inside a string literal can neither hide a token nor
                 // disable the gate (F1/F2 holes). REPORT the RAW line so message
                 // bytes are unchanged.
-                val strippedLine = f.strippedLines.getOrElse(idx) { "" }
+                val strippedLine = f.strippedLine(idx)
                 val m = tokenDecl.find(strippedLine) ?: return@inner null
                 if (m.groupValues[1] !in interactiveSizeTokens) return@inner null
                 if (m.groupValues[2].toDouble() >= minTargetDp) null
