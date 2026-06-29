@@ -99,6 +99,7 @@ import com.aritr.rova.service.export.ExportResult
 import com.aritr.rova.service.wakelock.WakeLockPolicy
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.utils.RovaCrashReporter
+import com.aritr.rova.BuildConfig
 import com.aritr.rova.utils.RovaLog
 import androidx.camera.video.VideoRecordEvent
 import kotlinx.coroutines.CancellationException
@@ -2056,6 +2057,41 @@ class RovaRecordingService : Service(), LifecycleOwner {
         }
     }
 
+    /**
+     * DualShot fps-cadence diagnosis (2026-06-29) — best-effort AE capture
+     * metadata. Attaches a Camera2 session capture callback to the dual
+     * Preview and logs exposure / frame-duration / AE fps-range / AE-state
+     * every ~60 frames. DEBUG only, best-effort (spec §5.3): the direct
+     * AE verdict when reachable, never a dependency — the slice still
+     * concludes on getTimestamp cadence + bright/dim if interop is absent.
+     */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun attachAeMetadataProbe(builder: androidx.camera.core.Preview.Builder) {
+        var frame = 0L
+        androidx.camera.camera2.interop.Camera2Interop.Extender(builder).setSessionCaptureCallback(
+            object : android.hardware.camera2.CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(
+                    session: android.hardware.camera2.CameraCaptureSession,
+                    request: android.hardware.camera2.CaptureRequest,
+                    result: android.hardware.camera2.TotalCaptureResult,
+                ) {
+                    if (frame++ % 60L != 0L) return
+                    val expNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
+                    val durNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
+                    val aeRange = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_TARGET_FPS_RANGE)
+                    val aeState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE)
+                    val expFps = if (expNs != null && expNs > 0) String.format(java.util.Locale.US, "%.1f", 1_000_000_000.0 / expNs) else "n/a"
+                    val durFps = if (durNs != null && durNs > 0) String.format(java.util.Locale.US, "%.1f", 1_000_000_000.0 / durNs) else "n/a"
+                    RovaLog.d {
+                        "DualShot AE: exposure=${expNs}ns (~${expFps}fps ceiling) " +
+                            "frameDuration=${durNs}ns (~${durFps}fps) " +
+                            "aeTargetFpsRange=$aeRange aeState=$aeState"
+                    }
+                }
+            }
+        )
+    }
+
     private suspend fun setupDualCamera() {
         setupMutex.withLock {
             if (_serviceState.value.isCameraActive) {
@@ -2187,10 +2223,19 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
                 )
                 .build()
-            preview = Preview.Builder()
+            val previewBuilder = Preview.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .setTargetRotation(android.view.Surface.ROTATION_0)
-                .build()
+            // fps-cadence diagnosis (2026-06-29) — best-effort AE metadata.
+            // DEBUG only; wrapped so a failure never blocks the binding.
+            if (BuildConfig.DEBUG) {
+                try {
+                    attachAeMetadataProbe(previewBuilder)
+                } catch (t: Throwable) {
+                    RovaLog.w("DualShot AE probe attach failed (non-fatal)", t)
+                }
+            }
+            preview = previewBuilder.build()
             val useDummy = currentSurfaceProvider == null
             val surfaceProvider = currentSurfaceProvider ?: createDummySurfaceProvider()
             preview?.setSurfaceProvider(surfaceProvider)
