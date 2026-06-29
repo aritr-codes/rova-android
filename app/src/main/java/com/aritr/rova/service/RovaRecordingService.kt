@@ -44,6 +44,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
+import com.aritr.rova.service.dualrecord.internal.AeFpsRangePolicy
 import com.aritr.rova.service.notification.ChronoSpec
 import com.aritr.rova.service.notification.DotState
 import com.aritr.rova.service.notification.DotsPlan
@@ -2058,6 +2059,50 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
+     * DualShot AE frame-rate floor (2026-06-29, ADR-0034) — read the bound
+     * back-camera's CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES, pick the best
+     * supported range >=24fps via [AeFpsRangePolicy], and request it frame-0 on
+     * the DualShot Preview. Capability-gated + fail-open: an unlisted range, a
+     * multi-camera selector match, a null pick, or any exception leaves the AE
+     * default in place — the camera must always open. The range is built on its
+     * own line and passed by reference (checkAeFpsRangeCapabilityGated forbids a
+     * hard-coded Range literal at the setCaptureRequestOption call).
+     */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun applyAeFpsFloor(
+        provider: androidx.camera.lifecycle.ProcessCameraProvider,
+        builder: androidx.camera.core.Preview.Builder,
+    ) {
+        try {
+            val matches = currentCameraSelector.filter(provider.availableCameraInfos)
+            if (matches.size != 1) {
+                RovaLog.d { "AE floor: selector resolved ${matches.size} cameras (need 1), skipping" }
+                return
+            }
+            val available = androidx.camera.camera2.interop.Camera2CameraInfo.from(matches.first())
+                .getCameraCharacteristic(
+                    android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                )
+                ?.map { it.lower to it.upper }
+                ?: emptyList()
+            val chosen = AeFpsRangePolicy.choose(available, floor = 24, ceiling = 30)
+            if (chosen == null) {
+                RovaLog.d { "AE floor: no supported range >=24fps, keeping device default" }
+                return
+            }
+            val aeRange = android.util.Range(chosen.first, chosen.second)
+            androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                .setCaptureRequestOption(
+                    android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                    aeRange,
+                )
+            RovaLog.d { "AE floor: requested CONTROL_AE_TARGET_FPS_RANGE=$aeRange" }
+        } catch (t: Throwable) {
+            RovaLog.w("AE floor: apply failed (non-fatal), keeping device default", t)
+        }
+    }
+
+    /**
      * DualShot fps-cadence diagnosis (2026-06-29) — best-effort AE capture
      * metadata. Attaches a Camera2 session capture callback to the dual
      * Preview and logs exposure / frame-duration / AE fps-range / AE-state
@@ -2226,6 +2271,10 @@ class RovaRecordingService : Service(), LifecycleOwner {
             val previewBuilder = Preview.Builder()
                 .setResolutionSelector(resolutionSelector)
                 .setTargetRotation(android.view.Surface.ROTATION_0)
+            // ADR-0034 — capability-gated AE fps floor [24,30]. Lifts the
+            // auto-exposure ceiling so dim-light capture cadence stops
+            // collapsing toward 15fps. Best-effort; never blocks the binding.
+            applyAeFpsFloor(provider, previewBuilder)
             // fps-cadence diagnosis (2026-06-29) — best-effort AE metadata.
             // DEBUG only; wrapped so a failure never blocks the binding.
             if (BuildConfig.DEBUG) {
