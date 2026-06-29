@@ -24,6 +24,12 @@ class AeFpsRangePolicyTest {
         assertEquals(24 to 24, choose(15 to 24, 24 to 24))
     }
 
+    @Test fun pass2_discriminatesSortKeys_highestUpperThenLowestLower() {
+        // both candidates in pass 2 (no upper==30); proves the comparator, not just membership
+        assertEquals(24 to 25, choose(24 to 24, 24 to 25)) // highest upper wins
+        assertEquals(24 to 25, choose(25 to 25, 24 to 25)) // upper tie (25) → lowest lower wins
+    }
+
     @Test fun nullWhenNoFloorRange() {
         // no lower>=24 anywhere → don't set
         assertNull(choose(7 to 30, 15 to 30))
