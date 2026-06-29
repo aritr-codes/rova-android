@@ -10,6 +10,7 @@ import android.opengl.GLES30
 import android.opengl.Matrix
 import android.view.Surface
 import com.aritr.rova.service.dualrecord.VideoSide
+import com.aritr.rova.BuildConfig
 import com.aritr.rova.utils.RovaLog
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -98,6 +99,13 @@ internal class EncoderRenderThread(
     private var uTextureLoc: Int = -1
     private var loggedOnce = false
 
+    // DualShot fps-cadence diagnosis (2026-06-29) — DEBUG-only per-side
+    // rings. Single-writer (this encoder thread). Dumped once at shutdown.
+    private val consumeProbe = CadenceProbe(512)   // post-take timestamps → consume cadence
+    private val serviceProbe = CadenceProbe(512)   // take→glFinish durations (GPU sample service)
+    private val swapProbe = CadenceProbe(512)      // glFinish→swap durations (MediaCodec back-pressure)
+    private val takeToSwapProbe = CadenceProbe(512) // full take→swap durations
+
     private val finalMatrix = FloatArray(16)
 
     private val vertexBuffer: FloatBuffer = ByteBuffer
@@ -120,6 +128,7 @@ internal class EncoderRenderThread(
         }
         while (true) {
             val frame = mailbox.take() ?: break   // null = poisoned → shutdown
+            val tTake = if (BuildConfig.DEBUG) System.nanoTime() else 0L
             try {
                 // DualShot fence-sync (B3) — server-side wait on the
                 // callback thread's post-blit fence. glWaitSync queues a
@@ -136,6 +145,7 @@ internal class EncoderRenderThread(
                 failed = true
                 break
             }
+            val tFinish = if (BuildConfig.DEBUG) System.nanoTime() else 0L
             try {
                 if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
                     val err = EGL14.eglGetError()
@@ -150,8 +160,41 @@ internal class EncoderRenderThread(
                 failed = true
                 break
             }
+            if (BuildConfig.DEBUG) {
+                val tSwap = System.nanoTime()
+                consumeProbe.record(tTake)               // cadence = successive take deltas
+                serviceProbe.record(tFinish - tTake)     // GPU sample service (incl glWaitSync+draw+glFinish)
+                swapProbe.record(tSwap - tFinish)        // submit / MediaCodec back-pressure
+                takeToSwapProbe.record(tSwap - tTake)    // full per-frame encoder service
+            }
         }
+        if (BuildConfig.DEBUG) dumpCadence()
         teardownEgl()
+    }
+
+    /**
+     * DualShot fps-cadence diagnosis (2026-06-29) — emit this side's
+     * cadence summary once, at thread shutdown (off the hot path). DEBUG
+     * only. consume = successive post-take deltas; service/swap/total are
+     * durations (already deltas). See spec §5.2.
+     */
+    private fun dumpCadence() {
+        val consume = CadenceStats.summarize(
+            consumeProbe.snapshot().let { CadenceStats.deltas(it, 0, it.size) }
+        )
+        val service = CadenceStats.summarize(serviceProbe.snapshot())
+        val swap = CadenceStats.summarize(swapProbe.snapshot())
+        val total = CadenceStats.summarize(takeToSwapProbe.snapshot())
+        fun ms(ns: Long) = String.format(java.util.Locale.US, "%.1f", ns / 1_000_000.0)
+        fun fps(medNs: Long) = if (medNs > 0) String.format(java.util.Locale.US, "%.1f", 1_000_000_000.0 / medNs) else "n/a"
+        RovaLog.d {
+            "EglEncoder[$side] cadence [${consume.count + 1}f]: " +
+                "consume median=${ms(consume.medianNs)} p95=${ms(consume.p95Ns)} (~${fps(consume.medianNs)}fps) | " +
+                "service(take→finish) median=${ms(service.medianNs)} p95=${ms(service.p95Ns)} | " +
+                "swap(finish→swap) median=${ms(swap.medianNs)} p95=${ms(swap.p95Ns)} | " +
+                "total(take→swap) median=${ms(total.medianNs)} p95=${ms(total.p95Ns)} | " +
+                "mailboxDrops=${mailbox.overwriteCount()}"
+        }
     }
 
     private fun initEgl(): Boolean {
