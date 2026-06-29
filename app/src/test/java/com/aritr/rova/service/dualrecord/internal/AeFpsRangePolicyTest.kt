@@ -44,6 +44,11 @@ class AeFpsRangePolicyTest {
         assertEquals(24 to 30, choose(24 to 30, 30 to 30))
     }
 
+    @Test fun ceilingPinAlone_stillLiftsTheFloor() {
+        // only a (30,30) pin available → pass 1 excludes it (lower==upper), pass 2 accepts it
+        assertEquals(30 to 30, choose(30 to 30))
+    }
+
     @Test fun nullWhenNoFloorRange() {
         // no lower>=24 anywhere → don't set
         assertNull(choose(7 to 30, 15 to 30))
