@@ -2059,14 +2059,16 @@ class RovaRecordingService : Service(), LifecycleOwner {
     }
 
     /**
-     * DualShot AE frame-rate floor (2026-06-29, ADR-0034) — read the bound
-     * back-camera's CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES, pick the best
-     * supported range >=24fps via [AeFpsRangePolicy], and request it frame-0 on
-     * the DualShot Preview. Capability-gated + fail-open: an unlisted range, a
-     * multi-camera selector match, a null pick, or any exception leaves the AE
-     * default in place — the camera must always open. The range is built on its
-     * own line and passed by reference (checkAeFpsRangeCapabilityGated forbids a
-     * hard-coded Range literal at the setCaptureRequestOption call).
+     * DualShot AE frame-rate floor (2026-06-29, ADR-0034) — read the matched back
+     * camera(s)' CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES, intersect across all
+     * candidates (DEFAULT_BACK_CAMERA may match several physical cameras; the
+     * intersection is safe whichever one binds), pick the best range via
+     * [AeFpsRangePolicy], and request it frame-0 on the DualShot Preview.
+     * Capability-gated + fail-open: 0 matches, an empty intersection, a null pick,
+     * or any exception leaves the AE default in place — the camera must always open.
+     * The range is built on its own line and passed by reference
+     * (checkAeFpsRangeCapabilityGated forbids a hard-coded Range literal at the
+     * setCaptureRequestOption call).
      */
     @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
     private fun applyAeFpsFloor(
@@ -2075,16 +2077,25 @@ class RovaRecordingService : Service(), LifecycleOwner {
     ) {
         try {
             val matches = currentCameraSelector.filter(provider.availableCameraInfos)
-            if (matches.size != 1) {
-                RovaLog.d { "AE floor: selector resolved ${matches.size} cameras (need 1), skipping" }
+            if (matches.isEmpty()) {
+                RovaLog.d { "AE floor: selector resolved 0 cameras, skipping" }
                 return
             }
-            val available = androidx.camera.camera2.interop.Camera2CameraInfo.from(matches.first())
-                .getCameraCharacteristic(
-                    android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
-                )
-                ?.map { it.lower to it.upper }
-                ?: emptyList()
+            // DEFAULT_BACK_CAMERA can match multiple physical back cameras; CameraX picks the
+            // primary at bind and no pre-bind API names the winner. Intersect the available
+            // ranges across ALL candidates so the chosen range is supported whichever binds.
+            val available = matches
+                .map { info ->
+                    androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
+                        .getCameraCharacteristic(
+                            android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES
+                        )
+                        ?.map { it.lower to it.upper }
+                        ?.toSet()
+                        ?: emptySet()
+                }
+                .reduce { acc, ranges -> acc intersect ranges }
+                .toList()
             val chosen = AeFpsRangePolicy.choose(available, floor = 24, ceiling = 30)
             if (chosen == null) {
                 RovaLog.d { "AE floor: no supported range >=24fps, keeping device default" }
