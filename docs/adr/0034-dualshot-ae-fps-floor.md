@@ -19,6 +19,13 @@ to 24fps in dim light for brightness). The range is selected from the device's
 range with a floor ≥24 is supported, the option is **not** set (the device
 default stays). The camera must always open — the apply path is fail-open.
 
+**Tradeoff (accepted):** the 24fps floor caps AE exposure at ~41ms versus the
+~60ms unconstrained AE wants in a dim scene, so dim-light DualShot capture will
+be measurably darker/noisier than the device-default AE would produce. This is
+deliberate — in the worst case we prioritize cadence over brightness (a 24fps
+floor over the ~16.7fps collapse). The asymmetric ceiling still lets AE relax to
+24fps (not pinned at 30) to claw back light where it can.
+
 This addresses Limiter 1 only. The encoder ceiling (Limiter 2, ~22fps output)
 is a separate later cycle.
 
