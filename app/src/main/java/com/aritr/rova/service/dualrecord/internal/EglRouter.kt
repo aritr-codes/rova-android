@@ -186,6 +186,15 @@ internal class EglRouter(
     private var perfBlitMaxNs = 0L
     private var perfPrevSwapMaxNs = 0L
 
+    // DualShot fps-cadence diagnosis (2026-06-29) — DEBUG-only cadence
+    // rings. Single-writer (this callback thread), so no synchronization.
+    //  - hwTsProbe: SurfaceTexture.getTimestamp() (camera HW cadence)
+    //  - wallArrivalProbe: renderFrame() entry nanoTime (wall arrival)
+    // Compared as same-clock deltas only (spec §4). 512 ≥ the ≥300-frame
+    // steady-state window; reset every PERF_WINDOW emit (no intra-window wrap).
+    private val hwTsProbe = CadenceProbe(512)
+    private val wallArrivalProbe = CadenceProbe(512)
+
     // Phase: render-architecture audit. Caller-owned scratch buffers for
     // buildUvTransformV2. 4 pairwise-distinct length-16 arrays, allocated
     // once at ctor, reused for every addTarget call. Per spec §2.2 + the
@@ -575,6 +584,14 @@ internal class EglRouter(
         tex.updateTexImage()
         tex.getTransformMatrix(texMatrix)
         val perfTexEndNs = perfNow()
+        // fps-cadence diagnosis — record camera HW timestamp + wall arrival.
+        // getTimestamp() is the camera frame's hardware clock (possibly a
+        // different timebase than nanoTime — only same-clock deltas are
+        // compared downstream). 0 is skipped by CadenceStats.deltas.
+        if (BuildConfig.DEBUG) {
+            hwTsProbe.record(tex.getTimestamp())
+            wallArrivalProbe.record(perfEntryNs)
+        }
 
         // DualShot FBO ring (B2, 2026-05-21) — snapshot this camera frame
         // into an off-screen FBO slot, then hand the slot's texture id to
@@ -811,6 +828,17 @@ internal class EglRouter(
                 "blit avg=${ms(perfBlitSumNs / perfFrames)} max=${ms(perfBlitMaxNs)} " +
                 "prevSwapMax=${ms(perfPrevSwapMaxNs)} | " +
                 "encoders=${encoderThreads.size} targets=${targets.size} (ms)"
+        }
+        if (BuildConfig.DEBUG) {
+            val hw = CadenceStats.summarize(hwTsProbe.snapshot().let { CadenceStats.deltas(it, 0, it.size) })
+            val wall = CadenceStats.summarize(wallArrivalProbe.snapshot().let { CadenceStats.deltas(it, 0, it.size) })
+            fun fps(medNs: Long) = if (medNs > 0) String.format(java.util.Locale.US, "%.1f", 1_000_000_000.0 / medNs) else "n/a"
+            RovaLog.d {
+                "EglRouter cadence [${hw.count + 1}f]: " +
+                    "cameraHW median=${ms(hw.medianNs)} p95=${ms(hw.p95Ns)} (~${fps(hw.medianNs)}fps) | " +
+                    "wallArrival median=${ms(wall.medianNs)} p95=${ms(wall.p95Ns)} (~${fps(wall.medianNs)}fps) (ms)"
+            }
+            hwTsProbe.reset(); wallArrivalProbe.reset()
         }
         perfFrames = 0
         perfIntervalSumNs = 0L; perfIntervalMaxNs = 0L
