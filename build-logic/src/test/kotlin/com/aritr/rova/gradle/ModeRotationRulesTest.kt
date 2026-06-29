@@ -1,7 +1,9 @@
 package com.aritr.rova.gradle
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModeRotationRulesTest {
@@ -387,5 +389,41 @@ class ModeRotationRulesTest {
         val expected = "ADR-0029 §5: FrontBack outside the capability-gated registry:\n" +
             "ui/screens/SomeScreen.kt:1"
         assertEquals(expected, msg)
+    }
+
+    // ── checkAeFpsRangeCapabilityGated (ADR-0034) ──────────────────────────
+
+    private fun svc(text: String) = listOf(
+        SourceFile("app/src/main/java/com/aritr/rova/service/RovaRecordingService.kt",
+            text.split("\n"), text)
+    )
+
+    @Test fun aeFpsRange_passesWhenRangeBuiltOnSeparateLineAndPassedByRef() {
+        val ok = """
+            val aeRange = android.util.Range(chosen.first, chosen.second)
+            ext.setCaptureRequestOption(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                aeRange,
+            )
+        """.trimIndent()
+        assertNull(ruleAeFpsRangeCapabilityGated(svc(ok)))
+    }
+
+    @Test fun aeFpsRange_firesOnInlineRangeLiteral() {
+        val bad = "ext.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(24, 30))"
+        val msg = ruleAeFpsRangeCapabilityGated(svc(bad))
+        assertNotNull(msg)
+        assertTrue(msg!!.contains("ADR-0034"))
+    }
+
+    @Test fun aeFpsRange_ignoresAvailableRangesCharacteristicLine() {
+        // the AVAILABLE list key must NOT trigger (different token), even though
+        // the .map { it.lower to it.upper } line is nearby.
+        val ok = "val a = info.getCameraCharacteristic(CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)"
+        assertNull(ruleAeFpsRangeCapabilityGated(svc(ok)))
+    }
+
+    @Test fun aeFpsRange_nullWhenServiceFileAbsent() {
+        assertNull(ruleAeFpsRangeCapabilityGated(emptyList()))
     }
 }

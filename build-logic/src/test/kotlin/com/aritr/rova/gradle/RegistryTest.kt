@@ -15,8 +15,8 @@ class RegistryTest {
     }
 
     /**
-     * The registry must hold EXACTLY the 46 gate ids — no missing/extra/typo.
-     * Update EXPECTED_IDS as each batch lands; final value is all 46.
+     * The registry must hold EXACTLY the 47 gate ids — no missing/extra/typo.
+     * Update EXPECTED_IDS as each batch lands; final value is all 47.
      */
     @Test
     fun registryHoldsExactlyTheExpectedIds() {
@@ -24,11 +24,12 @@ class RegistryTest {
     }
 
     companion object {
-        // All 46 gate ids — final registry.
+        // All 47 gate ids — final registry.
         val EXPECTED_IDS = sortedSetOf(
             "checkA11yAnimationGated",
             "checkA11yClickableHasRole",
             "checkA11yTargetSizeToken",
+            "checkAeFpsRangeCapabilityGated",
             "checkAtomicTerminalWriteForbiddenPair",
             "checkAudioModeFgsTypeMatch",
             "checkCompletedWriteOnlyFromPerformMerge",

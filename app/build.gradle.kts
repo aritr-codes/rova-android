@@ -922,6 +922,18 @@ val checkFrontBackCapabilityGated = tasks.register<com.aritr.rova.gradle.SourceC
     sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkFrontBackCapabilityGated.ok"))
 }
 
+// ADR-0034 — DualShot AE target fps range must be capability-gated (never a hard-coded literal).
+val checkAeFpsRangeCapabilityGated = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkAeFpsRangeCapabilityGated") {
+    group = "verification"
+    description = "DualShot AE target fps range must be capability-gated via AeFpsRangePolicy, never a hard-coded Range literal (ADR-0034)."
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/RovaRecordingService.kt")
+    )
+    checkId.set("checkAeFpsRangeCapabilityGated")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAeFpsRangeCapabilityGated.ok"))
+}
+
 // ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).
 val checkUserCopyVocabulary = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkUserCopyVocabulary") {
     group = "verification"
@@ -1179,6 +1191,7 @@ pluginManager.withPlugin("com.android.application") {
         dependsOn(checkNoLegacyModeStrings)
         dependsOn(checkSetTargetRotationBoundaryOnly)
         dependsOn(checkFrontBackCapabilityGated)
+        dependsOn(checkAeFpsRangeCapabilityGated)
         dependsOn(checkUserCopyVocabulary)
         dependsOn(checkRecordChromeLockSingleSite)
         dependsOn(checkSemanticIconNoRawAlpha)
