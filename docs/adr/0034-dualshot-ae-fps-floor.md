@@ -26,6 +26,13 @@ deliberate — in the worst case we prioritize cadence over brightness (a 24fps
 floor over the ~16.7fps collapse). The asymmetric ceiling still lets AE relax to
 24fps (not pinned at 30) to claw back light where it can.
 
+**Device fallback (when no `[24,30]` span exists).** Many devices expose only discrete
+pins (e.g. `(24,24)`, `(30,30)`) with no true range spanning the band. In that case the
+policy prefers the **lowest pinned fps ≥ floor** (`(24,24)` over `(30,30)`) — this still
+forbids the ~16fps collapse while giving AE the longest exposure for brightness, honoring
+the asymmetric intent. On RZCYA1VBQ2H every back camera lists exactly this set, so the
+applied range is `(24,24)`. A device that does expose a real `[24,30]` still gets `[24,30]`.
+
 This addresses Limiter 1 only. The encoder ceiling (Limiter 2, ~22fps output)
 is a separate later cycle.
 
