@@ -1,5 +1,7 @@
 package com.aritr.rova.service.dualrecord.internal
 
+import com.aritr.rova.BuildConfig
+
 /**
  * DualShot render threading (2026-05-21) — a single-slot, latest-wins
  * rendezvous between the [EglRouter] callback thread (producer) and one
@@ -27,7 +29,7 @@ internal class FrameMailbox<T : Any> {
     fun offer(item: T) {
         synchronized(lock) {
             if (poisoned) return
-            if (slot != null) overwrites++ // an unread frame is discarded — per-side drop
+            if (BuildConfig.DEBUG && slot != null) overwrites++ // an unread frame is discarded — per-side drop (DEBUG-only diagnostic)
             slot = item
             lock.notifyAll()
         }
