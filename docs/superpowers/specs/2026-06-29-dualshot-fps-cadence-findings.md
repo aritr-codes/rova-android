@@ -104,3 +104,34 @@ This is now a **two-part** fix, and order matters — fixing only AE would surfa
 2. **Reduce encoder service time** (Limiter 2). The ~45ms `take→finish` is the GPU draw + `glFinish` per side. Candidates for the fix spec to investigate: removing/relaxing the per-frame `glFinish` (rely on the existing fence-sync chain instead of a hard CPU stall), cheaper per-side draw, or revisiting the single-`CameraEffect` fan-out topology (the spec's gated escalation). **NOTE:** the encoder `service` rose 38ms (Run 1) → 45ms (Run 2); confirm whether that's the higher frame rate saturating the GPU vs thermal accumulation across back-to-back sessions before committing a fix.
 
 Fix = **separate brainstorm → spec → plan**, gated on this verdict. No code change in this slice. The probe should stay (DEBUG-gated) through the fix cycle to measure each step, then be removed before the fix PR per spec §5.
+
+---
+
+## AE floor — device verification (Limiter 1 fix, ADR-0034)
+
+**Shipped:** `AeFpsRangePolicy` (capability-gated, brightness-preferring fallback) + `applyAeFpsFloor` (intersect AE ranges across matched back cameras) + 47th gate `checkAeFpsRangeCapabilityGated`. SDD slice on `perf/dualshot-fps-diagnosis`.
+
+**Device:** RZCYA1VBQ2H, SD · DualShot, dim/indoor, 2×10s.
+
+### First device run (pre-fix) — FAILED, feature inert
+- `AE floor: selector resolved 2 cameras (need 1), skipping` (logged every binding). `DEFAULT_BACK_CAMERA` resolves to multiple physical back cameras (dumpsys: 6 back), so the original `matches.size != 1` identity guard skipped the apply.
+- Effective `aeTargetFpsRange` stayed `[15, 30]`.
+- Device fps-range data (every back camera, identical): `(15,15)(15,20)(20,20)(24,24)(15,30)(30,30)` — **no true `[24,30]`**. The original "prefer highest upper" policy would have returned `(30,30)` (pins 30fps, darkest dim) even once applied.
+
+### Fix (codex-reconciled, owner-approved)
+1. Identity guard → **intersect** `CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES` across all matched back cameras (no pre-bind API names the bound winner; the intersection is safe whichever binds). Skip only on 0 matches / empty intersection.
+2. Policy → prefer a **true ceiling-spanning range** (`upper==ceiling && lower>=floor && lower<upper`); else the **lowest pinned fps ≥ floor** (brightness). On this device → `(24,24)`; on a device exposing real `[24,30]` → `[24,30]`.
+
+### Second device run (post-fix) — PASS
+```
+AE floor: requested CONTROL_AE_TARGET_FPS_RANGE=[24, 24]    (both bindings, no "skipping")
+DualShot AE: exposure=40000000ns (~25fps ceiling) frameDuration=41666000ns (~24fps) aeTargetFpsRange=[24, 24] aeState=2(CONVERGED)
+EglRouter cadence [60f]: cameraHW median=41.7 p95=41.7 (~24.0fps) | wallArrival median≈40.5 (~24.8fps)
+EglEncoder[PORTRAIT/LANDSCAPE] cadence: consume median≈45.9 (~21.8fps) | service(take→finish)≈43ms | swap≈1.3ms | mailboxDrops=2
+```
+
+**Outcome:**
+- **Floor applied + honored:** effective `aeTargetFpsRange=[24,24]` (was `[15,30]`). Concern C resolved — the `Preview.Builder` Camera2Interop option **propagates through the `CameraEffect(PREVIEW)` fan-out** (the live session reflects the requested range).
+- **Limiter 1 fixed:** dim `cameraHW` held at **41.7ms / 24.0fps** (steady). The same class of dim scene collapsed to ~60ms / 16.7fps pre-fix (diagnosis Run 1). AE wanted longer exposure (40ms, would have gone lower-fps) but the floor pinned 24fps — the intended cadence-over-brightness tradeoff.
+- **Limiter 2 unchanged (expected):** encoder service ~43ms still caps **output ~22fps**; merged-file fps stays encoder-gated until the deferred Limiter 2 cycle. Camera-side success criterion met.
+- Camera opened cleanly (preview visible, no session-config error).
