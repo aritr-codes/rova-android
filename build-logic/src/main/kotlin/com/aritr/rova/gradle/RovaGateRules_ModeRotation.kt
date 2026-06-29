@@ -149,3 +149,34 @@ internal fun ruleFrontBackCapabilityGated(files: List<SourceFile>): String? {
     }
     return null
 }
+
+// ─── checkAeFpsRangeCapabilityGated ───────────────────────────────────────────
+
+/**
+ * ADR-0034 — the DualShot AE target fps range must be capability-gated via
+ * AeFpsRangePolicy, never a hard-coded literal. Scope: RovaRecordingService.kt.
+ * Forbid any single line that both references the request key
+ * `CONTROL_AE_TARGET_FPS_RANGE` AND constructs a `Range(` literal — that is the
+ * camera-open footgun. The legitimate form builds `android.util.Range(...)` on
+ * its own line and passes it by reference to setCaptureRequestOption.
+ * Detection on strippedLines (comment-aware); report from the raw line.
+ * The AVAILABLE-list key (CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) does not
+ * contain the substring `CONTROL_AE_TARGET_FPS_RANGE`, so it never triggers.
+ * Empty input / file absent: null (forbid gate, nothing to forbid).
+ */
+internal fun ruleAeFpsRangeCapabilityGated(files: List<SourceFile>): String? {
+    val suffix = "service/RovaRecordingService.kt"
+    val src = files.firstOrNull { it.relPath.replace('\\', '/').endsWith(suffix) } ?: return null
+    val offenders = mutableListOf<String>()
+    src.lines.forEachIndexed { i, line ->
+        val s = src.strippedLine(i)
+        if (s.contains("CONTROL_AE_TARGET_FPS_RANGE") && s.contains("Range(")) {
+            offenders += "$suffix:${i + 1}: ${line.trim()}"
+        }
+    }
+    if (offenders.isNotEmpty()) {
+        return "ADR-0034: AE target fps range must be capability-gated via AeFpsRangePolicy, " +
+            "not a hard-coded Range(...) literal:\n" + offenders.joinToString("\n")
+    }
+    return null
+}
