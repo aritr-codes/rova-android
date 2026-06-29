@@ -30,13 +30,19 @@ All changes in `RovaRecordingService.setupDualCamera` (~lines 2095–2254) plus 
 
 In `setupDualCamera`, after `provider` is resolved (~line 2109) and before the preview is built (~line 2238):
 
-1. Resolve the bound camera's `CameraInfo`: `currentCameraSelector.filter(provider.getAvailableCameraInfos())` → first element (the back camera, `DEFAULT_BACK_CAMERA`).
+1. Resolve the bound camera's `CameraInfo`: `currentCameraSelector.filter(provider.getAvailableCameraInfos())`. **Camera-identity guard (codex):** require the filter to resolve to **exactly one** `CameraInfo`. If it yields 0 or >1, skip — set nothing (a multi-match means `.first()` might read ranges from a camera other than the one CameraX binds). `DEFAULT_BACK_CAMERA` resolves to a single camera on the target device and typical hardware.
 2. Read its supported ranges: `Camera2CameraInfo.from(cameraInfo).getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)` → `Array<Range<Int>>?`.
 3. Map to primitive `Int` pairs and call the pure helper `AeFpsRangePolicy.choose(available, floor = 24, ceiling = 30)` → a chosen `(lower, upper)` or **null**.
 4. If non-null, wrap as `android.util.Range(lower, upper)` at the edge and apply via `Camera2Interop.Extender(previewBuilder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, chosen)`. If null, set nothing — today's `[15,30]` default behavior is preserved.
 5. The existing DEBUG `attachAeMetadataProbe` (from PR #154) stays. It logs the *effective* `CONTROL_AE_TARGET_FPS_RANGE` from each capture result, so device runs confirm the floor took.
 
 The whole read+choose+apply block is wrapped so any exception (characteristics unavailable, interop quirk) is caught and logged, and the binding proceeds unchanged — the camera must always open. Best-effort, never blocking, mirroring the probe's contract.
+
+### 3.1 Why `Preview.Builder` governs the capture (codex risk C) + empirical confirmation
+
+`Camera2Interop.Extender#setCaptureRequestOption` documents per-use-case config, not a session-wide guarantee. Here that is sufficient **by topology**: the DualShot `UseCaseGroup` (line 2244) is **Preview + CameraEffect only — no separate `VideoCapture`**. There is a single camera repeating request (the Preview's), and the `CameraEffect(target = PREVIEW)` samples exactly that stream to feed both GL encoders. So the AE option on the `Preview.Builder` reaches the only stream that matters.
+
+This is **empirically confirmed, not assumed**: the existing DEBUG `attachAeMetadataProbe` reads the *effective* `CONTROL_AE_TARGET_FPS_RANGE` straight from each `TotalCaptureResult`. Device verification (§8) asserts the effective range equals the chosen range — direct proof the option took session-wide. **Escalation (out of scope unless device disproves topology):** if the effective range on-device does not match the chosen range, the follow-up applies the same option via the documented session-wide `Camera2CameraControl` (post-bind); this slice does not pre-emptively add that path (YAGNI — the single-stream topology + probe confirmation make it unnecessary). The CameraEffect/EglRouter/encoder path is GL, downstream of the sensor, and is unaffected by the AE option.
 
 ## 4. Pure helper — `AeFpsRangePolicy`
 
