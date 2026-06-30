@@ -135,3 +135,79 @@ EglEncoder[PORTRAIT/LANDSCAPE] cadence: consume median≈45.9 (~21.8fps) | servi
 - **Limiter 1 fixed:** dim `cameraHW` held at **41.7ms / 24.0fps** (steady). The same class of dim scene collapsed to ~60ms / 16.7fps pre-fix (diagnosis Run 1). AE wanted longer exposure (40ms, would have gone lower-fps) but the floor pinned 24fps — the intended cadence-over-brightness tradeoff.
 - **Limiter 2 unchanged (expected):** encoder service ~43ms still caps **output ~22fps**; merged-file fps stays encoder-gated until the deferred Limiter 2 cycle. Camera-side success criterion met.
 - Camera opened cleanly (preview visible, no session-config error).
+
+---
+
+## Limiter-2 encoder micro-diagnosis — service-time split (2026-06-29, branch `perf/dualshot-encoder-limiter2-diagnosis`)
+
+**Instrumentation:** DEBUG-only edit to `EncoderRenderThread` — the lumped `service(take→finish)` bucket split into `{glWaitSync, drawSubmit, glFinish}` by moving the load-bearing `glFinish()` out of `drawFrame()` into `run()` (semantically identical: same thread/context, after every draw command, before swap; codex-reconciled). `glWaitSync` is server-side, so `wait` measures only CPU call overhead — the GPU-side fence wait retires inside `glFinish`. Device RZCYA1VBQ2H, SD · DualShot, dim/indoor (AE floor pins **24fps** → camera input already ≥ the encoder ceiling, so a bright scene is unnecessary to expose Limiter 2). Thermal read adb-side (`dumpsys thermalservice`), no extra code.
+
+### Data (medians, both sides near-identical)
+
+| Run | Thermal | `wait` | `draw` | **`finish`** | service | `finish` p95 | mailboxDrops |
+|---|---|---|---|---|---|---|---|
+| COLD | status 0 (AP ~46°C) | 0.1 ms | 0.7 ms | **43.2–43.4 ms** | 44.1–44.4 ms | ~51–53 ms | 5–8 |
+| WARM | **status 2 throttling** (AP 48.9°C, SKIN 43°C) | 0.1 ms | 0.7 ms | **42.1–43.0 ms** | 43.1–44.2 ms | 60.9–63.3 ms | 18–20 |
+
+(Camera side held `cameraHW=41.7ms`/24fps, `aeTargetFpsRange=[24,24]` throughout — AE floor working.)
+
+### Verdict — the ~45ms service is ~97% `glFinish`, and the median is THERMAL-INVARIANT (saturation, not heat)
+
+- **`draw` ruled out (0.7ms).** CPU GL submission of the single SD quad is negligible → candidate direction #2 ("cheaper per-side draw") has **no headroom** and is dead.
+- **`wait` ruled out (0.1ms).** The fence chain costs nothing on the CPU; any real wait is inside `finish`.
+- **Thermal ruled out as the median driver.** Intervention proof: SoC moved from status 0 → status 2 (actively throttling, thermal warning card shown) and the **median `finish` did not move (~43ms both)**. Thermal inflated only the **tail** (p95 51→62ms) and **mailboxDrops** (6→19). Heat worsens variance/drops, not the floor.
+- **`glFinish` GPU-drain (43ms) is the limiter** — structurally pinned near the 41.7ms (24fps) frame period, identical cold/warm. One SD quad is sub-millisecond of genuine shading, so 43ms is **serialization/backpressure**, not pixel work: per camera frame the GPU runs 1 OES→FBO blit (callback thread) + 2 encoder full-frame draws through one GPU, and each encoder's `glFinish` drains the whole queue.
+
+### Open sub-fork for the fix brainstorm (NOT yet resolved)
+
+`finish ≈ frame period` is consistent with **two** mechanisms; one more discriminator is needed before picking a fix:
+1. **GPU 3-pass serialization** — the three full-frame passes + per-`glFinish` full drains can't overlap, so wall-clock ≈ sum.
+2. **MediaCodec input-buffer backpressure surfacing inside `glFinish`** (codex flag) — rendering into the codec producer surface stalls until the encoder frees an input buffer; if MediaCodec encodes ~22fps at the configured size/bitrate, `glFinish` blocks ~45ms even though `eglSwapBuffers` is 1.3ms. Discriminator candidates: measure MediaCodec dequeue/output rate directly, or drop bitrate/resolution and watch whether `finish` falls (codec-bound) or holds (GPU-bound).
+
+**Probe stays in-tree (DEBUG) through the fix cycle; removed before the Limiter-2 PR (spec §5).**
+
+---
+
+## Limiter-2 RESOLUTION — sub-fork closed, no-fix decision (2026-06-30)
+
+Two further DEBUG probes + an experiment resolved the open sub-fork and the fix question. Device RZCYA1VBQ2H, SD · DualShot, dim/indoor, AE floor pinning camera `cameraHW=41.7ms` (24fps) throughout.
+
+### Probe 1 — drain-path (codec output cadence + muxer write cost)
+
+Added `dequeueOutputBuffer` cadence + `onSample` duration probes to `EncoderSurface.drainLoop`.
+
+| metric | DUAL (baseline) |
+|---|---|
+| codec dequeue cadence (TRUE delivered output) | 44.6 ms (22.4 fps) |
+| muxer `write(onSample)` | **0.5 ms median, 15.3 ms max** |
+
+→ **Muxer backpressure RULED OUT.** The synchronous `DualMuxer.writeSampleData` costs 0.5ms — it does not starve `releaseOutputBuffer`. The codec's true delivered output is ~22fps, matching the render-side `glFinish` cadence.
+
+### Experiment — `KEY_OPERATING_RATE=120` + `KEY_PRIORITY=0`
+
+DVFS/scheduling hints on both `EncoderSurface` formats. Result: **NULL** — `glFinish` 42.7→42.3 / 40.2ms (within noise), cadence unchanged. The Exynos codec ignored the hints or is not clock-starved. No cheap software lever. (Reverted.)
+
+### Probe 2 — single-side discriminator (codex-preferred over pbuffer)
+
+Ran only the PORTRAIT encoder (one HW codec + one render thread); LANDSCAPE skipped.
+
+| metric | DUAL | SINGLE-SIDE |
+|---|---|---|
+| `glFinish` | 42.7 ms | **37.1–37.7 ms** |
+| render consume cadence | 45.3 ms (22 fps) | 40.9–43.2 ms (23–24 fps) |
+| codec dequeue (true output) | 44.6 ms (22.4 fps) | **40.7–41.7 ms (24.0–24.6 fps)** |
+| mailboxDrops (~470 f) | ~40 | **2–9** |
+
+### Verdict (codex-reconciled)
+
+- **`glFinish` did NOT collapse single-side** (37ms, not <5ms) → **not** pure dual-encoder contention, and **not** GPU fill/shader cost (a quad is microseconds). The base ~37ms is a shared downstream sync stall — codec input-surface producer-queue **or** EGL-context/driver serialization (the single-side cut removed both the 2nd codec **and** the 2nd EGL context, so the two cannot be separated from this data alone; a pbuffer probe would refine the wording but not the decision).
+- **Running both encoders adds ~5ms/frame** of structural dual-path contention, tipping each side from `≤41.7ms` (keeps up with the 24fps camera) to `42.7ms` → **~22fps + ~10% drops**.
+- **The entire recoverable prize is ~2fps (22→24).** Every remaining lever is structural (stagger/serialize encodes, shared-encode + muxer crop, or lower per-side resolution/bitrate — the last a regression vs the just-shipped user-chosen Quality presets) and sits in the **load-bearing `glFinish`/FBO/fence stability stack** (#25–#35).
+
+### Decision — DOCUMENT & CLOSE, no fix (owner-approved 2026-06-30)
+
+Limiter 2 is an **inherent structural dual-HW-encode contention limit** on this Exynos config: a single encode sustains 24fps; two concurrent encodes settle at ~22fps. No cheap lever exists (operating-rate/priority = null), and the ~2fps ceiling does not justify the stability-stack risk of a topology rework. **~22fps is shipped and accepted** for a hands-free periodic background recorder.
+
+**Caveats (codex, scope discipline):** one device / one codec / one preset / one camera floor; do not generalize. "Not GPU" means "not shader/fill," not "not driver sync." operating-rate null = "no cheap lever on THIS driver," not "no scheduler lever in principle."
+
+**Probe removed** (this slice): the DEBUG fps-cadence probe (`CadenceProbe`, `CadenceStats`, `EglRouter`/`EglEncoder` taps, `FrameMailbox.overwriteCount` + tests) is reverted — its diagnostic purpose is complete. The Camera2Interop **AE-metadata log** in `RovaRecordingService` is **kept** (it verifies the shipped Limiter-1 floor and is outside the cadence-probe scope per the handoff enumeration).

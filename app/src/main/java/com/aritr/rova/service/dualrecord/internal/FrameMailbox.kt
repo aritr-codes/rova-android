@@ -1,7 +1,5 @@
 package com.aritr.rova.service.dualrecord.internal
 
-import com.aritr.rova.BuildConfig
-
 /**
  * DualShot render threading (2026-05-21) — a single-slot, latest-wins
  * rendezvous between the [EglRouter] callback thread (producer) and one
@@ -23,13 +21,11 @@ internal class FrameMailbox<T : Any> {
     private val lock = java.lang.Object()
     private var slot: T? = null
     private var poisoned = false
-    private var overwrites = 0L
 
     /** Overwrite the slot with [item] and wake a waiting [take]. No-op once poisoned. */
     fun offer(item: T) {
         synchronized(lock) {
             if (poisoned) return
-            if (BuildConfig.DEBUG && slot != null) overwrites++ // an unread frame is discarded — per-side drop (DEBUG-only diagnostic)
             slot = item
             lock.notifyAll()
         }
@@ -42,13 +38,6 @@ internal class FrameMailbox<T : Any> {
             lock.notifyAll()
         }
     }
-
-    /**
-     * Diagnostic (2026-06-29 fps-cadence) — count of unread frames
-     * discarded by [offer] (the per-side frame-drop). Read off the hot
-     * path, e.g. at encoder shutdown.
-     */
-    fun overwriteCount(): Long = synchronized(lock) { overwrites }
 
     /**
      * Block until an item is offered or the mailbox is poisoned. Returns
