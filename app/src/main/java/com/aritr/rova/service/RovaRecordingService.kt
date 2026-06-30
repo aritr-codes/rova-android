@@ -26,7 +26,6 @@ import androidx.camera.core.CameraState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
@@ -208,7 +207,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var cameraProvider: ProcessCameraProvider? = null
     private var recordingJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var currentRecording: Recording? = null
+    private var currentSingleRecording: com.aritr.rova.service.singlerecord.SingleRecording? = null
     private var segmentCount = 0
     private val setupMutex = kotlinx.coroutines.sync.Mutex()
     // ADR-0021 — camera warm across in-app navigation.
@@ -2799,7 +2798,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
         var watchdogArmed = false
 
         try {
-            val videoCap = videoCapture ?: run {
+            val recorder = currentSingleRecorder ?: run {
                 return failRecording("Camera encoder is not ready")
             }
 
@@ -2846,40 +2845,11 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // (they are session-frozen at start) — without this write a locked
             // session's FIRST clip inherits the stale idle-tracked rotation
             // (owner smoke 2026-06-12, finding #4).
-            try { videoCap.targetRotation = segmentRotation } catch (_: Exception) {}
             _serviceState.update {
                 it.copy(currentSegmentRotation = segmentRotation, pendingNextRotation = segmentRotation)
             }
 
             val outputOptions = FileOutputOptions.Builder(requireNotNull(videoFile)).build()
-
-            var pendingRecording = videoCap.output.prepareRecording(this, outputOptions)
-
-            // ADR 0006 B18: audio-mode is locked at session start and
-            // already verified by the per-segment gate. Drive the
-            // recorder config from `currentAudioMode`, NOT a fresh
-            // permission check. The gate guarantees that VIDEO_AUDIO
-            // sessions still have RECORD_AUDIO; if mic was revoked,
-            // the gate already terminated the session above.
-            //
-            // Lint-gate restoration: the gate-then-config window is not
-            // atomic — RECORD_AUDIO can be revoked between the gate
-            // pass and CameraX's audio enable. The FGS-type bitfield
-            // is immutable mid-session (B18), so we cannot fall back
-            // to video-only; route the race to the same
-            // PERMISSION_REVOKED termination path the gate uses.
-            if (currentAudioMode == com.aritr.rova.data.AudioMode.VIDEO_AUDIO) {
-                try {
-                    pendingRecording = pendingRecording.withAudioEnabled()
-                } catch (se: SecurityException) {
-                    RovaLog.w(
-                        "recordSegment: RECORD_AUDIO revoked between gate and CameraX config — terminating",
-                        se
-                    )
-                    currentStopReason = com.aritr.rova.data.StopReason.PERMISSION_REVOKED
-                    return SegmentResult.Terminated
-                }
-            }
 
             // R2: Fresh deferred for this segment's finalize event
             recordingFinalized = CompletableDeferred()
@@ -2890,13 +2860,30 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // var would be clobbered by the next iteration before finalize fires.
             val segmentStartWallClock = System.currentTimeMillis()
 
-            currentRecording = pendingRecording.start(ContextCompat.getMainExecutor(this)) { event ->
+            // SingleVideoRecorder owns the VideoCapture write surface: it applies
+            // the per-segment rotation, prepares + (audio-)enables, and starts the
+            // Recording. The finalize callback below stays here — it closes over
+            // service state (sessionStore, deferreds, _serviceState, persist jobs).
+            // ADR 0006 B18: audio-mode is locked at session start and verified by
+            // the per-segment gate; the gate-then-config window is not atomic, so
+            // a RECORD_AUDIO revocation surfaces as SecurityException from
+            // withAudioEnabled() inside start() — route it to the same
+            // PERMISSION_REVOKED termination path (the FGS-type bitfield is
+            // immutable mid-session, so we cannot fall back to video-only).
+            currentSingleRecording = try {
+                recorder.start(
+                    context = this,
+                    outputOptions = outputOptions,
+                    segmentRotation = segmentRotation,
+                    enableAudio = currentAudioMode == com.aritr.rova.data.AudioMode.VIDEO_AUDIO,
+                    executor = ContextCompat.getMainExecutor(this),
+                ) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
                         RovaLog.d { "Recording STARTED" }
                     }
                     is VideoRecordEvent.Finalize -> {
-                        currentRecording = null
+                        currentSingleRecording = null
                         val success = !event.hasError() &&
                             videoFile?.exists() == true &&
                             (videoFile?.length() ?: 0L) > 0L
@@ -2989,6 +2976,14 @@ class RovaRecordingService : Service(), LifecycleOwner {
                     is VideoRecordEvent.Status -> { /* no-op */ }
                 }
             }
+            } catch (se: SecurityException) {
+                RovaLog.w(
+                    "recordSegment: RECORD_AUDIO revoked between gate and CameraX config — terminating",
+                    se
+                )
+                currentStopReason = com.aritr.rova.data.StopReason.PERMISSION_REVOKED
+                return SegmentResult.Terminated
+            }
 
             RovaLog.d { "recordSegment: Recording initialized, waiting ${nSeconds}s" }
 
@@ -3022,8 +3017,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             delay(nSeconds * 1000)
 
             RovaLog.d { "recordSegment: Stopping recording normally" }
-            currentRecording?.stop()
-            currentRecording = null
+            currentSingleRecording?.stop()
+            currentSingleRecording = null
 
             // R2 + C18: wait for the Finalize callback. If it does not fire
             // within FINALIZE_TIMEOUT_MS the segment file may still be valid
@@ -3049,8 +3044,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
 
         } catch (e: CancellationException) {
             RovaLog.d { "recordSegment: Cancelled" }
-            try { currentRecording?.stop() } catch (e2: Exception) {}
-            currentRecording = null
+            try { currentSingleRecording?.stop() } catch (e2: Exception) {}
+            currentSingleRecording = null
 
             // C18: do NOT preemptively complete recordingFinalized. CameraX's
             // Finalize callback fires asynchronously after stop(); if we
@@ -3754,8 +3749,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private fun releaseResources() {
         recordingJob?.cancel()
         stopAndMergeJob?.cancel()
-        try { currentRecording?.stop() } catch (e: Exception) {}
-        currentRecording = null
+        try { currentSingleRecording?.stop() } catch (e: Exception) {}
+        currentSingleRecording = null
         currentDualRecording?.let { try { it.stop() } catch (_: Exception) {} }
         currentDualRecording = null
         currentDualRecorder?.release()
@@ -3805,8 +3800,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         recordingJob?.cancel()
         _serviceState.update { it.copy(isPeriodicActive = false, isRecording = false) }
 
-        try { currentRecording?.stop() } catch (e: Exception) { e.printStackTrace() }
-        currentRecording = null
+        try { currentSingleRecording?.stop() } catch (e: Exception) { e.printStackTrace() }
+        currentSingleRecording = null
 
         stopAndMergeJob?.cancel()
         stopAndMergeJob = serviceScope.launch {
