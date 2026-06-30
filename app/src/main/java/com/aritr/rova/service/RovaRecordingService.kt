@@ -287,7 +287,7 @@ class RovaRecordingService : Service(), LifecycleOwner {
     private var hasStableSnap: Boolean = false
     private var lastEffectiveTargetRotation: Int? = null
     // Phase 6.1b — dual recorder + dual recording handle for P+L mode.
-    // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
+    // Mirrors videoCapture / currentSingleRecording lifecycle 1:1 for the dual
     // path. Released on service teardown.
     private var currentDualRecorder: com.aritr.rova.service.dualrecord.DualVideoRecorder? = null
     // Single-mode recorder collaborator (mirror of currentDualRecorder).
@@ -597,6 +597,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentDualRecording = null
         currentDualRecorder?.release()
         currentDualRecorder = null
+        currentSingleRecorder?.release()
+        currentSingleRecorder = null
         markCameraUnbound()  // Phase 3.5
         // PR-α (ADR-0029 §Decision 2,3) — Single use cases unbound for background;
         // stop tracking. Re-enabled on the next Single bind success.
@@ -1640,6 +1642,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
             currentDualRecording = null
             currentDualRecorder?.release()
             currentDualRecorder = null
+            currentSingleRecorder?.release()
+            currentSingleRecorder = null
             markCameraUnbound()  // Phase 3.5
             // PR-α (ADR-0029 §Decision 2,3) — Single use cases are being unbound for
             // a fresh setup; stop tracking. setupCamera() re-enables on Single rebind.
