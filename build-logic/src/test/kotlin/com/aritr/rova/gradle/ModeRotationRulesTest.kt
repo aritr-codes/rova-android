@@ -313,6 +313,28 @@ class ModeRotationRulesTest {
         assertNull(RovaGateRules.run("checkSetTargetRotationBoundaryOnly", files))
     }
 
+    @Test
+    fun setTargetRotation_inSingleRecordPackage_isAllowed() {
+        val src = SourceFile(
+            relPath = "com/aritr/rova/service/singlerecord/SingleVideoRecorder.kt",
+            lines = listOf("        videoCapture = VideoCapture.Builder(recorder).setTargetRotation(rot).build()"),
+            text = "        videoCapture = VideoCapture.Builder(recorder).setTargetRotation(rot).build()\n",
+        )
+        assertNull(ruleSetTargetRotationBoundaryOnly(listOf(src)))
+    }
+
+    @Test
+    fun setTargetRotation_outsideBoundary_stillRedFires() {
+        val src = SourceFile(
+            relPath = "com/aritr/rova/ui/screens/RecordScreen.kt",
+            lines = listOf("    preview.setTargetRotation(rot)"),
+            text = "    preview.setTargetRotation(rot)\n",
+        )
+        val msg = ruleSetTargetRotationBoundaryOnly(listOf(src))
+        assertNotNull(msg)
+        assertTrue(msg!!.startsWith("ADR-0029 §3: setTargetRotation outside boundary-owning files:"))
+    }
+
     // ─── checkFrontBackCapabilityGated ────────────────────────────────────────
 
     @Test
