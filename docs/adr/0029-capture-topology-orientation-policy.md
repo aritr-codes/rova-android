@@ -402,7 +402,10 @@ wrappers stay thin seams.
     `RovaSettings.kt`; comment/KDoc lines skipped — documenting a legacy value is
     legal, branching on one is not);
   - `checkSetTargetRotationBoundaryOnly` — `setTargetRotation` reachable only
-    from `RovaRecordingService.kt` / `service/dualrecord/` (§3);
+    from `RovaRecordingService.kt` / `service/dualrecord/` / `service/singlerecord/` (§3);
+    `service/singlerecord/SingleVideoRecorder` owns the single-mode `VideoCapture` use case
+    and its build-time `setTargetRotation`, symmetric with `service/dualrecord/` for the dual
+    pipeline (2026-06-30).
   - `checkFrontBackCapabilityGated` — `FrontBack` referenced only by
     `CaptureTopology.kt` / `CaptureModes.kt` (the capability-gate site, §5);
     PR-δ extends the allowlist with the concurrent-camera module it builds;

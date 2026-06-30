@@ -102,7 +102,7 @@ internal fun ruleNoLegacyModeStrings(files: List<SourceFile>): String? {
 
 /**
  * Verbatim lift of checkSetTargetRotationBoundaryOnly.
- * Forbid setTargetRotation( outside service/RovaRecordingService.kt and service/dualrecord/.
+ * Forbid setTargetRotation( outside service/RovaRecordingService.kt, service/dualrecord/, and service/singlerecord/.
  * NO comment-skip — old gate scanned ALL lines including comments (no trimStart guard present).
  * Empty input: null (forbid gate, no files = no offenders).
  */
@@ -111,7 +111,8 @@ internal fun ruleSetTargetRotationBoundaryOnly(files: List<SourceFile>): String?
     files.forEach { f ->
         val rel = f.relPath.replace('\\', '/').substringAfter("com/aritr/rova/")
         val allowed = rel.endsWith("service/RovaRecordingService.kt") ||
-            rel.contains("service/dualrecord/")
+            rel.contains("service/dualrecord/") ||
+            rel.contains("service/singlerecord/")
         if (allowed) return@forEach
         f.lines.forEachIndexed { i, line ->
             if (line.contains("setTargetRotation(")) offenders += "$rel:${i + 1}"
