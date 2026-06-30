@@ -80,6 +80,9 @@ app/src/main/java/com/aritr/rova/
 │   ├── RovaRecordingService.kt      # FGS — CameraX bind, segment loop
 │   ├── RovaTickReceiver.kt          # Segment-boundary AlarmManager fire
 │   ├── RovaStopReceiver.kt          # Loop-count-exhausted STOP fire
+│   ├── singlerecord/                # Single-mode VideoCapture<Recorder> build +
+│   │                                # per-segment Recording start/stop
+│   │                                # (SingleVideoRecorder, mirror of dualrecord/)
 │   ├── dualrecord/                  # P+L dual-encode (CameraEffect + EGL14 fan-out)
 │   ├── export/                      # Tier1/2/3 exporters, ExportRecoveryRunner,
 │   │                                # ExportCleanupPredicate, MediaScanWaiter
@@ -122,6 +125,10 @@ Atomic manifest writes: `SessionStore` writes to a temp file then renames. Termi
 ### Tiered public export
 
 `Tier1Exporter` (API 29+ MediaStore), `Tier2Exporter` (API 26–28 scoped temp + `MediaScannerConnection`), `Tier3Exporter` (API 24–25 direct path with `WRITE_EXTERNAL_STORAGE maxSdkVersion=28`). Tier 1 pending-row visibility rules — per ADR-0003 amendment and ROADMAP v6 — are enforced by `checkExportIsPendingGuarded`, `checkExportSetIncludePendingGuarded`, `checkExportQueryArgMatchPendingGuarded`, `checkExportPendingVisibilityOnQuery`, `checkPendingFdModeIsRW`. Cleanup predicate (`ExportCleanupPredicate`) is the single decision point; `checkExportPipelineSingleEntry` enforces that.
+
+### Single-mode recording (`service/singlerecord/`)
+
+Single-capture (non-DualShot) topology. `SingleVideoRecorder` is the collaborator that owns the CameraX `VideoCapture<Recorder>` build (incl. its build-time `setTargetRotation` — ADR-0029 §3 boundary, this package allowlisted symmetric with `dualrecord/`) and the per-segment `Recording` start/stop, mirroring `service/dualrecord/DualVideoRecorder`. The service binds `recorder.videoCapture` in `setupSingleCamera` and drives one `recorder.start(...)` per segment from `recordSegment`; the active handle is `currentSingleRecording: SingleRecording?`. The segment loop, watchdog, finalize-coordination deferreds, persistence, `performMerge`, terminal writes, wakelock, and recovery stay in the service (exactly as the dual path keeps `recordSegmentDual`/`performMergeDual`). CameraX `VideoRecordEvent` is passed straight through to the service callback (no event remap); the `withAudioEnabled()` `SecurityException` propagates → `PERMISSION_REVOKED`. Pure JVM test on `SingleQualitySelector` (D-deviation — CameraX `Quality` only at the recorder edge). **Invariant (do not "fix"):** `SingleVideoRecorder.start()` overwrites `active` WITHOUT a `check(active==null)` guard — unlike `DualVideoRecorder` which clears its handle on stop via `onStopped`; single REUSES one recorder across all segments and never clears `active`, so a guard would false-fail segment 2. Extracted from inline-in-service in PR #159 (2026-06-30, zero behavior change, device-verified RZCYA1VBQ2H) — closes the one structural target named by the service-split audit (`memory/project_service_decomp_audit.md`).
 
 ### DualShot (P+L mode)
 
