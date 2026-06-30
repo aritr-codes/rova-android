@@ -1,5 +1,14 @@
 # NEXT TASK — DualShot encoder Limiter 2 (fresh-session handoff)
 
+> **⛔ HISTORICAL / CLOSED (2026-06-30, PR #157 → master `b1f7850`).** Limiter 2 was
+> diagnosed and **closed with no fix**: the ~45ms encoder service / ~22fps merged
+> output is **inherent structural dual-HW-encode contention** on this Exynos (single
+> encode = ~37ms/24fps; two concurrent encodes add ~5ms → ~22fps). No cheap lever
+> (`OPERATING_RATE`/`PRIORITY` = null; muxer 0.5ms); the ~2fps prize is not worth the
+> stability-stack risk. The DEBUG cadence probe has been removed. This document is kept
+> for provenance only — do **not** act on the task below. Full verdict:
+> `docs/superpowers/specs/2026-06-29-dualshot-fps-cadence-findings.md` ("Limiter-2 RESOLUTION").
+
 **Created:** 2026-06-29, after the AE-floor (Limiter 1) slice shipped to master (`4325808`, PR #155).
 **Paste the "Session prompt" block below into a fresh session to continue.**
 
