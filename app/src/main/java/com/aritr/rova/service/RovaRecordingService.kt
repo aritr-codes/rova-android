@@ -25,9 +25,6 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.FallbackStrategy
-import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
@@ -45,6 +42,8 @@ import com.aritr.rova.MainActivity
 import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.internal.AeFpsRangePolicy
+import com.aritr.rova.service.singlerecord.SingleVideoRecorder
+import com.aritr.rova.service.singlerecord.SingleVideoRecorderConfig
 import com.aritr.rova.service.notification.ChronoSpec
 import com.aritr.rova.service.notification.DotState
 import com.aritr.rova.service.notification.DotsPlan
@@ -292,6 +291,9 @@ class RovaRecordingService : Service(), LifecycleOwner {
     // Mirrors videoCapture / currentRecording lifecycle 1:1 for the dual
     // path. Released on service teardown.
     private var currentDualRecorder: com.aritr.rova.service.dualrecord.DualVideoRecorder? = null
+    // Single-mode recorder collaborator (mirror of currentDualRecorder).
+    // Owns the VideoCapture<Recorder> use case + per-segment Recording start.
+    private var currentSingleRecorder: SingleVideoRecorder? = null
     // Phase 6.1c — preview surfaces registered by DualPreviewZone. Survives
     // forceReconfigureCamera() (camera flip / mode change) by being replayed
     // onto the new DualVideoRecorder in setupDualCamera. Keyed by side;
@@ -1704,28 +1706,6 @@ class RovaRecordingService : Service(), LifecycleOwner {
             try {
             RovaLog.d { "setupCamera: Initializing UseCases (Preview + VideoCapture)" }
 
-            // Strict match against QualityPresets canonical labels:
-            // any non-canonical resolutionStr falls through to Quality.FHD
-            // exactly as before — we deliberately do NOT route through
-            // QualityPresets.canonicalize here, since that would widen
-            // the contract to honor "1080p" / "UHD" aliases the picker
-            // never produces and the manifest never persists.
-            val quality = when (resolutionStr) {
-                QualityPresets.UHD -> Quality.UHD
-                QualityPresets.FHD -> Quality.FHD
-                QualityPresets.HD -> Quality.HD
-                QualityPresets.SD -> Quality.SD
-                else -> Quality.FHD
-            }
-
-            val qualitySelector = QualitySelector.fromOrderedList(
-                listOf(quality, Quality.FHD, Quality.HD, Quality.SD),
-                FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
-            )
-
-            val recorder = Recorder.Builder()
-                .setQualitySelector(qualitySelector)
-                .build()
             val displayRotation = (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
                 ?: android.view.Surface.ROTATION_0
@@ -1738,7 +1718,18 @@ class RovaRecordingService : Service(), LifecycleOwner {
             // (Single path) so the HUD pending-orientation state is fed regardless of
             // policy; the resolver pins the ENCODED output at segment start.
             val targetRot = computeTargetRotation(displayRotation)
-            videoCapture = VideoCapture.Builder(recorder).setTargetRotation(targetRot).build()
+            // Single-mode recorder owns the VideoCapture<Recorder> build (incl.
+            // build-time setTargetRotation — ADR-0029 §3 boundary). Mirror of the
+            // dual path's DualVideoRecorder. The service caches the use case in
+            // `videoCapture` for binding + idle-preview live rotation tracking.
+            currentSingleRecorder?.release()
+            currentSingleRecorder = SingleVideoRecorder(
+                SingleVideoRecorderConfig(
+                    resolutionStr = resolutionStr,
+                    buildTimeTargetRotation = targetRot,
+                )
+            )
+            videoCapture = currentSingleRecorder!!.videoCapture
 
             // Preview rotation is owned by PreviewView/display, not the sensor listener
             // (see enableOrientationTracking). Seed with the bind-time display rotation;
@@ -1798,6 +1789,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
                 disableOrientationTracking()
                 preview = null
                 videoCapture = null
+                currentSingleRecorder?.release()
+                currentSingleRecorder = null
                 camera = null
                 configuredResolution = null
                 boundToDummy = false
@@ -3767,6 +3760,8 @@ class RovaRecordingService : Service(), LifecycleOwner {
         currentDualRecording = null
         currentDualRecorder?.release()
         currentDualRecorder = null
+        currentSingleRecorder?.release()
+        currentSingleRecorder = null
         try { cameraProvider?.unbindAll() } catch (e: Exception) {}
         markCameraUnbound()  // Phase 3.5 — service teardown
         // PR-α (ADR-0029 §Decision 2,3) — service teardown; stop orientation tracking.
