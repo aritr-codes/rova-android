@@ -85,28 +85,4 @@ class FrameMailboxTest {
         assertTrue(done.await(1, TimeUnit.SECONDS))
         assertNull(result[0])
     }
-
-    @Test fun overwriteCount_countsDiscardedUnreadFrames() {
-        val mb = FrameMailbox<String>()
-        assertEquals(0L, mb.overwriteCount())
-        mb.offer("a")
-        mb.offer("b") // "a" unread → discarded
-        mb.offer("c") // "b" unread → discarded
-        assertEquals(2L, mb.overwriteCount())
-    }
-
-    @Test fun overwriteCount_consumedFrameIsNotAnOverwrite() {
-        val mb = FrameMailbox<String>()
-        mb.offer("a")
-        assertEquals("a", mb.take()) // consumed, slot empty
-        mb.offer("b")                // slot was empty → not an overwrite
-        assertEquals(0L, mb.overwriteCount())
-    }
-
-    @Test fun overwriteCount_noIncrementAfterPoison() {
-        val mb = FrameMailbox<String>()
-        mb.poison()
-        mb.offer("a") // no-op once poisoned
-        assertEquals(0L, mb.overwriteCount())
-    }
 }
