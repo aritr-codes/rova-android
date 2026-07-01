@@ -1,5 +1,7 @@
 # NEXT TASK — fresh-session handoff (after SingleVideoRecorder extraction shipped)
 
+> ⚠️ **HISTORICAL — SUPERSEDED 2026-07-01.** Both candidates in this handoff shipped: δ0 CameraX 1.5.3 (PR #161 → `a0e0ff3`) and the DualShot jitter/thermal cycle (jitter = no fixable defect; thermal "make lighter" = ADR-0035 thermal-adaptive encode decimation, PR #162 → `d4222c2`, device-verified). The current handoff is **`2026-07-01-NEXT-player-library-transition-jitter.md`**. Kept for history.
+
 **Created:** 2026-06-30, after `SingleVideoRecorder` extraction merged (PR #159 → master `11913cc`, device-verified RZCYA1VBQ2H).
 **Paste the "Session prompt" block at the bottom into a fresh session to begin.**
 
