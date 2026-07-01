@@ -934,6 +934,18 @@ val checkAeFpsRangeCapabilityGated = tasks.register<com.aritr.rova.gradle.Source
     sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkAeFpsRangeCapabilityGated.ok"))
 }
 
+// ADR-0035 — thermal encode decimation must gate only the encoder-feed path, never preview render.
+val checkDecimationEncoderOnly = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkDecimationEncoderOnly") {
+    group = "verification"
+    description = "Thermal encode decimation (encodeDecimationFactor/shouldSubmit) must not appear in EglRouter's preview render loop (ADR-0035)."
+    sources.from(
+        layout.projectDirectory.file("src/main/java/com/aritr/rova/service/dualrecord/internal/EglRouter.kt")
+    )
+    checkId.set("checkDecimationEncoderOnly")
+    reportBaseDir.set(rootProject.layout.projectDirectory)
+    sentinel.set(layout.buildDirectory.file("reports/rova-checks/checkDecimationEncoderOnly.ok"))
+}
+
 // ADR-0029 §C — user-facing copy speaks clip/session only (spec 2026-06-11 §7).
 val checkUserCopyVocabulary = tasks.register<com.aritr.rova.gradle.SourceCheckTask>("checkUserCopyVocabulary") {
     group = "verification"
@@ -1192,6 +1204,7 @@ pluginManager.withPlugin("com.android.application") {
         dependsOn(checkSetTargetRotationBoundaryOnly)
         dependsOn(checkFrontBackCapabilityGated)
         dependsOn(checkAeFpsRangeCapabilityGated)
+        dependsOn(checkDecimationEncoderOnly)
         dependsOn(checkUserCopyVocabulary)
         dependsOn(checkRecordChromeLockSingleSite)
         dependsOn(checkSemanticIconNoRawAlpha)

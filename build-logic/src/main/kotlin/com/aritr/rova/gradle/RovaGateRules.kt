@@ -1,7 +1,7 @@
 package com.aritr.rova.gradle
 
 /**
- * The single home for all 47 gate rules, each LIFTED VERBATIM from the former
+ * The single home for all 48 gate rules, each LIFTED VERBATIM from the former
  * app/build.gradle.kts doLast bodies. A rule returns the exact message the old
  * gate threw, or null to pass. Split into family files (RovaGateRules_*.kt) as
  * it grows; this object only assembles the immutable registry.
@@ -57,6 +57,7 @@ object RovaGateRules {
         put("checkStatusColorLocked", ::ruleStatusColorLocked)
         put("checkRovaGlyphHome", ::ruleRovaGlyphHome)
         put("checkSingleColorSchemeSource", ::ruleSingleColorSchemeSource)
+        put("checkDecimationEncoderOnly", ::ruleDecimationEncoderOnly)
     }
 
     fun run(id: String, files: List<SourceFile>): String? {
