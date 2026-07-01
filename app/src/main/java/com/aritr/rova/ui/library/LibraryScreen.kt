@@ -294,6 +294,9 @@ fun LibraryScreen(
         val sid = item.sessionId
         if (sid != null) {
             pendingFocusKey = stableKey // restore focus here on return (row 23)
+            // Hand the already-decoded tile thumbnail to the player so it paints over the black
+            // shutter until the first video frame renders (no "block" flash on entry).
+            com.aritr.rova.ui.screens.player.PlayerPosterHandoff.set(sid, item.thumbnail)
             onOpenPlayer(sid, item.side)
         } else {
             // Legacy file-only row (no manifest): keep the PreviewActivity path.
