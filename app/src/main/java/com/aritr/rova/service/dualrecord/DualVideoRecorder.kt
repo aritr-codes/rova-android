@@ -45,6 +45,11 @@ class DualVideoRecorder(private val config: DualVideoRecorderConfig) {
     }
     @Volatile private var activeRecording: DualRecording? = null
 
+    /** ADR-0035 — forward the thermal decimation factor to the EGL router. */
+    fun setEncodeDecimationFactor(factor: Int) {
+        processor.setEncodeDecimationFactor(factor)
+    }
+
     /**
      * D-deviation (Task 15): `CameraEffect`'s constructors are `protected`
      * (the public API is to subclass). The plan's verbatim

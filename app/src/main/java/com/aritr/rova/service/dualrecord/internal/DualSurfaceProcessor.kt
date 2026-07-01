@@ -48,6 +48,11 @@ internal class DualSurfaceProcessor(
     ).also { it.setup() }
     private val released = AtomicBoolean(false)
 
+    /** ADR-0035 — forward the thermal decimation factor to the router. */
+    fun setEncodeDecimationFactor(factor: Int) {
+        router.encodeDecimationFactor = factor
+    }
+
     /**
      * Add an encoder input surface; `side` non-null. Must be called BEFORE
      * the first frame arrives. `width`/`height` are the encoder's
