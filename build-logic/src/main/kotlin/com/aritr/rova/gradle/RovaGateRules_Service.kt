@@ -258,3 +258,38 @@ internal fun ruleFGSStartGuarded(files: List<SourceFile>): String? {
         "Caller-side: catch IllegalStateException, SDK-gate the is-check.\n" +
         "Service-side: also catch SecurityException for FGS-type / permission mismatch."
 }
+
+// ─── checkDecimationEncoderOnly ───────────────────────────────────────────────
+
+/**
+ * ADR-0035 — thermal encode decimation must gate ONLY the encoder-feed path,
+ * never the preview render. Scope: EglRouter.kt. The preview-render loop begins
+ * at the `for (target in snapshot)` marker; any reference to
+ * `encodeDecimationFactor` or `shouldSubmit` at or after that line means
+ * decimation has leaked into preview — the exact regression ADR-0035 forbids
+ * (decimating preview breaks the full-rate-preview invariant). The field
+ * declaration and the encoder-feed gate both live ABOVE the marker, so they
+ * pass. Detection on strippedLines (comment-aware); report from the raw line.
+ * Marker absent (loop refactored) or file absent: null — nothing to locate /
+ * forbid (Task-2 review + ThermalDecimationPolicyTest + compile still cover it).
+ */
+internal fun ruleDecimationEncoderOnly(files: List<SourceFile>): String? {
+    val suffix = "service/dualrecord/internal/EglRouter.kt"
+    val src = files.firstOrNull { it.relPath.replace('\\', '/').endsWith(suffix) } ?: return null
+    val markerIdx = src.strippedLines.indexOfFirst { it.contains("for (target in snapshot)") }
+    if (markerIdx < 0) return null
+    val offenders = mutableListOf<String>()
+    src.lines.forEachIndexed { i, line ->
+        if (i < markerIdx) return@forEachIndexed
+        val s = src.strippedLine(i)
+        if (s.contains("encodeDecimationFactor") || s.contains("shouldSubmit")) {
+            offenders += "$suffix:${i + 1}: ${line.trim()}"
+        }
+    }
+    if (offenders.isNotEmpty()) {
+        return "ADR-0035: encode decimation must not touch the preview render path " +
+            "(encodeDecimationFactor/shouldSubmit found at/after the `for (target in snapshot)` " +
+            "preview-loop marker in EglRouter.kt):\n" + offenders.joinToString("\n")
+    }
+    return null
+}

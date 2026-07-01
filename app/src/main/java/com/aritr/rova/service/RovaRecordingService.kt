@@ -2728,6 +2728,13 @@ class RovaRecordingService : Service(), LifecycleOwner {
         val thermal = (applicationContext as? RovaApp)
             ?.thermalStatusSignal?.state?.value
             ?: com.aritr.rova.ui.signals.ThermalStatus.NONE
+        // ADR-0035 — thermal-adaptive encode decimation. Same stable-status
+        // read as the terminate gate below; per-segment cadence is ample for
+        // a minutes-long heat soak. No-op for single mode (currentDualRecorder
+        // null). Factor 1 below SEVERE restores full-rate on cooldown.
+        currentDualRecorder?.setEncodeDecimationFactor(
+            com.aritr.rova.service.ThermalDecimationPolicy.decimationFactor(thermal),
+        )
         if (com.aritr.rova.service.SegmentGateThermal.shouldTerminate(thermal)) {
             RovaLog.w("checkSegmentGates: thermal=$thermal at or above CRITICAL — terminating")
             return SegmentGateResult.Terminate(com.aritr.rova.data.StopReason.THERMAL)

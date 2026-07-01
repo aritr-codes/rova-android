@@ -498,4 +498,60 @@ class ServiceRulesTest {
             "Service-side: also catch SecurityException for FGS-type / permission mismatch."
         assertEquals(expected, msg)
     }
+
+    // ─── checkDecimationEncoderOnly (ADR-0035) ───────────────────────────────
+
+    private fun egl(body: String) = listOf(
+        src("app/src/main/java/com/aritr/rova/service/dualrecord/internal/EglRouter.kt", body)
+    )
+
+    @Test
+    fun decimationEncoderOnly_passesWhenTokensAbovePreviewLoop() {
+        val ok = """
+            @Volatile var encodeDecimationFactor: Int = 1
+            fun renderFrame() {
+                val submit = ThermalDecimationPolicy.shouldSubmit(c++, encodeDecimationFactor)
+                if (submit && liveEncoders.isNotEmpty()) { /* encoder feed */ }
+                for (target in snapshot) {
+                    drawPreview(target)
+                }
+            }
+        """.trimIndent()
+        assertNull(ruleDecimationEncoderOnly(egl(ok)))
+    }
+
+    @Test
+    fun decimationEncoderOnly_firesWhenTokenInPreviewLoop() {
+        // Decimation predicate leaked into the preview render loop = violation.
+        val bad = """
+            fun renderFrame() {
+                if (liveEncoders.isNotEmpty()) { /* encoder feed */ }
+                for (target in snapshot) {
+                    if (ThermalDecimationPolicy.shouldSubmit(c++, encodeDecimationFactor)) drawPreview(target)
+                }
+            }
+        """.trimIndent()
+        val msg = ruleDecimationEncoderOnly(egl(bad))
+        assertTrue(msg?.contains("ADR-0035") == true)
+    }
+
+    @Test
+    fun decimationEncoderOnly_ignoresCommentedTokenInPreviewLoop() {
+        // A commented mention below the marker is stripped => not a violation.
+        val ok = """
+            @Volatile var encodeDecimationFactor: Int = 1
+            fun renderFrame() {
+                for (target in snapshot) {
+                    // encodeDecimationFactor must never be read here
+                    drawPreview(target)
+                }
+            }
+        """.trimIndent()
+        assertNull(ruleDecimationEncoderOnly(egl(ok)))
+    }
+
+    @Test
+    fun decimationEncoderOnly_nullWhenFileAbsent() {
+        assertNull(ruleDecimationEncoderOnly(emptyList()))
+    }
 }

@@ -143,6 +143,16 @@ internal class EglRouter(
     // callback thread (setup/renderFrame/release all run there).
     private var fboRing: FboRing? = null
 
+    // ADR-0035 thermal-adaptive encode decimation. Set from the service
+    // thread (single writer) via the DualSurfaceProcessor passthrough; read
+    // on the callback (renderFrame) thread. 1 = encode every frame (default,
+    // identical to pre-ADR-0035 behavior). Preview render is NEVER gated on
+    // this — decimation is encoder-feed only.
+    @Volatile
+    var encodeDecimationFactor: Int = 1
+    // Callback-thread only (renderFrame is single-threaded) — no sync needed.
+    private var encodeFrameCounter: Int = 0
+
     private val mvpMatrix = FloatArray(16)
     private val texMatrix = FloatArray(16)
     private val finalMatrix = FloatArray(16)
@@ -586,7 +596,14 @@ internal class EglRouter(
             encoderThreads.values.filter { !it.failed }
         }
         val ring = fboRing
-        if (liveEncoders.isNotEmpty() && ring != null) {
+        // ADR-0035 — encoder-feed decimation. Counter ticks once per
+        // renderFrame (regardless of liveEncoders emptiness) so cadence is
+        // stable; factor 1 => every frame (identity). Preview render below
+        // is untouched. When skipped, encoders just get no new frame this
+        // tick (their mailbox take() blocks until the next submit).
+        val submitThisFrame = com.aritr.rova.service.ThermalDecimationPolicy
+            .shouldSubmit(encodeFrameCounter++, encodeDecimationFactor)
+        if (submitThisFrame && liveEncoders.isNotEmpty() && ring != null) {
             try {
                 val slot = ring.advance()
                 // Identity blit: full quad, OES source, uTexMatrix =
