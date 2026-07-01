@@ -377,12 +377,24 @@ fun LibraryScreen(
                 return@LifecycleEventObserver
             }
             coroutineScope.launch {
-                if (currentViewMode == LibraryViewMode.GRID) {
-                    gridState.scrollToItem(index)
-                    snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                val grid = currentViewMode == LibraryViewMode.GRID
+                // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
+                // The saveable lazy state restores the pre-open position on the pop, so the common
+                // return needs no scroll; a redundant scrollToItem jump-scrolls the grid and stalls
+                // the UI thread. Focus is still restored below in every case (all input modalities).
+                val visibleKeys = if (grid) {
+                    gridState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
                 } else {
-                    listState.scrollToItem(index)
-                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                    listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
+                }
+                if (FocusRestorePolicy.shouldScroll(key, visibleKeys)) {
+                    if (grid) {
+                        gridState.scrollToItem(index)
+                        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                    } else {
+                        listState.scrollToItem(index)
+                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                    }
                 }
                 withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
                 runCatching { rowFocusRequester.requestFocus() }

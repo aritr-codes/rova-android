@@ -37,4 +37,17 @@ object FocusRestorePolicy {
         }
         return null
     }
+
+    /**
+     * True when a scroll is needed to bring [pendingKey] into view before restoring focus. On the
+     * normal player→Library return the saveable [rememberLazyGridState] has already restored the
+     * pre-open scroll position, so the opened tile is still among [visibleKeys] — scrolling then is
+     * redundant and jump-scrolls the grid away from the user while stalling the main thread
+     * (jitter root cause, device-verified 2026-07-01, RZCYA1VBQ2H). Only scroll when the target
+     * genuinely isn't on screen (rare: state not restored). Focus is requested either way, so
+     * gating the scroll — not the whole restore — keeps focus restore for every input modality
+     * (D-pad / Switch Access / keyboard / TalkBack), unlike a touch-exploration-only gate.
+     */
+    fun shouldScroll(pendingKey: String, visibleKeys: Collection<String>): Boolean =
+        pendingKey !in visibleKeys
 }
