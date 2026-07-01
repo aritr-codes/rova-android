@@ -76,11 +76,13 @@ gate the encoder-submit block (FBO blit / fence / `liveEncoders.submit`) and
 nothing in the `for (target in snapshot)` preview loop. Violating this decimates
 preview — the exact regression this design forbids.
 
-> **Gate status (owner-reserved):** whether to enforce this clause with a 48th
-> static gate `checkDecimationEncoderOnly` (assert `encodeDecimationFactor` /
-> `shouldSubmit` appears only in the encoder-feed region of `EglRouter.kt`) vs.
-> relying on ADR prose + the `ThermalDecimationPolicyTest` unit tests + the Task-2
-> code review is a decision the owner reserved for ADR review. Pending that call.
+> **Gate (owner-approved 2026-06-30):** enforced by the 48th static gate
+> `checkDecimationEncoderOnly` — a region-scoped scan of `EglRouter.kt` that
+> forbids `encodeDecimationFactor` / `shouldSubmit` at or after the
+> `for (target in snapshot)` preview-loop marker (detects on comment-stripped
+> lines, reports from raw). RED-fire proven on an injected violation before
+> GREEN. Backed additionally by `ThermalDecimationPolicyTest` and the Task-2
+> code review.
 
 ## Scope
 
