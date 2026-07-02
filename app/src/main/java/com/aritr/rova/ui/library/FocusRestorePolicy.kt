@@ -47,6 +47,18 @@ object FocusRestorePolicy {
      * genuinely isn't on screen (rare: state not restored). Focus is requested either way, so
      * gating the scroll — not the whole restore — keeps focus restore for every input modality
      * (D-pad / Switch Access / keyboard / TalkBack), unlike a touch-exploration-only gate.
+     *
+     * Partial visibility counts as "on screen" by design (code-review 2026-07-02, PLAUSIBLE): a
+     * tile that is only a sliver at the viewport edge is still in [visibleKeys], so this returns
+     * false and no manual scroll fires. That is intentional, not a gap. (1) The only way to open
+     * the player is to tap/select a tile, which leaves it substantially visible, and the saveable
+     * lazy state restores that same offset on the pop — so a sliver-on-restore is practically
+     * unreachable. (2) The target tile is focusable (`combinedClickable` delegates a focusable
+     * node), and a focusable node requests a minimal bring-into-view on focus gain — the same path
+     * the caller's [requestFocus] takes — so any residual sliver self-heals. Widening this to a
+     * "more than marginally visible" test would force a full
+     * `scrollToItem`-to-top on that edge case — a BIGGER jump than the framework's minimal scroll
+     * (jitter regression) — so partial visibility is deliberately left to the focus system.
      */
     fun shouldScroll(pendingKey: String, visibleKeys: Collection<String>): Boolean =
         pendingKey !in visibleKeys

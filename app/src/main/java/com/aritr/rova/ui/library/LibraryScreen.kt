@@ -380,27 +380,33 @@ fun LibraryScreen(
                 return@LifecycleEventObserver
             }
             coroutineScope.launch {
-                val grid = currentViewMode == LibraryViewMode.GRID
                 // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
                 // The saveable lazy state restores the pre-open position on the pop, so the common
                 // return needs no scroll; a redundant scrollToItem jump-scrolls the grid and stalls
                 // the UI thread. Focus is still restored below in every case (all input modalities).
+                //
+                // ONE grid/list branch (code-review 2026-07-02, CONFIRMED): the visible-key source
+                // AND the scroll dispatch both come from a single `if`, so the two view modes can't
+                // drift out of sync — previously a change to the await/scroll arm in one mode would
+                // silently break focus restore in the other.
+                val rawVisibleKeys: () -> List<Any>
+                val scrollToTarget: suspend () -> Unit
+                if (currentViewMode == LibraryViewMode.GRID) {
+                    rawVisibleKeys = { gridState.layoutInfo.visibleItemsInfo.map { it.key } }
+                    scrollToTarget = { gridState.scrollToItem(index) }
+                } else {
+                    rawVisibleKeys = { listState.layoutInfo.visibleItemsInfo.map { it.key } }
+                    scrollToTarget = { listState.scrollToItem(index) }
+                }
                 // The hero renders under the prefixed lazy key "hero-<stableKey>" while pendingFocusKey
                 // and the group-row items use the plain stableKey. Strip the prefix so shouldScroll and
                 // the await compare like-for-like — otherwise the hero (a commonly-tapped tile) always
                 // scrolls (jitter persists) AND the await never matches, hanging this coroutine so
                 // pendingFocusKey never clears and a new one leaks every ON_RESUME (code-review 2026-07-02).
-                fun visibleStableKeys(): List<String> {
-                    val raw = if (grid) {
-                        gridState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
-                    } else {
-                        listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
-                    }
-                    return raw.map { it.removePrefix("hero-") }
-                }
-                if (FocusRestorePolicy.shouldScroll(key, visibleStableKeys())) {
-                    if (grid) gridState.scrollToItem(index) else listState.scrollToItem(index)
-                    snapshotFlow { key in visibleStableKeys() }.first { it }
+                val visibleKeys = { rawVisibleKeys().mapNotNull { it as? String }.map { it.removePrefix("hero-") } }
+                if (FocusRestorePolicy.shouldScroll(key, visibleKeys())) {
+                    scrollToTarget()
+                    snapshotFlow { key in visibleKeys() }.first { it }
                 }
                 withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
                 runCatching { rowFocusRequester.requestFocus() }
