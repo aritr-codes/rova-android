@@ -2,6 +2,7 @@ package com.aritr.rova.ui.library
 
 import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.StopReason
+import com.aritr.rova.service.dualrecord.VideoSide
 
 /**
  * ADR-0030 — pure row model the Library grid/list/hero render and [LibraryQuery]
@@ -35,6 +36,23 @@ data class LibraryRow(
     val orientation: LibraryOrientation? = null,
     /** When [badge] == AUTO_STOPPED, the gate reason (THERMAL/LOW_STORAGE) that picks the badge glyph. Else null. */
     val badgeStopReason: StopReason? = null,
+    /** [RecordingIdentity.sessionKey] of the owning session; null = sessionless/legacy row. */
+    val sessionKey: String? = null,
+    /** Per-side row discriminator; null on single-mode + aggregated session rows. */
+    val side: VideoSide? = null,
+    /** Non-empty ONLY on aggregated DualShot session rows (Task 5 aggregator, PR-A unwired). */
+    val sides: List<LibrarySessionSide> = emptyList(),
+)
+
+/**
+ * One playable side of an aggregated DualShot session row (spec §3.4).
+ * [stableKey] is the ORIGINAL per-side row key — PR-B resolves it to the playable file/uri.
+ */
+data class LibrarySessionSide(
+    val side: VideoSide,
+    val stableKey: String,
+    val durationMs: Long,
+    val clipCount: Int,
 )
 
 /** Sort options for the Library (decision C). */

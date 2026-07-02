@@ -4,7 +4,9 @@ import com.aritr.rova.data.CaptureTopology
 import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.StopReason
 import com.aritr.rova.data.Terminated
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Calendar
 import java.util.Locale
@@ -29,6 +31,8 @@ class LibraryRowMapperTest {
         export: ExportState = ExportState.FINALIZED,
         segmentDurationsMs: List<Long> = listOf(120_000L),
         startedAt: Long = millis(2026, Calendar.JUNE, 14, 14, 32),
+        side: VideoSide? = null,
+        sessionId: String? = null,
     ) = LibraryRowMapper.Input(
         stableKey = "/a.mp4",
         startedAtMillis = startedAt,
@@ -42,6 +46,8 @@ class LibraryRowMapperTest {
         exportState = export,
         customTitle = customTitle,
         favorite = favorite,
+        side = side,
+        sessionId = sessionId,
     )
 
     @Test fun `derives title from SmartTitle when no custom title`() {
@@ -89,5 +95,18 @@ class LibraryRowMapperTest {
             LibraryBadge.AUTO_STOPPED,
             LibraryRowMapper.map(input(terminated = Terminated.USER_STOPPED, stopReason = StopReason.THERMAL), locale, tz).badge,
         )
+    }
+
+    @Test fun `map_carriesSessionKeyAndSide`() {
+        val row = LibraryRowMapper.map(input(side = VideoSide.PORTRAIT, sessionId = "abc123"), locale, tz)
+        assertEquals("session:abc123", row.sessionKey)
+        assertEquals(VideoSide.PORTRAIT, row.side)
+        assertEquals(emptyList<LibrarySessionSide>(), row.sides)
+    }
+
+    @Test fun `map_nullSessionId_yieldsNullSessionKey`() {
+        val row = LibraryRowMapper.map(input(), locale, tz)
+        assertNull(row.sessionKey)
+        assertNull(row.side)
     }
 }
