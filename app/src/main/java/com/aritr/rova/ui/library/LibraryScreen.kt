@@ -385,19 +385,22 @@ fun LibraryScreen(
                 // The saveable lazy state restores the pre-open position on the pop, so the common
                 // return needs no scroll; a redundant scrollToItem jump-scrolls the grid and stalls
                 // the UI thread. Focus is still restored below in every case (all input modalities).
-                val visibleKeys = if (grid) {
-                    gridState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
-                } else {
-                    listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
-                }
-                if (FocusRestorePolicy.shouldScroll(key, visibleKeys)) {
-                    if (grid) {
-                        gridState.scrollToItem(index)
-                        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                // The hero renders under the prefixed lazy key "hero-<stableKey>" while pendingFocusKey
+                // and the group-row items use the plain stableKey. Strip the prefix so shouldScroll and
+                // the await compare like-for-like — otherwise the hero (a commonly-tapped tile) always
+                // scrolls (jitter persists) AND the await never matches, hanging this coroutine so
+                // pendingFocusKey never clears and a new one leaks every ON_RESUME (code-review 2026-07-02).
+                fun visibleStableKeys(): List<String> {
+                    val raw = if (grid) {
+                        gridState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
                     } else {
-                        listState.scrollToItem(index)
-                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+                        listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }
                     }
+                    return raw.map { it.removePrefix("hero-") }
+                }
+                if (FocusRestorePolicy.shouldScroll(key, visibleStableKeys())) {
+                    if (grid) gridState.scrollToItem(index) else listState.scrollToItem(index)
+                    snapshotFlow { key in visibleStableKeys() }.first { it }
                 }
                 withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
                 runCatching { rowFocusRequester.requestFocus() }
