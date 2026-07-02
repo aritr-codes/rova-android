@@ -78,6 +78,27 @@ class DualMuxerStateMachineTest {
     }
 
     @Test
+    fun `per-side failure during ADDING_TRACKS stays ADDING_TRACKS`() {
+        // A muxer can throw in setOrientationHint/addTrack/start() before the
+        // machine reaches STARTED; SideFailed must record the side, not throw.
+        val sm = DualMuxerStateMachine().also { it.dispatch(Event.TracksOpened) }
+        sm.dispatch(Event.SideFailed(VideoSide.PORTRAIT))
+        assertEquals(State.ADDING_TRACKS, sm.state)
+        assertEquals(setOf(VideoSide.PORTRAIT), sm.failedSides)
+    }
+
+    @Test
+    fun `both sides failing pre-START does not jump to STOPPING`() {
+        val sm = DualMuxerStateMachine().also { it.dispatch(Event.TracksOpened) }
+        sm.dispatch(Event.SideFailed(VideoSide.PORTRAIT))
+        sm.dispatch(Event.SideFailed(VideoSide.LANDSCAPE))
+        // STOPPING advance is STARTED-only; pre-START both-fail stays put and
+        // the caller's stop() releases the muxers.
+        assertEquals(State.ADDING_TRACKS, sm.state)
+        assertEquals(setOf(VideoSide.PORTRAIT, VideoSide.LANDSCAPE), sm.failedSides)
+    }
+
+    @Test
     fun `both sides failed transitions to STOPPING with both-failed marker`() {
         val sm = DualMuxerStateMachine().also {
             it.dispatch(Event.TracksOpened); it.dispatch(Event.AllTracksAdded)
