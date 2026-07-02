@@ -42,4 +42,20 @@ class FocusRestorePolicyTest {
     fun blankKey_returnsNull() {
         assertNull(FocusRestorePolicy.targetItemIndex("", "hero1", groups))
     }
+
+    @Test
+    fun shouldScroll_targetAlreadyVisible_false() {
+        // Normal return: saveable lazy state restored the pre-open position, opened tile on screen.
+        assertEquals(false, FocusRestorePolicy.shouldScroll("b", listOf("a", "b", "c")))
+    }
+
+    @Test
+    fun shouldScroll_targetNotVisible_true() {
+        assertEquals(true, FocusRestorePolicy.shouldScroll("z", listOf("a", "b", "c")))
+    }
+
+    @Test
+    fun shouldScroll_nothingLaidOut_true() {
+        assertEquals(true, FocusRestorePolicy.shouldScroll("a", emptyList()))
+    }
 }

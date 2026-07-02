@@ -56,6 +56,9 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aritr.rova.ui.components.rememberReduceMotion
 import androidx.lifecycle.Lifecycle
@@ -118,6 +121,11 @@ fun PlayerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val isVaulted by viewModel.isVaulted.collectAsStateWithLifecycle()
+    val firstFrameRendered by viewModel.firstFrameRendered.collectAsStateWithLifecycle()
+    // Poster hand-off from the Library tile — painted over the black shutter until the first video
+    // frame renders, so entry doesn't flash a black "block". Taken once (clears the slot); null for
+    // deep-link / process-death entries, which fall back to the default shutter.
+    val entryPoster = remember { PlayerPosterHandoff.take(sessionId) }
 
     // B5 / ADR-0025 — block screenshots / recents-thumbnail capture while
     // playing a VAULTED recording, via the ref-counted window controller.
@@ -183,6 +191,8 @@ fun PlayerScreen(
                     onPrevSegment = viewModel::jumpPrevSegment,
                     onNextSegment = viewModel::jumpNextSegment,
                     onSetSpeed = viewModel::setPlaybackSpeed,
+                    entryPoster = entryPoster,
+                    firstFrameRendered = firstFrameRendered,
                     bindPlayerView = { playerView ->
                         playerView.player = viewModel.getOrCreatePlayer()
                     }
@@ -239,6 +249,8 @@ private fun PlayerReady(
     onPrevSegment: () -> Unit,
     onNextSegment: () -> Unit,
     onSetSpeed: (Float) -> Unit,
+    entryPoster: android.graphics.Bitmap?,
+    firstFrameRendered: Boolean,
     bindPlayerView: (PlayerView) -> Unit
 ) {
     var surfaceWidthPx by remember { mutableFloatStateOf(0f) }
@@ -288,6 +300,19 @@ private fun PlayerReady(
         interactionTick++
     }
 
+    // Entry-poster state: wrap once (not per recomposition) and bound its lifetime — if the first
+    // frame never renders (no video track / odd Ready-without-render), drop the poster after a
+    // ceiling so it can't stick over playback (codex Q4). The error path already routes to
+    // Unavailable, so this only covers the rare never-renders case.
+    val posterBitmap = remember(entryPoster) { entryPoster?.asImageBitmap() }
+    var posterTimedOut by remember { mutableStateOf(false) }
+    if (posterBitmap != null) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(PLAYER_ENTRY_POSTER_MAX_MS)
+            posterTimedOut = true
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-bleed video surface. AndroidView handles attach /
         // detach; the DisposableEffect releases the surface reference
@@ -328,13 +353,14 @@ private fun PlayerReady(
                     onClick { onSingleTap(); true }
                 },
             factory = { ctx ->
-                PlayerView(ctx).apply {
-                    // PlayerView default shutter background is black —
-                    // configuring it explicitly via `setShutterBackgroundColor`
-                    // would require @OptIn(UnstableApi::class) for a
-                    // purely cosmetic match. Default is fine.
-                    useController = false
-                }
+                // Inflate from XML (not `PlayerView(ctx)`) so the surface is a
+                // TextureView — surface_type is an XML-only attr. The default
+                // SurfaceView renders on a hardware overlay the Compose entry
+                // poster can't cover (device-verified black block); a TextureView
+                // composites in the view layer so the poster masks the build/
+                // prepare gap. See res/layout/player_surface.xml.
+                android.view.LayoutInflater.from(ctx)
+                    .inflate(com.aritr.rova.R.layout.player_surface, null) as PlayerView
             },
             update = { view ->
                 bindPlayerView(view)
@@ -347,6 +373,19 @@ private fun PlayerReady(
                 view.keepScreenOn = progress.isPlaying
             }
         )
+
+        // Entry poster — mask the black PlayerView shutter during ExoPlayer build/prepare with the
+        // Library tile thumbnail (a player-owned copy) until the first frame renders, so entering
+        // the player doesn't flash a black "block". Removed the instant onRenderedFirstFrame lands
+        // (revealing the just-decoded video frame underneath) or after the ceiling above.
+        if (posterBitmap != null && !firstFrameRendered && !posterTimedOut) {
+            Image(
+                bitmap = posterBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.matchParentSize()
+            )
+        }
 
         // Top gradient + bar
         AnimatedVisibility(
@@ -699,3 +738,7 @@ private fun effectiveTotalMs(
 }
 
 private const val SEEK_DELTA_MS: Long = 10_000L
+
+// Ceiling for the entry poster: if ExoPlayer never renders a first frame within this window, drop
+// the poster so it can't stick over playback. Comfortably above a normal build+prepare+decode.
+private const val PLAYER_ENTRY_POSTER_MAX_MS: Long = 1_500L

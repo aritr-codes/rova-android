@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fullscreen playback surface for PlayerScreen.
+
+  surface_type=texture_view is LOAD-BEARING (player-entry poster fix, device-verified
+  RZCYA1VBQ2H 2026-07-01): PlayerView's default SurfaceView renders on a separate
+  hardware-overlay layer that the Compose entry-poster (drawn in the window layer) cannot
+  cover — so the poster composited fine yet the black shutter still showed for the ~440 ms
+  ExoPlayer build/prepare gap. A TextureView composites through the GPU like any view, so the
+  Compose poster (PlayerScreen) paints above it and masks the block until first frame. Same
+  root cause + fix as library_autoplay_preview.xml. Bounded to a single fullscreen player, so
+  the per-frame TextureView cost is negligible (unlike the capped autoplay-preview fleet).
+
+  resize_mode=fit = letterbox to preserve aspect (matches the poster's ContentScale.Fit and
+  the prior default-PlayerView behaviour).
+  use_controller=false: chrome is Compose, not PlayerView's built-in controls.
+  shutter transparent: no hard black flash behind the poster / on reset.
+-->
+<androidx.media3.ui.PlayerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:surface_type="texture_view"
+    app:use_controller="false"
+    app:resize_mode="fit"
+    app:shutter_background_color="@android:color/transparent" />

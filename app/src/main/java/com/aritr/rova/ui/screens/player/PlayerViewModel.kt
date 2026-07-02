@@ -79,6 +79,15 @@ class PlayerViewModel(
     private val _isVaulted = MutableStateFlow(false)
     val isVaulted: StateFlow<Boolean> = _isVaulted.asStateFlow()
 
+    /**
+     * True once ExoPlayer has decoded and pushed the first video frame to the surface. The screen
+     * paints a hand-off poster (the Library thumbnail) over the black PlayerView shutter until this
+     * flips, so entering the player doesn't flash a black "block" during build/prepare. Reset to
+     * false per [attachExoPlayer] so a re-attach re-shows the poster.
+     */
+    private val _firstFrameRendered = MutableStateFlow(false)
+    val firstFrameRendered: StateFlow<Boolean> = _firstFrameRendered.asStateFlow()
+
     private var exoPlayer: ExoPlayer? = null
     private var pollJob: Job? = null
 
@@ -107,6 +116,10 @@ class PlayerViewModel(
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             pushProgress(isPlaying = isPlaying)
             if (isPlaying) startPolling() else stopPolling()
+        }
+
+        override fun onRenderedFirstFrame() {
+            _firstFrameRendered.value = true
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -197,6 +210,7 @@ class PlayerViewModel(
 
     private fun attachExoPlayer(uri: String, startMs: Long = 0L) {
         val app = getApplication<Application>()
+        _firstFrameRendered.value = false
         val player = ExoPlayer.Builder(app).build().apply {
             setMediaItem(MediaItem.fromUri(resolvePlaybackUri(app, uri)))
             addListener(playerListener)
