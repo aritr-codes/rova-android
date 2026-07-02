@@ -57,3 +57,15 @@ A third exceptional badge `LibraryBadge.AUTO_STOPPED` (safety stops: `THERMAL` /
 - No manifest schema change; no migration. Legacy file-scan rows (no manifest) gain favorite/rename for free
   (the sidecar keys on `stableKey`, which exists for every row).
 - A new static gate (`checkLibraryNoManifestWrite`, the 42nd) enforces decision 2.
+
+## Amendment (2026-07-02) — Session-list presentation (Direction A)
+
+Spec: docs/superpowers/specs/2026-07-02-library-session-list-design.md. Owner-approved via brainstorming + codex peer review.
+
+1. **Single list presentation.** The grid view, the GRID/LIST view-mode toggle, and the `libraryViewMode` preference are removed. The Library renders one `LazyColumn` of session rows grouped by day.
+2. **Hero replaced by in-timeline latest-row accent.** The standalone "Latest Recording" hero card is removed. When sort = Newest, the first visible row renders as a restrained accent variant (tinted container, larger thumbnail, "Latest" eyebrow, explicit Play/Resume pill). Same information anatomy as every row; NO media autoplay anywhere in the Library (trust: background-recorded video must not auto-preview).
+3. **DualShot = one row per session.** The two per-side rows collapse into one session row (session-canonical `stableKey` = `RecordingIdentity.sessionKey`), showing a DualShot badge and two explicit, individually-labeled ≥48dp side actions ("Portrait · m:ss" / "Landscape · m:ss"). Row tap plays the Portrait side; the side actions make that default visible. Batch share/delete/favorite operate per-session (both sides). Vault: DualShot sessions remain NOT vault-movable (ADR-0025 status quo).
+4. **Sticky compact day headers** with relative + absolute labels (Today / Yesterday / weekday within 7 days / date), heading semantics, per-day count + size summary.
+5. **Density setting.** `libraryDensity` preference (COMFORTABLE default | COMPACT) controls row/thumbnail dimensions; replaces the retired view-mode toggle slot.
+
+§2 (sidecar-only metadata, `checkLibraryNoManifestWrite`) is unchanged and continues to bind the new presentation.
