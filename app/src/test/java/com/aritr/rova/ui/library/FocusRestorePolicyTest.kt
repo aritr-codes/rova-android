@@ -6,41 +6,36 @@ import org.junit.Test
 
 class FocusRestorePolicyTest {
 
-    // Lazy-list item order: [0]=recovery/warn header, [1]=hero (if present),
-    // then per group: day-header then the group's rows.
+    // Lazy-list item order: [0]=recovery/warn header, then per group: (optional) day-header then rows.
     private val groups = listOf(
         listOf("a", "b"),   // group 0
         listOf("c"),        // group 1
     )
+    private val allHeaders = listOf(true, true)
 
     @Test
-    fun heroRow_resolvesToIndex1() {
-        assertEquals(1, FocusRestorePolicy.targetItemIndex("hero1", "hero1", groups))
-    }
-
-    @Test
-    fun firstGroupRows_withHero() {
-        // 0 hdr, 1 hero, 2 day-hdr(group0), 3 "a", 4 "b", 5 day-hdr(group1), 6 "c"
-        assertEquals(3, FocusRestorePolicy.targetItemIndex("a", "hero1", groups))
-        assertEquals(4, FocusRestorePolicy.targetItemIndex("b", "hero1", groups))
-        assertEquals(6, FocusRestorePolicy.targetItemIndex("c", "hero1", groups))
-    }
-
-    @Test
-    fun noHero_shiftsIndicesDownByOne() {
+    fun firstGroupRows() {
         // 0 hdr, 1 day-hdr(group0), 2 "a", 3 "b", 4 day-hdr(group1), 5 "c"
-        assertEquals(2, FocusRestorePolicy.targetItemIndex("a", null, groups))
-        assertEquals(5, FocusRestorePolicy.targetItemIndex("c", null, groups))
+        assertEquals(2, FocusRestorePolicy.targetItemIndex("a", groups, allHeaders))
+        assertEquals(3, FocusRestorePolicy.targetItemIndex("b", groups, allHeaders))
+        assertEquals(5, FocusRestorePolicy.targetItemIndex("c", groups, allHeaders))
     }
 
     @Test
     fun missingKey_returnsNull() {
-        assertNull(FocusRestorePolicy.targetItemIndex("zzz", "hero1", groups))
+        assertNull(FocusRestorePolicy.targetItemIndex("zzz", groups, allHeaders))
     }
 
     @Test
     fun blankKey_returnsNull() {
-        assertNull(FocusRestorePolicy.targetItemIndex("", "hero1", groups))
+        assertNull(FocusRestorePolicy.targetItemIndex("", groups, allHeaders))
+    }
+
+    @Test
+    fun flatBucket_noHeader_indexSkipsNoSlot() {
+        // LONGEST/LARGEST: one label=="" group, screen renders no day header → rows start at 1.
+        val idx = FocusRestorePolicy.targetItemIndex("b", listOf(listOf("a", "b")), listOf(false))
+        assertEquals(2, idx) // [0] hdr-recovery-warn, [1] "a", [2] "b"
     }
 
     @Test

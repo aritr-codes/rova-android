@@ -3,33 +3,28 @@ package com.aritr.rova.ui.library
 /**
  * Pure helper for Slice-5 focus restore (WCAG 2.2 AA remediation-backlog row 23 subset): maps a
  * launched library row's `stableKey` to its flattened lazy-list item index so the caller can
- * `scrollToItem(index)` before requesting focus. The same index sequence works for grid and list
- * because every grid cell is its own keyed lazy item.
+ * `scrollToItem(index)` before requesting focus.
  *
- * Item order mirrors [LibraryScreen]'s lazy content: index 0 = recovery/warning header,
- * index 1 = hero (when present), then for each day-group a header item followed by its row items.
+ * Item order mirrors [LibraryScreen]'s lazy content: index 0 = recovery/warning header, then for
+ * each day-group an OPTIONAL header item followed by its row items.
  */
 object FocusRestorePolicy {
 
     /**
-     * @param pendingKey the stableKey of the row that launched playback.
-     * @param heroKey the hero row's stableKey, or null when no hero is shown.
-     * @param groupRowKeys per-day-group ordered stableKeys (each inner list = one group's rows).
-     * @return the lazy item index to scroll to, or null if [pendingKey] is blank or not found.
+     * Lazy-item index of [pendingKey] in the session list: [0] = recovery/warning header, then per
+     * group an OPTIONAL day header (headerless flat bucket under LONGEST/LARGEST — flag false) and
+     * its rows. Hero slot removed with the hero (PR-B); flat-bucket flag fixes a pre-existing
+     * off-by-one (codex plan-review 2026-07-03). Null = not found (row deleted while away).
      */
     fun targetItemIndex(
         pendingKey: String,
-        heroKey: String?,
         groupRowKeys: List<List<String>>,
+        groupHasHeader: List<Boolean>,
     ): Int? {
         if (pendingKey.isBlank()) return null
         var idx = 1 // [0] = recovery/warning header
-        if (heroKey != null) {
-            if (pendingKey == heroKey) return idx
-            idx++
-        }
-        for (rows in groupRowKeys) {
-            idx++ // day header
+        groupRowKeys.forEachIndexed { g, rows ->
+            if (groupHasHeader.getOrElse(g) { true }) idx++ // day header
             for (key in rows) {
                 if (key == pendingKey) return idx
                 idx++

@@ -24,8 +24,9 @@ import com.aritr.rova.ui.library.PruneKeepSet
 import com.aritr.rova.ui.library.RecordingIdentity
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
+import com.aritr.rova.ui.library.LibraryDensity
+import com.aritr.rova.ui.library.LibrarySessionAggregator
 import com.aritr.rova.ui.library.LibraryUiState
-import com.aritr.rova.ui.library.LibraryViewMode
 import com.aritr.rova.ui.library.SessionSidecarMerge
 import com.aritr.rova.ui.library.UsageAggregator
 import com.aritr.rova.ui.library.ThumbnailCacheKey
@@ -250,24 +251,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val settings = RovaSettings(getApplication())
 
     /**
-     * Library grid/list toggle (decision A). Drives [libraryUiState]. Seeded from the persisted
-     * [RovaSettings.libraryViewMode] (Slice 4.1, fixes "resets to Grid every launch") and
-     * re-persisted in [setViewMode]; unknown/missing coerces to GRID.
+     * Session-list row density (spec §3.7). Seeded from [RovaSettings.libraryDensity];
+     * [refreshDensity] re-reads on resume (the bottom-nav keeps LibraryScreen composed across tab
+     * switches — same reseed pattern the retired cardPreview used). Unknown/missing → COMFORTABLE.
      */
-    private val _viewMode = MutableStateFlow(
-        runCatching { LibraryViewMode.valueOf(settings.libraryViewMode) }.getOrDefault(LibraryViewMode.GRID),
-    )
+    private val _density = MutableStateFlow(readDensity())
 
-    /**
-     * Polish P7 — mirrors [RovaSettings.libraryCardPreview] (default OFF) into [libraryUiState] so the
-     * screen can gate card autoplay. [refreshCardPreview] re-reads the pref on resume because the
-     * bottom-nav keeps [com.aritr.rova.ui.library.LibraryScreen] composed across tab switches, so a
-     * Settings toggle would otherwise not be picked up until process recreation.
-     */
-    private val _cardPreview = MutableStateFlow(settings.libraryCardPreview)
+    private fun readDensity(): LibraryDensity =
+        runCatching { LibraryDensity.valueOf(settings.libraryDensity) }.getOrDefault(LibraryDensity.COMFORTABLE)
 
-    fun refreshCardPreview() {
-        _cardPreview.value = settings.libraryCardPreview
+    fun refreshDensity() {
+        _density.value = readDensity()
     }
 
     /**
@@ -313,7 +307,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _viewMode, _sidecarRevision, _cardPreview) { rows, loaded, mode, _, cardPreview ->
+        combine(items, hasLoaded, _sidecarRevision, _density) { rows, loaded, _, density ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
@@ -344,13 +338,15 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 }
                 toLibraryRow(item, meta, locale, tz)
             }
-            // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
+            // Spec §3.4: collapse DualShot per-side rows into ONE session row before the UI sees
+            // them. Usage folds over the aggregated list: a session counts once, bytes still sum
+            // (the session row carries both files' sizes).
+            val aggregated = LibrarySessionAggregator.aggregate(mapped)
             LibraryUiState(
-                rows = mapped,
-                viewMode = mode,
+                rows = aggregated,
                 hasLoaded = loaded,
-                usage = UsageAggregator.aggregate(mapped),
-                cardPreview = cardPreview,
+                usage = UsageAggregator.aggregate(aggregated),
+                density = density,
             )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)
@@ -388,11 +384,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             ),
             locale, tz,
         )
-    }
-
-    fun setViewMode(mode: LibraryViewMode) {
-        _viewMode.value = mode
-        settings.libraryViewMode = mode.name // persist across launches (Slice 4.1)
     }
 
     /**
