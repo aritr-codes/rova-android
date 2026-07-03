@@ -10,7 +10,7 @@ import java.util.TimeZone
  * [LibraryMetadataEntry.customTitle]. Pure: takes manifest-derived primitives, returns a string.
  *
  * Format: `EEE · h:mm a` (e.g. `Mon · 12:34 PM`) — a concise WHEN. The clip count, duration, and size
- * are the session's WHAT and live in the separate meta line ([SessionCaption] / [HeroMetaFormatter]) so
+ * are the session's WHAT and live in the separate meta line ([SessionCaption]) so
  * the title and meta don't repeat each other (owner polish, 2026-06-15).
  */
 object SmartTitle {

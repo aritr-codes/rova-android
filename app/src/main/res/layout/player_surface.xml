@@ -7,9 +7,8 @@
   hardware-overlay layer that the Compose entry-poster (drawn in the window layer) cannot
   cover — so the poster composited fine yet the black shutter still showed for the ~440 ms
   ExoPlayer build/prepare gap. A TextureView composites through the GPU like any view, so the
-  Compose poster (PlayerScreen) paints above it and masks the block until first frame. Same
-  root cause + fix as library_autoplay_preview.xml. Bounded to a single fullscreen player, so
-  the per-frame TextureView cost is negligible (unlike the capped autoplay-preview fleet).
+  Compose poster (PlayerScreen) paints above it and masks the block until first frame. Bounded
+  to a single fullscreen player, so the per-frame TextureView cost is negligible.
 
   resize_mode=fit = letterbox to preserve aspect (matches the poster's ContentScale.Fit and
   the prior default-PlayerView behaviour).

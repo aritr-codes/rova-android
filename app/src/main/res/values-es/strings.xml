@@ -393,9 +393,6 @@
     <string name="settings_section_appearance">Apariencia</string>
     <string name="settings_section_recording_defaults">Valores predeterminados de grabación</string>
     <string name="settings_section_recording_behavior">Comportamiento de grabación</string>
-    <string name="settings_section_library">Biblioteca</string>
-    <string name="settings_library_card_preview_title">Previsualizar grabaciones al explorar</string>
-    <string name="settings_library_card_preview_summary">Reproduce vistas previas silenciadas en las tarjetas. Desactivado por defecto para ahorrar batería.</string>
     <string name="settings_section_alerts">Alertas</string>
     <string name="settings_section_notifications">Notificaciones</string>
     <string name="settings_section_storage">Almacenamiento</string>
@@ -828,8 +825,6 @@
     <string name="library_action_favorite">Favorito</string>
     <string name="library_action_unfavorite">Quitar favorito</string>
     <string name="library_action_share">Compartir</string>
-    <string name="library_view_grid">Vista de cuadrícula</string>
-    <string name="library_view_list">Vista de lista</string>
     <string name="library_badge_recovered">Recuperado</string>
     <string name="library_badge_interrupted">Interrumpido</string>
     <string name="library_badge_auto_stopped">Detención automática</string>
