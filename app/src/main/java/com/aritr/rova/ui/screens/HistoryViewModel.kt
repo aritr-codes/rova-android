@@ -363,6 +363,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 sessionId = item.sessionId,
                 thumbWidthPx = item.thumbnail?.width ?: 0,
                 thumbHeightPx = item.thumbnail?.height ?: 0,
+                resumePositionMs = meta?.positionFor(RecordingIdentity.sideSlot(item.side)),
             ),
             locale, tz,
         )

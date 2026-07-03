@@ -20,11 +20,13 @@ class LibrarySessionAggregatorTest {
         sizeBytes: Long = 10L,
         clipCount: Int = 2,
         favorite: Boolean = false,
+        resumePositionMs: Long? = null,
     ) = LibraryRow(
         stableKey = key, title = "t", dateLabel = "d", dateMillis = dateMillis,
         durationMs = durationMs, sizeBytes = sizeBytes, clipCount = clipCount,
         topology = topology, badge = null, favorite = favorite,
         sessionKey = sessionKey, side = side,
+        resumePositionMs = resumePositionMs,
     )
 
     @Test
@@ -118,5 +120,21 @@ class LibrarySessionAggregatorTest {
         val l2 = row("/l2.mp4", CaptureTopology.DualShot, "session:s2", VideoSide.LANDSCAPE)
         val out = LibrarySessionAggregator.aggregate(listOf(p1, l1, p2, l2))
         assertEquals(listOf("session:s1", "session:s2"), out.map { it.stableKey })
+    }
+
+    @Test
+    fun collapse_resumePosition_portraitWins_elseLandscape() {
+        val p = row("/p.mp4", CaptureTopology.DualShot, "session:s1", VideoSide.PORTRAIT, dateMillis = 100L)
+            .copy(resumePositionMs = 11_000L)
+        val l = row("/l.mp4", CaptureTopology.DualShot, "session:s1", VideoSide.LANDSCAPE, dateMillis = 200L)
+            .copy(resumePositionMs = 22_000L)
+        // Portrait-first even though landscape is the latest-dated base.
+        assertEquals(11_000L, LibrarySessionAggregator.aggregate(listOf(p, l)).single().resumePositionMs)
+
+        val pNull = p.copy(resumePositionMs = null)
+        assertEquals(22_000L, LibrarySessionAggregator.aggregate(listOf(pNull, l)).single().resumePositionMs)
+
+        val bothNull = listOf(pNull, l.copy(resumePositionMs = null))
+        assertNull(LibrarySessionAggregator.aggregate(bothNull).single().resumePositionMs)
     }
 }
