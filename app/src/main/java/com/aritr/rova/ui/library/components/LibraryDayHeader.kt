@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.library.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,13 +16,15 @@ import androidx.compose.ui.unit.dp
 
 /**
  * spec §4 — day section label + per-day size total (polish pass: a lightweight label, not a dark toolbar).
- * Transparent background, tighter type; reads as a quiet section divider. Heading for TalkBack navigation.
+ * Opaque `surface` background (PR-C) so rows don't scroll visibly through the header while it's stuck
+ * via `LazyListScope.stickyHeader`; tighter type, reads as a quiet section divider. Heading for TalkBack navigation.
  */
 @Composable
 fun LibraryDayHeader(label: String, sizeTotal: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = LibraryDimens.screenPadH, vertical = LibraryDimens.sectionPadV)
             .semantics { heading() },
         horizontalArrangement = Arrangement.SpaceBetween,

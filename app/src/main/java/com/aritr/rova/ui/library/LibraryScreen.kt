@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.library
 
 import android.content.Intent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,7 @@ import java.util.TimeZone
  * delete commits only on the Snackbar owner (timeout/swipe), UNDO cancels, screen-dispose abandons
  * (files untouched, rows reappear next load). No manifest writes here (ADR-0030).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
     viewModel: HistoryViewModel = viewModel(),
@@ -550,7 +552,9 @@ fun LibraryScreen(
                                 item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
                                 groups.forEach { group ->
                                     if (group.label.isNotEmpty()) {
-                                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        stickyHeader(key = "hdr-${group.dayEpochMillis}") {
+                                            LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                        }
                                     }
                                     items(group.rows, key = { it.stableKey }) { row ->
                                         val isLatest = row.stableKey == latestKey
