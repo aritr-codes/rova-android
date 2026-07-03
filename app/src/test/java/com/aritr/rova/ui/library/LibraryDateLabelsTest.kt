@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Calendar
@@ -79,5 +80,52 @@ class LibraryDateLabelsTest {
         }.timeInMillis
         assertEquals(DayHeaderKind.TODAY, LibraryDateLabels.headerLabel(startOfToday, now, locale, tz).kind)
         assertEquals(DayHeaderKind.YESTERDAY, LibraryDateLabels.headerLabel(startOfToday - 1, now, locale, tz).kind)
+    }
+
+    // --- PR-C: dayEpoch (stable day identity for sticky-header keys) ---
+
+    @Test fun `dayEpoch same local day maps to one epoch`() {
+        val tz = TimeZone.getTimeZone("UTC")
+        val morning = 1_751_500_800_000L + 8 * 3600_000L   // 2025-07-03 08:00 UTC
+        val evening = 1_751_500_800_000L + 22 * 3600_000L  // 2025-07-03 22:00 UTC
+        assertEquals(LibraryDateLabels.dayEpoch(morning, tz), LibraryDateLabels.dayEpoch(evening, tz))
+    }
+
+    @Test fun `dayEpoch flips exactly at local midnight`() {
+        val tz = TimeZone.getTimeZone("UTC")
+        val beforeMidnight = 1_751_500_800_000L + 24 * 3600_000L - 1_000L // 23:59:59
+        val afterMidnight = 1_751_500_800_000L + 24 * 3600_000L + 1_000L  // 00:00:01 next day
+        assertNotEquals(LibraryDateLabels.dayEpoch(beforeMidnight, tz), LibraryDateLabels.dayEpoch(afterMidnight, tz))
+    }
+
+    @Test fun `dayEpoch is the local day floor across a DST transition`() {
+        // America/New_York springs forward 2026-03-08 (23h day). Noon that day must floor to that
+        // day's local midnight, distinct from both neighbours.
+        val tz = TimeZone.getTimeZone("America/New_York")
+        val cal = java.util.Calendar.getInstance(tz).apply {
+            clear(); set(2026, java.util.Calendar.MARCH, 8, 12, 0, 0)
+        }
+        val noonDst = cal.timeInMillis
+        val epoch = LibraryDateLabels.dayEpoch(noonDst, tz)
+        val midnight = java.util.Calendar.getInstance(tz).apply {
+            clear(); set(2026, java.util.Calendar.MARCH, 8, 0, 0, 0)
+        }.timeInMillis
+        assertEquals(midnight, epoch)
+        assertNotEquals(epoch, LibraryDateLabels.dayEpoch(noonDst - 24 * 3600_000L, tz))
+        assertNotEquals(epoch, LibraryDateLabels.dayEpoch(noonDst + 24 * 3600_000L, tz))
+    }
+
+    @Test fun `dayEpoch is the local day floor across a fall-back DST transition`() {
+        // America/New_York falls back 2026-11-01 (25h day) — both DST directions pinned
+        // (codex plan-review 2026-07-03). 23:30 that local day must still floor to the SAME
+        // local midnight as 01:30, despite 25 wall-clock-spanning hours.
+        val tz = TimeZone.getTimeZone("America/New_York")
+        fun at(h: Int, min: Int): Long = java.util.Calendar.getInstance(tz).apply {
+            clear(); set(2026, java.util.Calendar.NOVEMBER, 1, h, min, 0)
+        }.timeInMillis
+        val midnight = at(0, 0)
+        assertEquals(midnight, LibraryDateLabels.dayEpoch(at(1, 30), tz))
+        assertEquals(midnight, LibraryDateLabels.dayEpoch(at(23, 30), tz))
+        assertNotEquals(midnight, LibraryDateLabels.dayEpoch(at(23, 30) + 3600_000L, tz)) // 00:30 next day
     }
 }

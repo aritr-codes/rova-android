@@ -27,6 +27,13 @@ data class DayHeaderLabel(
 
 object LibraryDateLabels {
 
+    /**
+     * Local-midnight epoch of [millis]'s calendar day in [tz]. DST-safe (Calendar floor, not
+     * modular arithmetic). PR-C: stable day identity for sticky-header LazyList keys — the key
+     * survives midnight while the header LABEL ("Today" → "Yesterday") changes with nowMillis.
+     */
+    fun dayEpoch(millis: Long, tz: TimeZone): Long = startOfDay(millis, tz)
+
     fun headerLabel(dayMillis: Long, nowMillis: Long, locale: Locale, tz: TimeZone): DayHeaderLabel {
         val daysBack = dayDiff(from = dayMillis, to = nowMillis, tz = tz)
         val sameYear = yearOf(dayMillis, tz) == yearOf(nowMillis, tz)
