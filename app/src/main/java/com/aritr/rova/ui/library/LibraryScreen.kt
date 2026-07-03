@@ -457,6 +457,12 @@ fun LibraryScreen(
                         backLabel = stringResource(R.string.history_back_cd),
                         onOpenVault = onOpenVault,
                         vaultLabel = stringResource(R.string.vault_open_entry_cd),
+                        onToggleDensity = { viewModel.toggleDensity() },
+                        densityLabel = stringResource(R.string.library_density_toggle_cd),
+                        densityState = stringResource(
+                            if (ui.density == LibraryDensity.COMPACT) R.string.library_density_state_compact
+                            else R.string.library_density_state_comfortable
+                        ),
                         onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
                         searchLabel = stringResource(R.string.library_search_open_cd),
                         onOpenSort = { sortSheetOpen = true },

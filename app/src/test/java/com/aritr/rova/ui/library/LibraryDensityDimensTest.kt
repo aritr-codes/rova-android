@@ -40,4 +40,11 @@ class LibraryDensityDimensTest {
         assertTrue(k.thumbWidthDp < c.thumbWidthDp)
         assertTrue(k.rowMinHeightDp < c.rowMinHeightDp)
     }
+
+    // --- PR-C: toggle cycle ---
+
+    @Test fun `next cycles the two densities`() {
+        assertEquals(LibraryDensity.COMPACT, LibraryDensity.COMFORTABLE.next())
+        assertEquals(LibraryDensity.COMFORTABLE, LibraryDensity.COMPACT.next())
+    }
 }
