@@ -15,6 +15,9 @@ object RecordingIdentity {
     /** Session-level metadata key (favorite, customTitle, lastPlayedAt, positionsBySide). */
     fun sessionKey(sessionId: String): String = "session:$sessionId"
 
+    /** True for canonical session keys ("session:<id>") — the stableKey shape of aggregated session rows. */
+    fun isSessionKey(key: String): Boolean = key.startsWith("session:")
+
     /** Pre-seam stable key a file/SAF row may still be stored under, for dual-read fallback. */
     fun legacyKey(absolutePath: String?, docUri: String?): String? = absolutePath ?: docUri
 

@@ -396,28 +396,42 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI
-     * is NON-optimistic (owner adjustment 2): the star reflects the sidecar
-     * snapshot, and only flips after a SUCCESSFUL [LibraryMetadataStore.update]
-     * bumps [_sidecarRevision] and triggers a recompute. On failure we never
-     * optimistically flipped, so there is no desync to roll back — we log and raise
-     * a non-blocking error signal. Off-main.
+     * Sidecar WRITE keys for one row key. Single-mode rows: the item's own MetaKey (unchanged
+     * behavior). DualShot rows — per-side OR aggregated session — return the sides' legacy
+     * migration keys FIRST, then the canonical session key as the transform target: a
+     * canonical-only write can't clear state while a legacy alias survives, because the read
+     * path merge (favorite OR / customTitle ?:) would resurrect it (codex plan-review
+     * 2026-07-03). Null = unknown key → callers raise the existing error signal.
      */
-    private fun metaKeyForStableKey(stableKey: String): RecordingIdentity.MetaKey? {
-        val item = items.value.firstOrNull { it.stableKey == stableKey } ?: return null
-        return RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
+    private fun writeKeysForStableKey(stableKey: String): List<RecordingIdentity.MetaKey>? {
+        val item = items.value.firstOrNull { it.stableKey == stableKey }
+        val sessionId = when {
+            item != null && item.sessionId != null && item.side != null -> item.sessionId
+            item != null ->
+                return listOf(RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString()))
+            RecordingIdentity.isSessionKey(stableKey) -> stableKey.removePrefix("session:")
+            else -> return null
+        }
+        val legacies = items.value
+            .filter { it.sessionId == sessionId && it.side != null }
+            .map { RecordingIdentity.forItem(it.sessionId, it.file?.absolutePath, it.docUri?.toString()) }
+            .filter { it.legacy != null && it.legacy != it.canonical }
+        return legacies + RecordingIdentity.MetaKey(canonical = RecordingIdentity.sessionKey(sessionId), legacy = null)
     }
 
     fun toggleFavorite(stableKey: String) {
         val store = libraryStore ?: return
-        val key = metaKeyForStableKey(stableKey) ?: run {
+        val keys = writeKeysForStableKey(stableKey) ?: run {
             RovaLog.e("HistoryViewModel.toggleFavorite: item not in current list for $stableKey")
             _sidecarWriteError.update { it + 1 }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(key) { it.copy(favorite = !it.favorite) }
+                // Migrate legacy aliases into canonical first (identity transform = merge + drop
+                // alias), THEN apply the real transform to the canonical entry.
+                keys.dropLast(1).forEach { store.update(it) { e -> e } }
+                store.update(keys.last()) { it.copy(favorite = !it.favorite) }
                 _sidecarRevision.update { it + 1 } // success → recompute reads the new snapshot
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.toggleFavorite: sidecar write failed for $stableKey", t)
@@ -433,7 +447,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun renameSession(stableKey: String, newTitle: String) {
         val store = libraryStore ?: return
-        val key = metaKeyForStableKey(stableKey) ?: run {
+        val keys = writeKeysForStableKey(stableKey) ?: run {
             RovaLog.e("HistoryViewModel.renameSession: item not in current list for $stableKey")
             _sidecarWriteError.update { it + 1 }
             return
@@ -441,7 +455,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val trimmed = newTitle.trim()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(key) { it.copy(customTitle = trimmed.ifBlank { null }) }
+                // Migrate legacy aliases into canonical first (identity transform = merge + drop
+                // alias), THEN apply the real transform to the canonical entry.
+                keys.dropLast(1).forEach { store.update(it) { e -> e } }
+                store.update(keys.last()) { it.copy(customTitle = trimmed.ifBlank { null }) }
                 _sidecarRevision.update { it + 1 }
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
