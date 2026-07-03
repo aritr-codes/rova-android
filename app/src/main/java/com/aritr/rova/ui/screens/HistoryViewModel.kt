@@ -405,6 +405,13 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         }
         val legacies = items.value
             .filter { it.sessionId == sessionId && it.side != null }
+            // Portrait-first, matching the read-path merge order (legacyBySession above /
+            // LibrarySessionAggregator): migrate-then-transform below folds these into canonical
+            // in list order, and LibraryMetadataEntry.merge is earlier-arg-priority for
+            // customTitle, so an mtime (items.value) order here would silently let a newer-file
+            // side's legacy title win over the read path's portrait-preferred title (final
+            // whole-branch review finding, 2026-07-03).
+            .sortedBy { if (it.side == VideoSide.PORTRAIT) 0 else 1 }
             .map { RecordingIdentity.forItem(it.sessionId, it.file?.absolutePath, it.docUri?.toString()) }
             .filter { it.legacy != null && it.legacy != it.canonical }
         return legacies + RecordingIdentity.MetaKey(canonical = RecordingIdentity.sessionKey(sessionId), legacy = null)
