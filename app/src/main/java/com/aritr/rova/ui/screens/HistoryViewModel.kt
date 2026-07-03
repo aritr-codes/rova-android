@@ -360,6 +360,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 customTitle = meta?.customTitle,
                 favorite = meta?.favorite ?: false,
                 side = item.side,
+                sessionId = item.sessionId,
                 thumbWidthPx = item.thumbnail?.width ?: 0,
                 thumbHeightPx = item.thumbnail?.height ?: 0,
             ),

@@ -358,6 +358,12 @@ class RovaSettings(context: Context) {
         get() = prefs.getString("library_view_mode", "GRID") ?: "GRID"
         set(value) = prefs.edit { putString("library_view_mode", value) }
 
+    // Session-list row density (spec 2026-07-02 §3.7). Stored as LibraryDensity name;
+    // UI coerces unknown/missing → COMFORTABLE.
+    var libraryDensity: String
+        get() = prefs.getString("library_density", "COMFORTABLE") ?: "COMFORTABLE"
+        set(value) = prefs.edit { putString("library_density", value) }
+
     companion object {
         /** Backup-excluded SharedPreferences file for runtime state that must NOT survive reinstall. */
         const val RUNTIME_PREFS_NAME = "rova_runtime_prefs"

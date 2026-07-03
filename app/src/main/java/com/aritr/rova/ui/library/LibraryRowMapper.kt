@@ -32,6 +32,8 @@ object LibraryRowMapper {
         val favorite: Boolean,
         /** DualShot per-side discriminator (null for single-mode/legacy) — authoritative orientation. */
         val side: VideoSide? = null,
+        /** Session id for [RecordingIdentity.sessionKey]; null = sessionless/legacy row. */
+        val sessionId: String? = null,
         /** Decoded thumbnail pixel size (rotation-corrected) — orientation source for single-mode rows. */
         val thumbWidthPx: Int = 0,
         val thumbHeightPx: Int = 0,
@@ -57,6 +59,8 @@ object LibraryRowMapper {
             badgeStopReason = if (badge == LibraryBadge.AUTO_STOPPED) input.stopReason else null,
             favorite = input.favorite,
             orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
+            sessionKey = input.sessionId?.let { RecordingIdentity.sessionKey(it) },
+            side = input.side,
         )
     }
 }
