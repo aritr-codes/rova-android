@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -168,7 +169,14 @@ fun LibraryScreen(
     val rowByKey = remember(ui.rows) { ui.rows.associateBy { it.stableKey } }
     val locale = Locale.getDefault()
     val tz = TimeZone.getDefault()
-    val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
+    // PR-C midnight fix: relative day labels ("Today"/"Yesterday") go stale when the day flips
+    // while the app is backgrounded — the old remember(ui.rows) stamp only refreshed on row
+    // changes. Single UN-keyed state instance so the ON_RESUME observer's closure write (below)
+    // always hits the live instance (a rows-keyed remember would recreate the state and strand
+    // the observer's capture — the LaunchedEffect keeps the rows-refresh behavior instead).
+    val nowMillisState = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val nowMillis = nowMillisState.longValue
+    LaunchedEffect(ui.rows) { nowMillisState.longValue = System.currentTimeMillis() }
 
     // Aggregated session rows key on session:<id>, which has no VideoItem — resolve via the
     // PORTRAIT-first side key (LibraryRow.sides) for thumbnail/sheet/share (spec §3.4).
@@ -336,6 +344,9 @@ fun LibraryScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            // PR-C midnight fix — re-stamp so day groups/labels recompute if the day flipped
+            // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
+            nowMillisState.longValue = System.currentTimeMillis()
             // Density reseed — pick up a Settings/PR-C density toggle when returning to the
             // kept-composed Library tab (same resume-pickup contract the retired cardPreview used).
             viewModel.refreshDensity()
