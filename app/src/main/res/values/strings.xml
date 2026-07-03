@@ -842,6 +842,11 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
+    <string name="library_latest_resume">Resume · %1$s</string>
+    <string name="library_a11y_latest_resume">Resume latest recording from %1$s</string>
+    <string name="library_a11y_latest_play">Play latest recording</string>
+    <string name="library_a11y_play_side">Play %1$s side, %2$s</string>
+    <string name="library_side_action_label">%1$s · %2$s</string>
     <string name="library_a11y_duration">duration</string>
     <string name="library_day_size_total">%1$s this day</string>
     <string name="library_empty_title">No recordings yet</string>

@@ -700,8 +700,6 @@ fun LibraryScreen(
                                             LibraryListRow(
                                                 row = row,
                                                 thumbnail = byKey[row.stableKey]?.thumbnail,
-                                                previewUri = previewUriFor(row.stableKey),
-                                                autoplay = row.stableKey in autoplayKeys,
                                                 tileDescription = TileSemantics.describe(row, frag),
                                                 durationFallback = "—",
                                                 dualShotLabel = plLabel,

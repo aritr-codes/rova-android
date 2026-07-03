@@ -840,6 +840,11 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
+    <string name="library_latest_resume">Reanudar · %1$s</string>
+    <string name="library_a11y_latest_resume">Reanudar la última grabación desde %1$s</string>
+    <string name="library_a11y_latest_play">Reproducir la última grabación</string>
+    <string name="library_a11y_play_side">Reproducir el lado %1$s, %2$s</string>
+    <string name="library_side_action_label">%1$s · %2$s</string>
     <string name="library_a11y_duration">duración</string>
     <string name="library_day_size_total">%1$s este día</string>
     <string name="library_empty_title">Aún no hay grabaciones</string>
