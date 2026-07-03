@@ -70,4 +70,18 @@ class ScrubberIndexTest {
         assertNull(ScrubberIndex.labelForFraction(empty, 0.5f))
         assertEquals(0, ScrubberIndex.itemIndexForFraction(empty, 0.5f))
     }
+
+    // --- PR-C: bubble geometry (label rides the thumb, clamped inside the rail) ---
+
+    @Test
+    fun bubbleTopPx_centersOnThumb_andClamps() {
+        // Centered: thumb 16px tall at top=100 in a 400px rail, bubble 32px → 100+8-16 = 92.
+        assertEquals(92f, ScrubberIndex.bubbleTopPx(100f, 16f, 32f, 400f))
+        // Clamp top: thumb at 0 → centered would be negative → 0.
+        assertEquals(0f, ScrubberIndex.bubbleTopPx(0f, 16f, 32f, 400f))
+        // Clamp bottom: thumb at rail end (384) → centered 376 > 400-32=368 → 368.
+        assertEquals(368f, ScrubberIndex.bubbleTopPx(384f, 16f, 32f, 400f))
+        // Degenerate: bubble taller than rail → pinned to 0, never negative.
+        assertEquals(0f, ScrubberIndex.bubbleTopPx(10f, 16f, 500f, 400f))
+    }
 }

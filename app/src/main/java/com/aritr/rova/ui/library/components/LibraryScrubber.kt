@@ -7,9 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.ScrubberIndex
@@ -94,6 +97,12 @@ fun LibraryScrubber(
     )
     val accent = LocalGlassEnvironment.current.palette.accent
 
+    // Thumb + bubble geometry hoisted so the bubble (rendered before the rail) can track the
+    // thumb. Pure clamp in ScrubberIndex.bubbleTopPx (JVM-tested).
+    val thumbSizePx = with(density) { SCRUBBER_THUMB.toPx() }
+    val thumbTopPx = (thumbFraction * (railHeightPx - thumbSizePx)).coerceAtLeast(0f)
+    var bubbleHeightPx by remember { mutableFloatStateOf(0f) }
+
     // Coalesce drag scrolls (codex: don't launch a scroll every frame — only on segment change).
     fun scrollToSeg(seg: Int) {
         if (seg != lastScrolledSeg) {
@@ -111,11 +120,22 @@ fun LibraryScrubber(
                 contentDescription = label
             },
         )
-        // Bubble (drag only) to the LEFT of the rail.
+        // Bubble (drag only) to the LEFT of the rail, riding the thumb (PR-C fix #3: intrinsic
+        // width via unbounded wrapContentWidth — the old in-rail measure went negative and
+        // wrapped one char per line; vertical offset tracks the thumb, clamped inside the rail).
         if (dragging) {
             Box(
                 Modifier
+                    .offset {
+                        IntOffset(
+                            0,
+                            ScrubberIndex.bubbleTopPx(thumbTopPx, thumbSizePx, bubbleHeightPx, railHeightPx)
+                                .roundToInt(),
+                        )
+                    }
                     .padding(end = 28.dp)
+                    .wrapContentWidth(align = Alignment.End, unbounded = true)
+                    .onSizeChanged { bubbleHeightPx = it.height.toFloat() }
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.inverseSurface)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -160,12 +180,13 @@ fun LibraryScrubber(
                         true
                     }
                 },
+            contentAlignment = Alignment.TopCenter,
         ) {
-            val thumbY = with(density) { (thumbFraction * (railHeightPx - 24.dp.toPx())).coerceAtLeast(0f).toDp() }
+            val thumbY = with(density) { thumbTopPx.toDp() }
             Box(
                 Modifier
                     .padding(top = thumbY)
-                    .size(24.dp)
+                    .size(SCRUBBER_THUMB)
                     .alpha(thumbAlpha)
                     .clip(CircleShape)
                     .background(accent),
@@ -179,3 +200,6 @@ private const val SCRUBBER_IDLE_MS = 1100L
 
 /** Thumb fade-in/out duration (bypassed under reduced-motion, which snaps). */
 private const val SCRUBBER_FADE_MS = 260
+
+/** Thumb dot visual size — 16dp per owner request (PR-C); the 24dp-wide gesture rail is unchanged. */
+private val SCRUBBER_THUMB = 16.dp

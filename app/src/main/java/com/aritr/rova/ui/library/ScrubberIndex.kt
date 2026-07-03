@@ -62,4 +62,14 @@ object ScrubberIndex {
         if (segments.isEmpty()) return null
         return segments[nearestSegmentIndex(segments, fraction)].label
     }
+
+    /**
+     * Top Y of the drag bubble so its center rides the thumb's center, clamped fully inside the
+     * rail. Pure math seam for the PR-C scrubber fix (#3): the composable feeds measured px and
+     * applies the result as a layout offset.
+     */
+    fun bubbleTopPx(thumbTopPx: Float, thumbSizePx: Float, bubbleHeightPx: Float, railHeightPx: Float): Float {
+        val centered = thumbTopPx + thumbSizePx / 2f - bubbleHeightPx / 2f
+        return centered.coerceIn(0f, (railHeightPx - bubbleHeightPx).coerceAtLeast(0f))
+    }
 }
