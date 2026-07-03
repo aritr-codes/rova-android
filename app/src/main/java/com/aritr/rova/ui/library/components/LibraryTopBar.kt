@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -17,23 +16,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.components.SemanticIcon
-import com.aritr.rova.ui.library.LibraryViewMode
 import com.aritr.rova.ui.theme.GlassRole
 import com.aritr.rova.ui.theme.GlassSurface
 import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaIcons
 
 /**
- * spec §9 — glass top bar with a grid/list toggle. The toggle icon shows the mode you'll switch TO.
- * Slice 3 — optional back nav + vault entry (the route surface needs both; null = omit).
+ * spec §9 — glass top bar. Slice 3 — optional back nav + vault entry (the route surface needs
+ * both; null = omit).
  */
 @Composable
 fun LibraryTopBar(
     title: String,
-    viewMode: LibraryViewMode,
-    gridLabel: String,
-    listLabel: String,
-    onToggleView: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     backLabel: String = "",
@@ -92,22 +86,6 @@ fun LibraryTopBar(
                     SemanticIcon(
                         glyph = RovaIcons.Sort,
                         contentDescription = sortLabel,
-                        role = IconRole.Secondary,
-                        modifier = Modifier.size(LibraryDimens.navIcon),
-                    )
-                }
-            }
-            IconButton(onClick = onToggleView) {
-                if (viewMode == LibraryViewMode.GRID) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ViewList,
-                        contentDescription = listLabel,
-                        modifier = Modifier.size(LibraryDimens.navIcon),
-                    )
-                } else {
-                    SemanticIcon(
-                        glyph = RovaIcons.View,
-                        contentDescription = gridLabel,
                         role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )

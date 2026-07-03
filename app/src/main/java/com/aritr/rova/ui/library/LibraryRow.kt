@@ -42,6 +42,12 @@ data class LibraryRow(
     val side: VideoSide? = null,
     /** Non-empty ONLY on aggregated DualShot session rows (Task 5 aggregator, PR-A unwired). */
     val sides: List<LibrarySessionSide> = emptyList(),
+    /**
+     * Saved playback position (ms) for the side this row's tap would play: the row's own side for
+     * single/per-side rows, the PORTRAIT-first non-null side on aggregated session rows. Drives the
+     * latest-row Resume pill copy only (spec §3.3) — the player re-reads its own resume position.
+     */
+    val resumePositionMs: Long? = null,
 )
 
 /**

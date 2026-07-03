@@ -32,10 +32,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val autoDeleteEnabled = MutableStateFlow(settings.autoDeleteEnabled)
     val autoDeleteKeepLatest = MutableStateFlow(settings.autoDeleteKeepLatest)
 
-    // Polish P7 — opt-in Library card autoplay preview (default OFF). Write-back collector mirrors to
-    // RovaSettings; the Library VM reseeds from disk on resume (cross-VM sync via SharedPreferences).
-    val libraryCardPreview = MutableStateFlow(settings.libraryCardPreview)
-
     // B1 — recording defaults, surfaced as editable rows in App Settings.
     // These are the SAME persisted prefs the record SettingsSheet edits via
     // RecordViewModel. SharedPreferences is the single source of truth; both
@@ -119,7 +115,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { cameraGuidesEnabled.collect { settings.cameraGuidesEnabled = it } }
         viewModelScope.launch { autoDeleteEnabled.collect { settings.autoDeleteEnabled = it } }
         viewModelScope.launch { autoDeleteKeepLatest.collect { settings.autoDeleteKeepLatest = it } }
-        viewModelScope.launch { libraryCardPreview.collect { settings.libraryCardPreview = it } }
         viewModelScope.launch { resolution.collect { settings.resolution = it } }
         viewModelScope.launch { durationSeconds.collect { settings.durationSeconds = it } }
         viewModelScope.launch { intervalSeconds.collect { settings.intervalSeconds = it } }

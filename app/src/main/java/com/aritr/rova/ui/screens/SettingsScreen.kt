@@ -129,7 +129,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
     val vibrateAlerts by settingsViewModel.vibrateAlerts.collectAsStateWithLifecycle()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsStateWithLifecycle()
     val cameraGuidesEnabled by settingsViewModel.cameraGuidesEnabled.collectAsStateWithLifecycle()
-    val libraryCardPreview by settingsViewModel.libraryCardPreview.collectAsStateWithLifecycle()
     val autoDeleteEnabled by settingsViewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     val autoDeleteKeepLatest by settingsViewModel.autoDeleteKeepLatest.collectAsStateWithLifecycle()
     val resolution by settingsViewModel.resolution.collectAsStateWithLifecycle()
@@ -354,16 +353,6 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel, onBack: () -> Unit = {}
                     supporting = stringResource(R.string.settings_camera_guides_supporting),
                     checked = cameraGuidesEnabled,
                     onCheckedChange = { settingsViewModel.cameraGuidesEnabled.value = it }
-                )
-            }
-
-            SettingsSection(label = stringResource(R.string.settings_section_library)) {
-                SettingsRow(
-                    glyph = RovaIcons.Video,
-                    label = stringResource(R.string.settings_library_card_preview_title),
-                    supporting = stringResource(R.string.settings_library_card_preview_summary),
-                    checked = libraryCardPreview,
-                    onCheckedChange = { settingsViewModel.libraryCardPreview.value = it }
                 )
             }
 

@@ -109,4 +109,32 @@ class LibraryRowMapperTest {
         assertNull(row.sessionKey)
         assertNull(row.side)
     }
+
+    @Test
+    fun map_carriesResumePosition() {
+        // Build the same Input as map_carriesSessionKeyAndSide but with resumePositionMs = 42_000L.
+        // Assert: row.resumePositionMs == 42_000L. Also assert the default (an Input built without
+        // the param) yields null.
+        val row = LibraryRowMapper.map(
+            LibraryRowMapper.Input(
+                stableKey = "/path/a_P.mp4",
+                startedAtMillis = 1_000L,
+                dateMillis = 1_000L,
+                dateLabel = "Jul 2",
+                sizeBytes = 10L,
+                segmentDurationsMs = listOf(30_000L),
+                topologyPersisted = "DualShot",
+                terminated = null,
+                stopReason = StopReason.NONE,
+                exportState = ExportState.FINALIZED,
+                customTitle = null,
+                favorite = false,
+                side = VideoSide.PORTRAIT,
+                sessionId = "abc123",
+                resumePositionMs = 42_000L,
+            ),
+            Locale.US, TimeZone.getTimeZone("UTC"),
+        )
+        assertEquals(42_000L, row.resumePositionMs)
+    }
 }

@@ -86,4 +86,52 @@ class LibraryMetadataStoreTest {
         assertEquals(7L, e.positionFor("PORTRAIT"))
         assertEquals(9L, e.positionFor("LANDSCAPE"))
     }
+
+    /**
+     * Pins HistoryViewModel.writeKeysForStableKey's migrate-then-transform sequence
+     * (`keys.dropLast(1).forEach { store.update(it) { e -> e } }` then transform on the
+     * canonical key). Each legacy migration folds into canonical via
+     * LibraryMetadataEntry.merge, which is earlier-arg (canonical-so-far) priority for
+     * customTitle and DROPS the alias — so the FIRST legacy migrated seeds canonical's
+     * title and no later migration can override it. The list order must be portrait-first
+     * to match the read path (final whole-branch review finding, 2026-07-03): this test
+     * proves the migration order is load-bearing by running the identical sequence both ways.
+     */
+    @Test fun migrateThenTransform_portraitFirst_keepsPortraitTitle() {
+        val tmpDir = tmp.newFolder("migrateOrderPortraitFirst")
+        val store = LibraryMetadataStore(tmpDir)
+        store.update("/p/beach.mp4") { it.copy(customTitle = "Beach") }   // portrait legacy
+        store.update("/p/sunset.mp4") { it.copy(customTitle = "Sunset") } // landscape legacy, newer file
+        val portraitKey = RecordingIdentity.MetaKey("session:s1", "/p/beach.mp4")
+        val landscapeKey = RecordingIdentity.MetaKey("session:s1", "/p/sunset.mp4")
+        val canonicalKey = RecordingIdentity.MetaKey("session:s1", legacy = null)
+
+        // Portrait-first list, as LibraryRow.side ordering now produces.
+        val keysPortraitFirst = listOf(portraitKey, landscapeKey, canonicalKey)
+        keysPortraitFirst.dropLast(1).forEach { store.update(it) { e -> e } }
+        store.update(keysPortraitFirst.last()) { it.copy(favorite = true) }
+
+        val reloaded = LibraryMetadataStore(tmpDir)
+        assertEquals("Beach", reloaded.get("session:s1")!!.customTitle)
+        assertNull(reloaded.get("/p/beach.mp4"))
+        assertNull(reloaded.get("/p/sunset.mp4"))
+    }
+
+    @Test fun migrateThenTransform_landscapeFirst_flipsToLandscapeTitle_documentingOrderMatters() {
+        val tmpDir = tmp.newFolder("migrateOrderLandscapeFirst")
+        val store = LibraryMetadataStore(tmpDir)
+        store.update("/p/beach.mp4") { it.copy(customTitle = "Beach") }
+        store.update("/p/sunset.mp4") { it.copy(customTitle = "Sunset") }
+        val portraitKey = RecordingIdentity.MetaKey("session:s2", "/p/beach.mp4")
+        val landscapeKey = RecordingIdentity.MetaKey("session:s2", "/p/sunset.mp4")
+        val canonicalKey = RecordingIdentity.MetaKey("session:s2", legacy = null)
+
+        // Landscape-first (mtime order, the pre-fix bug) — landscape migrates FIRST and
+        // seeds canonical's title, silently overriding the read path's portrait-preferred title.
+        val keysLandscapeFirst = listOf(landscapeKey, portraitKey, canonicalKey)
+        keysLandscapeFirst.dropLast(1).forEach { store.update(it) { e -> e } }
+        store.update(keysLandscapeFirst.last()) { it.copy(favorite = true) }
+
+        assertEquals("Sunset", LibraryMetadataStore(tmpDir).get("session:s2")!!.customTitle)
+    }
 }

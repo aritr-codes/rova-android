@@ -37,6 +37,7 @@ object LibraryRowMapper {
         /** Decoded thumbnail pixel size (rotation-corrected) — orientation source for single-mode rows. */
         val thumbWidthPx: Int = 0,
         val thumbHeightPx: Int = 0,
+        val resumePositionMs: Long? = null,
     )
 
     fun map(input: Input, locale: Locale, tz: TimeZone): LibraryRow {
@@ -61,6 +62,7 @@ object LibraryRowMapper {
             orientation = OrientationResolver.resolve(input.side, input.thumbWidthPx, input.thumbHeightPx),
             sessionKey = input.sessionId?.let { RecordingIdentity.sessionKey(it) },
             side = input.side,
+            resumePositionMs = input.resumePositionMs,
         )
     }
 }

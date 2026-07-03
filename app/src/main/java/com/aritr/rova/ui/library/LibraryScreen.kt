@@ -9,11 +9,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -27,7 +22,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,10 +38,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CollectionInfo
-import androidx.compose.ui.semantics.CollectionItemInfo
-import androidx.compose.ui.semantics.collectionInfo
-import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -60,7 +50,6 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.components.RovaAlertDialog
-import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDayHeader
 import com.aritr.rova.ui.library.components.LibraryDualShotEmpty
@@ -69,8 +58,6 @@ import com.aritr.rova.ui.library.components.LibraryFavoritesEmpty
 import com.aritr.rova.ui.library.components.LibraryFilteredEmpty
 import com.aritr.rova.ui.library.components.LibrarySearchEmpty
 import com.aritr.rova.ui.library.components.LibraryUsageLine
-import com.aritr.rova.ui.library.components.LibraryGridCard
-import com.aritr.rova.ui.library.components.LibraryHeroCard
 import com.aritr.rova.ui.library.components.LibraryItemSheet
 import com.aritr.rova.ui.library.components.LibraryFilterChips
 import com.aritr.rova.ui.library.components.LibraryListRow
@@ -81,7 +68,6 @@ import com.aritr.rova.ui.library.components.LibrarySearchField
 import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
 import com.aritr.rova.ui.library.components.LibrarySortSheet
 import com.aritr.rova.ui.library.components.LibraryTopBar
-import com.aritr.rova.ui.library.components.statusBadgeLabel
 import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
@@ -109,18 +95,17 @@ import androidx.compose.ui.res.pluralStringResource
 import java.util.Locale
 import java.util.TimeZone
 
-private const val GRID_COLUMNS = 2
-
 /**
- * spec §5 — redesigned Library route surface (hero + grid/list, day-grouped, glass chrome) PLUS the
+ * spec §5 / ADR-0030 amendment (2026-07-02, Direction A) — single-list Library route surface:
+ * one `LazyColumn` of session rows, sticky day headers, a restrained in-timeline latest-row accent
+ * (NEWEST sort only, no autoplay anywhere — trust rule for background-recorded video) PLUS the
  * Slice 3 management layer: long-press multi-select, glass contextual top bar + bottom batch bar
  * (Share/Vault/Favorite/Delete), Snackbar-UNDO deferred delete, per-item sheet (incl. Rename), and the
  * ported recovery-card header + warning strip. Replaces `HistoryScreen` on the `"history"` route.
  *
- * Hero invariant (owner adj. 1): `collection` is built with `hero?.stableKey`, so the newest recording
- * renders in exactly one place. Deferred-delete (owner + codex): rows pending delete are hidden via
- * [PendingDelete]; the real delete commits only on the Snackbar owner (timeout/swipe), UNDO cancels,
- * screen-dispose abandons (files untouched, rows reappear next load). No manifest writes here (ADR-0030).
+ * Deferred-delete (owner + codex): rows pending delete are hidden via [PendingDelete]; the real
+ * delete commits only on the Snackbar owner (timeout/swipe), UNDO cancels, screen-dispose abandons
+ * (files untouched, rows reappear next load). No manifest writes here (ADR-0030).
  */
 @Composable
 fun LibraryScreen(
@@ -136,8 +121,6 @@ fun LibraryScreen(
 
     val ui by viewModel.libraryUiState.collectAsStateWithLifecycle()
     val items by viewModel.items.collectAsStateWithLifecycle()
-    // Hero muted autoplay is gated by reduce-motion (ADR-0020): off → static frame (owner polish #2).
-    val reduceMotion = rememberReduceMotion()
 
     // Slice 4 Discovery — sort/filter from the VM; search/sort-sheet are local UI state; hoisted scroll
     // state drives the date scrubber.
@@ -145,7 +128,6 @@ fun LibraryScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
-    val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
 
     // Slice 5 (remediation row 23) — focus restore: remember the row that launched playback so focus
@@ -186,42 +168,10 @@ fun LibraryScreen(
     val tz = TimeZone.getDefault()
     val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
 
-    // Slice 4.2 / Polish P7 — which cards autoplay: OFF by default (cards are static posters); only
-    // when the opt-in Setting (ui.cardPreview) is on do visible-only (≥50%), capped, non-scrolling,
-    // non-reduce-motion cards preview. The hero is unaffected (it autoplays regardless, see renderHero).
-    val autoplayKeys: Set<String> by remember(reduceMotion, ui.cardPreview) {
-        derivedStateOf {
-            if (reduceMotion || !ui.cardPreview) return@derivedStateOf emptySet()
-            val grid = ui.viewMode == LibraryViewMode.GRID
-            if (if (grid) gridState.isScrollInProgress else listState.isScrollInProgress) {
-                return@derivedStateOf emptySet()
-            }
-            val orderedKeys: List<String>
-            val heroVisible: Boolean
-            if (grid) {
-                val li = gridState.layoutInfo
-                val onScreen = li.visibleItemsInfo.filter {
-                    AutoplayPolicy.isMostlyVisible(it.offset.y, it.size.height, li.viewportStartOffset, li.viewportEndOffset)
-                }
-                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
-                orderedKeys = onScreen.mapNotNull { it.key as? String }
-                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
-            } else {
-                val li = listState.layoutInfo
-                val onScreen = li.visibleItemsInfo.filter {
-                    AutoplayPolicy.isMostlyVisible(it.offset, it.size, li.viewportStartOffset, li.viewportEndOffset)
-                }
-                heroVisible = onScreen.any { (it.key as? String)?.startsWith("hero-") == true }
-                orderedKeys = onScreen.mapNotNull { it.key as? String }
-                    .filter { !it.startsWith("hdr-") && !it.startsWith("hero-") }
-            }
-            AutoplayPolicy.select(orderedKeys, AutoplayPolicy.cardCap(heroVisible))
-        }
-    }
-
-    // Per-row preview URI (same resolution the hero uses).
-    fun previewUriFor(stableKey: String): android.net.Uri? =
-        byKey[stableKey]?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
+    // Aggregated session rows key on session:<id>, which has no VideoItem — resolve via the
+    // PORTRAIT-first side key (LibraryRow.sides) for thumbnail/sheet/share (spec §3.4).
+    fun itemFor(row: LibraryRow): com.aritr.rova.ui.screens.VideoItem? =
+        byKey[row.stableKey] ?: row.sides.firstOrNull()?.let { byKey[it.stableKey] }
 
     // ---- effects ----
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -230,8 +180,10 @@ fun LibraryScreen(
             RetentionCleanupNotices.message(notice)?.let { snackbarHostState.showSnackbar(it) }
         }
     }
-    LaunchedEffect(items) {
-        selection = SelectionReducer.reconcile(selection, items.map { it.stableKey }.toSet())
+    LaunchedEffect(ui.rows) {
+        // Reconcile against ROW keys, not VideoItem keys: aggregated session rows key on
+        // session:<id>, which has no VideoItem (codex plan-review 2026-07-03).
+        selection = SelectionReducer.reconcile(selection, ui.rows.map { it.stableKey }.toSet())
     }
     val sidecarErr by viewModel.sidecarWriteError.collectAsStateWithLifecycle()
     val sidecarErrMsg = stringResource(R.string.library_sidecar_write_error)
@@ -256,9 +208,6 @@ fun LibraryScreen(
         landscapeWord = stringResource(R.string.library_orientation_landscape),
         autoStoppedWord = stringResource(R.string.library_badge_auto_stopped),
     )
-    val recoveredLabel = stringResource(R.string.library_badge_recovered)
-    val interruptedLabel = stringResource(R.string.library_badge_interrupted)
-    val autoStoppedLabel = stringResource(R.string.library_badge_auto_stopped)
     val plLabel = stringResource(R.string.library_badge_pl)
     val eyebrow = stringResource(R.string.library_eyebrow_latest)
     val favoriteLabel = stringResource(R.string.library_action_favorite)
@@ -268,6 +217,11 @@ fun LibraryScreen(
     val notSelectedLabel = stringResource(R.string.library_a11y_not_selected)
     val shareNoApp = stringResource(R.string.history_share_no_app)
     val deleteUndoLabel = stringResource(R.string.library_delete_undo)
+    val playLabel = stringResource(R.string.library_action_play)
+    val portraitWord = stringResource(R.string.library_orientation_portrait)
+    val landscapeWord = stringResource(R.string.library_orientation_landscape)
+    val playSideTemplate = stringResource(R.string.library_a11y_play_side)
+    val sideActionTemplate = stringResource(R.string.library_side_action_label)
 
     // ---- share helper (no manifest writes; reuses ShareUriResolver) ----
     fun shareItems(targets: List<com.aritr.rova.ui.screens.VideoItem>) {
@@ -289,11 +243,14 @@ fun LibraryScreen(
         }
     }
 
-    fun play(stableKey: String) {
-        val item = byKey[stableKey] ?: return
+    fun play(rowKey: String, sideKey: String? = null) {
+        // Aggregated session row default = Portrait (sides are PORTRAIT-first; ADR-0030 §3 —
+        // the side actions make this default visible).
+        val resolved = sideKey ?: rowByKey[rowKey]?.sides?.firstOrNull()?.stableKey ?: rowKey
+        val item = byKey[resolved] ?: return
         val sid = item.sessionId
         if (sid != null) {
-            pendingFocusKey = stableKey // restore focus here on return (row 23)
+            pendingFocusKey = rowKey // restore focus here on return (row 23)
             // Hand the already-decoded tile thumbnail to the player so it paints over the black
             // shutter until the first video frame renders (no "block" flash on entry).
             com.aritr.rova.ui.screens.player.PlayerPosterHandoff.set(sid, item.thumbnail)
@@ -301,7 +258,7 @@ fun LibraryScreen(
         } else {
             // Legacy file-only row (no manifest): keep the PreviewActivity path.
             item.file?.let { f ->
-                pendingFocusKey = stableKey // restore focus here on return (row 23)
+                pendingFocusKey = rowKey // restore focus here on return (row 23)
                 val intent = Intent(context, PreviewActivity::class.java).apply {
                     putExtra("VIDEO_PATH", f.absolutePath)
                     item.shareUri?.let { putExtra("SHARE_URI", it.toString()) }
@@ -314,6 +271,10 @@ fun LibraryScreen(
     // ---- deferred-delete owner coroutine (owner + codex) ----
     fun startDeferredDelete(keys: Set<String>) {
         if (keys.isEmpty()) return
+        // Fan session rows out to their per-side file keys NOW (confirm time) — the timeout
+        // commit runs after the undo window, when the captured rowByKey snapshot may be stale
+        // (codex plan-review 2026-07-03). `pending`/selection keep hiding by ROW key.
+        val fileKeys = LibrarySessionKeys.expand(keys, rowByKey)
         // Commit any batch whose snackbar is still showing (stock showSnackbar QUEUES rather than
         // replaces — codex): dismissing it resolves the prior job Dismissed → it commits now.
         snackbarHostState.currentSnackbarData?.dismiss()
@@ -332,7 +293,7 @@ fun LibraryScreen(
                     // Timeout/swipe = decided commit. NonCancellable so a screen-dispose mid-delete can't
                     // half-delete (the still-showing-snackbar abandon path is the cancel of showSnackbar
                     // ABOVE, which never reaches here). deleteItemsKeyed refreshes items internally.
-                    val targets = viewModel.itemsForKeys(keys)
+                    val targets = viewModel.itemsForKeys(fileKeys)
                     val failed = withContext(NonCancellable) { viewModel.deleteItemsKeyed(targets) }
                     // Drop the WHOLE batch from pending: succeeded keys are gone from ui.rows, failed keys
                     // remain there and reappear once un-hidden — no stale-key leak (codex #1).
@@ -349,32 +310,35 @@ fun LibraryScreen(
 
     // ---- derived (pending rows hidden everywhere) ----
     val visibleRows = remember(ui.rows, pending) { pending.visible(ui.rows) }
-    val hero = remember(visibleRows, filter) { LibraryQuery.heroFor(visibleRows, filter) }
-    val collection = remember(visibleRows, hero, sort, filter) {
-        LibraryQuery.collection(visibleRows, sort, filter, hero?.stableKey)
+    // Hero is gone (ADR-0030 amendment §2): the full filtered+sorted collection renders in the
+    // list; the latest anchor is an in-timeline accent on the first row under NEWEST only.
+    val collection = remember(visibleRows, sort, filter) {
+        LibraryQuery.collection(visibleRows, sort, filter, heroKey = null)
     }
+    val latestKey = remember(collection, sort) { LatestRowPolicy.latestKey(collection, sort) }
     val groups = remember(collection, sort, nowMillis, locale, tz) { LibraryDayGrouping.groupForSort(collection, sort, nowMillis, locale, tz) }
-    // Scrubber segments: leading = recovery/warnings header (always) + hero (if present).
-    val leadingItemCount = 1 + (if (hero != null) 1 else 0)
-    val scrubberSegments = remember(groups, leadingItemCount) {
+    // Scrubber segments: leading = the recovery/warnings header only (hero slot gone).
+    val leadingItemCount = 1
+    val scrubberSegments = remember(groups) {
         ScrubberIndex.segments(groups.map { it.label }, groups.map { it.rows.size }, leadingItemCount)
     }
+    val dims = remember(ui.density) { LibraryDensityDimens.spec(ui.density) }
     val scrubberRailLabel = stringResource(R.string.library_scrubber_rail_cd)
 
     // Slice 5 (remediation row 23) — focus restore on return from the player. ON_RESUME also fires on
     // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
     // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
-    val currentHeroKey by rememberUpdatedState(hero?.stableKey)
     val currentGroupKeys by rememberUpdatedState(groups.map { g -> g.rows.map { it.stableKey } })
-    val currentViewMode by rememberUpdatedState(ui.viewMode)
+    val currentGroupHeaders by rememberUpdatedState(groups.map { it.label.isNotEmpty() })
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
-            // P7 — pick up a Settings card-preview toggle when returning to the kept-composed Library tab.
-            viewModel.refreshCardPreview()
+            // Density reseed — pick up a Settings/PR-C density toggle when returning to the
+            // kept-composed Library tab (same resume-pickup contract the retired cardPreview used).
+            viewModel.refreshDensity()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
-            val index = FocusRestorePolicy.targetItemIndex(key, currentHeroKey, currentGroupKeys)
+            val index = FocusRestorePolicy.targetItemIndex(key, currentGroupKeys, currentGroupHeaders)
             if (index == null) {
                 pendingFocusKey = null
                 return@LifecycleEventObserver
@@ -382,30 +346,11 @@ fun LibraryScreen(
             coroutineScope.launch {
                 // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
                 // The saveable lazy state restores the pre-open position on the pop, so the common
-                // return needs no scroll; a redundant scrollToItem jump-scrolls the grid and stalls
+                // return needs no scroll; a redundant scrollToItem jump-scrolls the list and stalls
                 // the UI thread. Focus is still restored below in every case (all input modalities).
-                //
-                // ONE grid/list branch (code-review 2026-07-02, CONFIRMED): the visible-key source
-                // AND the scroll dispatch both come from a single `if`, so the two view modes can't
-                // drift out of sync — previously a change to the await/scroll arm in one mode would
-                // silently break focus restore in the other.
-                val rawVisibleKeys: () -> List<Any>
-                val scrollToTarget: suspend () -> Unit
-                if (currentViewMode == LibraryViewMode.GRID) {
-                    rawVisibleKeys = { gridState.layoutInfo.visibleItemsInfo.map { it.key } }
-                    scrollToTarget = { gridState.scrollToItem(index) }
-                } else {
-                    rawVisibleKeys = { listState.layoutInfo.visibleItemsInfo.map { it.key } }
-                    scrollToTarget = { listState.scrollToItem(index) }
-                }
-                // The hero renders under the prefixed lazy key "hero-<stableKey>" while pendingFocusKey
-                // and the group-row items use the plain stableKey. Strip the prefix so shouldScroll and
-                // the await compare like-for-like — otherwise the hero (a commonly-tapped tile) always
-                // scrolls (jitter persists) AND the await never matches, hanging this coroutine so
-                // pendingFocusKey never clears and a new one leaks every ON_RESUME (code-review 2026-07-02).
-                val visibleKeys = { rawVisibleKeys().mapNotNull { it as? String }.map { it.removePrefix("hero-") } }
+                val visibleKeys = { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String } }
                 if (FocusRestorePolicy.shouldScroll(key, visibleKeys())) {
-                    scrollToTarget()
+                    listState.scrollToItem(index)
                     snapshotFlow { key in visibleKeys() }.first { it }
                 }
                 withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
@@ -457,27 +402,6 @@ fun LibraryScreen(
         }
     }
 
-    @Composable
-    fun renderHero(row: LibraryRow) {
-        val item = byKey[row.stableKey]
-        val previewUri = item?.let { it.shareUri ?: it.file?.let(android.net.Uri::fromFile) }
-        LibraryHeroCard(
-            row = row,
-            thumbnail = item?.thumbnail,
-            eyebrow = eyebrow,
-            playDescription = TileSemantics.describe(row, frag),
-            favoriteLabel = favoriteLabel,
-            unfavoriteLabel = unfavoriteLabel,
-            shareLabel = shareLabel,
-            onPlay = { play(row.stableKey) },
-            onFavorite = { viewModel.toggleFavorite(row.stableKey) },
-            onShare = { byKey[row.stableKey]?.let { shareItems(listOf(it)) } },
-            previewUri = previewUri,
-            autoplay = !reduceMotion,
-            mediaFocusRequester = if (row.stableKey == pendingFocusKey) rowFocusRequester else null,
-        )
-    }
-
     // tile interaction: tap toggles in select mode else plays. Long-press toggles in select mode,
     // else opens the per-item sheet (§5.3) — which carries a "Select" entry to start multi-select.
     fun onTileClick(key: String) {
@@ -516,14 +440,6 @@ fun LibraryScreen(
                 } else {
                     LibraryTopBar(
                         title = stringResource(R.string.history_title),
-                        viewMode = ui.viewMode,
-                        gridLabel = stringResource(R.string.library_view_grid),
-                        listLabel = stringResource(R.string.library_view_list),
-                        onToggleView = {
-                            viewModel.setViewMode(
-                                if (ui.viewMode == LibraryViewMode.GRID) LibraryViewMode.LIST else LibraryViewMode.GRID,
-                            )
-                        },
                         onBack = onBack,
                         backLabel = stringResource(R.string.history_back_cd),
                         onOpenVault = onOpenVault,
@@ -544,7 +460,7 @@ fun LibraryScreen(
                         favoriteLabel = favoriteLabel,
                         deleteLabel = stringResource(R.string.library_action_delete),
                         vaultEnabled = movableSelectedExists,
-                        onShare = { shareItems(viewModel.itemsForKeys(selection.keys)) },
+                        onShare = { shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(selection.keys, rowByKey))) },
                         onVault = { pendingMoveToVaultSessionId = "__batch__" },
                         onFavorite = {
                             // Batch favorite = mark all selected as favorited (skip already-favorited).
@@ -602,7 +518,7 @@ fun LibraryScreen(
                         },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
-                    if (hero == null && collection.isEmpty()) {
+                    if (collection.isEmpty()) {
                         // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
                         // pinned above so the user can clear/adjust; the body offers Clear filters too.
                         // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
@@ -626,109 +542,63 @@ fun LibraryScreen(
                         }
                     } else {
                         Box(Modifier.fillMaxSize().weight(1f)) {
-                            if (ui.viewMode == LibraryViewMode.GRID) {
-                                LazyVerticalGrid(
-                                    state = gridState,
-                                    columns = GridCells.Fixed(GRID_COLUMNS),
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = com.aritr.rova.ui.library.components.LibraryDimens.screenPadH)
-                                        .semantics {
-                                            isTraversalGroup = true
-                                            collectionInfo = CollectionInfo(rowCount = -1, columnCount = GRID_COLUMNS)
-                                        },
-                                    contentPadding = PaddingValues(bottom = 20.dp),
-                                ) {
-                                    item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-recovery-warn") { RecoveryAndWarnings() }
-                                    if (hero != null) {
-                                        item(span = { GridItemSpan(maxLineSpan) }, key = "hero-${hero.stableKey}") { renderHero(hero) }
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 20.dp),
+                            ) {
+                                item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
+                                groups.forEach { group ->
+                                    if (group.label.isNotEmpty()) {
+                                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
                                     }
-                                    groups.forEach { group ->
-                                        // Header suppressed for non-chronological sorts (label = "" →
-                                        // flat list, LibraryDayGrouping.groupForSort). Date sorts keep it.
-                                        if (group.label.isNotEmpty()) {
-                                            item(span = { GridItemSpan(maxLineSpan) }, key = "hdr-${group.label}") {
-                                                LibraryDayHeader(group.label, group.sizeTotalLabel)
-                                            }
-                                        }
-                                        itemsIndexed(group.rows, key = { _, r -> r.stableKey }) { index, row ->
-                                            LibraryGridCard(
-                                                row = row,
-                                                thumbnail = byKey[row.stableKey]?.thumbnail,
-                                                previewUri = previewUriFor(row.stableKey),
-                                                autoplay = row.stableKey in autoplayKeys,
-                                                tileDescription = TileSemantics.describe(row, frag),
-                                                statusLabel = statusBadgeLabel(row.badge, recoveredLabel, interruptedLabel, autoStoppedLabel),
-                                                badge = row.badge,
-                                                plLabel = plLabel,
-                                                onClick = { onTileClick(row.stableKey) },
-                                                modifier = Modifier
-                                                    .padding(com.aritr.rova.ui.library.components.LibraryDimens.gridGutter)
-                                                    .then(if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier),
-                                                itemSemantics = {
-                                                    collectionItemInfo = CollectionItemInfo(
-                                                        rowIndex = index / GRID_COLUMNS,
-                                                        rowSpan = 1,
-                                                        columnIndex = index % GRID_COLUMNS,
-                                                        columnSpan = 1,
-                                                    )
-                                                },
-                                                isSelectionMode = selection.active,
-                                                isSelected = row.stableKey in selection.keys,
-                                                onLongClick = { onTileLong(row.stableKey) },
-                                                selectedLabel = selectedLabel,
-                                                notSelectedLabel = notSelectedLabel,
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                LazyColumn(
-                                    state = listState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(bottom = 20.dp),
-                                ) {
-                                    item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
-                                    if (hero != null) {
-                                        item(key = "hero-${hero.stableKey}") { renderHero(hero) }
-                                    }
-                                    groups.forEach { group ->
-                                        if (group.label.isNotEmpty()) {
-                                            item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
-                                        }
-                                        items(group.rows, key = { it.stableKey }) { row ->
-                                            LibraryListRow(
-                                                row = row,
-                                                thumbnail = byKey[row.stableKey]?.thumbnail,
-                                                previewUri = previewUriFor(row.stableKey),
-                                                autoplay = row.stableKey in autoplayKeys,
-                                                tileDescription = TileSemantics.describe(row, frag),
-                                                durationFallback = "—",
-                                                dualShotLabel = plLabel,
-                                                onClick = { onTileClick(row.stableKey) },
-                                                modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
-                                                isSelectionMode = selection.active,
-                                                isSelected = row.stableKey in selection.keys,
-                                                onLongClick = { onTileLong(row.stableKey) },
-                                                selectedLabel = selectedLabel,
-                                                notSelectedLabel = notSelectedLabel,
-                                            )
-                                        }
+                                    items(group.rows, key = { it.stableKey }) { row ->
+                                        val isLatest = row.stableKey == latestKey
+                                        val resumeMs = row.resumePositionMs?.takeIf { it > 0 }
+                                        LibraryListRow(
+                                            row = row,
+                                            thumbnail = itemFor(row)?.thumbnail,
+                                            tileDescription = TileSemantics.describe(row, frag),
+                                            durationFallback = "—",
+                                            dualShotLabel = plLabel,
+                                            dims = dims,
+                                            latest = isLatest,
+                                            latestEyebrowText = eyebrow,
+                                            latestPillText = if (isLatest) {
+                                                resumeMs?.let { stringResource(R.string.library_latest_resume, SmartTitle.durationLabel(it)) } ?: playLabel
+                                            } else {
+                                                ""
+                                            },
+                                            latestPillDescription = if (isLatest) {
+                                                resumeMs?.let { stringResource(R.string.library_a11y_latest_resume, SmartTitle.durationLabel(it)) }
+                                                    ?: stringResource(R.string.library_a11y_latest_play)
+                                            } else {
+                                                ""
+                                            },
+                                            portraitWord = portraitWord,
+                                            landscapeWord = landscapeWord,
+                                            playSideDescriptionTemplate = playSideTemplate,
+                                            sideActionLabelTemplate = sideActionTemplate,
+                                            onPlaySide = { s ->
+                                                if (selection.active) onTileClick(row.stableKey) else play(row.stableKey, s.stableKey)
+                                            },
+                                            onClick = { onTileClick(row.stableKey) },
+                                            modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
+                                            isSelectionMode = selection.active,
+                                            isSelected = row.stableKey in selection.keys,
+                                            onLongClick = { onTileLong(row.stableKey) },
+                                            selectedLabel = selectedLabel,
+                                            notSelectedLabel = notSelectedLabel,
+                                        )
                                     }
                                 }
                             }
                             // Date fast-scroll rail (self-hides when < 2 day groups).
                             LibraryScrubber(
                                 segments = scrubberSegments,
-                                firstVisibleItemIndex = if (ui.viewMode == LibraryViewMode.GRID)
-                                    gridState.firstVisibleItemIndex else listState.firstVisibleItemIndex,
+                                firstVisibleItemIndex = listState.firstVisibleItemIndex,
                                 railLabel = scrubberRailLabel,
-                                onScrollToItemIndex = { idx ->
-                                    coroutineScope.launch {
-                                        if (ui.viewMode == LibraryViewMode.GRID) gridState.scrollToItem(idx)
-                                        else listState.scrollToItem(idx)
-                                    }
-                                },
+                                onScrollToItemIndex = { idx -> coroutineScope.launch { listState.scrollToItem(idx) } },
                                 modifier = Modifier.align(Alignment.CenterEnd),
                             )
                         }
@@ -797,7 +667,7 @@ fun LibraryScreen(
         }
 
         sheetTarget?.let { row ->
-            val item = byKey[row.stableKey]
+            val item = itemFor(row)
             // P8 — session-identity header: title (WHEN) + meta (clips · duration · size), reusing the
             // same pure SessionCaption the list row renders (no new formatter, no manifest read).
             val sheetClipLabel = if (row.clipCount > 1) {
@@ -828,7 +698,7 @@ fun LibraryScreen(
                 deleteLabel = stringResource(R.string.library_action_delete),
                 onPlay = { sheetTarget = null; play(row.stableKey) },
                 onSelect = { sheetTarget = null; selection = SelectionReducer.enter(SelectionState(), row.stableKey) },
-                onShare = { sheetTarget = null; item?.let { shareItems(listOf(it)) } },
+                onShare = { sheetTarget = null; shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(setOf(row.stableKey), rowByKey))) },
                 onToggleFavorite = { sheetTarget = null; viewModel.toggleFavorite(row.stableKey) },
                 onRename = { sheetTarget = null; renameTarget = row },
                 onMoveToVault = { sheetTarget = null; pendingMoveToVaultSessionId = item?.sessionId },

@@ -24,8 +24,10 @@ import com.aritr.rova.ui.library.PruneKeepSet
 import com.aritr.rova.ui.library.RecordingIdentity
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
+import com.aritr.rova.ui.library.LibraryDensity
+import com.aritr.rova.ui.library.LibrarySessionAggregator
 import com.aritr.rova.ui.library.LibraryUiState
-import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.SessionSidecarMerge
 import com.aritr.rova.ui.library.UsageAggregator
 import com.aritr.rova.ui.library.ThumbnailCacheKey
 import com.aritr.rova.ui.library.ThumbnailDiskCache
@@ -249,24 +251,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val settings = RovaSettings(getApplication())
 
     /**
-     * Library grid/list toggle (decision A). Drives [libraryUiState]. Seeded from the persisted
-     * [RovaSettings.libraryViewMode] (Slice 4.1, fixes "resets to Grid every launch") and
-     * re-persisted in [setViewMode]; unknown/missing coerces to GRID.
+     * Session-list row density (spec §3.7). Seeded from [RovaSettings.libraryDensity];
+     * [refreshDensity] re-reads on resume (the bottom-nav keeps LibraryScreen composed across tab
+     * switches — same reseed pattern the retired cardPreview used). Unknown/missing → COMFORTABLE.
      */
-    private val _viewMode = MutableStateFlow(
-        runCatching { LibraryViewMode.valueOf(settings.libraryViewMode) }.getOrDefault(LibraryViewMode.GRID),
-    )
+    private val _density = MutableStateFlow(readDensity())
 
-    /**
-     * Polish P7 — mirrors [RovaSettings.libraryCardPreview] (default OFF) into [libraryUiState] so the
-     * screen can gate card autoplay. [refreshCardPreview] re-reads the pref on resume because the
-     * bottom-nav keeps [com.aritr.rova.ui.library.LibraryScreen] composed across tab switches, so a
-     * Settings toggle would otherwise not be picked up until process recreation.
-     */
-    private val _cardPreview = MutableStateFlow(settings.libraryCardPreview)
+    private fun readDensity(): LibraryDensity =
+        runCatching { LibraryDensity.valueOf(settings.libraryDensity) }.getOrDefault(LibraryDensity.COMFORTABLE)
 
-    fun refreshCardPreview() {
-        _cardPreview.value = settings.libraryCardPreview
+    fun refreshDensity() {
+        _density.value = readDensity()
     }
 
     /**
@@ -312,24 +307,46 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _viewMode, _sidecarRevision, _cardPreview) { rows, loaded, mode, _, cardPreview ->
+        combine(items, hasLoaded, _sidecarRevision, _density) { rows, loaded, _, density ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
+            // Spec §3.4 sidecar lazy-merge: a DualShot session's two sides may carry divergent
+            // pre-#137 legacy (path-keyed) entries; merge them portrait-first so both side rows —
+            // and the aggregated session row built from them — read one metadata truth. Read-path
+            // only; writes stay canonical. Single-side / single-mode items keep the pairwise path.
+            val legacyBySession: Map<String, List<LibraryMetadataEntry?>> = rows
+                .filter { it.sessionId != null && it.side != null }
+                .groupBy { it.sessionId!! }
+                .filterValues { it.size > 1 }
+                .mapValues { (_, group) ->
+                    group.sortedBy { if (it.side == VideoSide.PORTRAIT) 0 else 1 }
+                        .map { s ->
+                            val k = RecordingIdentity.forItem(s.sessionId, s.file?.absolutePath, s.docUri?.toString())
+                            k.legacy?.takeIf { it != k.canonical }?.let { snapshot[it] }
+                        }
+                }
             val mapped = rows.map { item ->
                 val key = RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
                 val canonical = snapshot[key.canonical]
-                val legacy = key.legacy?.takeIf { it != key.canonical }?.let { snapshot[it] }
-                val meta = LibraryMetadataEntry.merge(canonical, legacy)
+                val sideLegacies = item.sessionId?.let { legacyBySession[it] }
+                val meta = if (sideLegacies != null) {
+                    SessionSidecarMerge.resolve(canonical, sideLegacies)
+                } else {
+                    val legacy = key.legacy?.takeIf { it != key.canonical }?.let { snapshot[it] }
+                    LibraryMetadataEntry.merge(canonical, legacy)
+                }
                 toLibraryRow(item, meta, locale, tz)
             }
-            // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
+            // Spec §3.4: collapse DualShot per-side rows into ONE session row before the UI sees
+            // them. Usage folds over the aggregated list: a session counts once, bytes still sum
+            // (the session row carries both files' sizes).
+            val aggregated = LibrarySessionAggregator.aggregate(mapped)
             LibraryUiState(
-                rows = mapped,
-                viewMode = mode,
+                rows = aggregated,
                 hasLoaded = loaded,
-                usage = UsageAggregator.aggregate(mapped),
-                cardPreview = cardPreview,
+                usage = UsageAggregator.aggregate(aggregated),
+                density = density,
             )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)
@@ -363,39 +380,56 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 sessionId = item.sessionId,
                 thumbWidthPx = item.thumbnail?.width ?: 0,
                 thumbHeightPx = item.thumbnail?.height ?: 0,
+                resumePositionMs = meta?.positionFor(RecordingIdentity.sideSlot(item.side)),
             ),
             locale, tz,
         )
     }
 
-    fun setViewMode(mode: LibraryViewMode) {
-        _viewMode.value = mode
-        settings.libraryViewMode = mode.name // persist across launches (Slice 4.1)
-    }
-
     /**
-     * Hero/quick-action Favorite — the first sidecar WRITE path (ADR-0030). The UI
-     * is NON-optimistic (owner adjustment 2): the star reflects the sidecar
-     * snapshot, and only flips after a SUCCESSFUL [LibraryMetadataStore.update]
-     * bumps [_sidecarRevision] and triggers a recompute. On failure we never
-     * optimistically flipped, so there is no desync to roll back — we log and raise
-     * a non-blocking error signal. Off-main.
+     * Sidecar WRITE keys for one row key. Single-mode rows: the item's own MetaKey (unchanged
+     * behavior). DualShot rows — per-side OR aggregated session — return the sides' legacy
+     * migration keys FIRST, then the canonical session key as the transform target: a
+     * canonical-only write can't clear state while a legacy alias survives, because the read
+     * path merge (favorite OR / customTitle ?:) would resurrect it (codex plan-review
+     * 2026-07-03). Null = unknown key → callers raise the existing error signal.
      */
-    private fun metaKeyForStableKey(stableKey: String): RecordingIdentity.MetaKey? {
-        val item = items.value.firstOrNull { it.stableKey == stableKey } ?: return null
-        return RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
+    private fun writeKeysForStableKey(stableKey: String): List<RecordingIdentity.MetaKey>? {
+        val item = items.value.firstOrNull { it.stableKey == stableKey }
+        val sessionId = when {
+            item != null && item.sessionId != null && item.side != null -> item.sessionId
+            item != null ->
+                return listOf(RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString()))
+            RecordingIdentity.isSessionKey(stableKey) -> stableKey.removePrefix("session:")
+            else -> return null
+        }
+        val legacies = items.value
+            .filter { it.sessionId == sessionId && it.side != null }
+            // Portrait-first, matching the read-path merge order (legacyBySession above /
+            // LibrarySessionAggregator): migrate-then-transform below folds these into canonical
+            // in list order, and LibraryMetadataEntry.merge is earlier-arg-priority for
+            // customTitle, so an mtime (items.value) order here would silently let a newer-file
+            // side's legacy title win over the read path's portrait-preferred title (final
+            // whole-branch review finding, 2026-07-03).
+            .sortedBy { if (it.side == VideoSide.PORTRAIT) 0 else 1 }
+            .map { RecordingIdentity.forItem(it.sessionId, it.file?.absolutePath, it.docUri?.toString()) }
+            .filter { it.legacy != null && it.legacy != it.canonical }
+        return legacies + RecordingIdentity.MetaKey(canonical = RecordingIdentity.sessionKey(sessionId), legacy = null)
     }
 
     fun toggleFavorite(stableKey: String) {
         val store = libraryStore ?: return
-        val key = metaKeyForStableKey(stableKey) ?: run {
+        val keys = writeKeysForStableKey(stableKey) ?: run {
             RovaLog.e("HistoryViewModel.toggleFavorite: item not in current list for $stableKey")
             _sidecarWriteError.update { it + 1 }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(key) { it.copy(favorite = !it.favorite) }
+                // Migrate legacy aliases into canonical first (identity transform = merge + drop
+                // alias), THEN apply the real transform to the canonical entry.
+                keys.dropLast(1).forEach { store.update(it) { e -> e } }
+                store.update(keys.last()) { it.copy(favorite = !it.favorite) }
                 _sidecarRevision.update { it + 1 } // success → recompute reads the new snapshot
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.toggleFavorite: sidecar write failed for $stableKey", t)
@@ -411,7 +445,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      */
     fun renameSession(stableKey: String, newTitle: String) {
         val store = libraryStore ?: return
-        val key = metaKeyForStableKey(stableKey) ?: run {
+        val keys = writeKeysForStableKey(stableKey) ?: run {
             RovaLog.e("HistoryViewModel.renameSession: item not in current list for $stableKey")
             _sidecarWriteError.update { it + 1 }
             return
@@ -419,7 +453,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val trimmed = newTitle.trim()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                store.update(key) { it.copy(customTitle = trimmed.ifBlank { null }) }
+                // Migrate legacy aliases into canonical first (identity transform = merge + drop
+                // alias), THEN apply the real transform to the canonical entry.
+                keys.dropLast(1).forEach { store.update(it) { e -> e } }
+                store.update(keys.last()) { it.copy(customTitle = trimmed.ifBlank { null }) }
                 _sidecarRevision.update { it + 1 }
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
