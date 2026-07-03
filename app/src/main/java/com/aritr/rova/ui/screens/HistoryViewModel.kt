@@ -26,6 +26,7 @@ import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.LibraryViewMode
+import com.aritr.rova.ui.library.SessionSidecarMerge
 import com.aritr.rova.ui.library.UsageAggregator
 import com.aritr.rova.ui.library.ThumbnailCacheKey
 import com.aritr.rova.ui.library.ThumbnailDiskCache
@@ -316,11 +317,31 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
+            // Spec §3.4 sidecar lazy-merge: a DualShot session's two sides may carry divergent
+            // pre-#137 legacy (path-keyed) entries; merge them portrait-first so both side rows —
+            // and the aggregated session row built from them — read one metadata truth. Read-path
+            // only; writes stay canonical. Single-side / single-mode items keep the pairwise path.
+            val legacyBySession: Map<String, List<LibraryMetadataEntry?>> = rows
+                .filter { it.sessionId != null && it.side != null }
+                .groupBy { it.sessionId!! }
+                .filterValues { it.size > 1 }
+                .mapValues { (_, group) ->
+                    group.sortedBy { if (it.side == VideoSide.PORTRAIT) 0 else 1 }
+                        .map { s ->
+                            val k = RecordingIdentity.forItem(s.sessionId, s.file?.absolutePath, s.docUri?.toString())
+                            k.legacy?.takeIf { it != k.canonical }?.let { snapshot[it] }
+                        }
+                }
             val mapped = rows.map { item ->
                 val key = RecordingIdentity.forItem(item.sessionId, item.file?.absolutePath, item.docUri?.toString())
                 val canonical = snapshot[key.canonical]
-                val legacy = key.legacy?.takeIf { it != key.canonical }?.let { snapshot[it] }
-                val meta = LibraryMetadataEntry.merge(canonical, legacy)
+                val sideLegacies = item.sessionId?.let { legacyBySession[it] }
+                val meta = if (sideLegacies != null) {
+                    SessionSidecarMerge.resolve(canonical, sideLegacies)
+                } else {
+                    val legacy = key.legacy?.takeIf { it != key.canonical }?.let { snapshot[it] }
+                    LibraryMetadataEntry.merge(canonical, legacy)
+                }
                 toLibraryRow(item, meta, locale, tz)
             }
             // P6: footprint over the FULL library (pure fold, no extra disk read) — see UsageAggregator.
