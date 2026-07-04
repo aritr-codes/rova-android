@@ -920,4 +920,5 @@
         <item quantity="one">%1$d grabación · %2$s</item>
         <item quantity="other">%1$d grabaciones · %2$s</item>
     </plurals>
+    <string name="library_day_select_all_cd">Seleccionar todo en %1$s</string>
 </resources>

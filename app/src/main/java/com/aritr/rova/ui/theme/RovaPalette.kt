@@ -26,6 +26,10 @@ object RovaSemantics {
 data class RovaPalette(
     val id: ThemeSelection,
     val background: Brush,
+    /** Top stop of [background]'s gradient as a flat [Color] — the ground-wash color for pinned
+     *  day headers (ADR-0030 amendment §4 / bento Task 5). [Brush] doesn't expose its stops, so this
+     *  is stored explicitly rather than parsed back out of the gradient. */
+    val bgTop: Color,
     val glassTint: Color,
     val edge: Color,
     val edgeTop: Color,
@@ -58,6 +62,7 @@ private fun darkPalette(
 ): RovaPalette = RovaPalette(
     id = id,
     background = Brush.verticalGradient(listOf(Color(bgTop), Color(bgBottom))),
+    bgTop = Color(bgTop),
     glassTint = DarkGlass,
     edge = DarkEdge,
     edgeTop = DarkEdgeTop,
@@ -87,6 +92,7 @@ private val Dusk = darkPalette(ThemeSelection.DUSK, 0xFF3A241C, 0xFF1F1310, Colo
 private val Eclipse = RovaPalette(
     id = ThemeSelection.ECLIPSE,
     background = Brush.verticalGradient(listOf(Color(0xFF050608), Color(0xFF000000))),
+    bgTop = Color(0xFF050608),
     glassTint = Color(0xD608090C),
     edge = Color(0x14FFFFFF),
     edgeTop = Color(0x1FFFFFFF),
@@ -105,6 +111,7 @@ private val Eclipse = RovaPalette(
 private val Daylight = RovaPalette(
     id = ThemeSelection.DAYLIGHT,
     background = Brush.verticalGradient(listOf(Color(0xFFE3E9F5), Color(0xFFF4F1EA))),
+    bgTop = Color(0xFFE3E9F5),
     glassTint = Color(0xA8FFFFFF),
     edge = Color(0x12141A28),
     edgeTop = Color(0xD9FFFFFF),
@@ -160,6 +167,7 @@ fun resolvePalette(selection: ThemeSelection, systemDark: Boolean): RovaPalette 
 internal val NeutralDarkRecordPalette = RovaPalette(
     id = ThemeSelection.AURORA, // identity slot only; never theme-derived on pinned routes
     background = Brush.verticalGradient(listOf(Color(0xFF0B0E14), Color(0xFF05070B))),
+    bgTop = Color(0xFF0B0E14),
     glassTint = Color(0x66000000),          // black @ 0.40 — matches RecordChromeTokens panels
     edge = Color.White.copy(alpha = 0.09f),
     edgeTop = Color.White.copy(alpha = 0.12f),
