@@ -828,7 +828,6 @@
         <item quantity="other">%d recordings</item>
     </plurals>
     <!-- Library/History redesign (ADR-0030) -->
-    <string name="library_eyebrow_latest">Latest recording</string>
     <string name="library_action_play">Play</string>
     <string name="library_action_favorite">Favorite</string>
     <string name="library_action_unfavorite">Remove favorite</string>
@@ -843,7 +842,6 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
-    <string name="library_latest_resume">Resume · %1$s</string>
     <string name="library_a11y_latest_resume">Resume latest recording from %1$s</string>
     <string name="library_a11y_latest_play">Play latest recording</string>
     <string name="library_a11y_play_side">Play %1$s side, %2$s</string>
@@ -899,21 +897,11 @@
     <string name="library_a11y_not_selected">Not selected</string>
     <string name="library_sidecar_write_error">Couldn\'t save that change</string>
     <!-- Library Discovery (Slice 4) -->
-    <string name="library_sort_title">Sort</string>
-    <string name="library_sort_newest">Newest first</string>
-    <string name="library_sort_oldest">Oldest first</string>
-    <string name="library_sort_longest">Longest</string>
-    <string name="library_sort_largest">Largest</string>
-    <string name="library_sort_open_cd">Sort</string>
-    <string name="library_sort_current_cd">Current sort: %1$s</string>
     <string name="library_filter_all">All</string>
     <string name="library_filter_favorites">Favorites</string>
     <string name="library_filter_pl">DualShot</string>
     <string name="library_filter_selected_cd">%1$s, selected</string>
     <string name="library_filter_not_selected_cd">%1$s</string>
-    <string name="library_density_toggle_cd">Toggle list density</string>
-    <string name="library_density_state_comfortable">Comfortable</string>
-    <string name="library_density_state_compact">Compact</string>
     <string name="library_search_open_cd">Search</string>
     <string name="library_search_close_cd">Close search</string>
     <string name="library_search_clear_cd">Clear search</string>

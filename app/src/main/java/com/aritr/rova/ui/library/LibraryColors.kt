@@ -5,9 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
-import com.aritr.rova.ui.theme.ContrastMath
 import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RovaPalette
@@ -42,9 +40,6 @@ data class LibraryColors(
     val playGlyphScrim: Color,
     val checkChipScrim: Color,
     val heroScrim: Brush,
-    val latestContainer: Color,
-    val latestEdge: Color,
-    val latestEyebrow: Color,
     val accentFill: Color,
     val accentInk: Color,
     val fill1: Color,
@@ -75,9 +70,6 @@ fun rememberLibraryColors(): LibraryColors {
             playGlyphScrim = LibraryColorSpec.PLAY_GLYPH_SCRIM,
             checkChipScrim = LibraryColorSpec.CHECK_CHIP_SCRIM,
             heroScrim = Brush.verticalGradient(listOf(Color.Transparent, LibraryColorSpec.OVERLAY_SCRIM)),
-            latestContainer = LibraryColorSpec.latestContainer(palette),
-            latestEdge = LibraryColorSpec.latestEdge(palette),
-            latestEyebrow = LibraryColorSpec.latestEyebrow(palette),
             accentFill = LibraryColorSpec.accentFill(palette),
             accentInk = LibraryColorSpec.accentInk(palette),
             fill1 = LibraryColorSpec.fill1(palette),
@@ -127,39 +119,6 @@ object LibraryColorSpec {
 
     /** Grid selection check-chip backing (over media). */
     val CHECK_CHIP_SCRIM: Color = Color.Black.copy(alpha = 0.32f)
-
-    // ── Latest-row accent (spec §3.3 — identity family, retints with the theme) ──
-    /** Tint alpha of the latest-row container laid over the glass card. */
-    private const val LATEST_TINT_ALPHA = 0.10f
-
-    /** Translucent identity tint layered over the latest row's glass card. */
-    fun latestContainer(p: RovaPalette): Color = p.accent.copy(alpha = LATEST_TINT_ALPHA)
-
-    /** Hairline accent border of the latest row. */
-    fun latestEdge(p: RovaPalette): Color = p.accent.copy(alpha = 0.45f)
-
-    /** Worst-case opaque background the eyebrow sits on (tint composited on the base surface). */
-    fun latestContainerOver(p: RovaPalette): Color = latestContainer(p).compositeOver(p.surfaceBase)
-
-    /**
-     * "Latest" eyebrow colour — accent-family candidate with an AA fallback: when the palette's
-     * accent can't reach 4.5:1 over the tinted container (labelSmall = small text), fall back to
-     * textHigh so the eyebrow NEVER ships below AA (spec §3.3; LibraryLatestColorsTest ×12).
-     */
-    fun latestEyebrow(p: RovaPalette): Color {
-        val bg = latestContainerOver(p)
-        val candidate = if (p.isLight) p.accent else p.accentOnDark
-        return if (contrastOver(candidate, bg) >= 4.5) candidate else p.textHigh
-    }
-
-    /** WCAG ratio of [fg] composited over the opaque [bg] (pure — ContrastMath substrate). */
-    fun contrastOver(fg: Color, bg: Color): Double {
-        val c = fg.compositeOver(bg)
-        fun lum(x: Color) = ContrastMath.relativeLuminance(
-            (x.red * 255).toInt(), (x.green * 255).toInt(), (x.blue * 255).toInt(),
-        )
-        return ContrastMath.contrastRatio(lum(c), lum(bg))
-    }
 
     // ── Bento accent + state layers (bento Task 3, additive) ─────────────
     private fun Color.toRgb(): IntArray = intArrayOf(

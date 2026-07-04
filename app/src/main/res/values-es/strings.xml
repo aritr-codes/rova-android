@@ -826,7 +826,6 @@
         <item quantity="other">%d grabaciones</item>
     </plurals>
     <!-- Rediseño de Biblioteca/Historial (ADR-0030) -->
-    <string name="library_eyebrow_latest">Última grabación</string>
     <string name="library_action_play">Reproducir</string>
     <string name="library_action_favorite">Favorito</string>
     <string name="library_action_unfavorite">Quitar favorito</string>
@@ -841,7 +840,6 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
-    <string name="library_latest_resume">Reanudar · %1$s</string>
     <string name="library_a11y_latest_resume">Reanudar la última grabación desde %1$s</string>
     <string name="library_a11y_latest_play">Reproducir la última grabación</string>
     <string name="library_a11y_play_side">Reproducir el lado %1$s, %2$s</string>
@@ -897,21 +895,11 @@
     <string name="library_a11y_not_selected">No seleccionada</string>
     <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
     <!-- Library Discovery (Slice 4) -->
-    <string name="library_sort_title">Ordenar</string>
-    <string name="library_sort_newest">Más recientes primero</string>
-    <string name="library_sort_oldest">Más antiguos primero</string>
-    <string name="library_sort_longest">Más largos</string>
-    <string name="library_sort_largest">Más grandes</string>
-    <string name="library_sort_open_cd">Ordenar</string>
-    <string name="library_sort_current_cd">Orden actual: %1$s</string>
     <string name="library_filter_all">Todos</string>
     <string name="library_filter_favorites">Favoritos</string>
     <string name="library_filter_pl">DualShot</string>
     <string name="library_filter_selected_cd">%1$s, seleccionado</string>
     <string name="library_filter_not_selected_cd">%1$s</string>
-    <string name="library_density_toggle_cd">Cambiar densidad de la lista</string>
-    <string name="library_density_state_comfortable">Cómoda</string>
-    <string name="library_density_state_compact">Compacta</string>
     <string name="library_search_open_cd">Buscar</string>
     <string name="library_search_close_cd">Cerrar búsqueda</string>
     <string name="library_search_clear_cd">Borrar búsqueda</string>

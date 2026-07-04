@@ -435,9 +435,6 @@ fun LibraryScreen(
             // PR-C midnight fix — re-stamp so day groups/labels recompute if the day flipped
             // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
             nowMillisState.longValue = System.currentTimeMillis()
-            // Density reseed — pick up a Settings/PR-C density toggle when returning to the
-            // kept-composed Library tab (same resume-pickup contract the retired cardPreview used).
-            viewModel.refreshDensity()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
             // bento Task 8 req 6 — index source is BentoListIndex's own lookup now (the retired
             // FocusRestorePolicy.targetItemIndex assumed the pre-bento flattened item shape).
