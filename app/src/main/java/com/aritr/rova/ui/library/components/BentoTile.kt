@@ -1,6 +1,8 @@
 package com.aritr.rova.ui.library.components
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -77,11 +81,11 @@ private val TILE_RADIUS = 16.dp
  * surviving side falls back to a single tile using [LibraryRow.side]/[LibraryRow.orientation] — the frozen
  * spec has no one-pane diptych, and [LibrarySessionSide] index 1 is never read without the size check.
  *
- * Media (placeholder gradient + press/selection scale + ring) lives INSIDE the seam/panes; the meta pill,
- * LATEST/status chip, favorite dot, and selection check are TILE-level overlays that span the whole card
- * (including across the diptych seam), matching the frozen anatomy where overlays sit on the outer
- * container, not inside either button. No thumbnail wiring yet (compiles standalone) — placeholder gradient
- * only, per brief.
+ * Media (thumbnail over placeholder gradient + press/selection scale + ring) lives INSIDE the seam/panes;
+ * the meta pill, LATEST/status chip, favorite dot, and selection check are TILE-level overlays that span
+ * the whole card (including across the diptych seam), matching the frozen anatomy where overlays sit on
+ * the outer container, not inside either button. Thumbnails are supplied by [thumbnailFor] (stableKey ->
+ * decoded bitmap); a null bitmap falls back to the placeholder gradient ([VideoFrame] draws nothing over it).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -96,6 +100,7 @@ fun BentoTile(
     onToggleSelect: () -> Unit,
     onEnterSelection: () -> Unit,
     modifier: Modifier = Modifier,
+    thumbnailFor: (String) -> Bitmap? = { null },
 ) {
     val colors = rememberLibraryColors()
     val reduceMotion = rememberReduceMotion()
@@ -135,7 +140,10 @@ fun BentoTile(
                     .clip(RoundedCornerShape(TILE_RADIUS))
                     .background(SEAM_COLOR)
                     .then(selectionRing(selected, colors.accentFill))
-                    .semantics { contentDescription = groupLabel },
+                    .semantics {
+                        contentDescription = groupLabel
+                        isTraversalGroup = true
+                    },
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 ordered.forEach { side ->
@@ -146,6 +154,7 @@ fun BentoTile(
                         selected = selected,
                         reduceMotion = reduceMotion,
                         label = paneLabel,
+                        bitmap = thumbnailFor(side.stableKey),
                         onTap = { if (selecting) onToggleSelect() else onPlay(side.side.name) },
                         onLongPress = { onEnterSelection(); onToggleSelect() },
                         modifier = Modifier.weight(1f).fillMaxSize(),
@@ -158,6 +167,7 @@ fun BentoTile(
                 selected = selected,
                 reduceMotion = reduceMotion,
                 label = label,
+                bitmap = thumbnailFor(row.stableKey),
                 onTap = { if (selecting) onToggleSelect() else onPlay(null) },
                 onLongPress = { onEnterSelection(); onToggleSelect() },
                 modifier = Modifier
@@ -226,9 +236,10 @@ private fun selectionRing(selected: Boolean, accentFill: Color): Modifier =
     }
 
 /**
- * One media pane — the single tile's whole body, or one half of a DualShot diptych. Placeholder-only
- * (thumbnail wiring is a later task): a 140°-angled surfaceContainerHigh→surface gradient, the bottom
- * legibility scrim (or a flat dim overlay when [selected]), and its own tap target (Role.Button, ≥48dp,
+ * One media pane — the single tile's whole body, or one half of a DualShot diptych. A 140°-angled
+ * surfaceContainerHigh→surface gradient placeholder, the decoded [bitmap] thumbnail layered above it
+ * (null shows the gradient — [VideoFrame] draws nothing over a null bitmap), the bottom legibility scrim
+ * (or a flat dim overlay when [selected]) above the media, and its own tap target (Role.Button, ≥48dp,
  * long-press enters selection and toggles — spec 2026-07-04 anatomy).
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -237,6 +248,7 @@ private fun BentoPane(
     selected: Boolean,
     reduceMotion: Boolean,
     label: String,
+    bitmap: Bitmap?,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -244,7 +256,11 @@ private fun BentoPane(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val target = if (selected) 0.94f else PressFeedback.targetScale(pressed, reduceMotion)
-    val scale by animateFloatAsState(targetValue = target, animationSpec = tween(durationMillis = 120), label = "bentoTileScale")
+    val scale by animateFloatAsState(
+        targetValue = target,
+        animationSpec = if (reduceMotion) snap() else tween(durationMillis = 120),
+        label = "bentoTileScale",
+    )
     val hi = MaterialTheme.colorScheme.surfaceContainerHigh
     val lo = MaterialTheme.colorScheme.surface
     Box(
@@ -263,6 +279,7 @@ private fun BentoPane(
                 contentDescription = label
             },
     ) {
+        VideoFrame(bitmap, Modifier.fillMaxSize())
         Box(
             Modifier
                 .fillMaxSize()
@@ -325,6 +342,7 @@ private fun MetaPill(orientation: LibraryOrientation?, dual: Boolean, timeLabel:
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
         )
         if (durationLabel.isNotEmpty()) {
             val durationTail = " · $durationLabel" // separator, not user copy — kept out of Text( as a literal
@@ -334,6 +352,7 @@ private fun MetaPill(orientation: LibraryOrientation?, dual: Boolean, timeLabel:
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
+                style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
             )
         }
     }
