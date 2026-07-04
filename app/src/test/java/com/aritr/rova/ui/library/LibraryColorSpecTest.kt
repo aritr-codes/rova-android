@@ -1,9 +1,11 @@
 package com.aritr.rova.ui.library
 
 import androidx.compose.ui.graphics.Color
+import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.RovaSemantics
 import com.aritr.rova.ui.theme.ThemeSelection
 import com.aritr.rova.ui.theme.rovaPalettes
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -50,5 +52,33 @@ class LibraryColorSpecTest {
         assertEquals(Color.White.copy(alpha = 0.30f), LibraryColorSpec.SELECTION_RING)
         assertEquals(Color.Black.copy(alpha = 0.34f), LibraryColorSpec.PLAY_GLYPH_SCRIM)
         assertEquals(Color.Black.copy(alpha = 0.32f), LibraryColorSpec.CHECK_CHIP_SCRIM)
+    }
+
+    // ── Bento accent + state layers (bento Task 3) ────────────────────────
+
+    private fun Color.toRgb() = intArrayOf(
+        (red * 255).roundToInt(),
+        (green * 255).roundToInt(),
+        (blue * 255).roundToInt(),
+    )
+
+    @Test fun `accent fill and ink equal DialogActionColors resolve(accent, accent)`() {
+        for (p in listOf(aurora, daylight)) {
+            val rgb = p.accent.toRgb()
+            val cta = DialogActionColors.resolve(rgb, rgb)
+            val expectedFill = Color(cta.start[0], cta.start[1], cta.start[2])
+            val expectedInk = if (cta.contentWhite) Color.White else Color(0xFF0E1116)
+            assertEquals(expectedFill, LibraryColorSpec.accentFill(p))
+            assertEquals(expectedInk, LibraryColorSpec.accentInk(p))
+        }
+    }
+
+    @Test fun `state layers are textHigh at the frozen alphas`() {
+        for (p in listOf(aurora, daylight)) {
+            assertEquals(p.textHigh.copy(alpha = 0.05f), LibraryColorSpec.fill1(p))
+            assertEquals(p.textHigh.copy(alpha = 0.08f), LibraryColorSpec.fill2(p))
+            assertEquals(p.textHigh.copy(alpha = 0.12f), LibraryColorSpec.press(p))
+            assertEquals(p.textHigh.copy(alpha = 0.06f), LibraryColorSpec.hairline(p))
+        }
     }
 }

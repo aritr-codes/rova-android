@@ -7,9 +7,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import com.aritr.rova.ui.theme.ContrastMath
+import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RovaPalette
 import com.aritr.rova.ui.theme.RovaSemantics
+import kotlin.math.roundToInt
 
 /**
  * Theme Foundation (M1–M3, 2026-06-16) — the SINGLE entry point for Library colour identity. No Library
@@ -42,6 +44,12 @@ data class LibraryColors(
     val latestContainer: Color,
     val latestEdge: Color,
     val latestEyebrow: Color,
+    val accentFill: Color,
+    val accentInk: Color,
+    val fill1: Color,
+    val fill2: Color,
+    val press: Color,
+    val hairline: Color,
 )
 
 /** Reads the active palette from [LocalGlassEnvironment] and resolves the Library colour slots. */
@@ -63,6 +71,12 @@ fun rememberLibraryColors(): LibraryColors {
             latestContainer = LibraryColorSpec.latestContainer(palette),
             latestEdge = LibraryColorSpec.latestEdge(palette),
             latestEyebrow = LibraryColorSpec.latestEyebrow(palette),
+            accentFill = LibraryColorSpec.accentFill(palette),
+            accentInk = LibraryColorSpec.accentInk(palette),
+            fill1 = LibraryColorSpec.fill1(palette),
+            fill2 = LibraryColorSpec.fill2(palette),
+            press = LibraryColorSpec.press(palette),
+            hairline = LibraryColorSpec.hairline(palette),
         )
     }
 }
@@ -134,4 +148,44 @@ object LibraryColorSpec {
         )
         return ContrastMath.contrastRatio(lum(c), lum(bg))
     }
+
+    // ── Bento accent + state layers (bento Task 3, additive) ─────────────
+    private fun Color.toRgb(): IntArray = intArrayOf(
+        (red * 255).roundToInt(),
+        (green * 255).roundToInt(),
+        (blue * 255).roundToInt(),
+    )
+
+    /** Near-black label used on a bright (undeepened) accent fill — mirrors RovaDialogs' CTA label. */
+    private val ACCENT_INK_DARK: Color = Color(0xFF0E1116)
+
+    /**
+     * Bento tile accent = a flat fill, so it reuses the premium-dialog CTA resolver
+     * ([DialogActionColors.resolve]) with a degenerate (solid) "gradient" of (accent, accent) — the
+     * same AA-guaranteed deepen-or-dark-label strategy the dialog system already proved out.
+     */
+    fun accentCta(p: RovaPalette): DialogActionColors.Cta {
+        val rgb = p.accent.toRgb()
+        return DialogActionColors.resolve(rgb, rgb)
+    }
+
+    /** Resolved accent fill (possibly deepened for label AA — see [accentCta]). */
+    fun accentFill(p: RovaPalette): Color {
+        val cta = accentCta(p)
+        return Color(cta.start[0], cta.start[1], cta.start[2])
+    }
+
+    /** On-accent label ink — white when it clears AA on the resolved fill, else [ACCENT_INK_DARK]. */
+    fun accentInk(p: RovaPalette): Color = if (accentCta(p).contentWhite) Color.White else ACCENT_INK_DARK
+
+    // Frozen state-layer alphas over textHigh (bento spec — not theme-tunable).
+    private const val FILL1_ALPHA = 0.05f
+    private const val FILL2_ALPHA = 0.08f
+    private const val PRESS_ALPHA = 0.12f
+    private const val HAIRLINE_ALPHA = 0.06f
+
+    fun fill1(p: RovaPalette): Color = p.textHigh.copy(alpha = FILL1_ALPHA)
+    fun fill2(p: RovaPalette): Color = p.textHigh.copy(alpha = FILL2_ALPHA)
+    fun press(p: RovaPalette): Color = p.textHigh.copy(alpha = PRESS_ALPHA)
+    fun hairline(p: RovaPalette): Color = p.textHigh.copy(alpha = HAIRLINE_ALPHA)
 }
