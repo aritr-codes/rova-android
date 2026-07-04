@@ -25,6 +25,7 @@ import com.aritr.rova.ui.library.RecordingIdentity
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
 import com.aritr.rova.ui.library.LibraryDensity
+import com.aritr.rova.ui.library.next
 import com.aritr.rova.ui.library.LibrarySessionAggregator
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.SessionSidecarMerge
@@ -262,6 +263,17 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshDensity() {
         _density.value = readDensity()
+    }
+
+    /**
+     * PR-C top-bar density toggle — the single production writer of [RovaSettings.libraryDensity].
+     * Writes the pref first, then the state, so a process death between the two resurrects the
+     * NEW value on next launch (state is re-seeded from the pref).
+     */
+    fun toggleDensity() {
+        val next = _density.value.next()
+        settings.libraryDensity = next.name
+        _density.value = next
     }
 
     /**

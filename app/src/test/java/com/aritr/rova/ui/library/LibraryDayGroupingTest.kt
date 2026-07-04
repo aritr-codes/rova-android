@@ -96,4 +96,26 @@ class LibraryDayGroupingTest {
             LibraryDayGrouping.groupForSort(emptyList(), LibrarySort.LARGEST, millis(2026, Calendar.JUNE, 14), locale, tz),
         )
     }
+
+    // --- PR-C: dayEpochMillis (sticky-header keys stable across midnight) ---
+
+    @Test fun `group stamps each bucket with its local day epoch`() {
+        val now = millis(2026, Calendar.JUNE, 14)
+        val rows = listOf(
+            row("a", millis(2026, Calendar.JUNE, 14), 1024),
+            row("b", millis(2026, Calendar.JUNE, 13), 2048),
+        )
+        val groups = LibraryDayGrouping.group(rows, now, locale, tz)
+        assertEquals(2, groups.size)
+        assertEquals(LibraryDateLabels.dayEpoch(millis(2026, Calendar.JUNE, 14), tz), groups[0].dayEpochMillis)
+        assertEquals(LibraryDateLabels.dayEpoch(millis(2026, Calendar.JUNE, 13), tz), groups[1].dayEpochMillis)
+        // Distinct per day — the LazyList duplicate-key invariant for the new header keys.
+        assertEquals(groups.size, groups.map { it.dayEpochMillis }.distinct().size)
+    }
+
+    @Test fun `flat bucket carries the zero epoch (header suppressed, key unused)`() {
+        val now = millis(2026, Calendar.JUNE, 14)
+        val groups = LibraryDayGrouping.groupForSort(interleavedBySize(now), LibrarySort.LARGEST, now, locale, tz)
+        assertEquals(0L, groups[0].dayEpochMillis)
+    }
 }

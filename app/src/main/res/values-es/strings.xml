@@ -895,6 +895,9 @@
     <string name="library_filter_pl">DualShot</string>
     <string name="library_filter_selected_cd">%1$s, seleccionado</string>
     <string name="library_filter_not_selected_cd">%1$s</string>
+    <string name="library_density_toggle_cd">Cambiar densidad de la lista</string>
+    <string name="library_density_state_comfortable">Cómoda</string>
+    <string name="library_density_state_compact">Compacta</string>
     <string name="library_search_open_cd">Buscar</string>
     <string name="library_search_close_cd">Cerrar búsqueda</string>
     <string name="library_search_clear_cd">Borrar búsqueda</string>

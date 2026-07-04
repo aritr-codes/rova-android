@@ -30,3 +30,9 @@ object LibraryDensityDimens {
         LibraryDensity.COMPACT -> COMPACT
     }
 }
+
+/** PR-C top-bar toggle cycle. Two values today; exhaustive `when` keeps a third honest. */
+fun LibraryDensity.next(): LibraryDensity = when (this) {
+    LibraryDensity.COMFORTABLE -> LibraryDensity.COMPACT
+    LibraryDensity.COMPACT -> LibraryDensity.COMFORTABLE
+}

@@ -9,6 +9,12 @@ data class LibraryDayGroup(
     val label: String,
     val sizeTotalLabel: String,
     val rows: List<LibraryRow>,
+    /**
+     * Local-midnight epoch of this bucket's day ([LibraryDateLabels.dayEpoch]) — the sticky-header
+     * key (PR-C), stable across midnight unlike [label]. 0L on the header-less flat bucket
+     * (label == "", header suppressed, key never used).
+     */
+    val dayEpochMillis: Long = 0L,
 )
 
 /**
@@ -24,7 +30,9 @@ object LibraryDayGrouping {
      * chronological. [group] folds same-day rows assuming they are contiguous (true for NEWEST/
      * OLDEST). Under LONGEST/LARGEST the collection is size/duration-ordered, so a given day's rows
      * scatter and [group] emits the SAME day label in multiple non-adjacent buckets. The render then
-     * keys header items as `hdr-<label>` → duplicate LazyList keys → IllegalArgumentException crash.
+     * keys header items as `hdr-<dayEpochMillis>` (PR-C; was `hdr-<label>` — same-day scatter
+     * duplicates the epoch exactly as it duplicated the label) → duplicate LazyList keys →
+     * IllegalArgumentException crash.
      * For non-chronological sorts we return a single header-less bucket (label = "" → the caller
      * suppresses the day header), which is also the correct UX (flat list, no scattered date headers).
      */
@@ -55,6 +63,7 @@ object LibraryDayGrouping {
         if (rows.isEmpty()) return emptyList()
         val out = ArrayList<LibraryDayGroup>()
         var bucketLabel: String? = null
+        var bucketEpoch = 0L
         var bucket = ArrayList<LibraryRow>()
         fun flush() {
             val label = bucketLabel ?: return
@@ -62,6 +71,7 @@ object LibraryDayGrouping {
                 label = label,
                 sizeTotalLabel = StorageFormat.dayTotal(bucket.map { it.sizeBytes }, locale),
                 rows = bucket.toList(),
+                dayEpochMillis = bucketEpoch,
             )
         }
         for (r in rows) {
@@ -69,6 +79,7 @@ object LibraryDayGrouping {
             if (label != bucketLabel) {
                 flush()
                 bucketLabel = label
+                bucketEpoch = LibraryDateLabels.dayEpoch(r.dateMillis, tz)
                 bucket = ArrayList()
             }
             bucket += r

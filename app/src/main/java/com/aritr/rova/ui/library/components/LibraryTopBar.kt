@@ -14,6 +14,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.theme.GlassRole
@@ -33,6 +35,9 @@ fun LibraryTopBar(
     backLabel: String = "",
     onOpenVault: (() -> Unit)? = null,
     vaultLabel: String = "",
+    onToggleDensity: (() -> Unit)? = null,
+    densityLabel: String = "",
+    densityState: String = "",
     onOpenSearch: (() -> Unit)? = null,
     searchLabel: String = "",
     onOpenSort: (() -> Unit)? = null,
@@ -66,6 +71,19 @@ fun LibraryTopBar(
                     SemanticIcon(
                         glyph = RovaIcons.Vault,
                         contentDescription = vaultLabel,
+                        role = IconRole.Secondary,
+                        modifier = Modifier.size(LibraryDimens.navIcon),
+                    )
+                }
+            }
+            if (onToggleDensity != null) {
+                IconButton(
+                    onClick = onToggleDensity,
+                    modifier = Modifier.semantics { stateDescription = densityState },
+                ) {
+                    SemanticIcon(
+                        glyph = RovaIcons.GridLayout,
+                        contentDescription = densityLabel,
                         role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )

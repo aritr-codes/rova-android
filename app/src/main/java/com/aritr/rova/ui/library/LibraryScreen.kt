@@ -1,6 +1,7 @@
 package com.aritr.rova.ui.library
 
 import android.content.Intent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,6 +109,7 @@ import java.util.TimeZone
  * delete commits only on the Snackbar owner (timeout/swipe), UNDO cancels, screen-dispose abandons
  * (files untouched, rows reappear next load). No manifest writes here (ADR-0030).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
     viewModel: HistoryViewModel = viewModel(),
@@ -166,7 +169,14 @@ fun LibraryScreen(
     val rowByKey = remember(ui.rows) { ui.rows.associateBy { it.stableKey } }
     val locale = Locale.getDefault()
     val tz = TimeZone.getDefault()
-    val nowMillis = remember(ui.rows) { System.currentTimeMillis() }
+    // PR-C midnight fix: relative day labels ("Today"/"Yesterday") go stale when the day flips
+    // while the app is backgrounded — the old remember(ui.rows) stamp only refreshed on row
+    // changes. Single UN-keyed state instance so the ON_RESUME observer's closure write (below)
+    // always hits the live instance (a rows-keyed remember would recreate the state and strand
+    // the observer's capture — the LaunchedEffect keeps the rows-refresh behavior instead).
+    val nowMillisState = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val nowMillis = nowMillisState.longValue
+    LaunchedEffect(ui.rows) { nowMillisState.longValue = System.currentTimeMillis() }
 
     // Aggregated session rows key on session:<id>, which has no VideoItem — resolve via the
     // PORTRAIT-first side key (LibraryRow.sides) for thumbnail/sheet/share (spec §3.4).
@@ -334,6 +344,9 @@ fun LibraryScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            // PR-C midnight fix — re-stamp so day groups/labels recompute if the day flipped
+            // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
+            nowMillisState.longValue = System.currentTimeMillis()
             // Density reseed — pick up a Settings/PR-C density toggle when returning to the
             // kept-composed Library tab (same resume-pickup contract the retired cardPreview used).
             viewModel.refreshDensity()
@@ -444,6 +457,12 @@ fun LibraryScreen(
                         backLabel = stringResource(R.string.history_back_cd),
                         onOpenVault = onOpenVault,
                         vaultLabel = stringResource(R.string.vault_open_entry_cd),
+                        onToggleDensity = { viewModel.toggleDensity() },
+                        densityLabel = stringResource(R.string.library_density_toggle_cd),
+                        densityState = stringResource(
+                            if (ui.density == LibraryDensity.COMPACT) R.string.library_density_state_compact
+                            else R.string.library_density_state_comfortable
+                        ),
                         onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
                         searchLabel = stringResource(R.string.library_search_open_cd),
                         onOpenSort = { sortSheetOpen = true },
@@ -550,7 +569,9 @@ fun LibraryScreen(
                                 item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
                                 groups.forEach { group ->
                                     if (group.label.isNotEmpty()) {
-                                        item(key = "hdr-${group.label}") { LibraryDayHeader(group.label, group.sizeTotalLabel) }
+                                        stickyHeader(key = "hdr-${group.dayEpochMillis}") {
+                                            LibraryDayHeader(group.label, group.sizeTotalLabel)
+                                        }
                                     }
                                     items(group.rows, key = { it.stableKey }) { row ->
                                         val isLatest = row.stableKey == latestKey
