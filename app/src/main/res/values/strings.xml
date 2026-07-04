@@ -913,4 +913,11 @@
     <string name="library_filtered_empty_title">No matches</string>
     <string name="library_filtered_empty_body">Clear a filter to see more recordings.</string>
     <string name="library_scrubber_rail_cd">Scroll by day</string>
+    <string name="library_day_today">Today</string>
+    <string name="library_day_yesterday">Yesterday</string>
+    <!-- %1$d = recording count, %2$s = total duration e.g. "18m" -->
+    <plurals name="library_day_count_duration">
+        <item quantity="one">%1$d recording · %2$s</item>
+        <item quantity="other">%1$d recordings · %2$s</item>
+    </plurals>
 </resources>

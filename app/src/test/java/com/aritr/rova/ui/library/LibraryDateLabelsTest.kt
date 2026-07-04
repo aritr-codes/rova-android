@@ -128,4 +128,27 @@ class LibraryDateLabelsTest {
         assertEquals(midnight, LibraryDateLabels.dayEpoch(at(23, 30), tz))
         assertNotEquals(midnight, LibraryDateLabels.dayEpoch(at(23, 30) + 3600_000L, tz)) // 00:30 next day
     }
+
+    // --- dayAge (rounded calendar-day diff, DST-safe) ---
+
+    @Test fun `dayAge counts calendar days DST-safely`() {
+        // Europe/Berlin springs forward 2024-03-31 (23h day). Noon on the DST-spring day vs
+        // noon the day before must still report a 1-day age via the rounded diff, not raw
+        // millis truncation, and same-day must report 0.
+        val tz = TimeZone.getTimeZone("Europe/Berlin")
+        fun noon(d: Int): Long = Calendar.getInstance(tz).apply {
+            clear(); set(2024, Calendar.MARCH, d, 12, 0, 0)
+        }.timeInMillis
+        val nowMillis = noon(31)
+        val today = LibraryDateLabels.dayEpoch(nowMillis, tz)
+        val yesterday = LibraryDateLabels.dayEpoch(noon(30), tz)
+        assertEquals(0, LibraryDateLabels.dayAge(today, nowMillis, tz))
+        assertEquals(1, LibraryDateLabels.dayAge(yesterday, nowMillis, tz))
+    }
+
+    @Test fun `dayAge clamps future days at zero`() {
+        val tz = TimeZone.getTimeZone("Asia/Kolkata")
+        val tomorrow = LibraryDateLabels.dayEpoch(at(2026, Calendar.JULY, 3, 8, 0), tz)
+        assertEquals(0, LibraryDateLabels.dayAge(tomorrow, now, tz))
+    }
 }

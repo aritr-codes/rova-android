@@ -911,4 +911,10 @@
     <string name="library_filtered_empty_title">Sin resultados</string>
     <string name="library_filtered_empty_body">Borra un filtro para ver más grabaciones.</string>
     <string name="library_scrubber_rail_cd">Desplazar por día</string>
+    <string name="library_day_today">Hoy</string>
+    <string name="library_day_yesterday">Ayer</string>
+    <plurals name="library_day_count_duration">
+        <item quantity="one">%1$d grabación · %2$s</item>
+        <item quantity="other">%1$d grabaciones · %2$s</item>
+    </plurals>
 </resources>
