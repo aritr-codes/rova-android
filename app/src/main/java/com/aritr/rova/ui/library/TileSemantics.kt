@@ -38,6 +38,36 @@ object TileSemantics {
         }
     }
 
+    /**
+     * Bento single-tile merged label (spec §8 / Task 4). Verb swaps Play/Select with
+     * [selecting] (matches the row-list `selectedLabel`/`notSelectedLabel` split); orientation
+     * word is only spoken when playing (selection mode reads position/status only, not the
+     * decorative frame glyph — same rationale as [describe]'s orientation clause).
+     */
+    fun bentoLabel(
+        selecting: Boolean,
+        orientationWord: String?,
+        dayAndTime: String,
+        duration: String,
+        favorite: Boolean,
+        latest: Boolean,
+    ): String = buildString {
+        append(if (selecting) "Select" else "Play")
+        if (!selecting && orientationWord != null) {
+            append(' ').append(orientationWord).append(", ")
+        } else {
+            append(' ')
+        }
+        append(dayAndTime)
+        append(", ").append(duration)
+        if (favorite) append(", favorite")
+        if (latest) append(", latest recording")
+    }
+
+    /** Bento diptych pane label (spec §8 / Task 4) — names the side ("Portrait"/"Landscape side"). */
+    fun bentoPaneLabel(selecting: Boolean, side: String, dayAndTime: String, duration: String): String =
+        "${if (selecting) "Select" else "Play"} $side side, $dayAndTime, $duration"
+
     private fun durationSpeech(ms: Long): String {
         val totalSec = ms / 1000
         val m = totalSec / 60

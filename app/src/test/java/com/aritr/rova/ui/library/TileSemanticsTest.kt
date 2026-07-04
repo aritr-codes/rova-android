@@ -45,4 +45,25 @@ class TileSemanticsTest {
             TileSemantics.describe(row(title = "T", dur = 42_000L), frag),
         )
     }
+
+    @Test fun `bento single label leads with orientation and verb play`() {
+        val label = TileSemantics.bentoLabel(
+            selecting = false, orientationWord = "portrait recording", dayAndTime = "Today 11:42 am",
+            duration = "2m", favorite = true, latest = true,
+        )
+        assertEquals("Play portrait recording, Today 11:42 am, 2m, favorite, latest recording", label)
+    }
+
+    @Test fun `bento selection mode swaps the verb`() {
+        val label = TileSemantics.bentoLabel(
+            selecting = true, orientationWord = null, dayAndTime = "Today 11:42 am",
+            duration = "2m", favorite = false, latest = false,
+        )
+        assertEquals("Select Today 11:42 am, 2m", label)
+    }
+
+    @Test fun `bento pane label names the side`() {
+        val label = TileSemantics.bentoPaneLabel(selecting = false, side = "Portrait", dayAndTime = "Today 11:42 am", duration = "2m")
+        assertEquals("Play Portrait side, Today 11:42 am, 2m", label)
+    }
 }
