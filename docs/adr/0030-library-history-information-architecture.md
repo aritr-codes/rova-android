@@ -69,3 +69,68 @@ Spec: docs/superpowers/specs/2026-07-02-library-session-list-design.md. Owner-ap
 5. **Density setting.** `libraryDensity` preference (COMFORTABLE default | COMPACT) controls row/thumbnail dimensions; replaces the retired view-mode toggle slot.
 
 §2 (sidecar-only metadata, `checkLibraryNoManifestWrite`) is unchanged and continues to bind the new presentation.
+
+## Amendment (2026-07-04) — Thumbnail-first presentation: Adaptive Bento Timeline
+
+**Canonical visual spec: `docs/design/library-bento.html` (v3.2, FROZEN 2026-07-04).** Owner-selected from three
+codex-reviewed interactive concepts, then refined across three codex-reconciled review rounds (token/tap-model
+pass, usability pass, header de-chroming). Per the HTML-first workflow (CLAUDE.md "Design workflow"): Compose
+*transcribes* the frozen spec; ambiguities discovered during implementation route back to the HTML for
+re-approval; pixel-match review against the spec gates the merge. Exact geometry, palette-derivation rules,
+type scale, and motion tokens live in the spec and the implementation spec — this amendment locks the
+*behavioral* invariants.
+
+This amendment **supersedes the presentation layer of the 2026-07-02 amendment**: its §1 (single row list),
+§2 (latest-row accent variant + Play/Resume pill), and §5 (`libraryDensity` preference) are retired. Its §3
+(session-canonical identity, one entry per DualShot session, per-side ≥48dp play targets) and §4 (sticky day
+headers with relative/absolute labels) carry forward in the new form below. Decisions 1–5 of the base ADR and
+the 2026-06-24 safety-stop amendment continue to bind.
+
+1. **Presentation.** The Library renders one vertical scroll of day sections; each day lays its sessions out
+   as a 6-column bento grid using pre-authored span patterns. Density is **recency-graduated by day age**
+   (featured ≤1 day / standard 2–6 / archive ≥7) — this replaces the manual `libraryDensity` preference and
+   its top-bar toggle, which are removed (with pref-key cleanup). Chronological order is never re-sorted; row
+   patterns are chosen around content (a DualShot session always lands on a span ≥3 slot) and rotate on the
+   day's age so filter/search changes never reshuffle a day's pattern. There is no sort control (chronology +
+   the date rail are the navigation model).
+
+2. **Tap plays.** Tapping a tile opens the Player directly (restores the shipped row-tap-plays behavior).
+   A DualShot tile is a diptych: two panes, each its own accessible tap target — tap a side, play that side;
+   **Portrait is always the left pane, everywhere**. The details surface moves to selection mode: an info
+   action enabled when exactly one session is selected. Rename, favorite-from-details, vault-move, and delete
+   live there. Export remains absent (decision 1).
+
+3. **Selection.** Long-press enters selection (plus an explicit top-bar entry); day headers gain per-day
+   select-all circles; batch favorite / vault / delete (with Undo toast) operate on the selection. The
+   selection can never silently hold sessions the current view hides — filter/search changes prune it to the
+   visible set, and per-item mutations drop the affected id.
+
+4. **Day headers are ground, not chrome.** Headers are plain labels in the timeline (no bar, no blur, no
+   border, identical anatomy in both states). While pinned, the page's own background color washes over the
+   exit edge (solid hold behind the label, long dissolve tail, no bottom edge); the pinned state must be
+   applied synchronously with content changes so a pinned header never paints unveiled over thumbnails.
+   Epoch-keyed day identity and midnight re-stamp behavior from PR-C carry forward.
+
+5. **Orientation is legible.** Every tile's meta pill leads with the recording's shape: singles show their
+   orientation glyph (portrait ▯ / landscape ▭); DualShot shows the ▯▭ pair in pane order. The details facts
+   line names it in words; single-tile accessibility labels include it. (Media-relative treatment per
+   decision 5's structural-scrim rule.)
+
+6. **Latest = chip, not variant.** The newest recording (unfiltered view only) carries a small accent chip;
+   there is no enlarged/accented row variant and no Resume pill (the shipped Player owns resume, #137).
+   **No media autoplay anywhere in the Library** — unchanged trust rule; the Player opens paused.
+
+7. **Chrome.** Filter chips (All / Favorites / DualShot) and the stats line scroll away with content — day
+   headers own the pinned top. Search matches names and date words and reports "X of Y recordings". The date
+   scrub rail (auto-hiding right-edge thumb + date bubble, slider semantics, exact-day keyboard stepping)
+   replaces the PR-C scrubber anatomy. The Private Vault remains a quiet destination row above the timeline
+   (decision 4 binds: never a filter).
+
+8. **Exceptional status badges carry forward** (decision 3 set + AUTO_STOPPED): rendered on the tile with the
+   structural media scrim of decision 5, taking precedence over the latest chip's slot when both apply. The
+   frozen spec models the treatment; the badge taxonomy and colors are unchanged (`data/StopCategory.kt`,
+   locked status colors).
+
+§2 (sidecar-only metadata, `checkLibraryNoManifestWrite`) is unchanged and continues to bind: favorite,
+rename, and playback-position metadata go only through their existing stores; the new presentation adds no
+manifest writes.
