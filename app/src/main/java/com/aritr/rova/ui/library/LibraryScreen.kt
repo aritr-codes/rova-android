@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -600,10 +601,10 @@ fun LibraryScreen(
                     // P6 storage/usage footprint — directly under the top bar, above the discovery bar
                     // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
                     LibraryUsageLine(ui.usage)
-                    // bento Task 8 — the search field + filter chips render in TWO places by design:
-                    // pinned above (this call) when the collection is filtered to nothing, so the user
-                    // can still adjust the filter that emptied it; as LazyColumn item[2] (below) when
-                    // there IS content to scroll. Only one of the two ever composes per state.
+                    // bento Task 8 review fix — single chips path: search field + filter chips render
+                    // ONLY as LazyColumn item[2] (below), including when the collection is filtered to
+                    // nothing (the filtered-empty views below carry their own "Clear filters" CTA, so
+                    // the user can always escape a filter without a second pinned chips row).
                     val discoveryChips: @Composable () -> Unit = {
                         if (searchActive) {
                             LibrarySearchField(
@@ -626,11 +627,10 @@ fun LibraryScreen(
                         )
                     }
                     if (collection.isEmpty()) {
-                        // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
-                        // pinned above so the user can clear/adjust; the body offers Clear filters too.
+                        // Filtered/searched to nothing (rows exist, none match) — the body offers
+                        // Clear filters itself (below); no second pinned chips row (review fix 3).
                         // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
                         // always showing search wording for a filter that carries no search.
-                        discoveryChips()
                         val onClearFilters: () -> Unit = { viewModel.clearFilters(); searchActive = false }
                         when (
                             FilteredEmptyPolicy.resolve(
@@ -657,11 +657,11 @@ fun LibraryScreen(
                             ) {
                                 // ---- leading chrome (BentoListIndex.LEADING_ITEM_COUNT = 4) ----
                                 item(key = "hdr-recovery-warn") {
-                                    val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(0) else Modifier.animateItem()
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 0)
                                     Box(mod) { RecoveryAndWarnings() }
                                 }
                                 item(key = "stats") {
-                                    val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(1) else Modifier.animateItem()
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 1)
                                     if (isFiltered) {
                                         Text(
                                             stringResource(R.string.library_stats_filtered, collection.size, visibleRows.size),
@@ -674,11 +674,11 @@ fun LibraryScreen(
                                     }
                                 }
                                 item(key = "chips") {
-                                    val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(2) else Modifier.animateItem()
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 2)
                                     Column(mod) { discoveryChips() }
                                 }
                                 item(key = "vault-door") {
-                                    val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(3) else Modifier.animateItem()
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 3)
                                     VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = mod)
                                 }
 
@@ -688,7 +688,7 @@ fun LibraryScreen(
                                     val staggerIdx = BentoListIndex.LEADING_ITEM_COUNT + i
                                     when (entry) {
                                         is BentoListIndex.Entry.MonthDivider -> item(key = key) {
-                                            val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(staggerIdx) else Modifier.animateItem()
+                                            val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
                                             Text(
                                                 entry.label,
                                                 modifier = mod.padding(horizontal = LibraryDimens.screenPadH, vertical = 10.dp),
@@ -714,7 +714,7 @@ fun LibraryScreen(
                                             )
                                         }
                                         is BentoListIndex.Entry.BentoRow -> item(key = key) {
-                                            val mod = if (!reduceMotion && bootActive) Modifier.bentoStaggerEntrance(staggerIdx) else Modifier.animateItem()
+                                            val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
                                             Row(
                                                 mod
                                                     .padding(horizontal = 16.dp)
@@ -761,11 +761,7 @@ fun LibraryScreen(
                                 }
 
                                 item(key = "endcap") {
-                                    val mod = if (!reduceMotion && bootActive) {
-                                        Modifier.bentoStaggerEntrance(BentoListIndex.LEADING_ITEM_COUNT + built.entries.size)
-                                    } else {
-                                        Modifier.animateItem()
-                                    }
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, BentoListIndex.LEADING_ITEM_COUNT + built.entries.size)
                                     Text(
                                         stringResource(R.string.library_endcap, collection.size),
                                         modifier = mod
@@ -810,12 +806,19 @@ fun LibraryScreen(
                         selection = SelectionReducer.clear(selection)
                         coroutineScope.launch {
                             val res = viewModel.batchMoveToVault(keys)
+                            // bento Task 8 review fix 2 — the vault door count reads vaultViewModel's own
+                            // list, which only refreshed once on screen entry; re-read now that the move
+                            // (both suspend calls return only after their move completes) landed.
+                            vaultViewModel.refresh()
                             snackbarHostState.showSnackbar(
                                 context.getString(R.string.library_vault_batch_result, res.moved, res.skipped),
                             )
                         }
                     } else {
-                        coroutineScope.launch { viewModel.moveToVault(sid) }
+                        coroutineScope.launch {
+                            viewModel.moveToVault(sid)
+                            vaultViewModel.refresh()
+                        }
                     }
                 },
                 dismissText = stringResource(R.string.dialog_cancel),
@@ -940,6 +943,20 @@ private val BOOT_STAGGER_TRANSLATE_Y = 14.dp
  * items scrolled into view after this window just use [androidx.compose.foundation.lazy.LazyItemScope.animateItem].
  */
 private const val BOOT_STAGGER_WINDOW_MS = 3000L
+
+/**
+ * bento Task 8 review fix 1 — single branch point for the per-item motion modifier so the
+ * reduce-motion / boot-stagger / animateItem choice lives in ONE place instead of being repeated
+ * at every `item { }` call site. Under reduced motion NO animation modifier applies at all (not
+ * even [androidx.compose.foundation.lazy.LazyItemScope.animateItem]'s placement animation) — ADR-0020.
+ */
+@Composable
+private fun LazyItemScope.bentoItemMotion(reduceMotion: Boolean, bootActive: Boolean, index: Int): Modifier =
+    when {
+        reduceMotion -> Modifier
+        bootActive -> Modifier.bentoStaggerEntrance(index)
+        else -> Modifier.animateItem()
+    }
 
 /**
  * bento Task 8 req 8 — boot-only entrance (translateY 14dp + scale .97 -> rest, 500ms, frozen easing),
