@@ -551,7 +551,7 @@
 <body>
 
 <div class="stagehead">
-  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING · v3.2 FREEZE CANDIDATE — 2026-07-04</div>
+  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING · v3.2.1 FROZEN — 2026-07-04</div>
   <h1>Library — Adaptive Bento Timeline</h1>
   <nav class="conceptnav">
     <a class="active" href="library-bento.html">Living spec</a>
@@ -562,7 +562,8 @@
   <p class="stagenote">This file IS the design source of truth (HTML-first workflow) — every design change lands here first; Compose transcribes only after approval.<br>
   <b>v3 · Freeze pass:</b> full semantic-token restructure + 12-palette preview (RovaPalette.kt verbatim; accent fills AA-resolved by a JS port of DialogActionColors.resolve — Compose uses the real one) · media-relative overlay constants (paint on video never re-themes) · <b>tap now plays</b> (DualShot pane = that side; restores shipped row-tap behavior), details sheet moves to the selection ⓘ · filters scroll away — day headers own the top · unified radius/type/elevation/motion scales, exits ≈70% of enters · AA sweep (informational text ≥ textDim, darker media pills, 44px toast/selbar/rail targets) · explicit sheet close, hidden chrome is <b>inert</b>, rename-Escape stays local · resume pill dropped — the shipped player already resumes (#137). No autoplay anywhere, by design.<br>
   <b>v3.1 · pre-freeze usability pass:</b> day headers are now two-state — plain content at rest, glass veil only while actually pinned, native push-off by the next day (kills the "persistent chrome strip" feel without losing context) · orientation made legible everywhere: the meta pill leads with the recording's shape (single = ▯ or ▭; DualShot = ▯▭ in pane order, Portrait always left), echoed in sheet facts, player subtitle, reader labels, and an aspect-honest player frame · DualShot consistency: panes share the single-tile loading placeholder, seam tokenized as <b>--media-seam</b>. No treatment added to mute the diptych — its salience is information (two recordings, two tap targets), and singles stay content-first.<br>
-  <b>v3.2 · header de-chroming (owner round 2):</b> the pinned day header is no longer glass — no blur, no border, no surface fill, no bottom edge. While pinned, the page's <b>own</b> color (--bgTop) dissolves over the exit edge (solid behind the label, ~34px fade tail), so the timeline itself appears to carry the date label; anatomy, typography and text colors are identical in both states, and every palette washes with its own ground (Daylight = paper, Eclipse = near-black). Fully-naked pinned text was evaluated and fails — themed text over arbitrary thumbnails has unbounded contrast, and a text-shadow halo can't save the 11.5px dim meta line. --chrome token retired (selection bar/toast/rail keep --chrome-solid). codex round: wash primed <b>synchronously</b> at render (a pinned header never paints naked over thumbnails, IO alone lands a frame late) + wash geometry locked to explicit text metrics (21px line-heights → 37px header box, 31px solid hold, 63px total).</p>
+  <b>v3.2 · header de-chroming (owner round 2):</b> the pinned day header is no longer glass — no blur, no border, no surface fill, no bottom edge. While pinned, the page's <b>own</b> color (--bgTop) dissolves over the exit edge (solid behind the label, ~34px fade tail), so the timeline itself appears to carry the date label; anatomy, typography and text colors are identical in both states, and every palette washes with its own ground (Daylight = paper, Eclipse = near-black). Fully-naked pinned text was evaluated and fails — themed text over arbitrary thumbnails has unbounded contrast, and a text-shadow halo can't save the 11.5px dim meta line. --chrome token retired (selection bar/toast/rail keep --chrome-solid). codex round: wash primed <b>synchronously</b> at render (a pinned header never paints naked over thumbnails, IO alone lands a frame late) + wash geometry locked to explicit text metrics (21px line-heights → 37px header box, 31px solid hold, 63px total).<br>
+  <b>v3.2.1 · frozen (post-freeze correction):</b> sheet action relabeled <b>Share</b> (was "Export" — ADR-0030 §1: export is not a Library action; Share hands a content-URI to another app and saves nothing, matching shipped behavior). Label-only fix at Compose transcription kickoff.</p>
 </div>
 
 <div class="phone">
@@ -1070,7 +1071,7 @@ function buildSheet(s){
     <div class="actions">
       <button class="arow ${s.fav?'fav-on':''}" data-a="fav">${ICON.starL(s.fav)}<span>${s.fav?'Remove from favorites':'Add to favorites'}</span></button>
       <button class="arow" data-a="vault">${ICON.lock}<span>Move to Private Vault</span></button>
-      <button class="arow" data-a="export">${ICON.share}<span>Export</span></button>
+      <button class="arow" data-a="share">${ICON.share}<span>Share</span></button>
     </div>
     <div class="dangerzone"><button class="arow" data-a="delete">${ICON.trash}<span>Delete recording</span></button></div>`;
 }
@@ -1100,7 +1101,7 @@ $('#sheetbody').addEventListener('click',e=>{
     s.vaulted=true; dropFromSelection(s.id); closeSheet(); flip(rerender);
     toast('Moved to Private Vault',{label:'Undo',fn(){s.vaulted=false; flip(rerender);}});
   }
-  else if(a==='export'){ toast('Export sheet would open (mock)'); }
+  else if(a==='share'){ toast('Share sheet would open (mock)'); }
   else if(a==='delete'){
     s.deleted=true; dropFromSelection(s.id); closeSheet(); flip(rerender);
     toast('Recording deleted',{label:'Undo',fn(){s.deleted=false; flip(rerender);}});
