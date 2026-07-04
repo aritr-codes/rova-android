@@ -930,4 +930,6 @@
     <!-- bento Task 7 — reflujo de chrome: entrada de selección en la barra superior + texto de estadísticas filtradas (Task 8 lo conecta) -->
     <string name="library_select_open_cd">Seleccionar grabaciones</string>
     <string name="library_stats_filtered">%1$d de %2$d grabaciones</string>
+    <!-- bento Task 8 — remate final de la cronología, p. ej. "— 12 GRABACIONES —" -->
+    <string name="library_endcap">— %1$d GRABACIONES —</string>
 </resources>
