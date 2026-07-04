@@ -68,7 +68,6 @@ import com.aritr.rova.ui.library.components.LibraryRenameDialog
 import com.aritr.rova.ui.library.components.LibraryScrubber
 import com.aritr.rova.ui.library.components.LibrarySearchField
 import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
-import com.aritr.rova.ui.library.components.LibrarySortSheet
 import com.aritr.rova.ui.library.components.LibraryTopBar
 import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
@@ -130,7 +129,6 @@ fun LibraryScreen(
     val sort by viewModel.sort.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     var searchActive by rememberSaveable { mutableStateOf(false) }
-    var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // Slice 5 (remediation row 23) — focus restore: remember the row that launched playback so focus
@@ -455,18 +453,13 @@ fun LibraryScreen(
                         title = stringResource(R.string.history_title),
                         onBack = onBack,
                         backLabel = stringResource(R.string.history_back_cd),
-                        onOpenVault = onOpenVault,
-                        vaultLabel = stringResource(R.string.vault_open_entry_cd),
-                        onToggleDensity = { viewModel.toggleDensity() },
-                        densityLabel = stringResource(R.string.library_density_toggle_cd),
-                        densityState = stringResource(
-                            if (ui.density == LibraryDensity.COMPACT) R.string.library_density_state_compact
-                            else R.string.library_density_state_comfortable
-                        ),
                         onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
                         searchLabel = stringResource(R.string.library_search_open_cd),
-                        onOpenSort = { sortSheetOpen = true },
-                        sortLabel = stringResource(R.string.library_sort_open_cd),
+                        // bento Task 7 — top-bar select entry: same "activate selection mode" outcome
+                        // as the per-item sheet's existing Select action / long-press, just with no
+                        // row pre-selected (SelectionReducer.enter always seeds a key).
+                        onOpenSelect = { selection = SelectionState(active = true) },
+                        selectLabel = stringResource(R.string.library_select_open_cd),
                     )
                 }
             },
@@ -733,14 +726,6 @@ fun LibraryScreen(
                 },
                 onDelete = { sheetTarget = null; pendingDeleteConfirm = setOf(row.stableKey) },
                 onDismiss = { sheetTarget = null },
-            )
-        }
-
-        if (sortSheetOpen) {
-            LibrarySortSheet(
-                current = sort,
-                onSelect = { viewModel.setSort(it); sortSheetOpen = false },
-                onDismiss = { sortSheetOpen = false },
             )
         }
 

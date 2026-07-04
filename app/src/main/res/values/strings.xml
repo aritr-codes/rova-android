@@ -821,6 +821,12 @@
     <string name="vault_delete_title">Delete from vault?</string>
     <string name="vault_delete_body">This permanently deletes the recording. It is not in your gallery and cannot be recovered.</string>
     <string name="vault_delete_confirm">Delete</string>
+    <!-- bento Task 7 — Private Vault door row (chrome reflow) -->
+    <string name="library_vault_door_title">Private Vault</string>
+    <plurals name="library_vault_door_count">
+        <item quantity="one">%d recording</item>
+        <item quantity="other">%d recordings</item>
+    </plurals>
     <!-- Library/History redesign (ADR-0030) -->
     <string name="library_eyebrow_latest">Latest recording</string>
     <string name="library_action_play">Play</string>
@@ -924,4 +930,7 @@
         <item quantity="other">%1$d recordings · %2$s</item>
     </plurals>
     <string name="library_day_select_all_cd">Select all in %1$s</string>
+    <!-- bento Task 7 — chrome reflow: top-bar select entry + filtered stats copy (Task 8 wires the latter) -->
+    <string name="library_select_open_cd">Select recordings</string>
+    <string name="library_stats_filtered">%1$d of %2$d recordings</string>
 </resources>

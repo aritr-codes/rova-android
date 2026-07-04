@@ -289,6 +289,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * holders; the pure [LibraryQuery] does the work and the Screen reads these into
      * its query call. `_filter.search` carries the live search query (folded into the
      * one filter object so the query call takes a single facet bundle).
+     *
+     * bento Task 7 — sort left the chrome (chronology + the day-scrubber rail are the
+     * navigation model now); NEWEST is pinned. [setSort] survives `internal` for tests
+     * only — no production call site sets anything but NEWEST.
      */
     private val _sort = MutableStateFlow(LibrarySort.NEWEST)
     val sort: StateFlow<LibrarySort> = _sort.asStateFlow()
@@ -296,7 +300,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val _filter = MutableStateFlow(LibraryFilter())
     val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
 
-    fun setSort(value: LibrarySort) { _sort.value = value }
+    internal fun setSort(value: LibrarySort) { _sort.value = value }
     fun setSearch(query: String) { _filter.update { it.copy(search = query) } }
     fun setFavoritesOnly(only: Boolean) { _filter.update { it.copy(favoritesOnly = only) } }
     fun setTopologyFilter(topology: CaptureTopology?) { _filter.update { it.copy(topology = topology) } }

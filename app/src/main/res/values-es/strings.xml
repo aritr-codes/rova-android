@@ -819,6 +819,12 @@
     <string name="vault_delete_title">¿Eliminar de la caja fuerte?</string>
     <string name="vault_delete_body">Esto elimina la grabación de forma permanente. No está en tu galería y no se puede recuperar.</string>
     <string name="vault_delete_confirm">Eliminar</string>
+    <!-- bento Task 7 — fila de acceso a la caja fuerte privada (reflujo de chrome) -->
+    <string name="library_vault_door_title">Caja fuerte privada</string>
+    <plurals name="library_vault_door_count">
+        <item quantity="one">%d grabación</item>
+        <item quantity="other">%d grabaciones</item>
+    </plurals>
     <!-- Rediseño de Biblioteca/Historial (ADR-0030) -->
     <string name="library_eyebrow_latest">Última grabación</string>
     <string name="library_action_play">Reproducir</string>
@@ -921,4 +927,7 @@
         <item quantity="other">%1$d grabaciones · %2$s</item>
     </plurals>
     <string name="library_day_select_all_cd">Seleccionar todo en %1$s</string>
+    <!-- bento Task 7 — reflujo de chrome: entrada de selección en la barra superior + texto de estadísticas filtradas (Task 8 lo conecta) -->
+    <string name="library_select_open_cd">Seleccionar grabaciones</string>
+    <string name="library_stats_filtered">%1$d de %2$d grabaciones</string>
 </resources>
