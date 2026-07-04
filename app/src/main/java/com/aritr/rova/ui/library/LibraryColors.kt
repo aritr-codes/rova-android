@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
 import com.aritr.rova.ui.theme.ContrastMath
 import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
@@ -50,6 +51,12 @@ data class LibraryColors(
     val fill2: Color,
     val press: Color,
     val hairline: Color,
+    /** Details-sheet hero play-disc CTA gradient (Task 9 — non-degenerate accent→accent2). */
+    val heroCtaGradient: Brush,
+    /** On-hero-CTA glyph ink (white or near-black, AA-resolved with [heroCtaGradient]). */
+    val heroCtaInk: Color,
+    /** Details-sheet container background (Task 9 — surfaceHi→surface vertical gradient). */
+    val sheetBackground: Brush,
 )
 
 /** Reads the active palette from [LocalGlassEnvironment] and resolves the Library colour slots. */
@@ -77,6 +84,11 @@ fun rememberLibraryColors(): LibraryColors {
             fill2 = LibraryColorSpec.fill2(palette),
             press = LibraryColorSpec.press(palette),
             hairline = LibraryColorSpec.hairline(palette),
+            heroCtaGradient = Brush.linearGradient(LibraryColorSpec.heroCtaColors(palette).toList()),
+            heroCtaInk = LibraryColorSpec.heroCtaInk(palette),
+            sheetBackground = Brush.verticalGradient(
+                colorStops = arrayOf(0f to LibraryColorSpec.sheetSurfaceHi(palette), 0.4f to palette.surfaceBase),
+            ),
         )
     }
 }
@@ -188,4 +200,25 @@ object LibraryColorSpec {
     fun fill2(p: RovaPalette): Color = p.textHigh.copy(alpha = FILL2_ALPHA)
     fun press(p: RovaPalette): Color = p.textHigh.copy(alpha = PRESS_ALPHA)
     fun hairline(p: RovaPalette): Color = p.textHigh.copy(alpha = HAIRLINE_ALPHA)
+
+    // ── Task 9: details-sheet hero CTA + container background ────────────
+    /**
+     * Hero play-disc gradient (frozen sheet spec) — unlike [accentCta]'s degenerate solid fill,
+     * this resolves the REAL two-stop accent gradient ([RovaPalette.accent] → [accent2]) through
+     * the same AA-guaranteed [DialogActionColors.resolve] strategy (mirrors the mockup's ctaResolve).
+     */
+    fun heroCta(p: RovaPalette): DialogActionColors.Cta =
+        DialogActionColors.resolve(p.accent.toRgb(), p.accent2.toRgb())
+
+    /** Hero CTA gradient endpoints as Compose [Color]s (start, end). */
+    fun heroCtaColors(p: RovaPalette): Pair<Color, Color> {
+        val cta = heroCta(p)
+        return Color(cta.start[0], cta.start[1], cta.start[2]) to Color(cta.end[0], cta.end[1], cta.end[2])
+    }
+
+    /** On-hero-CTA glyph ink — white when it clears AA on the gradient, else [ACCENT_INK_DARK]. */
+    fun heroCtaInk(p: RovaPalette): Color = if (heroCta(p).contentWhite) Color.White else ACCENT_INK_DARK
+
+    /** Sheet-hi background stop: `surfaceBase` lightened 8% toward white (mirrors the mockup's `--surface-hi`). */
+    fun sheetSurfaceHi(p: RovaPalette): Color = lerp(p.surfaceBase, Color.White, 0.08f)
 }

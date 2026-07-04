@@ -69,7 +69,6 @@ import com.aritr.rova.ui.components.RovaAlertDialog
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.components.BentoDayHeader
 import com.aritr.rova.ui.library.components.BentoTile
-import com.aritr.rova.ui.library.components.LibraryBatchBar
 import com.aritr.rova.ui.library.components.LibraryDimens
 import com.aritr.rova.ui.library.components.LibraryDualShotEmpty
 import com.aritr.rova.ui.library.components.LibraryEmpty
@@ -200,7 +199,9 @@ fun LibraryScreen(
     var viewSettingsConfig by remember { mutableStateOf<SessionConfig?>(null) }
     var pendingMoveToVaultSessionId by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryRow?>(null) }
-    var sheetTarget by remember { mutableStateOf<LibraryRow?>(null) }
+    // bento Task 9 — keyed (not row-snapshot) so the sheet reflects live favorite/rename state
+    // instead of freezing the row as it stood when the sheet opened.
+    var sheetTargetKey by remember { mutableStateOf<String?>(null) }
     var pendingDeleteConfirm by remember { mutableStateOf<Set<String>?>(null) }
 
     val byKey = remember(items) { items.associateBy { it.stableKey } }
@@ -504,14 +505,12 @@ fun LibraryScreen(
         }
     }
 
-    // bento Task 8 — BentoTile owns tap routing itself (selecting ? onToggleSelect() : onPlay(...)),
-    // so only the long-press contract is still needed here: toggle when already selecting, else open
-    // the per-item sheet (§5.3, carries a "Select" entry to start multi-select) — BentoTile's
-    // onEnterSelection hook is left a no-op and onToggleSelect is wired straight to this function so
-    // long-press keeps its pre-bento behavior unchanged.
+    // bento Task 9 — long-press now ENTERS selection mode directly (frozen selbar entry point,
+    // docs/design/library-bento.html "long-press → selection"): the details sheet no longer opens
+    // from a bare long-press — its only entry is the selection top bar's info action (exactly one
+    // selected). BentoTile owns tap routing itself (selecting ? onToggleSelect() : onPlay(...)).
     fun onTileLong(key: String) {
-        if (selection.active) selection = SelectionReducer.toggle(selection, key)
-        else sheetTarget = rowByKey[key]
+        selection = if (selection.active) SelectionReducer.toggle(selection, key) else SelectionReducer.enter(selection, key)
     }
 
     val movableSelectedExists = remember(selection, byKey) {
@@ -534,10 +533,30 @@ fun LibraryScreen(
                         countLabel = stringResource(R.string.library_select_count, selection.count),
                         closeLabel = stringResource(R.string.library_action_close_selection),
                         selectAllLabel = stringResource(R.string.library_action_select_all),
+                        infoLabel = stringResource(R.string.library_action_info_cd),
+                        favoriteLabel = favoriteLabel,
+                        vaultLabel = stringResource(R.string.library_action_vault),
+                        vaultDisabledLabel = stringResource(R.string.library_action_vault_disabled),
+                        deleteLabel = stringResource(R.string.library_action_delete),
+                        infoEnabled = selection.count == 1,
+                        vaultEnabled = movableSelectedExists,
                         onClose = { selection = SelectionReducer.clear(selection) },
                         onSelectAll = {
                             selection = SelectionReducer.selectAll(selection, visibleRows.map { it.stableKey })
                         },
+                        onInfo = { selection.keys.singleOrNull()?.let { sheetTargetKey = it } },
+                        onFavorite = {
+                            // Batch favorite = mark all selected as favorited (skip already-favorited).
+                            val keys = selection.keys
+                            keys.forEach { k ->
+                                if (ui.rows.firstOrNull { it.stableKey == k }?.favorite == false) {
+                                    viewModel.toggleFavorite(k)
+                                }
+                            }
+                            selection = SelectionReducer.clear(selection)
+                        },
+                        onVault = { pendingMoveToVaultSessionId = "__batch__" },
+                        onDelete = { pendingDeleteConfirm = selection.keys },
                     )
                 } else {
                     LibraryTopBar(
@@ -554,31 +573,9 @@ fun LibraryScreen(
                     )
                 }
             },
-            bottomBar = {
-                if (selection.active) {
-                    LibraryBatchBar(
-                        shareLabel = shareLabel,
-                        vaultLabel = stringResource(R.string.library_action_vault),
-                        vaultDisabledLabel = stringResource(R.string.library_action_vault_disabled),
-                        favoriteLabel = favoriteLabel,
-                        deleteLabel = stringResource(R.string.library_action_delete),
-                        vaultEnabled = movableSelectedExists,
-                        onShare = { shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(selection.keys, rowByKey))) },
-                        onVault = { pendingMoveToVaultSessionId = "__batch__" },
-                        onFavorite = {
-                            // Batch favorite = mark all selected as favorited (skip already-favorited).
-                            val keys = selection.keys
-                            keys.forEach { k ->
-                                if (ui.rows.firstOrNull { it.stableKey == k }?.favorite == false) {
-                                    viewModel.toggleFavorite(k)
-                                }
-                            }
-                            selection = SelectionReducer.clear(selection)
-                        },
-                        onDelete = { pendingDeleteConfirm = selection.keys },
-                    )
-                }
-            },
+            // bento Task 9 — the bottom LibraryBatchBar is retired: every batch action it carried
+            // (favorite/vault/delete) now lives in the top LibrarySelectionTopBar above; batch Share
+            // was dropped from the frozen design (share is sheet-only, ADR-0030 §1 "Share not Export").
         ) { innerPadding ->
             when {
                 // Body state taxonomy mirrors LibraryStatePolicy (Loading / Empty / SearchEmpty /
@@ -854,52 +851,81 @@ fun LibraryScreen(
             )
         }
 
-        sheetTarget?.let { row ->
+        // bento Task 9 — keyed lookup (not a frozen row snapshot) so favorite/rename reflect live
+        // as soon as the VM's row list updates, while the sheet stays open (frozen behavior).
+        sheetTargetKey?.let(rowByKey::get)?.let { row ->
             val item = itemFor(row)
-            // P8 — session-identity header: title (WHEN) + meta (clips · duration · size), reusing the
-            // same pure SessionCaption the list row renders (no new formatter, no manifest read).
-            val sheetClipLabel = if (row.clipCount > 1) {
-                pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
-            } else {
-                ""
+            val isDualForSheet = row.sides.size == 2
+            val portraitThumb = row.sides.getOrNull(0)?.let { thumbnailByKey[it.stableKey] }
+            val landscapeThumb = row.sides.getOrNull(1)?.let { thumbnailByKey[it.stableKey] }
+            val longDateFmt = remember(locale, tz) { SimpleDateFormat("MMMM d, yyyy", locale).apply { timeZone = tz } }
+            val timeFmt = remember(locale, tz) { SimpleDateFormat("h:mm a", locale).apply { timeZone = tz } }
+            val clipsLabel = pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
+            val orientationWord = when {
+                isDualForSheet -> stringResource(R.string.library_filter_pl)
+                row.orientation == LibraryOrientation.PORTRAIT -> stringResource(R.string.library_orientation_portrait)
+                row.orientation == LibraryOrientation.LANDSCAPE -> stringResource(R.string.library_orientation_landscape)
+                else -> ""
             }
-            val sheetMeta = SessionCaption.listMeta(
-                clipCountLabel = sheetClipLabel,
-                durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else "",
-                sizeLabel = StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+            val factsLine1 = stringResource(
+                R.string.library_facts_line1,
+                longDateFmt.format(Date(row.dateMillis)),
+                timeFmt.format(Date(row.dateMillis)),
+                timeFmt.format(Date(row.dateMillis + row.durationMs)),
+            )
+            val factsLine2 = stringResource(
+                R.string.library_facts_line2,
+                SmartTitle.durationLabel(row.durationMs),
+                clipsLabel,
+                StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+                orientationWord,
             )
             LibraryItemSheet(
                 isFavorite = row.favorite,
                 movable = row.topology != com.aritr.rova.data.CaptureTopology.DualShot && item?.sessionId != null,
-                headerTitle = row.title,
-                headerMeta = sheetMeta,
-                headerThumbnail = item?.thumbnail,
+                isDualShot = isDualForSheet,
+                title = row.title,
+                factsLine1 = factsLine1,
+                factsLine2 = factsLine2,
+                heroThumbnail = item?.thumbnail,
+                portraitThumbnail = portraitThumb,
+                landscapeThumbnail = landscapeThumb,
+                durationPillLabel = SmartTitle.durationLabel(row.durationMs),
                 playLabel = stringResource(R.string.library_action_play),
-                selectLabel = stringResource(R.string.library_action_select),
-                shareLabel = shareLabel,
+                portraitLabel = stringResource(R.string.library_orientation_portrait),
+                landscapeLabel = stringResource(R.string.library_orientation_landscape),
+                closeLabel = stringResource(R.string.library_sheet_close_cd),
+                renameLabel = stringResource(R.string.library_action_rename),
+                renameFieldHint = stringResource(R.string.library_rename_hint),
                 favoriteLabel = favoriteLabel,
                 unfavoriteLabel = unfavoriteLabel,
-                renameLabel = stringResource(R.string.library_action_rename),
                 vaultLabel = stringResource(R.string.library_action_vault),
                 vaultUnavailableReason = stringResource(R.string.library_action_vault_unavailable_dualshot),
-                viewSettingsLabel = stringResource(R.string.library_action_view_settings),
+                shareLabel = shareLabel,
                 deleteLabel = stringResource(R.string.library_action_delete),
-                onPlay = { sheetTarget = null; play(row.stableKey) },
-                onSelect = { sheetTarget = null; selection = SelectionReducer.enter(SelectionState(), row.stableKey) },
-                onShare = { sheetTarget = null; shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(setOf(row.stableKey), rowByKey))) },
-                onToggleFavorite = { sheetTarget = null; viewModel.toggleFavorite(row.stableKey) },
-                onRename = { sheetTarget = null; renameTarget = row },
-                onMoveToVault = { sheetTarget = null; pendingMoveToVaultSessionId = item?.sessionId },
-                onViewSettings = {
-                    sheetTarget = null
-                    coroutineScope.launch {
-                        val cfg = viewModel.loadSessionConfig(item?.sessionId)
-                        if (cfg != null) viewSettingsConfig = cfg
-                        else snackbarHostState.showSnackbar(context.getString(R.string.history_settings_unavailable))
-                    }
+                onPlay = { sideToken ->
+                    sheetTargetKey = null
+                    val sideKey = sideToken?.let { token -> row.sides.firstOrNull { it.side.name == token }?.stableKey }
+                    play(row.stableKey, sideKey)
                 },
-                onDelete = { sheetTarget = null; pendingDeleteConfirm = setOf(row.stableKey) },
-                onDismiss = { sheetTarget = null },
+                onRename = { newTitle -> viewModel.renameSession(row.stableKey, newTitle) },
+                onToggleFavorite = { viewModel.toggleFavorite(row.stableKey) },
+                onShare = {
+                    sheetTargetKey = null
+                    shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(setOf(row.stableKey), rowByKey)))
+                },
+                onMoveToVault = {
+                    // frozen v3 codex Critical — drop from selection BEFORE closing.
+                    selection = SelectionReducer.removeAll(selection, setOf(row.stableKey))
+                    sheetTargetKey = null
+                    pendingMoveToVaultSessionId = item?.sessionId
+                },
+                onDelete = {
+                    selection = SelectionReducer.removeAll(selection, setOf(row.stableKey))
+                    sheetTargetKey = null
+                    pendingDeleteConfirm = setOf(row.stableKey)
+                },
+                onDismiss = { sheetTargetKey = null },
             )
         }
 

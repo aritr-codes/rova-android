@@ -879,6 +879,11 @@
     <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
     <string name="library_action_rename">Cambiar nombre</string>
     <string name="library_action_view_settings">Detalles</string>
+    <!-- bento Task 9 — frozen selection bar + details sheet -->
+    <string name="library_action_info_cd">Detalles</string>
+    <string name="library_sheet_close_cd">Cerrar detalles</string>
+    <string name="library_facts_line1">%1$s · %2$s – %3$s</string>
+    <string name="library_facts_line2">%1$s · %2$s · %3$s · %4$s</string>
     <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
     <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
     <string name="library_delete_undo">Deshacer</string>
