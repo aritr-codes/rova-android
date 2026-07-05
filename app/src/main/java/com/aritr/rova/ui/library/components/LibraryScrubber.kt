@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -40,12 +41,19 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.library.LibraryColorSpec
 import com.aritr.rova.ui.library.ScrubberIndex
 import com.aritr.rova.ui.library.ScrubberSegment
+import com.aritr.rova.ui.library.rememberLibraryColors
+import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
+import com.aritr.rova.ui.theme.RovaIcons
 import kotlinx.coroutines.delay
 
 /**
@@ -95,11 +103,14 @@ fun LibraryScrubber(
         animationSpec = if (reduceMotion) snap() else tween(durationMillis = SCRUBBER_FADE_MS),
         label = "scrubberThumbAlpha",
     )
-    val accent = LocalGlassEnvironment.current.palette.accent
+    val palette = LocalGlassEnvironment.current.palette
+    val colors = rememberLibraryColors()
+    val chromeFill = LibraryColorSpec.sheetSurfaceHi(palette).copy(alpha = SCRUBBER_CHROME_ALPHA)
 
     // Thumb + bubble geometry hoisted so the bubble (rendered before the rail) can track the
-    // thumb. Pure clamp in ScrubberIndex.bubbleTopPx (JVM-tested).
-    val thumbSizePx = with(density) { SCRUBBER_THUMB.toPx() }
+    // thumb. Pure clamp in ScrubberIndex.bubbleTopPx (JVM-tested). Height only (drag math is
+    // vertical) — the thumb's visual width no longer equals its height (chrome-tab re-skin).
+    val thumbSizePx = with(density) { SCRUBBER_THUMB_HEIGHT.toPx() }
     val thumbTopPx = (thumbFraction * (railHeightPx - thumbSizePx)).coerceAtLeast(0f)
     var bubbleHeightPx by remember { mutableFloatStateOf(0f) }
 
@@ -136,18 +147,27 @@ fun LibraryScrubber(
                     .padding(end = 28.dp)
                     .wrapContentWidth(align = Alignment.End, unbounded = true)
                     .onSizeChanged { bubbleHeightPx = it.height.toFloat() }
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.inverseSurface)
+                    .shadow(SCRUBBER_BUBBLE_ELEVATION, RoundedCornerShape(SCRUBBER_BUBBLE_RADIUS))
+                    .clip(RoundedCornerShape(SCRUBBER_BUBBLE_RADIUS))
+                    .background(chromeFill)
+                    .border(1.dp, colors.hairline, RoundedCornerShape(SCRUBBER_BUBBLE_RADIUS))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Text(label, color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.labelLarge)
+                Text(
+                    label,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = SCRUBBER_BUBBLE_TEXT_SP,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
         // Rail + thumb. Slider node: discrete progress + setProgress; NO live region here.
+        // Final-review F3 — gesture INPUT area widened to 48dp (WCAG 2.2 AA target size, ADR-0020);
+        // the 44dp thumb visual drawn below is unchanged, this Box only accepts touches.
         Box(
             Modifier
                 .fillMaxHeight()
-                .width(24.dp)
+                .width(48.dp)
                 .onSizeChanged { railHeightPx = it.height.toFloat().coerceAtLeast(1f) }
                 .pointerInput(segments) {
                     detectVerticalDragGestures(
@@ -181,25 +201,54 @@ fun LibraryScrubber(
                     }
                 },
             contentAlignment = Alignment.TopCenter,
+        ) {}
+        // Thumb — 44×48dp chrome tab docked to the outer box's right edge (rounded LEFT corners
+        // only, flush against the screen edge), drawn OVER the (invisible) 24dp gesture rail above
+        // so touches still land on its pointerInput/semantics — this Box has no input modifiers of
+        // its own so drags pass through untouched (bento re-skin, visual-only).
+        Box(
+            Modifier
+                .offset { IntOffset(0, thumbTopPx.roundToInt()) }
+                .size(width = SCRUBBER_THUMB_WIDTH, height = SCRUBBER_THUMB_HEIGHT)
+                .alpha(thumbAlpha)
+                .shadow(SCRUBBER_THUMB_ELEVATION, SCRUBBER_THUMB_SHAPE)
+                .clip(SCRUBBER_THUMB_SHAPE)
+                .background(if (dragging) colors.accentFill else chromeFill)
+                .border(1.dp, colors.hairline, SCRUBBER_THUMB_SHAPE),
+            contentAlignment = Alignment.Center,
         ) {
-            val thumbY = with(density) { thumbTopPx.toDp() }
-            Box(
-                Modifier
-                    .padding(top = thumbY)
-                    .size(SCRUBBER_THUMB)
-                    .alpha(thumbAlpha)
-                    .clip(CircleShape)
-                    .background(accent),
+            SemanticIcon(
+                glyph = RovaIcons.Schedule,
+                contentDescription = null, // decorative — rail already carries contentDescription/stateDescription
+                modifier = Modifier.size(SCRUBBER_THUMB_GLYPH),
+                role = if (dragging) IconRole.OnAccent else IconRole.Secondary,
             )
         }
     }
 }
 
 /** How long the scrubber thumb stays fully visible after the last scroll/drag before fading. */
-private const val SCRUBBER_IDLE_MS = 1100L
+private const val SCRUBBER_IDLE_MS = 1400L
 
 /** Thumb fade-in/out duration (bypassed under reduced-motion, which snaps). */
 private const val SCRUBBER_FADE_MS = 260
 
-/** Thumb dot visual size — 16dp per owner request (PR-C); the 24dp-wide gesture rail is unchanged. */
-private val SCRUBBER_THUMB = 16.dp
+/** Chrome-tab thumb size (bento re-skin) — docked right, rounded LEFT corners only. */
+private val SCRUBBER_THUMB_WIDTH = 44.dp
+private val SCRUBBER_THUMB_HEIGHT = 48.dp
+private val SCRUBBER_THUMB_RADIUS = 14.dp
+private val SCRUBBER_THUMB_SHAPE = RoundedCornerShape(
+    topStart = SCRUBBER_THUMB_RADIUS,
+    bottomStart = SCRUBBER_THUMB_RADIUS,
+    topEnd = 0.dp,
+    bottomEnd = 0.dp,
+)
+private val SCRUBBER_THUMB_ELEVATION = 3.dp
+private val SCRUBBER_THUMB_GLYPH = 20.dp
+
+/** Chrome fill alpha shared by the thumb tab + drag bubble (94%, per spec). */
+private const val SCRUBBER_CHROME_ALPHA = 0.94f
+
+private val SCRUBBER_BUBBLE_RADIUS = 12.dp
+private val SCRUBBER_BUBBLE_ELEVATION = 4.dp
+private val SCRUBBER_BUBBLE_TEXT_SP = 12.5.sp

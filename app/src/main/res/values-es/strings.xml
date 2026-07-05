@@ -819,8 +819,13 @@
     <string name="vault_delete_title">¿Eliminar de la caja fuerte?</string>
     <string name="vault_delete_body">Esto elimina la grabación de forma permanente. No está en tu galería y no se puede recuperar.</string>
     <string name="vault_delete_confirm">Eliminar</string>
+    <!-- bento Task 7 — fila de acceso a la caja fuerte privada (reflujo de chrome) -->
+    <string name="library_vault_door_title">Caja fuerte privada</string>
+    <plurals name="library_vault_door_count">
+        <item quantity="one">%d grabación</item>
+        <item quantity="other">%d grabaciones</item>
+    </plurals>
     <!-- Rediseño de Biblioteca/Historial (ADR-0030) -->
-    <string name="library_eyebrow_latest">Última grabación</string>
     <string name="library_action_play">Reproducir</string>
     <string name="library_action_favorite">Favorito</string>
     <string name="library_action_unfavorite">Quitar favorito</string>
@@ -835,11 +840,13 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
-    <string name="library_latest_resume">Reanudar · %1$s</string>
     <string name="library_a11y_latest_resume">Reanudar la última grabación desde %1$s</string>
     <string name="library_a11y_latest_play">Reproducir la última grabación</string>
     <string name="library_a11y_play_side">Reproducir el lado %1$s, %2$s</string>
     <string name="library_side_action_label">%1$s · %2$s</string>
+    <!-- Mosaico bento (Task 4) -->
+    <string name="library_a11y_dualshot_group">DualShot, %1$s</string>
+    <string name="library_bento_latest_chip">RECIENTE</string>
     <string name="library_a11y_duration">duración</string>
     <string name="library_day_size_total">%1$s este día</string>
     <string name="library_empty_title">Aún no hay grabaciones</string>
@@ -870,34 +877,26 @@
     <string name="library_action_vault_disabled">Caja fuerte no disponible para esta selección</string>
     <string name="library_action_rename">Cambiar nombre</string>
     <string name="library_action_view_settings">Detalles</string>
+    <!-- bento Task 9 — frozen selection bar + details sheet -->
+    <string name="library_action_info_cd">Detalles</string>
+    <string name="library_sheet_close_cd">Cerrar detalles</string>
+    <string name="library_facts_line1">%1$s · %2$s – %3$s</string>
     <string name="library_delete_confirm_title">¿Eliminar grabaciones?</string>
     <string name="library_delete_confirm_body">Se eliminarán %1$d grabación(es).</string>
     <string name="library_delete_undo">Deshacer</string>
     <string name="library_deleted_count">Se eliminaron %1$d grabación(es)</string>
     <string name="library_delete_failed">No se pudieron eliminar %1$d grabación(es)</string>
     <string name="library_vault_batch_result">Movidas %1$d, omitidas %2$d</string>
-    <string name="library_rename_title">Cambiar nombre de la grabación</string>
     <string name="library_rename_hint">Título</string>
-    <string name="library_rename_confirm">Guardar</string>
     <string name="library_a11y_selected">Seleccionada</string>
     <string name="library_a11y_not_selected">No seleccionada</string>
     <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
     <!-- Library Discovery (Slice 4) -->
-    <string name="library_sort_title">Ordenar</string>
-    <string name="library_sort_newest">Más recientes primero</string>
-    <string name="library_sort_oldest">Más antiguos primero</string>
-    <string name="library_sort_longest">Más largos</string>
-    <string name="library_sort_largest">Más grandes</string>
-    <string name="library_sort_open_cd">Ordenar</string>
-    <string name="library_sort_current_cd">Orden actual: %1$s</string>
     <string name="library_filter_all">Todos</string>
     <string name="library_filter_favorites">Favoritos</string>
     <string name="library_filter_pl">DualShot</string>
     <string name="library_filter_selected_cd">%1$s, seleccionado</string>
     <string name="library_filter_not_selected_cd">%1$s</string>
-    <string name="library_density_toggle_cd">Cambiar densidad de la lista</string>
-    <string name="library_density_state_comfortable">Cómoda</string>
-    <string name="library_density_state_compact">Compacta</string>
     <string name="library_search_open_cd">Buscar</string>
     <string name="library_search_close_cd">Cerrar búsqueda</string>
     <string name="library_search_clear_cd">Borrar búsqueda</string>
@@ -911,4 +910,20 @@
     <string name="library_filtered_empty_title">Sin resultados</string>
     <string name="library_filtered_empty_body">Borra un filtro para ver más grabaciones.</string>
     <string name="library_scrubber_rail_cd">Desplazar por día</string>
+    <string name="library_day_today">Hoy</string>
+    <string name="library_day_yesterday">Ayer</string>
+    <plurals name="library_day_count_duration">
+        <item quantity="one">%1$d grabación · %2$s</item>
+        <item quantity="other">%1$d grabaciones · %2$s</item>
+    </plurals>
+    <string name="library_day_select_all_cd">Seleccionar todo en %1$s</string>
+    <!-- bento Task 7 — reflujo de chrome: entrada de selección en la barra superior + texto de estadísticas filtradas (Task 8 lo conecta) -->
+    <string name="library_select_open_cd">Seleccionar grabaciones</string>
+    <string name="library_stats_filtered">%1$d de %2$d grabaciones</string>
+    <plurals name="library_stats_resting">
+        <item quantity="one">%1$d grabación · %2$s</item>
+        <item quantity="other">%1$d grabaciones · %2$s</item>
+    </plurals>
+    <!-- bento Task 8 — remate final de la cronología, p. ej. "— 12 GRABACIONES —" -->
+    <string name="library_endcap">— %1$d GRABACIONES —</string>
 </resources>

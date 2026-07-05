@@ -5,11 +5,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
-import com.aritr.rova.ui.theme.ContrastMath
+import androidx.compose.ui.graphics.lerp
+import com.aritr.rova.ui.theme.DialogActionColors
 import com.aritr.rova.ui.theme.LocalGlassEnvironment
 import com.aritr.rova.ui.theme.RovaPalette
 import com.aritr.rova.ui.theme.RovaSemantics
+import kotlin.math.roundToInt
 
 /**
  * Theme Foundation (M1–M3, 2026-06-16) — the SINGLE entry point for Library colour identity. No Library
@@ -39,9 +40,18 @@ data class LibraryColors(
     val playGlyphScrim: Color,
     val checkChipScrim: Color,
     val heroScrim: Brush,
-    val latestContainer: Color,
-    val latestEdge: Color,
-    val latestEyebrow: Color,
+    val accentFill: Color,
+    val accentInk: Color,
+    val fill1: Color,
+    val fill2: Color,
+    val press: Color,
+    val hairline: Color,
+    /** Details-sheet hero play-disc CTA gradient (Task 9 — non-degenerate accent→accent2). */
+    val heroCtaGradient: Brush,
+    /** On-hero-CTA glyph ink (white or near-black, AA-resolved with [heroCtaGradient]). */
+    val heroCtaInk: Color,
+    /** Details-sheet container background (Task 9 — surfaceHi→surface vertical gradient). */
+    val sheetBackground: Brush,
 )
 
 /** Reads the active palette from [LocalGlassEnvironment] and resolves the Library colour slots. */
@@ -60,9 +70,17 @@ fun rememberLibraryColors(): LibraryColors {
             playGlyphScrim = LibraryColorSpec.PLAY_GLYPH_SCRIM,
             checkChipScrim = LibraryColorSpec.CHECK_CHIP_SCRIM,
             heroScrim = Brush.verticalGradient(listOf(Color.Transparent, LibraryColorSpec.OVERLAY_SCRIM)),
-            latestContainer = LibraryColorSpec.latestContainer(palette),
-            latestEdge = LibraryColorSpec.latestEdge(palette),
-            latestEyebrow = LibraryColorSpec.latestEyebrow(palette),
+            accentFill = LibraryColorSpec.accentFill(palette),
+            accentInk = LibraryColorSpec.accentInk(palette),
+            fill1 = LibraryColorSpec.fill1(palette),
+            fill2 = LibraryColorSpec.fill2(palette),
+            press = LibraryColorSpec.press(palette),
+            hairline = LibraryColorSpec.hairline(palette),
+            heroCtaGradient = Brush.linearGradient(LibraryColorSpec.heroCtaColors(palette).toList()),
+            heroCtaInk = LibraryColorSpec.heroCtaInk(palette),
+            sheetBackground = Brush.verticalGradient(
+                colorStops = arrayOf(0f to LibraryColorSpec.sheetSurfaceHi(palette), 0.4f to palette.surfaceBase),
+            ),
         )
     }
 }
@@ -102,36 +120,64 @@ object LibraryColorSpec {
     /** Grid selection check-chip backing (over media). */
     val CHECK_CHIP_SCRIM: Color = Color.Black.copy(alpha = 0.32f)
 
-    // ── Latest-row accent (spec §3.3 — identity family, retints with the theme) ──
-    /** Tint alpha of the latest-row container laid over the glass card. */
-    private const val LATEST_TINT_ALPHA = 0.10f
+    // ── Bento accent + state layers (bento Task 3, additive) ─────────────
+    private fun Color.toRgb(): IntArray = intArrayOf(
+        (red * 255).roundToInt(),
+        (green * 255).roundToInt(),
+        (blue * 255).roundToInt(),
+    )
 
-    /** Translucent identity tint layered over the latest row's glass card. */
-    fun latestContainer(p: RovaPalette): Color = p.accent.copy(alpha = LATEST_TINT_ALPHA)
-
-    /** Hairline accent border of the latest row. */
-    fun latestEdge(p: RovaPalette): Color = p.accent.copy(alpha = 0.45f)
-
-    /** Worst-case opaque background the eyebrow sits on (tint composited on the base surface). */
-    fun latestContainerOver(p: RovaPalette): Color = latestContainer(p).compositeOver(p.surfaceBase)
+    /** Near-black label used on a bright (undeepened) accent fill — mirrors RovaDialogs' CTA label. */
+    private val ACCENT_INK_DARK: Color = Color(0xFF0E1116)
 
     /**
-     * "Latest" eyebrow colour — accent-family candidate with an AA fallback: when the palette's
-     * accent can't reach 4.5:1 over the tinted container (labelSmall = small text), fall back to
-     * textHigh so the eyebrow NEVER ships below AA (spec §3.3; LibraryLatestColorsTest ×12).
+     * Bento tile accent = a flat fill, so it reuses the premium-dialog CTA resolver
+     * ([DialogActionColors.resolve]) with a degenerate (solid) "gradient" of (accent, accent) — the
+     * same AA-guaranteed deepen-or-dark-label strategy the dialog system already proved out.
      */
-    fun latestEyebrow(p: RovaPalette): Color {
-        val bg = latestContainerOver(p)
-        val candidate = if (p.isLight) p.accent else p.accentOnDark
-        return if (contrastOver(candidate, bg) >= 4.5) candidate else p.textHigh
+    fun accentCta(p: RovaPalette): DialogActionColors.Cta {
+        val rgb = p.accent.toRgb()
+        return DialogActionColors.resolve(rgb, rgb)
     }
 
-    /** WCAG ratio of [fg] composited over the opaque [bg] (pure — ContrastMath substrate). */
-    fun contrastOver(fg: Color, bg: Color): Double {
-        val c = fg.compositeOver(bg)
-        fun lum(x: Color) = ContrastMath.relativeLuminance(
-            (x.red * 255).toInt(), (x.green * 255).toInt(), (x.blue * 255).toInt(),
-        )
-        return ContrastMath.contrastRatio(lum(c), lum(bg))
+    /** Resolved accent fill (possibly deepened for label AA — see [accentCta]). */
+    fun accentFill(p: RovaPalette): Color {
+        val cta = accentCta(p)
+        return Color(cta.start[0], cta.start[1], cta.start[2])
     }
+
+    /** On-accent label ink — white when it clears AA on the resolved fill, else [ACCENT_INK_DARK]. */
+    fun accentInk(p: RovaPalette): Color = if (accentCta(p).contentWhite) Color.White else ACCENT_INK_DARK
+
+    // Frozen state-layer alphas over textHigh (bento spec — not theme-tunable).
+    private const val FILL1_ALPHA = 0.05f
+    private const val FILL2_ALPHA = 0.08f
+    private const val PRESS_ALPHA = 0.12f
+    private const val HAIRLINE_ALPHA = 0.06f
+
+    fun fill1(p: RovaPalette): Color = p.textHigh.copy(alpha = FILL1_ALPHA)
+    fun fill2(p: RovaPalette): Color = p.textHigh.copy(alpha = FILL2_ALPHA)
+    fun press(p: RovaPalette): Color = p.textHigh.copy(alpha = PRESS_ALPHA)
+    fun hairline(p: RovaPalette): Color = p.textHigh.copy(alpha = HAIRLINE_ALPHA)
+
+    // ── Task 9: details-sheet hero CTA + container background ────────────
+    /**
+     * Hero play-disc gradient (frozen sheet spec) — unlike [accentCta]'s degenerate solid fill,
+     * this resolves the REAL two-stop accent gradient ([RovaPalette.accent] → [accent2]) through
+     * the same AA-guaranteed [DialogActionColors.resolve] strategy (mirrors the mockup's ctaResolve).
+     */
+    fun heroCta(p: RovaPalette): DialogActionColors.Cta =
+        DialogActionColors.resolve(p.accent.toRgb(), p.accent2.toRgb())
+
+    /** Hero CTA gradient endpoints as Compose [Color]s (start, end). */
+    fun heroCtaColors(p: RovaPalette): Pair<Color, Color> {
+        val cta = heroCta(p)
+        return Color(cta.start[0], cta.start[1], cta.start[2]) to Color(cta.end[0], cta.end[1], cta.end[2])
+    }
+
+    /** On-hero-CTA glyph ink — white when it clears AA on the gradient, else [ACCENT_INK_DARK]. */
+    fun heroCtaInk(p: RovaPalette): Color = if (heroCta(p).contentWhite) Color.White else ACCENT_INK_DARK
+
+    /** Sheet-hi background stop: `surfaceBase` lightened 8% toward white (mirrors the mockup's `--surface-hi`). */
+    fun sheetSurfaceHi(p: RovaPalette): Color = lerp(p.surfaceBase, Color.White, 0.08f)
 }

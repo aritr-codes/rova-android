@@ -34,6 +34,15 @@ object LibraryDateLabels {
      */
     fun dayEpoch(millis: Long, tz: TimeZone): Long = startOfDay(millis, tz)
 
+    /**
+     * Whole calendar days between [dayEpochMillis] and [nowMillis]'s local dates, clamped to
+     * ≥0 (a future day is "today" for wash/bento purposes, never negative). Mirrors [dayDiff]'s
+     * DST-safe rounding — a calendar day can be 23h/25h across a transition, so this rounds
+     * rather than truncates raw millis.
+     */
+    fun dayAge(dayEpochMillis: Long, nowMillis: Long, timeZone: TimeZone): Int =
+        dayDiff(from = dayEpochMillis, to = nowMillis, tz = timeZone).toInt().coerceAtLeast(0)
+
     fun headerLabel(dayMillis: Long, nowMillis: Long, locale: Locale, tz: TimeZone): DayHeaderLabel {
         val daysBack = dayDiff(from = dayMillis, to = nowMillis, tz = tz)
         val sameYear = yearOf(dayMillis, tz) == yearOf(nowMillis, tz)

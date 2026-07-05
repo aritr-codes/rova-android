@@ -821,8 +821,13 @@
     <string name="vault_delete_title">Delete from vault?</string>
     <string name="vault_delete_body">This permanently deletes the recording. It is not in your gallery and cannot be recovered.</string>
     <string name="vault_delete_confirm">Delete</string>
+    <!-- bento Task 7 — Private Vault door row (chrome reflow) -->
+    <string name="library_vault_door_title">Private Vault</string>
+    <plurals name="library_vault_door_count">
+        <item quantity="one">%d recording</item>
+        <item quantity="other">%d recordings</item>
+    </plurals>
     <!-- Library/History redesign (ADR-0030) -->
-    <string name="library_eyebrow_latest">Latest recording</string>
     <string name="library_action_play">Play</string>
     <string name="library_action_favorite">Favorite</string>
     <string name="library_action_unfavorite">Remove favorite</string>
@@ -837,11 +842,13 @@
         <item quantity="one">%d clip</item>
         <item quantity="other">%d clips</item>
     </plurals>
-    <string name="library_latest_resume">Resume · %1$s</string>
     <string name="library_a11y_latest_resume">Resume latest recording from %1$s</string>
     <string name="library_a11y_latest_play">Play latest recording</string>
     <string name="library_a11y_play_side">Play %1$s side, %2$s</string>
     <string name="library_side_action_label">%1$s · %2$s</string>
+    <!-- Bento tile (Task 4) -->
+    <string name="library_a11y_dualshot_group">DualShot, %1$s</string>
+    <string name="library_bento_latest_chip">LATEST</string>
     <string name="library_a11y_duration">duration</string>
     <string name="library_day_size_total">%1$s this day</string>
     <string name="library_empty_title">No recordings yet</string>
@@ -872,34 +879,26 @@
     <string name="library_action_vault_disabled">Vault unavailable for this selection</string>
     <string name="library_action_rename">Rename</string>
     <string name="library_action_view_settings">Details</string>
+    <!-- bento Task 9 — frozen selection bar + details sheet -->
+    <string name="library_action_info_cd">Details</string>
+    <string name="library_sheet_close_cd">Close details</string>
+    <string name="library_facts_line1">%1$s · %2$s – %3$s</string>
     <string name="library_delete_confirm_title">Delete recordings?</string>
     <string name="library_delete_confirm_body">%1$d recording(s) will be deleted.</string>
     <string name="library_delete_undo">Undo</string>
     <string name="library_deleted_count">Deleted %1$d recording(s)</string>
     <string name="library_delete_failed">Couldn\'t delete %1$d recording(s)</string>
     <string name="library_vault_batch_result">Moved %1$d, skipped %2$d</string>
-    <string name="library_rename_title">Rename recording</string>
     <string name="library_rename_hint">Title</string>
-    <string name="library_rename_confirm">Save</string>
     <string name="library_a11y_selected">Selected</string>
     <string name="library_a11y_not_selected">Not selected</string>
     <string name="library_sidecar_write_error">Couldn\'t save that change</string>
     <!-- Library Discovery (Slice 4) -->
-    <string name="library_sort_title">Sort</string>
-    <string name="library_sort_newest">Newest first</string>
-    <string name="library_sort_oldest">Oldest first</string>
-    <string name="library_sort_longest">Longest</string>
-    <string name="library_sort_largest">Largest</string>
-    <string name="library_sort_open_cd">Sort</string>
-    <string name="library_sort_current_cd">Current sort: %1$s</string>
     <string name="library_filter_all">All</string>
     <string name="library_filter_favorites">Favorites</string>
     <string name="library_filter_pl">DualShot</string>
     <string name="library_filter_selected_cd">%1$s, selected</string>
     <string name="library_filter_not_selected_cd">%1$s</string>
-    <string name="library_density_toggle_cd">Toggle list density</string>
-    <string name="library_density_state_comfortable">Comfortable</string>
-    <string name="library_density_state_compact">Compact</string>
     <string name="library_search_open_cd">Search</string>
     <string name="library_search_close_cd">Close search</string>
     <string name="library_search_clear_cd">Clear search</string>
@@ -913,4 +912,21 @@
     <string name="library_filtered_empty_title">No matches</string>
     <string name="library_filtered_empty_body">Clear a filter to see more recordings.</string>
     <string name="library_scrubber_rail_cd">Scroll by day</string>
+    <string name="library_day_today">Today</string>
+    <string name="library_day_yesterday">Yesterday</string>
+    <!-- %1$d = recording count, %2$s = total duration e.g. "18m" -->
+    <plurals name="library_day_count_duration">
+        <item quantity="one">%1$d recording · %2$s</item>
+        <item quantity="other">%1$d recordings · %2$s</item>
+    </plurals>
+    <string name="library_day_select_all_cd">Select all in %1$s</string>
+    <!-- bento Task 7 — chrome reflow: top-bar select entry + filtered stats copy (Task 8 wires the latter) -->
+    <string name="library_select_open_cd">Select recordings</string>
+    <string name="library_stats_filtered">%1$d of %2$d recordings</string>
+    <plurals name="library_stats_resting">
+        <item quantity="one">%1$d recording · %2$s</item>
+        <item quantity="other">%1$d recordings · %2$s</item>
+    </plurals>
+    <!-- bento Task 8 — trailing timeline endcap, e.g. "— 12 RECORDINGS —" -->
+    <string name="library_endcap">— %1$d RECORDINGS —</string>
 </resources>

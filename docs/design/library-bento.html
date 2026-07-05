@@ -5,43 +5,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rova — Library Visual Spec · Adaptive Bento Timeline</title>
 <style>
-  /* ============ Rova Blossom tokens (RovaPalette.kt verbatim) ============ */
+  /* ================================================================
+     TOKENS
+     Two strict families — this split IS the theme contract:
+       1. SEMANTIC tokens (JS theme picker rewrites them; values are
+          RovaPalette.kt verbatim). Chrome, surfaces, text, accents.
+       2. MEDIA-RELATIVE constants (NEVER themed). Anything painted on
+          top of a video frame — scrims, pills, star dot, pane gaps —
+          anchors to the media (arbitrary bright/dark content), not to
+          the palette. Compose keeps the same split.
+     Locked semantics (RovaSemantics, ADR-0028 §1.3): gold/danger are
+     identical across all 12 palettes by design.
+     ================================================================ */
   :root{
+    /* — stage chrome (spec page, fixed — not part of the app design) — */
+    --stage-accent:#FF8FC7; --stage-ink:#2a1420;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-edgeTop:rgba(255,255,255,.18);
+
+    /* — semantic palette tokens (default = Blossom; picker swaps) — */
     --bgTop:#3A2238; --bgBot:#1E1220;
+    --surface:#1E1220; --surface-hi:#332639;          /* opaque elevated surfaces */
     --accent:#FF8FC7; --accent2:#FF6FAE;
     --tHigh:rgba(255,255,255,.94); --tDim:rgba(255,255,255,.62); --tFaint:rgba(255,255,255,.40);
-    --glass:rgba(18,22,32,.58); --edge:rgba(255,255,255,.10); --edgeTop:rgba(255,255,255,.18);
+    --glass:rgba(18,22,32,.58);  /* registry-complete (RovaPalette verbatim) — no consumer on this screen */
+    --edge:rgba(255,255,255,.10); --edgeTop:rgba(255,255,255,.18);
+
+    /* AA-resolved accent paint — JS ports DialogActionColors.resolve
+       (prefer white ink, deepen fill within budget; too-light accents
+       keep the bright fill and take near-black ink). Compose uses the
+       real DialogActionColors verbatim. */
+    --accent-fill:#FF8FC7; --accent-ink:#2a1420;      /* flat accent fills */
+    --cta-start:#FF8FC7; --cta-end:#FF6FAE; --cta-ink:#2a1420; /* gradient fills */
+    --accent-text:color-mix(in srgb, var(--accent) 72%, var(--tHigh)); /* accent AS text on surfaces */
+
+    /* locked semantics — identical across all 12 palettes */
     --gold:#FBBF24; --danger:#EF4444;
+    --danger-text:color-mix(in srgb, var(--danger) 62%, var(--tHigh));
+
+    /* state layers — keyed to the text ink so direction flips with the theme */
+    --fill-1:color-mix(in srgb, var(--tHigh) 5%, transparent);
+    --fill-2:color-mix(in srgb, var(--tHigh) 8%, transparent);
+    --press:color-mix(in srgb, var(--tHigh) 12%, transparent);
+    --hairline:color-mix(in srgb, var(--tHigh) 6%, transparent);
+
+    /* translucent chrome (selection bar, toast, rail). Day headers are NOT
+       chrome — pinned, they wash with the page's own --bgTop (see .dayhdr) */
+    --chrome-solid:color-mix(in srgb, var(--surface-hi) 94%, transparent);
+
+    /* elevation scale (JS swaps the set for the light palette) */
+    --e1:0 6px 22px rgba(0,0,0,.35);
+    --e2:0 12px 34px rgba(0,0,0,.5);
+    --e3:0 18px 60px rgba(0,0,0,.55);
+
+    /* — media-relative constants (never themed) — */
+    --media-scrim:rgba(6,3,8,.62);        /* pill / dot backing on video */
+    --media-edge:rgba(255,255,255,.10);
+    --media-edge-top:rgba(255,255,255,.08);
+    --media-ink:rgba(255,255,255,.95);
+    --media-ink-dim:rgba(255,255,255,.68);
+    --media-dim:rgba(6,3,8,.35);          /* selected-tile dim */
+    --media-seam:#060308;                 /* gap between two sides of one DualShot */
+    --scrim:rgba(0,0,0,.5);               /* modal scrim — black in every theme (Material) */
+
+    /* geometry · radius scale */
     --fw:412px;
-    --r-tile:18px;
+    --r-sm:10px; --r-md:14px; --r-tile:16px; --r-lg:18px; --r-sheet:26px;
+
+    /* motion — single source; exits run ~70% of enters */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --ease-spring:cubic-bezier(.34,1.56,.64,1);
+    --t-micro:.12s; --t-small:.2s; --t-container:.3s; --t-exit:.22s;
   }
+  /* type scale — 10.5 caps · 11 media-pill · 11.5 meta · 12.5 body ·
+     13.5 control · 14 action/title-sub · 15 emphasis · 18 sheet title ·
+     21 page title. tabular-nums on every numeric. */
+
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{
     background:#0d0812 radial-gradient(120% 90% at 50% 0%, #251427 0%, #0d0812 70%);
-    color:var(--tHigh);
+    color:var(--stage-hi);
     font-family:'Inter','SF Pro Text',system-ui,'Segoe UI',Roboto,sans-serif;
     display:flex;flex-direction:column;align-items:center;
     min-height:100dvh;padding:26px 16px 40px;
   }
   button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
   button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+  button[disabled]{opacity:.38;cursor:default}
   img{display:block;user-select:none;-webkit-user-drag:none}
 
   /* ============ Stage chrome (outside the phone) ============ */
-  .stagehead{max-width:520px;text-align:center;margin-bottom:20px}
-  .kicker{font-size:10.5px;letter-spacing:.22em;color:var(--tFaint);font-weight:600}
+  .stagehead{max-width:600px;text-align:center;margin-bottom:20px}
+  .kicker{font-size:10.5px;letter-spacing:.22em;color:var(--stage-faint);font-weight:600}
   .stagehead h1{font-size:20px;font-weight:700;margin:8px 0 12px}
   .conceptnav{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
   .conceptnav a{
-    font-size:12px;font-weight:600;text-decoration:none;color:var(--tDim);
-    padding:7px 14px;border-radius:999px;border:1px solid var(--edge);
+    font-size:12px;font-weight:600;text-decoration:none;color:var(--stage-dim);
+    padding:7px 14px;border-radius:999px;border:1px solid var(--stage-edge);
   }
-  .conceptnav a.active{color:#2a1420;background:var(--accent);border-color:transparent}
-  .conceptnav a:hover:not(.active){color:var(--tHigh);border-color:var(--edgeTop)}
-  .stagenote{font-size:12px;line-height:1.6;color:var(--tFaint)}
+  .conceptnav a.active{color:var(--stage-ink);background:var(--stage-accent);border-color:transparent}
+  .conceptnav a:hover:not(.active){color:var(--stage-hi);border-color:var(--stage-edgeTop)}
+  /* theme picker — stage tooling that proves the token contract; not app UI */
+  .themerow{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+  .swatch{
+    width:26px;height:26px;border-radius:50%;flex:none;
+    border:1px solid rgba(255,255,255,.22);
+    transition:transform var(--t-micro);
+  }
+  .swatch:hover{transform:scale(1.12)}
+  .swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #0d0812, 0 0 0 4px var(--stage-hi)}
+  .stagenote{font-size:12px;line-height:1.6;color:var(--stage-faint)}
+  .stagenote b{color:var(--stage-dim);font-weight:600}
 
-  /* ============ Phone frame ============ */
+  /* ============ Phone frame (stage bezel — fixed) ============ */
   .phone{
     position:relative;width:var(--fw);height:min(880px,86dvh);min-height:560px;
     background:linear-gradient(180deg,var(--bgTop),var(--bgBot) 62%);
@@ -62,268 +139,431 @@
   }
   .status svg{opacity:.85}
 
-  .top{
-    height:52px;display:flex;align-items:center;gap:4px;padding:0 8px;
-  }
+  /* ============ Top bar — back · title · search · select ============ */
+  .top{height:52px;display:flex;align-items:center;gap:4px;padding:0 8px;color:var(--tHigh)}
   .top h2{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-left:4px}
   .top .spacer{flex:1}
   .iconbtn{
-    width:44px;height:44px;display:grid;place-items:center;border-radius:14px;
-    color:var(--tDim);transition:background .15s,color .15s,transform .1s;
+    width:44px;height:44px;display:grid;place-items:center;border-radius:var(--r-md);
+    color:var(--tDim);transition:background var(--t-micro),color var(--t-micro),transform var(--t-micro);
   }
-  .iconbtn:hover{background:rgba(255,255,255,.06);color:var(--tHigh)}
-  .iconbtn:active{transform:scale(.92)}
+  .iconbtn:hover{background:var(--fill-2);color:var(--tHigh)}
+  .iconbtn:active{transform:scale(.92);background:var(--press)}
+  .searchwrap{
+    flex:1;display:none;align-items:center;gap:8px;height:44px;margin:0 2px 0 6px;
+    padding:0 0 0 12px;border-radius:var(--r-md);
+    background:var(--fill-2);border:1px solid var(--edgeTop);
+  }
+  .searchwrap svg{color:var(--tFaint);flex:none}
+  .searchwrap input{
+    flex:1;min-width:0;font:inherit;font-size:14px;color:var(--tHigh);
+    background:none;border:0;outline:none;
+  }
+  .searchwrap input::placeholder{color:var(--tFaint)}
+  .top.searching h2,.top.searching #searchBtn,.top.searching .spacer{display:none}
+  .top.searching .searchwrap{display:flex;animation:searchin var(--t-small) var(--ease-std)}
+  @keyframes searchin{from{opacity:0;transform:scaleX(.92);transform-origin:right}to{opacity:1;transform:none}}
 
   /* ============ Scroll region ============ */
   .scroll{
     position:absolute;left:0;right:0;bottom:0;top:86px;
     overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;
+    color:var(--tHigh);
   }
   .scroll::-webkit-scrollbar{display:none}
 
   .stats{
-    font-size:11.5px;color:var(--tFaint);padding:2px 16px 10px;letter-spacing:.01em;
+    font-size:11.5px;color:var(--tDim);padding:2px 16px 10px;letter-spacing:.01em;
     font-variant-numeric:tabular-nums;
   }
 
-  .chipsWrap{
-    position:sticky;top:0;z-index:30;
-    padding:6px 12px 10px;
-    background:linear-gradient(180deg,rgba(48,28,46,.92) 55%,rgba(48,28,46,0));
-    backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
-  }
-  .chips{display:flex;gap:8px}
+  /* filters scroll away with the stats — browsing chrome stays out of the
+     way mid-timeline (rail owns deep navigation); day headers own the top */
+  .chips{display:flex;gap:8px;padding:2px 16px 12px}
   .chip{
-    padding:9px 16px;min-height:36px;border-radius:999px;font-size:13px;font-weight:600;
-    color:var(--tDim);background:rgba(255,255,255,.05);border:1px solid var(--edge);
-    transition:all .18s cubic-bezier(.2,.8,.2,1);
+    padding:11px 16px;min-height:44px;border-radius:999px;font-size:13.5px;font-weight:600;
+    color:var(--tDim);background:var(--fill-1);border:1px solid var(--edge);
+    transition:background var(--t-small) var(--ease-std),color var(--t-small),border-color var(--t-small),transform var(--t-micro);
   }
-  .chip[aria-pressed="true"]{color:#2a1420;background:var(--accent);border-color:transparent}
+  .chip[aria-pressed="true"]{color:var(--accent-ink);background:var(--accent-fill);border-color:transparent}
   .chip:active{transform:scale(.95)}
 
+  /* Vault — a quiet door, not a banner. Destination, never a filter (ADR-0025). Scrolls away. */
   .vault{
-    display:flex;align-items:center;gap:12px;width:calc(100% - 28px);margin:2px 14px 18px;
-    padding:12px 14px;border-radius:16px;text-align:left;
-    background:var(--glass);border:1px solid var(--edge);
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-    box-shadow:inset 0 1px 0 var(--edgeTop);
-    transition:transform .12s,border-color .18s;
+    display:flex;align-items:center;gap:11px;width:calc(100% - 32px);margin:0 16px 16px;
+    min-height:44px;padding:7px 12px;border-radius:var(--r-md);text-align:left;
+    background:var(--fill-1);border:1px solid var(--edge);
+    transition:transform var(--t-micro),border-color var(--t-small),background var(--t-small);
   }
   .vault:active{transform:scale(.98)}
-  .vault:hover{border-color:var(--edgeTop)}
-  .vault .vicon{
-    width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;
-    background:linear-gradient(140deg,rgba(255,143,199,.22),rgba(255,111,174,.08));
-    color:var(--accent);
-  }
-  .vault b{display:block;font-size:14px;font-weight:600}
-  .vault span{display:block;font-size:11.5px;color:var(--tFaint);margin-top:2px}
+  .vault:hover{border-color:var(--edgeTop);background:var(--fill-2)}
+  .vault .vicon{color:var(--tDim);display:grid;place-items:center;flex:none}
+  .vault b{font-size:13.5px;font-weight:600;color:var(--tDim)}
+  .vault .vcount{font-size:11.5px;color:var(--tDim);font-variant-numeric:tabular-nums}
   .vault .grow{flex:1}
-  .vault .chev{color:var(--tFaint)}
+  .vault .chev{color:var(--tFaint);display:grid;place-items:center}
 
-  /* ============ Day sections + bento ============ */
-  .day{margin-bottom:26px}
+  /* ============ Month dividers + day sections ============ */
+  .monthdiv{
+    font-size:10.5px;font-weight:700;letter-spacing:.22em;color:var(--tDim);
+    text-align:center;padding:22px 0 12px;
+  }
+  .day{margin-bottom:24px;content-visibility:auto;contain-intrinsic-size:auto 380px}
+  /* Day header — GROUND, not glass. Visually identical in both states:
+     transparent, no blur, no border, same typography; the next day pushes
+     it off natively (sticky-in-section). While pinned, the page's OWN color
+     (--bgTop) washes over the exit edge — solid behind the label line, then
+     a long dissolve tail with no bottom edge for the eye to parse as a bar.
+     Tiles slide under the ground and the ground carries the label; text
+     keeps its themed page pairing in both states (AA by construction in
+     all 12 palettes — Daylight washes with its own paper, Eclipse with
+     near-black). A blur/surface fill here would say "pane of UI above your
+     content" — exactly the chrome sensation this kills. */
   .dayhdr{
-    position:sticky;top:46px;z-index:20;
-    display:flex;align-items:baseline;justify-content:space-between;
-    padding:9px 16px;margin-bottom:10px;
-    background:rgba(40,23,39,.78);
-    backdrop-filter:blur(16px) saturate(1.35);-webkit-backdrop-filter:blur(16px) saturate(1.35);
-    border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.05);
+    position:sticky;top:0;z-index:20;
+    display:flex;align-items:center;gap:10px;
+    padding:8px 16px;margin-bottom:10px;
   }
-  .dayhdr h3{font-size:13px;font-weight:700;letter-spacing:.01em}
-  .dayhdr span{font-size:11px;color:var(--tFaint);font-variant-numeric:tabular-nums}
+  /* wash geometry in px, tied to the locked 37px box: solid hold 31px
+     (8 pad + 21 line + 2 slack — covers every descender), 32px dissolve
+     tail, 63px total. No bottom edge for the eye to parse as a bar. */
+  .dayhdr::before{
+    content:"";position:absolute;left:0;right:0;top:0;height:63px;
+    background:linear-gradient(180deg,var(--bgTop) 0,var(--bgTop) 31px,transparent 63px);
+    opacity:0;pointer-events:none;z-index:-1;
+    transition:opacity var(--t-small);
+  }
+  .dayhdr.stuck::before{
+    opacity:1;
+    transition-duration:var(--t-micro); /* wash ON fast (legibility over sliding tiles); release relaxes */
+  }
+  /* explicit line metrics lock the header box at 37px (8 + 21 + 8) so the
+     wash geometry below is font-metric-independent — a spec, not a guess */
+  .dayhdr h3{font-size:14px;font-weight:700;letter-spacing:.01em;line-height:21px}
+  .dayhdr .daymeta{flex:1;font-size:11.5px;line-height:21px;color:var(--tDim);font-variant-numeric:tabular-nums}
+  .dayselect{
+    width:44px;height:44px;margin-block:-10px;margin-right:-10px;border-radius:var(--r-md);
+    display:none;place-items:center;flex:none;
+  }
+  .dayselect:active .circ{transform:scale(.88)}
+  .dayselect .circ{
+    width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--accent-ink);
+    background:var(--fill-2);border:1.5px solid color-mix(in srgb, var(--tHigh) 65%, transparent);
+    transition:background var(--t-micro),transform var(--t-micro);
+  }
+  .dayselect .circ svg{opacity:0}
+  .dayselect.on .circ{background:var(--accent-fill);border-color:var(--accent-fill)}
+  .dayselect.on .circ svg{opacity:1}
+  .selecting .dayselect{display:grid}
 
-  .bento{
-    display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:0 14px;
-  }
-  .tile{position:relative;border-radius:var(--r-tile);animation:tin .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0)*36ms)}
+  /* ============ Bento tiles ============ */
+  .bento{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:0 16px}
+  .tile{position:relative;border-radius:var(--r-tile)}
+  /* entrance stagger runs once at boot only — later renders are FLIP-driven, never re-entrance */
+  .booting .tile{animation:tin .5s var(--ease-std) both;animation-delay:calc(var(--i,0)*30ms)}
   @keyframes tin{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
   .tilebtn{
     position:relative;display:block;width:100%;height:100%;overflow:hidden;
-    border-radius:var(--r-tile);background:linear-gradient(140deg,#3d2440,#241426);
-    border:1px solid rgba(255,255,255,.07);
-    box-shadow:0 6px 22px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.07);
-    transition:box-shadow .25s,transform .18s cubic-bezier(.2,.8,.2,1);
+    border-radius:var(--r-tile);
+    background:linear-gradient(140deg,var(--surface-hi),var(--surface));
+    border:1px solid var(--media-edge-top);
+    box-shadow:var(--e1), inset 0 1px 0 var(--media-edge-top);
+    transition:box-shadow var(--t-small),transform var(--t-small) var(--ease-std);
   }
   .tilebtn:active{transform:scale(.97)}
-  .tilebtn img{
-    width:100%;height:100%;object-fit:cover;
-    transition:transform 3.5s cubic-bezier(.15,.6,.2,1);
-  }
+  .tilebtn img{width:100%;height:100%;object-fit:cover;transition:transform 3.5s cubic-bezier(.15,.6,.2,1)}
   @media (hover:hover){
-    .tilebtn:hover{box-shadow:0 14px 34px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.1)}
-    .tilebtn:hover img{transform:scale(1.07)}
+    .tilebtn:hover{box-shadow:var(--e2), 0 0 0 1px var(--media-edge), inset 0 1px 0 var(--media-edge)}
+    .tilebtn:hover img{transform:scale(1.06)}
   }
-  .tilebtn::after{ /* legibility scrim */
+  .tilebtn::after{ /* legibility scrim (media-relative) — bottom-weighted for the meta pill */
     content:"";position:absolute;inset:0;border-radius:inherit;
-    background:linear-gradient(180deg,rgba(10,5,13,.18) 0%,transparent 30%,transparent 55%,rgba(10,5,13,.55) 100%);
+    background:linear-gradient(180deg,rgba(6,3,8,.16) 0%,transparent 26%,transparent 52%,rgba(6,3,8,.58) 100%);
     pointer-events:none;
   }
-  .dur{
-    position:absolute;right:8px;bottom:8px;z-index:2;
+  /* DualShot = diptych. Each pane is its own button — tap the side you
+     see, play the side you tapped. No text badge; the form IS the label. */
+  .tilebtn.duo{display:flex;gap:2px;background:var(--media-seam);padding:0}
+  /* pane placeholder = the single-tile placeholder — one loading language;
+     only the 2px seam between the sides stays media-dark */
+  .panebtn{flex:1;overflow:hidden;position:relative;min-width:0;background:linear-gradient(140deg,var(--surface-hi),var(--surface))}
+  .panebtn img{width:100%;height:100%;object-fit:cover;transition:transform 3.5s cubic-bezier(.15,.6,.2,1)}
+  .panebtn::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(6,3,8,.16) 0%,transparent 26%,transparent 52%,rgba(6,3,8,.58) 100%);
+    pointer-events:none;
+  }
+  .panebtn:focus-visible{outline-offset:-3px} /* duo clips overflow — ring must draw inside */
+  @media (hover:hover){ .panebtn:hover img{transform:scale(1.06)} }
+  .tilebtn.duo::after{display:none}
+
+  /* tile metadata grammar — one pill, bottom-left, leading with the
+     recording's SHAPE: single = its orientation glyph (▯ or ▭); DualShot =
+     the ▯▭ pair in pane order (Portrait is always left, everywhere). Then
+     time (+ duration when wide). Crop-to-fill erases aspect evidence from
+     the thumbnail itself, so the pill is where orientation lives.
+     Overlays sit on .tile (not in the buttons) so the duo split keeps them whole. */
+  .meta{
+    position:absolute;left:8px;bottom:8px;z-index:2;
+    display:inline-flex;align-items:center;gap:5px;
     font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.02em;
-    padding:3px 8px;border-radius:999px;color:rgba(255,255,255,.92);
-    background:rgba(8,4,11,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-    border:1px solid rgba(255,255,255,.09);pointer-events:none;
+    padding:3px 8px;border-radius:999px;color:var(--media-ink);
+    background:var(--media-scrim);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid var(--media-edge);pointer-events:none;white-space:nowrap;
   }
-  .dual{
-    position:absolute;left:8px;top:8px;z-index:2;display:flex;align-items:center;gap:4px;
-    font-size:9.5px;font-weight:700;letter-spacing:.08em;
-    padding:3px 7px;border-radius:999px;color:rgba(255,255,255,.9);
-    background:rgba(8,4,11,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-    border:1px solid rgba(255,255,255,.09);pointer-events:none;
+  /* full media-ink, not dim — the shape is information users came to read
+     (codex low-vision note: a dim 10px outline reads as confirmation, not
+     discovery); the dim slot stays for the secondary duration */
+  .meta .og{display:inline-flex;align-items:center;gap:2.5px;color:var(--media-ink)}
+  .meta .du{color:var(--media-ink-dim)}
+  .latestchip{
+    position:absolute;left:8px;top:8px;z-index:2;
+    font-size:10px;font-weight:700;letter-spacing:.1em;
+    padding:4px 9px;border-radius:999px;color:var(--accent-ink);background:var(--accent-fill);
+    box-shadow:0 1px 0 rgba(0,0,0,.2), 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+    pointer-events:none;
   }
-  .dual svg{opacity:.95}
+  /* favorite — indicator first: media-scrim dot keeps the locked gold star
+     legible on any thumbnail. Tap-to-star from the grid is desktop-hover
+     only; on touch it is never an invisible target (v1 trap). */
   .starbtn{
-    position:absolute;right:2px;top:2px;z-index:3;
-    width:40px;height:40px;display:grid;place-items:center;border-radius:12px;
-    color:rgba(255,255,255,.55);opacity:0;transition:opacity .18s,transform .1s;
-    filter:drop-shadow(0 1px 4px rgba(0,0,0,.7));
+    position:absolute;right:4px;top:4px;z-index:3;
+    width:36px;height:36px;display:grid;place-items:center;border-radius:12px;
+    color:var(--gold);opacity:0;pointer-events:none;transition:opacity var(--t-small),transform var(--t-micro);
+  }
+  .starbtn .dot{
+    width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+    background:var(--media-scrim);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid var(--media-edge);
   }
   .starbtn:active{transform:scale(.85)}
-  .tile.fav .starbtn{opacity:1;color:var(--gold)}
-  @media (hover:hover){ .tile:hover .starbtn{opacity:1} }
-  .selecting .starbtn{opacity:0 !important;pointer-events:none}
+  .tile.fav .starbtn{opacity:1;pointer-events:auto}
+  @media (hover:hover){ .tile:hover .starbtn{opacity:1;pointer-events:auto;color:var(--media-ink-dim)} .tile.fav:hover .starbtn{color:var(--gold)} }
+  .selecting .starbtn{opacity:0 !important;pointer-events:none !important}
 
-  .tile.latest .tilebtn{
-    box-shadow:0 0 0 1.5px var(--accent2), 0 6px 26px rgba(255,111,174,.28), inset 0 1px 0 rgba(255,255,255,.08);
-  }
-
-  /* selection */
+  /* selection — check disc sits on media (media-relative off state, accent on) */
   .check{
-    position:absolute;left:8px;bottom:8px;z-index:4;width:22px;height:22px;border-radius:50%;
-    display:grid;place-items:center;color:#2a1420;
+    position:absolute;right:8px;bottom:8px;z-index:4;width:22px;height:22px;border-radius:50%;
+    display:grid;place-items:center;color:var(--accent-ink);
     background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.7);
-    transform:scale(0);transition:transform .2s cubic-bezier(.34,1.56,.64,1),background .15s;
+    transform:scale(0);transition:transform var(--t-small) var(--ease-spring),background var(--t-micro);
     pointer-events:none;
   }
-  .check svg{opacity:0;transition:opacity .1s}
+  .check svg{opacity:0;transition:opacity var(--t-micro)}
   .selecting .check{transform:scale(1)}
-  .tile.sel .check{background:var(--accent);border-color:var(--accent)}
+  .tile.sel .check{background:var(--accent-fill);border-color:var(--accent-fill)}
   .tile.sel .check svg{opacity:1}
-  .tile.sel .tilebtn{transform:scale(.94);box-shadow:0 0 0 2px var(--accent), 0 10px 30px rgba(0,0,0,.5)}
-  .tile.sel .tilebtn::after{background:linear-gradient(180deg,rgba(30,18,32,.35),rgba(30,18,32,.35))}
+  .tile.sel .tilebtn{transform:scale(.94);box-shadow:0 0 0 2px var(--accent-fill), var(--e2)}
+  .tile.sel .tilebtn::after,.tile.sel .panebtn::after{background:linear-gradient(180deg,var(--media-dim),var(--media-dim))}
 
   .selbar{
     position:absolute;left:10px;right:10px;top:10px;z-index:60;height:52px;
-    display:flex;align-items:center;gap:2px;padding:0 6px;border-radius:18px;
-    background:rgba(24,14,26,.92);border:1px solid var(--edgeTop);
+    display:flex;align-items:center;gap:2px;padding:0 6px;border-radius:var(--r-lg);
+    background:var(--chrome-solid);border:1px solid var(--edgeTop);color:var(--tHigh);
     backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);
-    box-shadow:0 12px 34px rgba(0,0,0,.55);
-    transform:translateY(-72px);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+    box-shadow:var(--e2);
+    transform:translateY(-72px);transition:transform var(--t-exit) var(--ease-std);
   }
-  .selbar.on{transform:none}
-  .selbar .count{flex:1;font-size:14.5px;font-weight:600;padding-left:6px}
+  .selbar.on{transform:none;transition-duration:var(--t-container)}
+  .selbar .count{flex:1;font-size:14px;font-weight:600;padding-left:6px;font-variant-numeric:tabular-nums}
+  .selbar .allbtn{
+    font-size:12px;font-weight:700;color:var(--tDim);padding:8px 12px;border-radius:var(--r-sm);
+    border:1px solid var(--edge);margin-right:4px;min-height:44px;
+  }
+  .selbar .allbtn:hover{color:var(--tHigh);border-color:var(--edgeTop)}
 
-  .endcap{padding:26px 0 44px;text-align:center;font-size:11px;color:var(--tFaint);letter-spacing:.14em}
+  /* ============ Date scrub rail — the 500-recording lever ============ */
+  .rail{
+    position:absolute;right:0;top:96px;bottom:18px;width:48px;z-index:40;
+    opacity:0;pointer-events:none;transition:opacity var(--t-small);touch-action:none;
+  }
+  .rail.show{opacity:1;pointer-events:auto}
+  .railthumb{
+    position:absolute;right:0;top:0;width:44px;height:48px;
+    border-radius:var(--r-md) 0 0 var(--r-md);
+    display:grid;place-items:center;color:var(--tDim);
+    background:var(--chrome-solid);border:1px solid var(--edgeTop);border-right:0;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    box-shadow:var(--e1);
+  }
+  .rail.drag .railthumb{color:var(--accent-ink);background:var(--accent-fill);border-color:transparent}
+  .railbubble{
+    position:absolute;right:52px;transform:translateY(-30%);
+    font-size:12.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;
+    padding:8px 13px;border-radius:var(--r-md);color:var(--tHigh);
+    background:var(--chrome-solid);border:1px solid var(--edgeTop);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    box-shadow:var(--e2);
+    opacity:0;transition:opacity var(--t-micro);pointer-events:none;
+  }
+  .rail.drag .railbubble{opacity:1}
+
+  .endcap{padding:26px 0 44px;text-align:center;font-size:10.5px;color:var(--tFaint);letter-spacing:.14em}
   .empty{padding:60px 30px;text-align:center;color:var(--tDim)}
   .empty b{display:block;font-size:15px;margin-bottom:6px;color:var(--tHigh)}
-  .empty span{font-size:12.5px;line-height:1.6;color:var(--tFaint)}
+  .empty span{font-size:12.5px;line-height:1.6;color:var(--tDim)}
 
-  /* ============ Sheet ============ */
+  /* ============ Details sheet ============ */
   .scrim{
-    position:absolute;inset:0;z-index:70;background:rgba(8,4,11,.55);
-    opacity:0;pointer-events:none;transition:opacity .24s;
+    position:absolute;inset:0;z-index:70;background:var(--scrim);
+    opacity:0;pointer-events:none;transition:opacity var(--t-exit);
   }
-  .scrim.on{opacity:1;pointer-events:auto}
+  .scrim.on{opacity:1;pointer-events:auto;transition-duration:var(--t-container)}
   .sheet{
-    position:absolute;left:0;right:0;bottom:0;z-index:80;max-height:82%;
-    display:flex;flex-direction:column;
-    background:linear-gradient(180deg,#33203a,#241528 40%);
-    border-radius:26px 26px 0 0;border:1px solid var(--edgeTop);border-bottom:0;
-    box-shadow:0 -18px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.1);
-    transform:translateY(104%);transition:transform .3s cubic-bezier(.2,.85,.25,1);
+    position:absolute;left:0;right:0;bottom:0;z-index:80;max-height:84%;
+    display:flex;flex-direction:column;color:var(--tHigh);
+    background:linear-gradient(180deg,var(--surface-hi),var(--surface) 40%);
+    border-radius:var(--r-sheet) var(--r-sheet) 0 0;border:1px solid var(--edgeTop);border-bottom:0;
+    box-shadow:var(--e3), inset 0 1px 0 var(--edgeTop);
+    transform:translateY(104%);transition:transform var(--t-exit) var(--ease-std);
     will-change:transform;
   }
-  .sheet.on{transform:none}
+  .sheet.on{transform:none;transition-duration:var(--t-container)}
   .sheet.drag{transition:none}
-  .grab{padding:10px 0 4px;display:grid;place-items:center;cursor:grab;flex:none;touch-action:none}
-  .grab::before{content:"";width:40px;height:4.5px;border-radius:99px;background:rgba(255,255,255,.24)}
+  .grab{padding:12px 0 6px;display:grid;place-items:center;cursor:grab;flex:none;touch-action:none}
+  .grab::before{content:"";width:40px;height:4.5px;border-radius:99px;background:color-mix(in srgb, var(--tHigh) 24%, transparent)}
+  /* explicit dismiss — a modal can't rely on drag/scrim alone */
+  .sheetclose{position:absolute;right:10px;top:10px;z-index:5;width:44px;height:44px;display:grid;place-items:center;border-radius:var(--r-md);color:var(--media-ink)}
+  .sheetclose .dot{
+    width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+    background:var(--media-scrim);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid var(--media-edge);
+  }
+  .sheetclose:active .dot{transform:scale(.9)}
   .sheetbody{overflow-y:auto;padding:6px 18px 26px;scrollbar-width:none}
   .sheetbody::-webkit-scrollbar{display:none}
+  /* hero: singles get one frame + center play; DualShot repeats the diptych — each pane plays its side */
   .hero{
-    position:relative;width:100%;aspect-ratio:16/9;border-radius:18px;overflow:hidden;
-    background:#241426;border:1px solid rgba(255,255,255,.08);flex:none;
+    position:relative;width:100%;aspect-ratio:16/9;border-radius:var(--r-lg);overflow:hidden;
+    background:var(--surface);border:1px solid var(--media-edge-top);flex:none;
   }
   .hero img{width:100%;height:100%;object-fit:cover}
-  .hero .dur{right:10px;bottom:10px}
-  .sheettitle{display:flex;align-items:center;gap:10px;margin:16px 2px 3px}
-  .sheettitle h3{font-size:18px;font-weight:700;letter-spacing:-.01em;flex:1}
+  .heroplay{position:absolute;inset:0;display:grid;place-items:center;color:var(--media-ink)}
+  .playdisc{
+    width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:var(--cta-ink);
+    background:linear-gradient(135deg,var(--cta-start),var(--cta-end));
+    box-shadow:0 10px 30px color-mix(in srgb, var(--cta-end) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.35);
+    transition:transform var(--t-micro) var(--ease-std);
+  }
+  .heroplay:hover .playdisc{transform:scale(1.07)}
+  .heroplay:active .playdisc{transform:scale(.94)}
+  .heropanes{display:flex;gap:2px;position:absolute;inset:0;background:var(--media-seam)}
+  .hpane{flex:1;position:relative;overflow:hidden;display:block}
+  .hpane img{width:100%;height:100%;object-fit:cover;transition:transform var(--t-container) var(--ease-std)}
+  @media (hover:hover){ .hpane:hover img{transform:scale(1.04)} }
+  .hpane .playdisc{position:absolute;left:50%;top:42%;translate:-50% -50%;width:44px;height:44px}
+  .hpane .plabel{
+    position:absolute;left:50%;bottom:10px;translate:-50% 0;
+    font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--media-ink);
+    padding:4px 10px;border-radius:999px;background:var(--media-scrim);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--media-edge);
+  }
+  .hpane::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(6,3,8,.5));pointer-events:none}
+  .hero .durpill{
+    position:absolute;right:10px;bottom:10px;z-index:2;
+    font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;
+    padding:3px 8px;border-radius:999px;color:var(--media-ink);
+    background:var(--media-scrim);backdrop-filter:blur(6px);border:1px solid var(--media-edge);
+  }
+  .sheettitle{display:flex;align-items:center;gap:8px;margin:16px 2px 2px}
+  .sheettitle h3{font-size:18px;font-weight:700;letter-spacing:-.01em}
   .sheettitle input{
     flex:1;font:inherit;font-size:18px;font-weight:700;color:var(--tHigh);
-    background:rgba(255,255,255,.07);border:1px solid var(--edgeTop);border-radius:10px;padding:4px 10px;outline:none;
+    background:var(--fill-2);border:1px solid var(--edgeTop);border-radius:var(--r-sm);padding:4px 10px;outline:none;
   }
-  .sheetsub{font-size:12.5px;color:var(--tFaint);margin:0 2px 14px}
-  .metachips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-  .mchip{
-    display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--tDim);
-    padding:7px 11px;border-radius:999px;background:rgba(255,255,255,.055);border:1px solid var(--edge);
-    font-variant-numeric:tabular-nums;
-  }
-  .mchip svg{color:var(--tFaint)}
-  .playrow{display:flex;gap:10px;margin-bottom:8px}
-  .playbtn{
-    flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
-    min-height:48px;border-radius:16px;font-size:14px;font-weight:700;color:#2a1420;
-    background:linear-gradient(135deg,var(--accent),var(--accent2));
-    box-shadow:0 8px 24px rgba(255,111,174,.3);
-    transition:transform .12s,box-shadow .2s;
-  }
-  .playbtn.tonal{
-    color:var(--accent);background:rgba(255,143,199,.12);box-shadow:none;
-    border:1px solid rgba(255,143,199,.28);
-  }
-  .playbtn:active{transform:scale(.97)}
-  .actions{margin-top:8px;border-radius:18px;overflow:hidden;border:1px solid var(--edge);background:rgba(255,255,255,.035)}
+  .penbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:var(--r-md);color:var(--tFaint);margin-block:-6px}
+  .penbtn:hover{color:var(--tHigh);background:var(--fill-1)}
+  /* facts as quiet prose, not chip salad — nobody taps a fact */
+  .facts{font-size:12.5px;line-height:1.7;color:var(--tDim);margin:2px 2px 16px;font-variant-numeric:tabular-nums}
+  .facts .sep{color:var(--tFaint);padding:0 5px}
+  .actions{border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--edge);background:var(--fill-1)}
   .arow{
     display:flex;align-items:center;gap:14px;width:100%;min-height:50px;padding:0 16px;
     font-size:14px;font-weight:500;text-align:left;
-    border-bottom:1px solid rgba(255,255,255,.05);transition:background .13s;
+    border-bottom:1px solid var(--hairline);transition:background var(--t-micro);
   }
   .arow:last-child{border-bottom:0}
-  .arow:hover{background:rgba(255,255,255,.05)}
-  .arow:active{background:rgba(255,255,255,.09)}
+  .arow:hover{background:var(--fill-1)}
+  .arow:active{background:var(--press)}
   .arow svg{color:var(--tDim);flex:none}
   .arow.fav-on{color:var(--gold)} .arow.fav-on svg{color:var(--gold)}
-  .arow.danger{color:#ff7b7b} .arow.danger svg{color:#ff7b7b}
+  /* destructive action isolated in its own group below the safe ones */
+  .dangerzone{
+    margin-top:10px;border-radius:var(--r-lg);overflow:hidden;
+    border:1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+    background:color-mix(in srgb, var(--danger) 7%, transparent);
+  }
+  .dangerzone .arow{color:var(--danger-text);border-bottom:0} .dangerzone .arow svg{color:var(--danger-text)}
+
+  /* ============ Player boundary (mock of the shipped screen) ============
+     The real Player is a pinned neutral-dark route (ADR-0028 §2.4): it never
+     adopts the Library palette — so this overlay is deliberately NOT themed
+     apart from the dark-safe accent CTA. */
+  .player{
+    position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;
+    background:linear-gradient(180deg,#0B0E14,#05070B);color:rgba(255,255,255,.93);
+    visibility:hidden;opacity:0;transition:opacity var(--t-exit),visibility 0s linear var(--t-exit);
+  }
+  .player.on{visibility:visible;opacity:1;transition:opacity var(--t-container),visibility 0s}
+  .ptop{display:flex;align-items:center;gap:8px;padding:34px 8px 0}
+  .ptop .iconbtn{color:rgba(255,255,255,.65)}
+  .ptop .iconbtn:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.93)}
+  .ptitle{min-width:0}
+  .ptitle b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ptitle span{font-size:11.5px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums}
+  .pmedia{flex:1;display:grid;place-items:center;min-height:0;padding:12px 0;position:relative}
+  .pmedia img{max-width:100%;max-height:100%;object-fit:contain}
+  .pmedia .playdisc{position:absolute;left:50%;top:50%;translate:-50% -50%}
+  .pcap{
+    padding:0 24px 26px;text-align:center;font-size:11px;line-height:1.6;
+    color:rgba(255,255,255,.45);
+  }
 
   /* ============ Toast ============ */
   .toast{
-    position:absolute;left:14px;right:14px;bottom:18px;z-index:90;
-    display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:16px;
-    background:rgba(20,12,22,.94);border:1px solid var(--edgeTop);
+    position:absolute;left:16px;right:16px;bottom:18px;z-index:110;
+    display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:var(--r-tile);
+    background:var(--chrome-solid);border:1px solid var(--edgeTop);color:var(--tHigh);
     backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    box-shadow:0 14px 40px rgba(0,0,0,.5);
-    font-size:13px;font-weight:500;color:var(--tHigh);
-    transform:translateY(90px);opacity:0;transition:all .28s cubic-bezier(.2,.8,.2,1);
+    box-shadow:var(--e2);
+    font-size:13px;font-weight:500;
+    transform:translateY(90px);opacity:0;transition:all var(--t-exit) var(--ease-std);
     pointer-events:none;
   }
-  .toast.on{transform:none;opacity:1;pointer-events:auto}
+  .toast.on{transform:none;opacity:1;pointer-events:auto;transition-duration:var(--t-container)}
   .toast .msg{flex:1}
-  .toast .act{color:var(--accent);font-weight:700;font-size:13px;padding:6px 8px;border-radius:8px}
-  .toast .act:hover{background:rgba(255,143,199,.12)}
+  .toast .act{
+    color:var(--accent-text);font-weight:700;font-size:13px;
+    min-height:44px;padding:6px 10px;margin-block:-10px;border-radius:8px;
+  }
+  .toast .act:hover{background:color-mix(in srgb, var(--accent) 12%, transparent)}
 
-  .ghost{position:fixed;z-index:999;pointer-events:none;background-size:cover;background-position:center;transform-origin:top left;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .ghost{position:fixed;z-index:999;pointer-events:none;background-size:cover;background-position:center;transform-origin:top left;box-shadow:var(--e3);overflow:hidden}
+  .ghost .gpane{flex:1;background-size:cover;background-position:center}
+  .sheet:focus,.player:focus{outline:none}
 
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
-    .tilebtn img{transition:none}
+    .tilebtn img,.panebtn img,.hpane img{transition:none}
   }
 </style>
 </head>
 <body>
 
 <div class="stagehead">
-  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING — ADOPTED 2026-07-04</div>
+  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING · v3.2.1 FROZEN — 2026-07-04</div>
   <h1>Library — Adaptive Bento Timeline</h1>
   <nav class="conceptnav">
     <a class="active" href="library-bento.html">Living spec</a>
     <a href="../../mockups/library-concept-b-quilt-2026-07-04.html">B · Quilt (archive)</a>
     <a href="../../mockups/library-concept-c-filmstrip-2026-07-04.html">C · Filmstrip (archive)</a>
   </nav>
-  <p class="stagenote">This file IS the design source of truth (HTML-first workflow, CLAUDE.md) — every design change lands here first; Compose transcribes only after approval.<br>
-  Seeded mock data (~95 sessions). Tap tile = details sheet · long-press = selection · hover = preview lift · star = favorite. No autoplay by design.</p>
+  <div class="themerow" id="themerow" role="group" aria-label="Preview palette (stage tooling — proves the token contract, not app UI)"></div>
+  <p class="stagenote">This file IS the design source of truth (HTML-first workflow) — every design change lands here first; Compose transcribes only after approval.<br>
+  <b>v3 · Freeze pass:</b> full semantic-token restructure + 12-palette preview (RovaPalette.kt verbatim; accent fills AA-resolved by a JS port of DialogActionColors.resolve — Compose uses the real one) · media-relative overlay constants (paint on video never re-themes) · <b>tap now plays</b> (DualShot pane = that side; restores shipped row-tap behavior), details sheet moves to the selection ⓘ · filters scroll away — day headers own the top · unified radius/type/elevation/motion scales, exits ≈70% of enters · AA sweep (informational text ≥ textDim, darker media pills, 44px toast/selbar/rail targets) · explicit sheet close, hidden chrome is <b>inert</b>, rename-Escape stays local · resume pill dropped — the shipped player already resumes (#137). No autoplay anywhere, by design.<br>
+  <b>v3.1 · pre-freeze usability pass:</b> day headers are now two-state — plain content at rest, glass veil only while actually pinned, native push-off by the next day (kills the "persistent chrome strip" feel without losing context) · orientation made legible everywhere: the meta pill leads with the recording's shape (single = ▯ or ▭; DualShot = ▯▭ in pane order, Portrait always left), echoed in sheet facts, player subtitle, reader labels, and an aspect-honest player frame · DualShot consistency: panes share the single-tile loading placeholder, seam tokenized as <b>--media-seam</b>. No treatment added to mute the diptych — its salience is information (two recordings, two tap targets), and singles stay content-first.<br>
+  <b>v3.2 · header de-chroming (owner round 2):</b> the pinned day header is no longer glass — no blur, no border, no surface fill, no bottom edge. While pinned, the page's <b>own</b> color (--bgTop) dissolves over the exit edge (solid behind the label, ~34px fade tail), so the timeline itself appears to carry the date label; anatomy, typography and text colors are identical in both states, and every palette washes with its own ground (Daylight = paper, Eclipse = near-black). Fully-naked pinned text was evaluated and fails — themed text over arbitrary thumbnails has unbounded contrast, and a text-shadow halo can't save the 11.5px dim meta line. --chrome token retired (selection bar/toast/rail keep --chrome-solid). codex round: wash primed <b>synchronously</b> at render (a pinned header never paints naked over thumbnails, IO alone lands a frame late) + wash geometry locked to explicit text metrics (21px line-heights → 37px header box, 31px solid hold, 63px total).<br>
+  <b>v3.2.1 · frozen (post-freeze correction):</b> sheet action relabeled <b>Share</b> (was "Export" — ADR-0030 §1: export is not a Library action; Share hands a content-URI to another app and saves nothing, matching shipped behavior). Label-only fix at Compose transcription kickoff.</p>
 </div>
 
 <div class="phone">
@@ -335,84 +575,195 @@
       <rect x="31" y="3.5" width="12" height="6.5" rx="2"/><rect x="32.5" y="5" width="7" height="3.5" rx="1" fill="currentColor" stroke="none"/><path d="M44.5 5.5 v2.5"/>
     </svg>
   </div>
-  <header class="top">
+  <header class="top" id="topbar">
     <button class="iconbtn" id="backBtn" aria-label="Back"></button>
     <h2>Library</h2>
+    <div class="searchwrap" id="searchwrap">
+      <span id="searchGlyph"></span>
+      <input id="searchInput" type="search" placeholder="Search names or dates" aria-label="Search recordings by name or date">
+      <button class="iconbtn" id="searchClose" aria-label="Close search"></button>
+    </div>
     <span class="spacer"></span>
     <button class="iconbtn" id="searchBtn" aria-label="Search"></button>
-    <button class="iconbtn" id="sortBtn" aria-label="Sort"></button>
+    <button class="iconbtn" id="selectBtn" aria-label="Select recordings"></button>
   </header>
 
   <div class="scroll" id="scroll">
     <div class="stats" id="stats"></div>
-    <div class="chipsWrap">
-      <div class="chips" role="group" aria-label="Filters">
-        <button class="chip" data-f="all" aria-pressed="true">All</button>
-        <button class="chip" data-f="fav" aria-pressed="false">Favorites</button>
-        <button class="chip" data-f="dual" aria-pressed="false">DualShot</button>
-      </div>
+    <div class="chips" role="group" aria-label="Filters">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="fav" aria-pressed="false">Favorites</button>
+      <button class="chip" data-f="dual" aria-pressed="false">DualShot</button>
     </div>
     <button class="vault" id="vault">
       <span class="vicon" id="vicon"></span>
-      <span><b>Private Vault</b><span>Locked · 14 videos</span></span>
+      <b>Private Vault</b>
       <span class="grow"></span>
+      <span class="vcount" id="vcount"></span>
       <span class="chev" id="vchev"></span>
     </button>
     <div id="list"></div>
-    <div class="endcap">— END OF RECORDINGS —</div>
+    <div class="endcap" id="endcap"></div>
   </div>
 
-  <div class="selbar" id="selbar">
+  <div class="rail" id="rail">
+    <button class="railthumb" id="railthumb" role="slider" aria-label="Jump to date" aria-orientation="vertical"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></button>
+    <div class="railbubble" id="railbubble"></div>
+  </div>
+
+  <div class="selbar" id="selbar" inert>
     <button class="iconbtn" id="selClose" aria-label="Exit selection"></button>
-    <span class="count" id="selCount">0 selected</span>
+    <span class="count" id="selCount" aria-live="polite">0 selected</span>
+    <button class="allbtn" id="selAll">All</button>
+    <button class="iconbtn" id="selInfo" aria-label="Details" disabled></button>
     <button class="iconbtn" id="selFav" aria-label="Favorite selected"></button>
+    <button class="iconbtn" id="selVault" aria-label="Move selected to Private Vault"></button>
     <button class="iconbtn" id="selDel" aria-label="Delete selected"></button>
   </div>
 
   <div class="scrim" id="scrim"></div>
-  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Recording details">
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Recording details" tabindex="-1" inert>
     <div class="grab" id="grab"></div>
+    <button class="sheetclose" id="sheetClose" aria-label="Close details"><span class="dot"></span></button>
     <div class="sheetbody" id="sheetbody"></div>
   </section>
-  <div class="toast" id="toast"><span class="msg" id="toastMsg"></span><button class="act" id="toastAct"></button></div>
+  <section class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" tabindex="-1" inert></section>
+  <div class="toast" id="toast" role="status" aria-live="polite" inert><span class="msg" id="toastMsg"></span><button class="act" id="toastAct"></button></div>
 </div>
 
 <script>
 'use strict';
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
+/* JS mirror of the CSS motion tokens — keep in sync with :root */
+const T = { micro:120, small:200, container:300, exit:220 };
+const EASE_STD = 'cubic-bezier(.2,.8,.2,1)';
 
 /* ================= icons (Lucide-style, stroke 1.75) ================= */
 const I = (d, sz=20, extra='') => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const ICON = {
   back : I('<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>'),
   search: I('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
-  sort : I('<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/>'),
-  lock : I('<rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', 19),
-  chev : I('<path d="m9 6 6 6-6 6"/>', 18),
-  star : f => `<svg width="19" height="19" viewBox="0 0 24 24" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.6L12 17.4l-5.9 3.3 1.3-6.6L2.5 9.5l6.6-.8z"/></svg>`,
-  dual : I('<rect x="3" y="7" width="12" height="14" rx="2.5"/><rect x="12" y="3" width="9" height="12" rx="2.5"/>', 11, 'stroke-width="2.4"'),
+  select: I('<path d="m3.5 12.5 3 3 5-6"/><path d="m12.5 12.5 3 3 5-6"/>', 20),
+  info : I('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>', 19),
+  lock : I('<rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', 17),
+  chev : I('<path d="m9 6 6 6-6 6"/>', 16),
+  star : f => `<svg width="13" height="13" viewBox="0 0 24 24" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.6L12 17.4l-5.9 3.3 1.3-6.6L2.5 9.5l6.6-.8z"/></svg>`,
+  starL: f => `<svg width="19" height="19" viewBox="0 0 24 24" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.8-4.9 4.6 1.3 6.6L12 17.4l-5.9 3.3 1.3-6.6L2.5 9.5l6.6-.8z"/></svg>`,
   check: I('<path d="m4.5 12.5 5 5 10-11"/>', 15, 'stroke-width="3"'),
+  checkS:I('<path d="m4.5 12.5 5 5 10-11"/>', 13, 'stroke-width="3.2"'),
   x    : I('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
   trash: I('<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'),
-  play : I('<path d="M7 4.5v15l12-7.5z"/>', 18),
+  play : sz => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>`,
   share: I('<path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>', 19),
-  pen  : I('<path d="M17 3.5a2.4 2.4 0 0 1 3.5 3.5L8 19.5 3 21l1.5-5z"/>', 19),
-  clock: I('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', 14),
-  clips: I('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', 14),
-  db   : I('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>', 14),
+  pen  : I('<path d="M17 3.5a2.4 2.4 0 0 1 3.5 3.5L8 19.5 3 21l1.5-5z"/>', 16),
+  /* orientation shape — a tiny frame outline, tall or wide */
+  orient: o => `<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect ${o==='P'?'x="3.4" y="1" width="5.2" height="10"':'x="1" y="3.4" width="10" height="5.2"'} rx="1.6"/></svg>`,
 };
 
-/* ================= seeded dataset (identical across concepts) ================= */
+/* ================= palettes (RovaPalette.kt verbatim) =================
+   darkPalette() defaults mirror the shared dark-base tokens; Eclipse and
+   Daylight carry their own glass/edge/text overrides exactly as the file
+   defines them. Daylight is the only light palette. */
+const DARKBASE = {
+  tHigh:'rgba(255,255,255,.94)', tDim:'rgba(255,255,255,.62)', tFaint:'rgba(255,255,255,.40)',
+  glass:'rgba(18,22,32,.58)', edge:'rgba(255,255,255,.10)', edgeTop:'rgba(255,255,255,.18)',
+};
+const PALETTES = {
+  Aurora  :{bg:['#2C3658','#141622'], a:'#5B9DFF', b:'#7C5BFF'},
+  Tide    :{bg:['#16323A','#0E1A1F'], a:'#34D3C0', b:'#2AA3FF'},
+  Jade    :{bg:['#13322A','#0C1C18'], a:'#34D399', b:'#059E6B'},
+  Dusk    :{bg:['#3A241C','#1F1310'], a:'#FF8A4C', b:'#FF5FA2'},
+  Eclipse :{bg:['#050608','#000000'], a:'#8B7CFF', b:'#B56CFF',
+            glass:'rgba(8,9,12,.84)', edge:'rgba(255,255,255,.08)', edgeTop:'rgba(255,255,255,.12)'},
+  Daylight:{bg:['#E3E9F5','#F4F1EA'], a:'#5B7FFF', b:'#7C5BFF', light:true,
+            glass:'rgba(255,255,255,.66)', edge:'rgba(20,26,40,.07)', edgeTop:'rgba(255,255,255,.85)',
+            tHigh:'rgba(20,26,40,.95)', tDim:'rgba(20,26,40,.60)', tFaint:'rgba(20,26,40,.42)',
+            surface:'#F4F1EA', surfaceHi:'#FFFFFF'},
+  Blossom :{bg:['#3A2238','#1E1220'], a:'#FF8FC7', b:'#FF6FAE'},
+  Coral   :{bg:['#3A2820','#1F1510'], a:'#FFB24D', b:'#FF6A8B'},
+  Meadow  :{bg:['#22301A','#12190E'], a:'#9AE65C', b:'#34D3C0'},
+  Cobalt  :{bg:['#1C2350','#0E1230'], a:'#6F8CFF', b:'#3A45C4'},
+  Orchid  :{bg:['#3A2030','#1E1019'], a:'#FB7185', b:'#A855F7'},
+  Graphite:{bg:['#1A1C20','#0E0F12'], a:'#D2D6DE', b:'#8A8F99'},
+};
+
+/* --- DialogActionColors.resolve, ported verbatim (AA=4.5, STEP=.12,
+   MAX_DEEPEN=.6, WHITE_DEEPEN_LIMIT=.4; worst contrast over start/mid/end).
+   Rendered dark ink is accent-tinted near-black (L≈0.01); the AA decision
+   uses the pure-black bound exactly like the Kotlin. --- */
+const hexToRgb = h => [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const rgbToHex = c => '#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
+const ctaResolve = (()=>{
+  const lin = v => { v/=255; return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+  const lum = c => 0.2126*lin(c[0]) + 0.7152*lin(c[1]) + 0.0722*lin(c[2]);
+  const ratio = (a,b) => (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+  const mid = (a,b) => a.map((v,i)=>Math.floor((v+b[i])/2)); // Kotlin Int division truncates
+  const deepen = (c,t) => c.map(v=>Math.min(255,Math.max(0,Math.round(v*(1-t)))));
+  const worst = (fg,s,e) => Math.min(...[s,mid(s,e),e].map(c=>ratio(fg,lum(c))));
+  return (start,end)=>{
+    let t=0;
+    while(t<=0.6+1e-9){
+      const ds=deepen(start,t), de=deepen(end,t);
+      if(worst(1,ds,de)>=4.5){ if(t<=0.4+1e-9) return {start:ds,end:de,white:true}; break; }
+      t+=0.12;
+    }
+    if(worst(0,start,end)>=4.5) return {start,end,white:false};
+    return {start:deepen(start,.6), end:deepen(end,.6), white:true};
+  };
+})();
+const mix = (a,b,t) => a.map((v,i)=>Math.round(v*(1-t)+b[i]*t));
+
+function applyTheme(name){
+  const p=PALETTES[name], R=document.documentElement.style;
+  const set=(k,v)=>R.setProperty(k,v);
+  const bgB=hexToRgb(p.bg[1]);
+  set('--bgTop',p.bg[0]); set('--bgBot',p.bg[1]);
+  set('--surface', p.surface ?? p.bg[1]);
+  set('--surface-hi', p.surfaceHi ?? rgbToHex(mix(bgB,[255,255,255],.08)));
+  set('--accent',p.a); set('--accent2',p.b);
+  for(const k of ['tHigh','tDim','tFaint','glass','edge','edgeTop'])
+    set(`--${k}`, p[k] ?? DARKBASE[k]);
+  // gradient CTA (playdisc) + flat accent fill (chips/badges/check) — both AA-resolved
+  const g=ctaResolve(hexToRgb(p.a),hexToRgb(p.b));
+  const f=ctaResolve(hexToRgb(p.a),hexToRgb(p.a));
+  const ink=c=>rgbToHex(c.map(v=>Math.round(v*0.16))); // accent-tinted near-black
+  set('--cta-start',rgbToHex(g.start)); set('--cta-end',rgbToHex(g.end));
+  set('--cta-ink', g.white?'#FFFFFF':ink(hexToRgb(p.a)));
+  set('--accent-fill',rgbToHex(f.start));
+  set('--accent-ink', f.white?'#FFFFFF':ink(hexToRgb(p.a)));
+  // elevation set — light surfaces take soft ink-tinted shadows
+  if(p.light){
+    set('--e1','0 4px 14px rgba(20,26,40,.10)');
+    set('--e2','0 10px 28px rgba(20,26,40,.16)');
+    set('--e3','0 16px 44px rgba(20,26,40,.20)');
+  }else{
+    set('--e1','0 6px 22px rgba(0,0,0,.35)');
+    set('--e2','0 12px 34px rgba(0,0,0,.5)');
+    set('--e3','0 18px 60px rgba(0,0,0,.55)');
+  }
+  document.querySelectorAll('.swatch').forEach(s=>s.setAttribute('aria-pressed', s.dataset.p===name ? 'true':'false'));
+}
+{
+  const row=$('#themerow');
+  row.innerHTML=Object.entries(PALETTES).map(([n,p])=>
+    `<button class="swatch" data-p="${n}" aria-pressed="false" aria-label="${n} palette" title="${n}"
+       style="background:linear-gradient(135deg,${p.a},${p.b})"></button>`).join('');
+  row.addEventListener('click',e=>{ const s=e.target.closest('.swatch'); if(s) applyTheme(s.dataset.p); });
+}
+
+/* ================= seeded dataset (same seed as concept round: mulberry32(20260704)) ================= */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const rnd = mulberry32(20260704);
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const NAMES=['Front door test','Parking cam','Desk timelapse','Balcony overnight'];
 const sessions=[];
 {
-  let id=0;
-  for(let d=0; d<22; d++){
-    const count = d===0 ? 3 : 2+Math.floor(rnd()*6);
+  let id=0, named=0;
+  for(let d=0; d<38; d++){
+    const count = d===0 ? 3 : 1+Math.floor(rnd()*6);
     const date = new Date(2026,6,4-d);
     const ts=[];
     for(let i=0;i<count;i++) ts.push({h:6+Math.floor(rnd()*17), m:Math.floor(rnd()*60)});
@@ -423,12 +774,16 @@ const sessions=[];
                  : p<.75 ? 60*(1+Math.floor(rnd()*5))+Math.floor(rnd()*60)
                  : p<.93 ? 300+Math.floor(rnd()*420)
                  :         900+Math.floor(rnd()*2100);
-      const dual = rnd()<.45;
+      const name = (named<NAMES.length && rnd()<.04) ? NAMES[named++] : null;
+      // orientation off an id hash, NOT rnd() — keeps the seeded stream (and
+      // the whole cross-concept comparison dataset) byte-identical.
+      // Portrait-dominant, matching how the app is actually used.
+      const orient = ((id*2654435761)>>>0)%100<68 ? 'P' : 'L';
       sessions.push({
-        id:id++, d, date, h:t.h, m:t.m, durS,
+        id:id++, d, date, h:t.h, m:t.m, durS, orient,
         clips: Math.min(15, Math.max(1, Math.round(durS/(45+rnd()*45)))),
         sizeMB: Math.round(durS*(0.8+rnd()*0.5)*10)/10,
-        dual, fav: rnd()<.16, deleted:false, name:null,
+        dual: rnd()<.38, fav: rnd()<.14, deleted:false, vaulted:false, name,
       });
     }
   }
@@ -436,39 +791,92 @@ const sessions=[];
 
 /* ================= formatters ================= */
 const dayLabel = s => s.d===0?'Today': s.d===1?'Yesterday': `${MONTHS[s.date.getMonth()]} ${s.date.getDate()}, ${s.date.getFullYear()}`;
+const dayShort = s => s.d===0?'Today': s.d===1?'Yesterday': `${MONTHS[s.date.getMonth()].slice(0,3)} ${s.date.getDate()}`;
 const timeLabel = s => `${((s.h+11)%12)+1}:${String(s.m).padStart(2,'0')} ${s.h<12?'am':'pm'}`;
+function endTime(s){ const t=s.h*3600+s.m*60+s.durS, h=Math.floor(t/3600)%24, m=Math.floor(t%3600/60); return timeLabel({h,m}); }
 function fmtDur(x){
   if(x<60) return `${x}s`;
   const h=Math.floor(x/3600), m=Math.floor(x%3600/60), r=x%60;
   if(h) return r||m ? `${h}h ${m}m` : `${h}h`;
   return r ? `${m}m ${r}s` : `${m}m`;
 }
+const fmtDurShort = x => x<60?`${x}s` : x<3600?`${Math.round(x/60)}m` : `${Math.floor(x/3600)}h ${Math.round(x%3600/60)}m`;
 const fmtSize = mb => mb>=1024 ? `${(mb/1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
-const imgURL = (s,w,h) => `https://picsum.photos/seed/rova${s.id}/${w}/${h}`;
+const imgURL = (s,w,h,side) => `https://picsum.photos/seed/rova${s.id}${side||''}/${w}/${h}`;
 
 /* ================= state ================= */
-let filter='all', selecting=false, sheetId=null, lastFocusTile=null;
+let filter='all', q='', selecting=false, sheetId=null, playerId=null, lastFocusTile=null, lastPlayerFocus=null;
 const selected=new Set();
-const visible = () => sessions.filter(s=>!s.deleted && (filter==='all' || (filter==='fav'&&s.fav) || (filter==='dual'&&s.dual)));
+function matchQ(s){
+  if(!q) return true;
+  const hay=[s.name||'', dayLabel(s), dayShort(s), DOW[s.date.getDay()], timeLabel(s)].join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(w=>hay.includes(w));
+}
+const live    = () => sessions.filter(s=>!s.deleted && !s.vaulted);
+const visible = () => live().filter(s=>(filter==='all' || (filter==='fav'&&s.fav) || (filter==='dual'&&s.dual)) && matchQ(s));
+const latestId = () => (filter==='all' && !q) ? live()[0]?.id : undefined;
 
-/* ================= render — bento ================= */
-/* Deterministic 10-slot cycle (span-of-6, heightPx). Rows: 6 | 3+3 | 2+4 | 4+2 | 3+3 | 6. Resets each day. */
-const SLOTS=[[6,204],[3,150],[3,150],[2,198],[4,198],[4,142],[2,142],[3,212],[3,212],[6,126]];
+/* ================= recency-graduated bento =================
+   Three density tiers by day age — recent days breathe, the archive packs tight:
+     FEATURED  d ≤ 1   hero-led rows, tall tiles
+     STANDARD  d 2–6   mid rows, no heroes
+     ARCHIVE   d ≥ 7   dense uniform rows
+   Heights sit on the 4px grid. Rows are pre-authored span patterns summing
+   to 6. Chronological order is NEVER re-sorted; the row template is chosen
+   around the content — a DualShot session always lands on a span ≥ 3 slot
+   so its diptych reads. */
+const TIERS={
+  featured:{hero:{s:[6],h:208}, rows:[{s:[3,3],h:152},{s:[4,2],h:164},{s:[2,4],h:164}], fill1:{s:[6],h:192}},
+  standard:{rows:[{s:[4,2],h:148},{s:[3,3],h:128},{s:[2,2,2],h:104},{s:[2,4],h:148}], fill1:{s:[6],h:148}},
+  archive :{rows:[{s:[2,2,2],h:92},{s:[3,3],h:92}], fill1:{s:[6],h:108}},
+};
+const tierFor = d => d<=1?'featured' : d<=6?'standard' : 'archive';
 
-function tileHTML(s, span, hpx, idx){
-  const latest = filter==='all' && !s.deleted && s.id===visible()[0]?.id;
-  const w=Math.min(1000,Math.round(span*70*1.7)), h=Math.round(hpx*1.7);
-  const label = `${dayLabel(s)} ${timeLabel(s)}, ${fmtDur(s.durS)}${s.dual?', DualShot':''}${s.fav?', favorite':''}${latest?', latest recording':''}`;
+/* Rotation keys on the day's AGE (stable), not its render index — a day's
+   pattern never reshuffles when filters or search change what surrounds it.
+   The hero is outside the rotation: exactly one per featured day, and only
+   when the day has ≥3 sessions (a 2-session day reads better as a pair). */
+function buildRows(ds, tier, d){
+  const T=TIERS[tier], out=[];
+  let i=0, rot=d;
+  while(i<ds.length){
+    const left=ds.length-i;
+    if(left===1){ out.push(T.fill1); i++; continue; }
+    if(tier==='featured' && i===0 && ds.length>=3){ out.push(T.hero); i++; continue; }
+    const cands=T.rows.filter(r=>r.s.length<=left);
+    const off=rot%cands.length;
+    const ordered=cands.slice(off).concat(cands.slice(0,off));
+    // first variant that gives every upcoming DualShot a span ≥ 3
+    const pick=ordered.find(r=>r.s.every((sp,j)=> sp>=3 || !ds[i+j]?.dual)) || ordered[0];
+    out.push(pick); i+=pick.s.length; rot++;
+  }
+  return out;
+}
+
+/* Tap plays (the shipped Library behavior — PR-B row-tap already plays);
+   DualShot panes are separate buttons so the side you tap is the side that
+   plays, with honest keyboard/reader stops per side. In selection mode the
+   same buttons toggle the session. */
+function tileHTML(s, span, hpx, idx, isLatest){
+  const w=Math.round(span*68*1.7), h=Math.round(hpx*1.7);
+  const wide = span>=3;
+  const ow = s.dual ? '' : (s.orient==='P'?'portrait':'landscape');
+  const base = `${ow?ow+' recording, ':''}${dayLabel(s)} ${timeLabel(s)}, ${fmtDur(s.durS)}${s.fav?', favorite':''}${isLatest?', latest recording':''}`;
+  const act = side => selecting ? `Select ${base}` : `Play ${side?side+' side, ':''}${base}`;
+  const inner = s.dual
+    ? `<div class="tilebtn duo" role="group" aria-label="DualShot, ${base}">
+         <button class="panebtn" data-side="Portrait" aria-label="${act('Portrait')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h)}"></button>
+         <button class="panebtn" data-side="Landscape" aria-label="${act('Landscape')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h,'b')}"></button>
+       </div>`
+    : `<button class="tilebtn" aria-label="${act('')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,w,h)}"></button>`;
   return `
-  <div class="tile ${s.fav?'fav':''} ${selected.has(s.id)?'sel':''} ${latest?'latest':''}"
+  <div class="tile ${s.fav?'fav':''} ${selected.has(s.id)?'sel':''}"
        data-id="${s.id}" style="grid-column:span ${span};height:${hpx}px;--i:${Math.min(idx,14)}">
-    <button class="tilebtn" aria-label="${label}">
-      <img loading="lazy" decoding="async" alt="" src="${imgURL(s,w,h)}">
-      ${s.dual?`<span class="dual">${ICON.dual}DUAL</span>`:''}
-      <span class="dur">${fmtDur(s.durS)}</span>
-      <span class="check">${ICON.check}</span>
-    </button>
-    <button class="starbtn" aria-label="${s.fav?'Remove favorite':'Add favorite'}" aria-pressed="${s.fav}">${ICON.star(s.fav)}</button>
+    ${inner}
+    ${isLatest?'<span class="latestchip">LATEST</span>':''}
+    <span class="meta"><span class="og">${s.dual ? ICON.orient('P')+ICON.orient('L') : ICON.orient(s.orient)}</span><span>${timeLabel(s)}${wide?`&thinsp;<span class="du">· ${fmtDurShort(s.durS)}</span>`:''}</span></span>
+    <span class="check">${ICON.check}</span>
+    <button class="starbtn" aria-label="${s.fav?'Remove favorite':'Add favorite'}" aria-pressed="${s.fav}"><span class="dot">${ICON.star(s.fav)}</span></button>
   </div>`;
 }
 
@@ -476,35 +884,51 @@ function renderList(){
   const rows = visible();
   const list = $('#list');
   if(!rows.length){
-    list.innerHTML = `<div class="empty"><b>${filter==='fav'?'No favorites yet':filter==='dual'?'No DualShot recordings':'No recordings'}</b>
-      <span>${filter==='fav'?'Star a recording and it shows up here.':'Recordings appear here as sessions complete.'}</span></div>`;
+    list.innerHTML = `<div class="empty"><b>${q?'No matches':filter==='fav'?'No favorites yet':filter==='dual'?'No DualShot recordings':'No recordings'}</b>
+      <span>${q?'Try a name, a month, or “yesterday”.':filter==='fav'?'Star a recording and it shows up here.':'Recordings appear here as sessions complete.'}</span></div>`;
+    cacheOffsets();
     return;
   }
+  const lid=latestId();
   const byDay=new Map();
   for(const s of rows){ (byDay.get(s.d) ?? byDay.set(s.d,[]).get(s.d)).push(s); }
-  let html='', gi=0;
+  let html='', gi=0, prevMonth=null;
   for(const [d,ds] of byDay){
-    const total=ds.reduce((a,s)=>a+s.sizeMB,0);
-    html += `<section class="day"><header class="dayhdr"><h3>${dayLabel(ds[0])}</h3><span>${fmtSize(total)}</span></header><div class="bento">`;
-    let slot=0, rowRemain=6;
-    ds.forEach((s,i)=>{
-      let [span,hpx]=SLOTS[slot%SLOTS.length];
-      if(rowRemain===0) rowRemain=6;
-      if(span>rowRemain) span=rowRemain;                 // safety (cycle is row-aligned, but stay robust)
-      if(i===ds.length-1 && rowRemain-span>0) span=rowRemain; // last tile fills its row
-      html += tileHTML(s, span, hpx, gi++);
-      rowRemain-=span; slot++;
-    });
+    const mo=ds[0].date.getMonth(), yr=ds[0].date.getFullYear();
+    if(prevMonth!==null && mo!==prevMonth) html+=`<div class="monthdiv">${MONTHS[mo].toUpperCase()} ${yr}</div>`;
+    prevMonth=mo;
+    const totalDur=ds.reduce((a,s)=>a+s.durS,0);
+    const allSel=ds.every(s=>selected.has(s.id));
+    html += `<section class="day" data-day="${d}"><header class="dayhdr">
+      <h3>${dayLabel(ds[0])}</h3>
+      <span class="daymeta">${ds.length} recording${ds.length>1?'s':''} · ${fmtDurShort(totalDur)}</span>
+      <button class="dayselect ${allSel?'on':''}" data-day="${d}" aria-label="Select all in ${dayLabel(ds[0])}" aria-pressed="${allSel}"><span class="circ">${ICON.checkS}</span></button>
+    </header><div class="bento">`;
+    const tier=tierFor(d), plan=buildRows(ds,tier,d);
+    let si=0;
+    for(const row of plan){
+      for(const sp of row.s){
+        if(si>=ds.length) break;
+        html += tileHTML(ds[si], sp, row.h, gi++, ds[si].id===lid);
+        si++;
+      }
+    }
     html += `</div></section>`;
   }
   list.innerHTML=html;
   document.body.classList.toggle('selecting', selecting);
+  cacheOffsets();
 }
 
 function renderStats(){
-  const live=sessions.filter(s=>!s.deleted);
-  const clips=live.reduce((a,s)=>a+s.clips,0), mb=live.reduce((a,s)=>a+s.sizeMB,0);
-  $('#stats').textContent=`${live.length} sessions · ${clips} clips · ${fmtSize(mb)}`;
+  const l=live();
+  const filtered = q || filter!=='all';
+  $('#stats').textContent = filtered
+    ? `${visible().length} of ${l.length} recordings`
+    : `${l.length} recordings · ${fmtSize(l.reduce((a,s)=>a+s.sizeMB,0))}`;
+  $('#endcap').textContent=`— ${l.length} RECORDINGS —`;
+  const v=sessions.filter(s=>s.vaulted && !s.deleted).length + 14;
+  $('#vcount').textContent=`${v} recordings`;
 }
 
 /* ================= FLIP ================= */
@@ -515,35 +939,57 @@ function flip(mutate){
   requestAnimationFrame(()=>{
     document.querySelectorAll('.tile').forEach(e=>{
       const b=before.get(e.dataset.id);
-      if(!b){ e.animate([{opacity:0,transform:'scale(.9)'},{opacity:1,transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'}); return; }
+      if(!b){ e.animate([{opacity:0,transform:'scale(.9)'},{opacity:1,transform:'none'}],{duration:T.small,easing:EASE_STD}); return; }
       const a=e.getBoundingClientRect();
       const dx=b.left-a.left, dy=b.top-a.top, sx=b.width/a.width, sy=b.height/a.height;
       if(Math.abs(dx)<1&&Math.abs(dy)<1&&Math.abs(sx-1)<.01&&Math.abs(sy-1)<.01) return;
       e.animate([{transform:`translate(${dx}px,${dy}px) scale(${sx},${sy})`,transformOrigin:'top left'},{transform:'none',transformOrigin:'top left'}],
-                {duration:300,easing:'cubic-bezier(.2,.8,.2,1)'});
+                {duration:T.container,easing:EASE_STD});
     });
   });
 }
-const rerender = () => { renderList(); renderStats(); };
+let railSync = () => {}; // assigned by the rail module below
+const rerender = () => { renderList(); renderStats(); railSync(); };
+
+/* selection can never silently hold recordings the current view hides —
+   filter/search changes prune it to the visible set */
+function pruneSelection(){
+  if(!selecting) return;
+  const vis=new Set(visible().map(s=>s.id));
+  for(const id of [...selected]) if(!vis.has(id)) selected.delete(id);
+  if(!selected.size) setSelecting(false); else updateSelbar();
+}
+
+/* surgical favorite patch — no full re-render, no re-entrance flicker */
+function patchTile(s){
+  const t=document.querySelector(`.tile[data-id="${s.id}"]`); if(!t) return;
+  t.classList.toggle('fav',s.fav);
+  const st=t.querySelector('.starbtn');
+  st.setAttribute('aria-label', s.fav?'Remove favorite':'Add favorite');
+  st.setAttribute('aria-pressed', s.fav);
+  st.querySelector('.dot').innerHTML=ICON.star(s.fav);
+}
 
 /* ================= toast ================= */
 let toastTimer=null, toastFn=null;
+function hideToast(){ const t=$('#toast'); t.classList.remove('on'); t.inert=true; }
 function toast(msg, action){
   const t=$('#toast'), a=$('#toastAct');
   $('#toastMsg').textContent=msg;
   toastFn=action?.fn??null;
   a.textContent=action?.label??''; a.style.display=action?'':'none';
-  t.classList.add('on');
+  t.inert=false; t.classList.add('on');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.remove('on'), action?5200:3200);
+  toastTimer=setTimeout(hideToast, action?5200:3200);
 }
-$('#toastAct').addEventListener('click',()=>{ toastFn?.(); $('#toast').classList.remove('on'); });
+$('#toastAct').addEventListener('click',()=>{ toastFn?.(); hideToast(); });
 
 /* ================= favorite ================= */
 function toggleFav(s, el){
   s.fav=!s.fav;
-  if(el && !RM) el.animate([{transform:'scale(1)'},{transform:'scale(1.5)'},{transform:'scale(1)'}],{duration:260,easing:'cubic-bezier(.34,1.56,.64,1)'});
-  if(filter==='fav' && !s.fav) flip(rerender); else rerender();
+  if(el && !RM) el.animate([{transform:'scale(1)'},{transform:'scale(1.4)'},{transform:'scale(1)'}],{duration:260,easing:'cubic-bezier(.34,1.56,.64,1)'});
+  // un-favoriting inside the Favorites view removes the row — selection must drop it too
+  if(filter==='fav' && !s.fav){ pruneSelection(); flip(rerender); } else patchTile(s);
 }
 
 /* ================= selection ================= */
@@ -551,22 +997,44 @@ function setSelecting(on){
   selecting=on;
   if(!on) selected.clear();
   $('#selbar').classList.toggle('on',on);
+  $('#selbar').inert=!on; // off-canvas chrome leaves the keyboard/reader flow too
   document.body.classList.toggle('selecting',on);
   updateSelbar(); renderList();
 }
-function updateSelbar(){ $('#selCount').textContent=`${selected.size} selected`; }
+function updateSelbar(){
+  $('#selCount').textContent=`${selected.size} selected`;
+  $('#selInfo').disabled = selected.size!==1;
+}
 function toggleSel(id){
   selected.has(id)?selected.delete(id):selected.add(id);
   if(!selected.size){ setSelecting(false); return; }
   updateSelbar(); renderList();
 }
+$('#selectBtn').addEventListener('click',()=>setSelecting(true));
 $('#selClose').addEventListener('click',()=>setSelecting(false));
+$('#selAll').addEventListener('click',()=>{
+  const vis=visible();
+  const all=vis.every(s=>selected.has(s.id));
+  vis.forEach(s=> all?selected.delete(s.id):selected.add(s.id));
+  if(!selected.size){ setSelecting(false); return; }
+  updateSelbar(); renderList();
+});
+$('#selInfo').addEventListener('click',()=>{
+  if(selected.size!==1) return;
+  openSheet([...selected][0], null);
+});
 $('#selFav').addEventListener('click',()=>{
   const rows=sessions.filter(s=>selected.has(s.id));
   const allFav=rows.every(s=>s.fav);
   rows.forEach(s=>s.fav=!allFav);
   toast(allFav?`Removed ${rows.length} from favorites`:`Added ${rows.length} to favorites`);
   setSelecting(false); flip(rerender);
+});
+$('#selVault').addEventListener('click',()=>{
+  const rows=sessions.filter(s=>selected.has(s.id));
+  rows.forEach(s=>s.vaulted=true);
+  setSelecting(false); flip(rerender);
+  toast(`Moved ${rows.length} to Private Vault`,{label:'Undo',fn(){rows.forEach(s=>s.vaulted=false); flip(rerender);}});
 });
 $('#selDel').addEventListener('click',()=>{
   const rows=sessions.filter(s=>selected.has(s.id));
@@ -575,60 +1043,51 @@ $('#selDel').addEventListener('click',()=>{
   toast(`Deleted ${rows.length} recording${rows.length>1?'s':''}`,{label:'Undo',fn(){rows.forEach(s=>s.deleted=false); flip(rerender);}});
 });
 
-/* ================= sheet ================= */
+/* after a sheet action mutates a session away (vault/delete), selection must drop it */
+function dropFromSelection(id){
+  if(!selecting) return;
+  selected.delete(id);
+  if(!selected.size) setSelecting(false); else updateSelbar();
+}
+
+/* ================= details sheet ================= */
 function buildSheet(s){
-  const latestPlay = s.dual
-    ? `<div class="playrow"><button class="playbtn" data-a="play" data-side="Portrait">${ICON.play}Portrait</button>
-       <button class="playbtn tonal" data-a="play" data-side="Landscape">${ICON.play}Landscape</button></div>`
-    : `<div class="playrow"><button class="playbtn" data-a="play" data-side="">${ICON.play}Play</button></div>`;
+  const hero = s.dual
+    ? `<div class="hero"><div class="heropanes">
+         <button class="hpane" data-a="play" data-side="Portrait"><img alt="" src="${imgURL(s,380,428)}"><span class="playdisc">${ICON.play(20)}</span><span class="plabel">Portrait</span></button>
+         <button class="hpane" data-a="play" data-side="Landscape"><img alt="" src="${imgURL(s,380,428,'b')}"><span class="playdisc">${ICON.play(20)}</span><span class="plabel">Landscape</span></button>
+       </div></div>`
+    : `<div class="hero"><img alt="" src="${imgURL(s,760,428)}">
+       <button class="heroplay" data-a="play" data-side="" aria-label="Play recording"><span class="playdisc">${ICON.play(24)}</span></button>
+       <span class="durpill">${fmtDur(s.durS)}</span></div>`;
   $('#sheetbody').innerHTML=`
-    <div class="hero"><img id="sheetHero" alt="" src="${imgURL(s,760,428)}"><span class="dur">${fmtDur(s.durS)}</span></div>
-    <div class="sheettitle"><h3 id="sheetTitle">${s.name ?? `${DOW[s.date.getDay()]} · ${timeLabel(s)}`}</h3></div>
-    <p class="sheetsub">${MONTHS[s.date.getMonth()]} ${s.date.getDate()}, ${s.date.getFullYear()}${s.name?` · ${timeLabel(s)}`:''}</p>
-    <div class="metachips">
-      <span class="mchip">${ICON.clock}${fmtDur(s.durS)}</span>
-      <span class="mchip">${ICON.clips}${s.clips} clip${s.clips>1?'s':''}</span>
-      <span class="mchip">${ICON.db}${fmtSize(s.sizeMB)}</span>
-      ${s.dual?`<span class="mchip">${ICON.dual}&nbsp;DualShot</span>`:''}
+    ${hero}
+    <div class="sheettitle">
+      <h3 id="sheetTitle">${s.name ?? `${DOW[s.date.getDay()]} · ${timeLabel(s)}`}</h3>
+      <button class="penbtn" data-a="rename" aria-label="Rename recording">${ICON.pen}</button>
     </div>
-    ${latestPlay}
+    <p class="facts">${MONTHS[s.date.getMonth()]} ${s.date.getDate()}, ${s.date.getFullYear()}<span class="sep">·</span>${timeLabel(s)} – ${endTime(s)}<br>
+    ${fmtDur(s.durS)}<span class="sep">·</span>${s.clips} clip${s.clips>1?'s':''}<span class="sep">·</span>${fmtSize(s.sizeMB)}<span class="sep">·</span>${s.dual?'DualShot':s.orient==='P'?'Portrait':'Landscape'}</p>
     <div class="actions">
-      <button class="arow ${s.fav?'fav-on':''}" data-a="fav">${ICON.star(s.fav)}<span>${s.fav?'Remove from favorites':'Add to favorites'}</span></button>
-      <button class="arow" data-a="export">${ICON.share}<span>Export</span></button>
-      <button class="arow" data-a="rename">${ICON.pen}<span>Rename</span></button>
-      <button class="arow danger" data-a="delete">${ICON.trash}<span>Delete recording</span></button>
-    </div>`;
+      <button class="arow ${s.fav?'fav-on':''}" data-a="fav">${ICON.starL(s.fav)}<span>${s.fav?'Remove from favorites':'Add to favorites'}</span></button>
+      <button class="arow" data-a="vault">${ICON.lock}<span>Move to Private Vault</span></button>
+      <button class="arow" data-a="share">${ICON.share}<span>Share</span></button>
+    </div>
+    <div class="dangerzone"><button class="arow" data-a="delete">${ICON.trash}<span>Delete recording</span></button></div>`;
 }
 function openSheet(id, fromEl){
   const s=sessions.find(x=>x.id===id); if(!s) return;
   sheetId=id; lastFocusTile=fromEl??null;
   buildSheet(s);
+  $('#sheet').inert=false;
   $('#scrim').classList.add('on'); $('#sheet').classList.add('on');
-  if(fromEl && !RM){
-    const img=fromEl.querySelector('img');
-    if(img){
-      const r=img.getBoundingClientRect();
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        const hero=$('#sheetHero'); const hr=hero.getBoundingClientRect();
-        if(!hr.width) return;
-        // sheet is mid-slide: its final transform is none, so subtract the current translateY
-        const tf=getComputedStyle($('#sheet')).transform;
-        const dy=tf&&tf!=='none' ? new DOMMatrixReadOnly(tf).m42 : 0;
-        const ht=hr.top-dy;
-        const g=document.createElement('div'); g.className='ghost';
-        g.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:18px;background-image:url('${img.currentSrc||img.src}')`;
-        document.body.appendChild(g);
-        hero.style.opacity='0';
-        g.animate([{transform:'none',opacity:1},{transform:`translate(${hr.left-r.left}px,${ht-r.top}px) scale(${hr.width/r.width},${hr.height/r.height})`,opacity:1}],
-                  {duration:280,easing:'cubic-bezier(.3,.75,.2,1)'}).onfinish=()=>{ hero.style.opacity='1'; g.remove(); };
-      }));
-    }
-  }
+  $('#sheet').focus({preventScroll:true});
 }
 function closeSheet(){
   sheetId=null;
   $('#scrim').classList.remove('on'); $('#sheet').classList.remove('on');
-  lastFocusTile?.querySelector('.tilebtn')?.focus({preventScroll:true});
+  $('#sheet').inert=true;
+  (lastFocusTile?.querySelector('button') ?? (selecting ? $('#selInfo') : $('#selectBtn')))?.focus({preventScroll:true});
 }
 $('#scrim').addEventListener('click',closeSheet);
 
@@ -636,11 +1095,15 @@ $('#sheetbody').addEventListener('click',e=>{
   const b=e.target.closest('[data-a]'); if(!b||sheetId==null) return;
   const s=sessions.find(x=>x.id===sheetId); if(!s) return;
   const a=b.dataset.a;
-  if(a==='play'){ toast(`Would open player${b.dataset.side?` · ${b.dataset.side} side`:''} (mock)`); }
+  if(a==='play'){ closeSheet(); openPlayer(s, b.dataset.side, null); }
   else if(a==='fav'){ toggleFav(s); buildSheet(s); }
-  else if(a==='export'){ toast('Export sheet would open (mock)'); }
+  else if(a==='vault'){
+    s.vaulted=true; dropFromSelection(s.id); closeSheet(); flip(rerender);
+    toast('Moved to Private Vault',{label:'Undo',fn(){s.vaulted=false; flip(rerender);}});
+  }
+  else if(a==='share'){ toast('Share sheet would open (mock)'); }
   else if(a==='delete'){
-    s.deleted=true; closeSheet(); flip(rerender);
+    s.deleted=true; dropFromSelection(s.id); closeSheet(); flip(rerender);
     toast('Recording deleted',{label:'Undo',fn(){s.deleted=false; flip(rerender);}});
   }
   else if(a==='rename'){
@@ -650,9 +1113,27 @@ $('#sheetbody').addEventListener('click',e=>{
     h.replaceWith(inp); inp.focus();
     const commit=()=>{ s.name=inp.value.trim()||null; buildSheet(s); if(s.name) toast('Renamed'); };
     inp.addEventListener('blur',commit,{once:true});
-    inp.addEventListener('keydown',ev=>{ if(ev.key==='Enter') inp.blur(); if(ev.key==='Escape'){inp.value=s.name??''; inp.blur();} });
+    inp.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter') inp.blur();
+      // Escape cancels the RENAME only — it must not fall through and close the sheet
+      if(ev.key==='Escape'){ ev.stopPropagation(); inp.value=s.name??''; inp.blur(); }
+    });
   }
 });
+
+/* shared focus trap — both dialogs claim aria-modal, so focus must actually stay inside */
+function trapIn(root){
+  root.addEventListener('keydown',e=>{
+    if(e.key!=='Tab') return;
+    const f=[...root.querySelectorAll('button,input')].filter(el=>el.offsetParent!==null && !el.disabled);
+    if(!f.length) return;
+    const first=f[0], last=f[f.length-1];
+    if(e.shiftKey && (document.activeElement===first||document.activeElement===root)){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  });
+}
+trapIn($('#sheet'));
+trapIn($('#player'));
 
 /* sheet drag-to-close */
 {
@@ -663,14 +1144,76 @@ $('#sheetbody').addEventListener('click',e=>{
   $('#grab').addEventListener('pointerup',end); $('#grab').addEventListener('pointercancel',end);
 }
 
+/* ================= player boundary =================
+   Tap plays — this overlay marks where the shipped Player takes over.
+   Static frame only (NO autoplay, trust rule); resume position and wall-clock
+   readout are the shipped player's own features (#137, ADR-0032). */
+function openPlayer(s, side, originEl){
+  playerId=s.id; lastPlayerFocus=originEl ?? document.activeElement;
+  const pl=$('#player');
+  const seed = (s.dual && side==='Landscape') ? 'b' : '';
+  // the mock frame is aspect-honest: portrait recordings preview portrait
+  const portrait = s.dual ? side==='Portrait' : s.orient==='P';
+  const dims = portrait ? [380,560] : [720,405];
+  pl.innerHTML=`
+    <div class="ptop">
+      <button class="iconbtn" id="pClose" aria-label="Close player">${ICON.x}</button>
+      <div class="ptitle">
+        <b>${s.name ?? `${DOW[s.date.getDay()]} · ${timeLabel(s)}`}</b>
+        <span>${dayLabel(s)} · ${timeLabel(s)} · ${fmtDur(s.durS)}${s.dual ? ` · DualShot${side?` · ${side} side`:''}` : ` · ${s.orient==='P'?'Portrait':'Landscape'}`}</span>
+      </div>
+    </div>
+    <div class="pmedia"><img alt="" src="${imgURL(s,dims[0],dims[1],seed)}"><span class="playdisc">${ICON.play(24)}</span></div>
+    <div class="pcap">Mock boundary — the shipped Player opens here, paused on the first frame.<br>
+    Pinned neutral-dark route (ADR-0028 §2.4): the Player never adopts the Library palette.</div>`;
+  pl.inert=false; pl.classList.add('on');
+  $('#pClose').addEventListener('click',closePlayer);
+  if(originEl && !RM){
+    const img=originEl.querySelector('img');
+    if(img){
+      const r=img.getBoundingClientRect();
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        const m=pl.querySelector('.pmedia'); if(!m) return;
+        const hr=m.getBoundingClientRect(); if(!hr.width) return;
+        const g=document.createElement('div'); g.className='ghost';
+        g.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:16px`;
+        g.style.backgroundImage=`url('${img.currentSrc||img.src}')`;
+        document.body.appendChild(g);
+        g.animate([{transform:'none',opacity:1},
+                   {transform:`translate(${hr.left-r.left}px,${hr.top-r.top}px) scale(${hr.width/r.width},${hr.height/r.height})`,opacity:0}],
+                  {duration:T.container,easing:EASE_STD}).onfinish=()=>g.remove();
+      }));
+    }
+  }
+  pl.focus({preventScroll:true});
+}
+function closePlayer(){
+  playerId=null;
+  $('#player').classList.remove('on');
+  $('#player').inert=true;
+  lastPlayerFocus?.focus?.({preventScroll:true});
+}
+
 /* ================= list interaction (delegated) ================= */
 $('#list').addEventListener('click',e=>{
+  const daySel=e.target.closest('.dayselect');
+  if(daySel){
+    const d=+daySel.dataset.day;
+    const ds=visible().filter(s=>s.d===d);
+    const all=ds.every(s=>selected.has(s.id));
+    ds.forEach(s=> all?selected.delete(s.id):selected.add(s.id));
+    if(!selected.size){ setSelecting(false); return; }
+    updateSelbar(); renderList();
+    return;
+  }
   const star=e.target.closest('.starbtn');
   if(star){ const s=sessions.find(x=>x.id===+star.closest('.tile').dataset.id); toggleFav(s,star); return; }
-  const btn=e.target.closest('.tilebtn'); if(!btn) return;
+  const btn=e.target.closest('.panebtn,.tilebtn'); if(!btn||btn.classList.contains('duo')) return;
   const tile=btn.closest('.tile'), id=+tile.dataset.id;
   if(suppressClick){ suppressClick=false; return; }
-  if(selecting) toggleSel(id); else openSheet(id,tile);
+  if(selecting){ toggleSel(id); return; }
+  const s=sessions.find(x=>x.id===id);
+  openPlayer(s, btn.dataset.side ?? '', btn);
 });
 
 /* long-press → selection */
@@ -691,30 +1234,152 @@ const lpCancel=e=>{ if(lpStart&&e.type==='pointermove'&&Math.hypot(e.clientX-lpS
 $('#list').addEventListener('pointermove',lpCancel);
 $('#list').addEventListener('pointerup',()=>{clearTimeout(lpTimer); lpStart=null;});
 $('#list').addEventListener('pointercancel',()=>{clearTimeout(lpTimer); lpStart=null;});
-$('#scroll').addEventListener('scroll',()=>{clearTimeout(lpTimer); lpStart=null;},{passive:true});
 $('#list').addEventListener('contextmenu',e=>{ if(e.target.closest('.tile')) e.preventDefault(); });
+
+/* ================= date scrub rail ================= */
+let dayOffsets=[]; // {top,label} per rendered day section, newest→oldest
+/* measured separately from cacheOffsets so rail interactions can re-measure
+   at use time: content-visibility:auto lets never-rendered sections stand in
+   at their 380px intrinsic size, so offsets cached at render can drift until
+   realization — refreshing at pointerdown/keydown bounds the staleness */
+function measureDays(){
+  dayOffsets=[...document.querySelectorAll('.day')].map(el=>{
+    const d=+el.dataset.day;
+    const s=visible().find(x=>x.d===d);
+    return {top:el.offsetTop, label:s?dayShort(s):''};
+  });
+}
+function cacheOffsets(){ measureDays(); watchStuck(); }
+
+/* pinned-state detection for the day-header ground wash: a header is "stuck"
+   when its top edge is clipped at the scroll edge (rootMargin -1px makes a
+   pinned header report ratio < 1). Headers entering from the BOTTOM are also
+   ratio < 1 — the top guard filters them out. It keeps its wash while the
+   next section pushes it up and off. Re-observed after every render
+   (innerHTML replaces the nodes). */
+const stuckIO = new IntersectionObserver(es=>{
+  for(const en of es)
+    en.target.classList.toggle('stuck', en.intersectionRatio<1 && en.boundingClientRect.top <= (en.rootBounds?.top ?? 0)+1);
+},{root:$('#scroll'), threshold:1, rootMargin:'-1px 0px 0px 0px'});
+function watchStuck(){
+  stuckIO.disconnect();
+  // Prime the pinned state SYNCHRONOUSLY, in the same task as the render:
+  // IO callbacks land a frame late, and a pinned header must never paint
+  // naked over live thumbnails after a re-render (codex freeze round, High).
+  // Two passes — read all rects, then write classes — to avoid layout thrash.
+  const rootTop=$('#scroll').getBoundingClientRect().top;
+  const hs=[...document.querySelectorAll('.dayhdr')];
+  const pin=hs.map(h=>h.getBoundingClientRect().top<=rootTop+1);
+  hs.forEach((h,i)=>{ h.classList.toggle('stuck',pin[i]); stuckIO.observe(h); });
+}
+{
+  const scroll=$('#scroll'), rail=$('#rail'), thumb=$('#railthumb'), bubble=$('#railbubble');
+  let hideTimer=null, dragging=false, raf=0;
+
+  const maxScroll = () => scroll.scrollHeight-scroll.clientHeight;
+  const railSpan  = () => rail.clientHeight-48; // thumb height
+  function labelAt(top){
+    let l=dayOffsets[0]?.label||'';
+    for(const o of dayOffsets){ if(o.top<=top+140) l=o.label; else break; }
+    return l;
+  }
+  function syncThumb(){
+    const pct=maxScroll()>0 ? scroll.scrollTop/maxScroll() : 0;
+    const y=pct*railSpan();
+    thumb.style.top=`${y}px`; bubble.style.top=`${y+24}px`;
+    bubble.textContent=labelAt(scroll.scrollTop);
+    thumb.setAttribute('aria-valuenow', Math.round(pct*100));
+    thumb.setAttribute('aria-valuetext', bubble.textContent);
+  }
+  function show(){
+    if(maxScroll()<600){ rail.classList.remove('show'); return; } // short lists don't need a rail
+    rail.classList.add('show');
+    clearTimeout(hideTimer);
+    if(!dragging) hideTimer=setTimeout(()=>rail.classList.remove('show'), 1400);
+  }
+  railSync=()=>{
+    const gated=maxScroll()<600;
+    if(gated) rail.classList.remove('show');
+    thumb.tabIndex = gated ? -1 : 0; // gated rail leaves the tab order entirely
+    syncThumb();
+  };
+  thumb.addEventListener('focus',show); // keyboard focus reveals the auto-hidden rail
+  scroll.addEventListener('scroll',()=>{
+    clearTimeout(lpTimer); lpStart=null;
+    if(!raf) raf=requestAnimationFrame(()=>{ raf=0; syncThumb(); show(); });
+  },{passive:true});
+
+  thumb.addEventListener('pointerdown',e=>{
+    measureDays(); // re-measure — realized sections may have moved the map
+    dragging=true; rail.classList.add('drag'); show();
+    thumb.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  thumb.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const r=rail.getBoundingClientRect();
+    const pct=Math.min(1,Math.max(0,(e.clientY-r.top-24)/railSpan()));
+    scroll.scrollTop=pct*maxScroll();
+  });
+  const endDrag=()=>{ if(!dragging) return; dragging=false; rail.classList.remove('drag'); show(); };
+  thumb.addEventListener('pointerup',endDrag);
+  thumb.addEventListener('pointercancel',endDrag);
+  // keyboard: arrows step exactly one day (index-based, so repeated presses always advance).
+  // Day headers stick at top:0 now, so a day's "position" is its exact offsetTop.
+  thumb.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowDown'&&e.key!=='ArrowUp') return;
+    e.preventDefault();
+    measureDays();
+    if(!dayOffsets.length) return;
+    const cur=scroll.scrollTop;
+    let idx=0;
+    for(let k=0;k<dayOffsets.length;k++){ if(dayOffsets[k].top<=cur+2) idx=k; else break; }
+    const ni=Math.min(dayOffsets.length-1, Math.max(0, idx+(e.key==='ArrowDown'?1:-1)));
+    scroll.scrollTop=Math.max(0, dayOffsets[ni].top);
+    show(); syncThumb();
+  });
+}
 
 /* ================= chrome ================= */
 document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
   if(filter===c.dataset.f) return;
   filter=c.dataset.f;
   document.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed', x===c ? 'true':'false'));
+  pruneSelection();
   flip(rerender);
 }));
 $('#vault').addEventListener('click',()=>toast('Private Vault · device credential required (mock)'));
 $('#backBtn').addEventListener('click',()=>toast('Back → Home (mock)'));
-$('#searchBtn').addEventListener('click',()=>toast('Search not wired in mockup'));
-$('#sortBtn').addEventListener('click',()=>toast('Sort locked to Newest in mockup'));
+
+/* search */
+function setSearch(on){
+  $('#topbar').classList.toggle('searching',on);
+  if(on){ $('#searchInput').focus(); }
+  else{ q=''; $('#searchInput').value=''; rerender(); }
+}
+$('#searchBtn').addEventListener('click',()=>setSearch(true));
+$('#searchClose').addEventListener('click',()=>setSearch(false));
+$('#searchInput').addEventListener('input',e=>{ q=e.target.value.trim(); pruneSelection(); rerender(); });
+
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
-  if(sheetId!=null) closeSheet(); else if(selecting) setSelecting(false);
+  if(playerId!=null) closePlayer();
+  else if(sheetId!=null) closeSheet();
+  else if(selecting) setSelecting(false);
+  else if($('#topbar').classList.contains('searching')) setSearch(false);
 });
 
 /* ================= boot ================= */
-$('#backBtn').innerHTML=ICON.back; $('#searchBtn').innerHTML=ICON.search; $('#sortBtn').innerHTML=ICON.sort;
+$('#backBtn').innerHTML=ICON.back; $('#searchBtn').innerHTML=ICON.search; $('#selectBtn').innerHTML=ICON.select;
+$('#searchGlyph').innerHTML=ICON.search; $('#searchClose').innerHTML=ICON.x;
 $('#vicon').innerHTML=ICON.lock; $('#vchev').innerHTML=ICON.chev;
-$('#selClose').innerHTML=ICON.x; $('#selFav').innerHTML=ICON.star(true); $('#selDel').innerHTML=ICON.trash;
+$('#selClose').innerHTML=ICON.x; $('#selInfo').innerHTML=ICON.info; $('#selFav').innerHTML=ICON.starL(true); $('#selVault').innerHTML=ICON.lock; $('#selDel').innerHTML=ICON.trash;
+$('#sheetClose .dot').innerHTML=ICON.x;
+$('#sheetClose').addEventListener('click',closeSheet);
+applyTheme('Blossom');
+document.body.classList.add('booting');
 rerender();
+setTimeout(()=>document.body.classList.remove('booting'), 1200);
 </script>
 </body>
 </html>

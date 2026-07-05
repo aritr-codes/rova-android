@@ -14,8 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.theme.GlassRole
@@ -24,8 +22,9 @@ import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.RovaIcons
 
 /**
- * spec §9 — glass top bar. Slice 3 — optional back nav + vault entry (the route surface needs
- * both; null = omit).
+ * spec §9 — glass top bar. bento Task 7 chrome reflow: slots are back · title · search · select
+ * (all optional; null = omit). Vault moved to [VaultDoorRow] in the timeline; density toggle and
+ * sort left the top bar entirely (sort is pinned NEWEST — see [com.aritr.rova.ui.screens.HistoryViewModel]).
  */
 @Composable
 fun LibraryTopBar(
@@ -33,15 +32,10 @@ fun LibraryTopBar(
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     backLabel: String = "",
-    onOpenVault: (() -> Unit)? = null,
-    vaultLabel: String = "",
-    onToggleDensity: (() -> Unit)? = null,
-    densityLabel: String = "",
-    densityState: String = "",
     onOpenSearch: (() -> Unit)? = null,
     searchLabel: String = "",
-    onOpenSort: (() -> Unit)? = null,
-    sortLabel: String = "",
+    onOpenSelect: (() -> Unit)? = null,
+    selectLabel: String = "",
 ) {
     GlassSurface(role = GlassRole.NavBar, modifier = modifier.fillMaxWidth()) {
         Row(
@@ -66,29 +60,6 @@ fun LibraryTopBar(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(horizontal = if (onBack != null) 4.dp else 12.dp),
             )
-            if (onOpenVault != null) {
-                IconButton(onClick = onOpenVault) {
-                    SemanticIcon(
-                        glyph = RovaIcons.Vault,
-                        contentDescription = vaultLabel,
-                        role = IconRole.Secondary,
-                        modifier = Modifier.size(LibraryDimens.navIcon),
-                    )
-                }
-            }
-            if (onToggleDensity != null) {
-                IconButton(
-                    onClick = onToggleDensity,
-                    modifier = Modifier.semantics { stateDescription = densityState },
-                ) {
-                    SemanticIcon(
-                        glyph = RovaIcons.GridLayout,
-                        contentDescription = densityLabel,
-                        role = IconRole.Secondary,
-                        modifier = Modifier.size(LibraryDimens.navIcon),
-                    )
-                }
-            }
             if (onOpenSearch != null) {
                 IconButton(onClick = onOpenSearch) {
                     SemanticIcon(
@@ -99,11 +70,11 @@ fun LibraryTopBar(
                     )
                 }
             }
-            if (onOpenSort != null) {
-                IconButton(onClick = onOpenSort) {
+            if (onOpenSelect != null) {
+                IconButton(onClick = onOpenSelect) {
                     SemanticIcon(
-                        glyph = RovaIcons.Sort,
-                        contentDescription = sortLabel,
+                        glyph = RovaIcons.Select,
+                        contentDescription = selectLabel,
                         role = IconRole.Secondary,
                         modifier = Modifier.size(LibraryDimens.navIcon),
                     )

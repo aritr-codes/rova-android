@@ -14,6 +14,4 @@ data class LibraryUiState(
      * summary line (Polish P6). Pure in-memory fold via [UsageAggregator]; no extra disk read.
      */
     val usage: UsageSummary = UsageSummary(0, 0, 0),
-    /** Session-list row density (spec §3.7); seeded from RovaSettings.libraryDensity, reseeded on resume. */
-    val density: LibraryDensity = LibraryDensity.COMFORTABLE,
 )

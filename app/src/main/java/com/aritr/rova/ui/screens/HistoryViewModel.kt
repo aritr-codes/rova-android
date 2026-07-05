@@ -24,8 +24,6 @@ import com.aritr.rova.ui.library.PruneKeepSet
 import com.aritr.rova.ui.library.RecordingIdentity
 import com.aritr.rova.ui.library.LibraryRowMapper
 import com.aritr.rova.ui.library.LibrarySort
-import com.aritr.rova.ui.library.LibraryDensity
-import com.aritr.rova.ui.library.next
 import com.aritr.rova.ui.library.LibrarySessionAggregator
 import com.aritr.rova.ui.library.LibraryUiState
 import com.aritr.rova.ui.library.SessionSidecarMerge
@@ -252,31 +250,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val settings = RovaSettings(getApplication())
 
     /**
-     * Session-list row density (spec §3.7). Seeded from [RovaSettings.libraryDensity];
-     * [refreshDensity] re-reads on resume (the bottom-nav keeps LibraryScreen composed across tab
-     * switches — same reseed pattern the retired cardPreview used). Unknown/missing → COMFORTABLE.
-     */
-    private val _density = MutableStateFlow(readDensity())
-
-    private fun readDensity(): LibraryDensity =
-        runCatching { LibraryDensity.valueOf(settings.libraryDensity) }.getOrDefault(LibraryDensity.COMFORTABLE)
-
-    fun refreshDensity() {
-        _density.value = readDensity()
-    }
-
-    /**
-     * PR-C top-bar density toggle — the single production writer of [RovaSettings.libraryDensity].
-     * Writes the pref first, then the state, so a process death between the two resurrects the
-     * NEW value on next launch (state is re-seeded from the pref).
-     */
-    fun toggleDensity() {
-        val next = _density.value.next()
-        settings.libraryDensity = next.name
-        _density.value = next
-    }
-
-    /**
      * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
      * Single-writer contract: [toggleFavorite] is the only production writer today.
      * Any FUTURE sidecar mutation (rename / lastPlayedAt / prune) MUST also bump
@@ -289,6 +262,10 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * holders; the pure [LibraryQuery] does the work and the Screen reads these into
      * its query call. `_filter.search` carries the live search query (folded into the
      * one filter object so the query call takes a single facet bundle).
+     *
+     * bento Task 7 — sort left the chrome (chronology + the day-scrubber rail are the
+     * navigation model now); NEWEST is pinned. [setSort] survives `internal` for tests
+     * only — no production call site sets anything but NEWEST.
      */
     private val _sort = MutableStateFlow(LibrarySort.NEWEST)
     val sort: StateFlow<LibrarySort> = _sort.asStateFlow()
@@ -296,7 +273,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val _filter = MutableStateFlow(LibraryFilter())
     val filter: StateFlow<LibraryFilter> = _filter.asStateFlow()
 
-    fun setSort(value: LibrarySort) { _sort.value = value }
+    internal fun setSort(value: LibrarySort) { _sort.value = value }
     fun setSearch(query: String) { _filter.update { it.copy(search = query) } }
     fun setFavoritesOnly(only: Boolean) { _filter.update { it.copy(favoritesOnly = only) } }
     fun setTopologyFilter(topology: CaptureTopology?) { _filter.update { it.copy(topology = topology) } }
@@ -319,7 +296,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _sidecarRevision, _density) { rows, loaded, _, density ->
+        combine(items, hasLoaded, _sidecarRevision) { rows, loaded, _ ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
@@ -358,7 +335,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 rows = aggregated,
                 hasLoaded = loaded,
                 usage = UsageAggregator.aggregate(aggregated),
-                density = density,
             )
         }
             // The transform reads the sidecar store (lock-bearing, lazily disk-loaded)

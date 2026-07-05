@@ -71,4 +71,8 @@ object LibraryDimens {
     val sheetElevation = 12.dp
     /** Max width so the sheet reads as a card on wide screens (tablets/landscape). */
     val sheetMaxWidth = 560.dp
+
+    // ── bento Task 9: frozen edge-to-edge details sheet (docs/design/library-bento.html) ──
+    /** Frozen details-sheet top corner radius (26dp — distinct from the retired [sheetCornerRadius]). */
+    val sheetCornerRadiusV2 = 26.dp
 }

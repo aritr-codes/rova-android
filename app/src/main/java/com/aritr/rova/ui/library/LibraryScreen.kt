@@ -1,16 +1,24 @@
 package com.aritr.rova.ui.library
 
 import android.content.Intent
+import android.graphics.Bitmap
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,29 +28,34 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -52,24 +65,23 @@ import com.aritr.rova.R
 import com.aritr.rova.RovaApp
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.components.RovaAlertDialog
-import com.aritr.rova.ui.library.components.LibraryBatchBar
-import com.aritr.rova.ui.library.components.LibraryDayHeader
+import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.library.components.BentoDayHeader
+import com.aritr.rova.ui.library.components.BentoTile
+import com.aritr.rova.ui.library.components.LibraryDimens
 import com.aritr.rova.ui.library.components.LibraryDualShotEmpty
 import com.aritr.rova.ui.library.components.LibraryEmpty
 import com.aritr.rova.ui.library.components.LibraryFavoritesEmpty
 import com.aritr.rova.ui.library.components.LibraryFilteredEmpty
 import com.aritr.rova.ui.library.components.LibrarySearchEmpty
-import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryItemSheet
 import com.aritr.rova.ui.library.components.LibraryFilterChips
-import com.aritr.rova.ui.library.components.LibraryListRow
 import com.aritr.rova.ui.library.components.LibraryLoading
-import com.aritr.rova.ui.library.components.LibraryRenameDialog
 import com.aritr.rova.ui.library.components.LibraryScrubber
 import com.aritr.rova.ui.library.components.LibrarySearchField
 import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
-import com.aritr.rova.ui.library.components.LibrarySortSheet
 import com.aritr.rova.ui.library.components.LibraryTopBar
+import com.aritr.rova.ui.library.components.VaultDoorRow
 import com.aritr.rova.ui.recovery.RecoveryCardKind
 import com.aritr.rova.ui.recovery.RecoveryCardList
 import com.aritr.rova.ui.recovery.RecoveryViewModel
@@ -80,6 +92,7 @@ import com.aritr.rova.ui.PreviewActivity
 import com.aritr.rova.ui.screens.HistoryViewModel
 import com.aritr.rova.ui.screens.LibrarySessionConfigDialog
 import com.aritr.rova.ui.share.safeShareUri
+import com.aritr.rova.ui.vault.VaultViewModel
 import com.aritr.rova.ui.warnings.HistoryWarningSheetHost
 import com.aritr.rova.ui.warnings.HistoryWarningStrip
 import com.aritr.rova.ui.warnings.WarningId
@@ -89,11 +102,15 @@ import com.aritr.rova.ui.screens.RetentionCleanupNotices
 import com.aritr.rova.data.SessionConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.pluralStringResource
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -130,7 +147,6 @@ fun LibraryScreen(
     val sort by viewModel.sort.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     var searchActive by rememberSaveable { mutableStateOf(false) }
-    var sortSheetOpen by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // Slice 5 (remediation row 23) — focus restore: remember the row that launched playback so focus
@@ -150,6 +166,13 @@ fun LibraryScreen(
         .collectAsStateWithLifecycle()
     var sheetWarningId by remember { mutableStateOf<WarningId?>(null) }
 
+    // bento Task 8 req 3 — vault-door count. VaultViewModel is the existing read side for
+    // vault-visible sessions; HistoryViewModel's own rows are PUBLIC-only (isLibraryVisible) and
+    // never see vaulted sessions, so the door needs its own small read.
+    val vaultViewModel: VaultViewModel = viewModel()
+    val vaultItems by vaultViewModel.items.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vaultViewModel.refresh() }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -158,11 +181,44 @@ fun LibraryScreen(
     var pending by remember { mutableStateOf(PendingDelete.NONE) }
     var pendingJob by remember { mutableStateOf<Job?>(null) }
 
+    // bento Task 8 req 8 — boot-only entrance stagger. `bootActive` covers the window every
+    // initially-composed item needs to play its stagger delay (index * 30ms) + 500ms animation;
+    // after it flips false, item moves (e.g. a delete closing a gap) use Modifier.animateItem()
+    // instead of replaying an entrance. Both are skipped under reduced motion (ADR-0020).
+    // Final-review #2 — SAVEABLE, so the entrance plays ONCE per screen presence. Nav-Compose
+    // disposes this composition when the player is pushed on top; a plain `remember` would reset to
+    // true on the pop and replay the whole entrance — and because the stagger delay is the ABSOLUTE
+    // built index, a return to a scrolled-down list would hold those tiles at translateY/scale for up
+    // to ~1.3s and then settle, exactly the "reposition after a moment" Item 2 forbids. The saveable
+    // flag (restored via the retained History NavBackStackEntry) keeps it false across every re-entry.
+    val reduceMotion = rememberReduceMotion()
+    var bootActive by rememberSaveable { mutableStateOf(true) }
+    if (bootActive) {
+        LaunchedEffect(Unit) {
+            delay(BOOT_STAGGER_WINDOW_MS)
+            bootActive = false
+        }
+    }
+
+    // Final-review #3 — back cancels an active selection / closes the search field BEFORE leaving the
+    // screen (standard Android expectation for a management surface). Enabled only while one of them is
+    // active, so otherwise system-back falls through to the nav-retention handler (MainScreen) or the
+    // default exit — this inner handler is composed deeper than MainScreen's, so it wins when enabled.
+    androidx.activity.compose.BackHandler(enabled = selection.active || searchActive) {
+        if (selection.active) {
+            selection = SelectionReducer.clear(selection)
+        } else {
+            searchActive = false
+            viewModel.setSearch("")
+        }
+    }
+
     // Dialog / sheet targets.
     var viewSettingsConfig by remember { mutableStateOf<SessionConfig?>(null) }
     var pendingMoveToVaultSessionId by remember { mutableStateOf<String?>(null) }
-    var renameTarget by remember { mutableStateOf<LibraryRow?>(null) }
-    var sheetTarget by remember { mutableStateOf<LibraryRow?>(null) }
+    // bento Task 9 — keyed (not row-snapshot) so the sheet reflects live favorite/rename state
+    // instead of freezing the row as it stood when the sheet opened.
+    var sheetTargetKey by remember { mutableStateOf<String?>(null) }
     var pendingDeleteConfirm by remember { mutableStateOf<Set<String>?>(null) }
 
     val byKey = remember(items) { items.associateBy { it.stableKey } }
@@ -209,29 +265,17 @@ fun LibraryScreen(
     }
 
     // ---- labels ----
-    val frag = TileSemantics.Fragments(
-        durationWord = stringResource(R.string.library_a11y_duration),
-        recoveredWord = stringResource(R.string.library_badge_recovered),
-        interruptedWord = stringResource(R.string.library_badge_interrupted),
-        dualWord = stringResource(R.string.library_badge_pl),
-        portraitWord = stringResource(R.string.library_orientation_portrait),
-        landscapeWord = stringResource(R.string.library_orientation_landscape),
-        autoStoppedWord = stringResource(R.string.library_badge_auto_stopped),
-    )
-    val plLabel = stringResource(R.string.library_badge_pl)
-    val eyebrow = stringResource(R.string.library_eyebrow_latest)
+    // bento Task 8 — BentoTile computes its own tile/pane accessibility labels internally
+    // (TileSemantics.bentoLabel/bentoPaneLabel read stringResource inside the component), so the
+    // per-row Fragments/eyebrow/selected-state/play-side label plumbing LibraryListRow needed is
+    // gone; only the strings still consumed by dialogs/sheets/snackbars below remain.
     val favoriteLabel = stringResource(R.string.library_action_favorite)
     val unfavoriteLabel = stringResource(R.string.library_action_unfavorite)
     val shareLabel = stringResource(R.string.library_action_share)
-    val selectedLabel = stringResource(R.string.library_a11y_selected)
-    val notSelectedLabel = stringResource(R.string.library_a11y_not_selected)
     val shareNoApp = stringResource(R.string.history_share_no_app)
     val deleteUndoLabel = stringResource(R.string.library_delete_undo)
-    val playLabel = stringResource(R.string.library_action_play)
-    val portraitWord = stringResource(R.string.library_orientation_portrait)
-    val landscapeWord = stringResource(R.string.library_orientation_landscape)
-    val playSideTemplate = stringResource(R.string.library_a11y_play_side)
-    val sideActionTemplate = stringResource(R.string.library_side_action_label)
+    val todayWord = stringResource(R.string.library_day_today)
+    val yesterdayWord = stringResource(R.string.library_day_yesterday)
 
     // ---- share helper (no manifest writes; reuses ShareUriResolver) ----
     fun shareItems(targets: List<com.aritr.rova.ui.screens.VideoItem>) {
@@ -325,49 +369,107 @@ fun LibraryScreen(
     val collection = remember(visibleRows, sort, filter) {
         LibraryQuery.collection(visibleRows, sort, filter, heroKey = null)
     }
-    val latestKey = remember(collection, sort) { LatestRowPolicy.latestKey(collection, sort) }
-    val groups = remember(collection, sort, nowMillis, locale, tz) { LibraryDayGrouping.groupForSort(collection, sort, nowMillis, locale, tz) }
-    // Scrubber segments: leading = the recovery/warnings header only (hero slot gone).
-    val leadingItemCount = 1
-    val scrubberSegments = remember(groups) {
-        ScrubberIndex.segments(groups.map { it.label }, groups.map { it.rows.size }, leadingItemCount)
+    val isFiltered = filter.favoritesOnly || filter.topology != null || filter.search.isNotBlank()
+    // bento Task 8 req 1 — the in-timeline latest accent is a NEWEST-only, UNFILTERED affordance:
+    // once the user narrows the view there is no single "latest" row left to anchor on.
+    val latestKey = remember(collection, sort, isFiltered) {
+        if (isFiltered) null else LatestRowPolicy.latestKey(collection, sort)
     }
-    val dims = remember(ui.density) { LibraryDensityDimens.spec(ui.density) }
+    val groups = remember(collection, sort, nowMillis, locale, tz) { LibraryDayGrouping.groupForSort(collection, sort, nowMillis, locale, tz) }
+    val groupsByEpoch = remember(groups) { groups.associateBy { it.dayEpochMillis } }
+    val collectionByKey = remember(collection) { collection.associateBy { it.stableKey } }
+    // Every stableKey a BentoTile might ask for: a row's own key, PLUS every side's own key — an
+    // aggregated session row's stableKey ("session:<id>") has no VideoItem, same fallback shape
+    // the retired itemFor() used.
+    val thumbnailByKey = remember(collection, byKey) {
+        val map = HashMap<String, Bitmap?>()
+        collection.forEach { row ->
+            map[row.stableKey] = itemFor(row)?.thumbnail
+            row.sides.forEach { side -> map.putIfAbsent(side.stableKey, byKey[side.stableKey]?.thumbnail) }
+        }
+        map
+    }
+
+    // bento Task 8 req 2 — per-day tile layout, month dividers, and short rail labels; all pure
+    // derivations feeding the single BentoListIndex build below.
+    val plans = remember(groups, nowMillis, tz) {
+        groups.map { g -> BentoRowPlanner.plan(g.rows.map { it.sides.size == 2 }, LibraryDateLabels.dayAge(g.dayEpochMillis, nowMillis, tz)) }
+    }
+    val dividerLabels = remember(groups, locale, tz) {
+        val monthFmt = SimpleDateFormat("MMMM yyyy", locale).apply { timeZone = tz }
+        groups.mapIndexed { i, g ->
+            if (g.label.isEmpty()) return@mapIndexed null // header-less flat bucket (non-chronological sort)
+            val prev = groups.getOrNull(i - 1)
+            // Frozen spec (library-bento.html: `prevMonth!==null && mo!==prevMonth`) emits a month divider
+            // only BETWEEN groups on a month change — NEVER above the first/newest group (peer-review parity
+            // finding, 2026-07-05). No prev ⇒ first group ⇒ suppress.
+            if (prev == null) return@mapIndexed null
+            val sameMonth = prev.label.isNotEmpty() && isSameMonth(prev.dayEpochMillis, g.dayEpochMillis, tz)
+            if (sameMonth) null else monthFmt.format(Date(g.dayEpochMillis)).uppercase(locale)
+        }
+    }
+    val railLabels = remember(groups, nowMillis, locale, tz, todayWord, yesterdayWord) {
+        groups.map { g ->
+            val header = LibraryDateLabels.headerLabel(g.dayEpochMillis, nowMillis, locale, tz)
+            when (header.kind) {
+                DayHeaderKind.TODAY -> todayWord
+                DayHeaderKind.YESTERDAY -> yesterdayWord
+                else -> header.absolute
+            }
+        }
+    }
+    // bento Task 8 req 3 — the single source of item order/keys/scrubber/focus lookups, computed
+    // in the SAME recomposition pass as the LazyColumn content below (no LaunchedEffect hop — the
+    // ground wash and scrubber must never lag a render, ADR-0030 amendment §4).
+    val built = remember(groups, plans, dividerLabels, railLabels) {
+        BentoListIndex.build(groups, plans, dividerLabels, railLabels)
+    }
     val scrubberRailLabel = stringResource(R.string.library_scrubber_rail_cd)
 
-    // Slice 5 (remediation row 23) — focus restore on return from the player. ON_RESUME also fires on
-    // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
-    // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
-    val currentGroupKeys by rememberUpdatedState(groups.map { g -> g.rows.map { it.stableKey } })
-    val currentGroupHeaders by rememberUpdatedState(groups.map { it.label.isNotEmpty() })
+    // bento Task 8 req 4 — ground-wash pinned header: derived synchronously off LazyList layout
+    // info so the wash can never lag a render (BentoWashPolicy contract).
+    val pinnedEpoch by remember {
+        derivedStateOf {
+            BentoWashPolicy.pinnedDayEpoch(
+                listState.layoutInfo.visibleItemsInfo.mapNotNull { info ->
+                    (info.key as? String)?.takeIf { it.startsWith("hdr-") }
+                        ?.removePrefix("hdr-")?.toLongOrNull()?.let { it to info.offset }
+                },
+            )
+        }
+    }
+
+    // bento Task 8 req 1 — selection prune: drop any selected key the filter/search narrowed
+    // away (ADR §3). Separate from the ui.rows-keyed reconcile below, which tracks underlying
+    // data changes (deletes/adds), not the active filter/search view.
+    LaunchedEffect(built.visibleStableKeys) {
+        selection = SelectionReducer.reconcile(selection, built.visibleStableKeys)
+    }
+
+    // Focus restore on return from the player (accessibility). ON_RESUME also fires on first entry,
+    // so guard on pendingFocusKey; clear after every attempt. Focus-only — the viewport is restored by
+    // the saveable LazyListState (Item 2 owner ruling: no auto-scroll).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
             // PR-C midnight fix — re-stamp so day groups/labels recompute if the day flipped
-            // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
+            // while backgrounded (regroup ≈12ms, keys stable → LazyColumn keeps position, no scroll).
             nowMillisState.longValue = System.currentTimeMillis()
-            // Density reseed — pick up a Settings/PR-C density toggle when returning to the
-            // kept-composed Library tab (same resume-pickup contract the retired cardPreview used).
-            viewModel.refreshDensity()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
-            val index = FocusRestorePolicy.targetItemIndex(key, currentGroupKeys, currentGroupHeaders)
-            if (index == null) {
-                pendingFocusKey = null
-                return@LifecycleEventObserver
-            }
             coroutineScope.launch {
-                // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
-                // The saveable lazy state restores the pre-open position on the pop, so the common
-                // return needs no scroll; a redundant scrollToItem jump-scrolls the list and stalls
-                // the UI thread. Focus is still restored below in every case (all input modalities).
-                val visibleKeys = { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String } }
-                if (FocusRestorePolicy.shouldScroll(key, visibleKeys())) {
-                    listState.scrollToItem(index)
-                    snapshotFlow { key in visibleKeys() }.first { it }
+                // Item 2 (owner ruling 2026-07-05, release blocker): NEVER auto-scroll or reposition
+                // on return from the player. The saveable LazyListState already restores the EXACT
+                // pre-open viewport; the previous scrollToItem here fought that restoration and
+                // jump-scrolled the list "after a moment", breaking spatial memory. We now only
+                // restore FOCUS (accessibility) — and only when the opened tile is already within the
+                // restored viewport (it was on-screen when tapped, so the restored viewport shows it),
+                // so requestFocus never triggers an implicit scroll. Viewport is never disturbed.
+                withFrameNanos { }
+                val visible = listState.layoutInfo.visibleItemsInfo.any { it.key == key }
+                if (visible) {
+                    runCatching { rowFocusRequester.requestFocus() }
                 }
-                withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
-                runCatching { rowFocusRequester.requestFocus() }
                 pendingFocusKey = null
             }
         }
@@ -415,17 +517,16 @@ fun LibraryScreen(
         }
     }
 
-    // tile interaction: tap toggles in select mode else plays. Long-press toggles in select mode,
-    // else opens the per-item sheet (§5.3) — which carries a "Select" entry to start multi-select.
-    fun onTileClick(key: String) {
-        selection = if (selection.active) SelectionReducer.toggle(selection, key) else { play(key); selection }
-    }
+    // bento Task 9 — long-press now ENTERS selection mode directly (frozen selbar entry point,
+    // docs/design/library-bento.html "long-press → selection"): the details sheet no longer opens
+    // from a bare long-press — its only entry is the selection top bar's info action (exactly one
+    // selected). BentoTile owns tap routing itself (selecting ? onToggleSelect() : onPlay(...)).
     fun onTileLong(key: String) {
-        if (selection.active) selection = SelectionReducer.toggle(selection, key)
-        else sheetTarget = rowByKey[key]
+        selection = if (selection.active) SelectionReducer.toggle(selection, key) else SelectionReducer.enter(selection, key)
     }
 
-    val movableSelectedExists = remember(selection, byKey) {
+    // Final-review #5 — key on what the lambda actually reads (selection + ui.rows), not byKey.
+    val movableSelectedExists = remember(selection, ui.rows) {
         selection.keys.any { (ui.rows.firstOrNull { r -> r.stableKey == it }?.topology) != com.aritr.rova.data.CaptureTopology.DualShot }
     }
 
@@ -445,42 +546,18 @@ fun LibraryScreen(
                         countLabel = stringResource(R.string.library_select_count, selection.count),
                         closeLabel = stringResource(R.string.library_action_close_selection),
                         selectAllLabel = stringResource(R.string.library_action_select_all),
+                        infoLabel = stringResource(R.string.library_action_info_cd),
+                        favoriteLabel = favoriteLabel,
+                        vaultLabel = stringResource(R.string.library_action_vault),
+                        vaultDisabledLabel = stringResource(R.string.library_action_vault_disabled),
+                        deleteLabel = stringResource(R.string.library_action_delete),
+                        infoEnabled = selection.count == 1,
+                        vaultEnabled = movableSelectedExists,
                         onClose = { selection = SelectionReducer.clear(selection) },
                         onSelectAll = {
                             selection = SelectionReducer.selectAll(selection, visibleRows.map { it.stableKey })
                         },
-                    )
-                } else {
-                    LibraryTopBar(
-                        title = stringResource(R.string.history_title),
-                        onBack = onBack,
-                        backLabel = stringResource(R.string.history_back_cd),
-                        onOpenVault = onOpenVault,
-                        vaultLabel = stringResource(R.string.vault_open_entry_cd),
-                        onToggleDensity = { viewModel.toggleDensity() },
-                        densityLabel = stringResource(R.string.library_density_toggle_cd),
-                        densityState = stringResource(
-                            if (ui.density == LibraryDensity.COMPACT) R.string.library_density_state_compact
-                            else R.string.library_density_state_comfortable
-                        ),
-                        onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
-                        searchLabel = stringResource(R.string.library_search_open_cd),
-                        onOpenSort = { sortSheetOpen = true },
-                        sortLabel = stringResource(R.string.library_sort_open_cd),
-                    )
-                }
-            },
-            bottomBar = {
-                if (selection.active) {
-                    LibraryBatchBar(
-                        shareLabel = shareLabel,
-                        vaultLabel = stringResource(R.string.library_action_vault),
-                        vaultDisabledLabel = stringResource(R.string.library_action_vault_disabled),
-                        favoriteLabel = favoriteLabel,
-                        deleteLabel = stringResource(R.string.library_action_delete),
-                        vaultEnabled = movableSelectedExists,
-                        onShare = { shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(selection.keys, rowByKey))) },
-                        onVault = { pendingMoveToVaultSessionId = "__batch__" },
+                        onInfo = { selection.keys.singleOrNull()?.let { sheetTargetKey = it } },
                         onFavorite = {
                             // Batch favorite = mark all selected as favorited (skip already-favorited).
                             val keys = selection.keys
@@ -491,16 +568,38 @@ fun LibraryScreen(
                             }
                             selection = SelectionReducer.clear(selection)
                         },
+                        onVault = { pendingMoveToVaultSessionId = "__batch__" },
                         onDelete = { pendingDeleteConfirm = selection.keys },
+                    )
+                } else {
+                    LibraryTopBar(
+                        title = stringResource(R.string.history_title),
+                        onBack = onBack,
+                        backLabel = stringResource(R.string.history_back_cd),
+                        onOpenSearch = { searchActive = !searchActive; if (!searchActive) viewModel.setSearch("") },
+                        searchLabel = stringResource(R.string.library_search_open_cd),
+                        // bento Task 7 — top-bar select entry: same "activate selection mode" outcome
+                        // as the per-item sheet's existing Select action / long-press, just with no
+                        // row pre-selected (SelectionReducer.enter always seeds a key).
+                        onOpenSelect = { selection = SelectionState(active = true) },
+                        selectLabel = stringResource(R.string.library_select_open_cd),
                     )
                 }
             },
+            // bento Task 9 — the bottom LibraryBatchBar is retired: every batch action it carried
+            // (favorite/vault/delete) now lives in the top LibrarySelectionTopBar above; batch Share
+            // was dropped from the frozen design (share is sheet-only, ADR-0030 §1 "Share not Export").
         ) { innerPadding ->
             when {
                 // Body state taxonomy mirrors LibraryStatePolicy (Loading / Empty / SearchEmpty /
                 // Content); the inline branch keeps the structural nesting (shared discovery chips +
                 // RecoveryAndWarnings) the pure resolver can't express. See LibraryStatePolicy.
-                !ui.hasLoaded -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
+                // Item 1 (owner ruling 2026-07-05) — the skeleton is a placeholder of LAST RESORT.
+                // Once any rows have ever loaded, the retained VM/StateFlow keeps serving them, so a
+                // re-entry renders the last-known library instantly and refresh() updates it async
+                // (loadItemsList never clears _items or resets _hasLoaded mid-refresh). The skeleton
+                // shows ONLY when there is genuinely nothing renderable yet (true cold first load).
+                !ui.hasLoaded && ui.rows.isEmpty() -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
                 ui.rows.isEmpty() -> Column(
                     Modifier
                         .fillMaxSize()
@@ -511,13 +610,24 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     RecoveryAndWarnings()
+                    // Final-review F1 — the vault door was the ONLY route to the vault once the
+                    // top-bar icon was retired (bento Task 7); a fully-empty library must still
+                    // offer it when vaulted sessions exist.
+                    if (vaultItems.isNotEmpty()) {
+                        VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = Modifier.fillMaxWidth())
+                    }
                     LibraryEmpty(onGoToRecord = onNavigateToRecord)
                 }
                 else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                    // P6 storage/usage footprint — directly under the top bar, above the discovery bar
-                    // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
-                    LibraryUsageLine(ui.usage)
-                    // Pinned Discovery controls (search field when active + filter chips).
+                    // F7 (owner ruling 2026-07-05) — the storage/usage footprint is no longer pinned;
+                    // per ADR-0030 §7 + frozen spec §1 the stats line scrolls away with content, so it
+                    // lives in the LazyColumn "stats" item below reading "{n} recordings · {size}".
+                    // Final-review F2 — single mount point: the search field renders here, above the
+                    // collection.isEmpty() split, so it stays mounted across the filtered-empty <->
+                    // LazyColumn swap below (was previously duplicated into both branches, which
+                    // unmounted the focused TextField and dropped the keyboard mid-keystroke at the
+                    // zero-match boundary). Filter chips (unaffected by that split) stay in their own
+                    // LazyColumn item further down.
                     if (searchActive) {
                         LibrarySearchField(
                             value = filter.search,
@@ -525,39 +635,53 @@ fun LibraryScreen(
                             onClear = { viewModel.setSearch("") },
                         )
                     }
-                    LibraryFilterChips(
-                        filter = filter,
-                        onAll = { viewModel.clearFilters(); searchActive = false },
-                        onToggleFavorites = { viewModel.setFavoritesOnly(!filter.favoritesOnly) },
-                        onTogglePl = {
-                            viewModel.setTopologyFilter(
-                                if (filter.topology == com.aritr.rova.data.CaptureTopology.DualShot) null
-                                else com.aritr.rova.data.CaptureTopology.DualShot,
-                            )
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    )
+                    // bento Task 8 review fix — filter chips render ONLY as LazyColumn item[2] (below),
+                    // including when the collection is filtered to nothing (the filtered-empty views
+                    // below carry their own "Clear filters" CTA, so the user can always escape a filter
+                    // without a second pinned chips row).
+                    val discoveryChips: @Composable () -> Unit = {
+                        LibraryFilterChips(
+                            filter = filter,
+                            onAll = { viewModel.clearFilters(); searchActive = false },
+                            onToggleFavorites = { viewModel.setFavoritesOnly(!filter.favoritesOnly) },
+                            onTogglePl = {
+                                viewModel.setTopologyFilter(
+                                    if (filter.topology == com.aritr.rova.data.CaptureTopology.DualShot) null
+                                    else com.aritr.rova.data.CaptureTopology.DualShot,
+                                )
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                    }
                     if (collection.isEmpty()) {
-                        // Filtered/searched to nothing (rows exist, none match) — discovery bar stays
-                        // pinned above so the user can clear/adjust; the body offers Clear filters too.
+                        // Filtered/searched to nothing (rows exist, none match) — the body offers
+                        // Clear filters itself (below); no second pinned chips row (review fix 3).
                         // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
                         // always showing search wording for a filter that carries no search.
                         val onClearFilters: () -> Unit = { viewModel.clearFilters(); searchActive = false }
-                        when (
-                            FilteredEmptyPolicy.resolve(
-                                hasSearch = filter.search.isNotBlank(),
-                                favoritesOnly = filter.favoritesOnly,
-                                isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
-                            )
-                        ) {
-                            FilteredEmptyKind.Favorites ->
-                                LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.DualShot ->
-                                LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.Search ->
-                                LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.Generic ->
-                                LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                        Column(Modifier.fillMaxSize()) {
+                            // Final-review F1 — same vault-door escape hatch as the true-empty branch.
+                            if (vaultItems.isNotEmpty()) {
+                                VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = Modifier.fillMaxWidth())
+                            }
+                            Box(Modifier.fillMaxSize().weight(1f)) {
+                                when (
+                                    FilteredEmptyPolicy.resolve(
+                                        hasSearch = filter.search.isNotBlank(),
+                                        favoritesOnly = filter.favoritesOnly,
+                                        isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
+                                    )
+                                ) {
+                                    FilteredEmptyKind.Favorites ->
+                                        LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.DualShot ->
+                                        LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.Search ->
+                                        LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.Generic ->
+                                        LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                                }
+                            }
                         }
                     } else {
                         Box(Modifier.fillMaxSize().weight(1f)) {
@@ -566,57 +690,143 @@ fun LibraryScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(bottom = 20.dp),
                             ) {
-                                item(key = "hdr-recovery-warn") { RecoveryAndWarnings() }
-                                groups.forEach { group ->
-                                    if (group.label.isNotEmpty()) {
-                                        stickyHeader(key = "hdr-${group.dayEpochMillis}") {
-                                            LibraryDayHeader(group.label, group.sizeTotalLabel)
-                                        }
-                                    }
-                                    items(group.rows, key = { it.stableKey }) { row ->
-                                        val isLatest = row.stableKey == latestKey
-                                        val resumeMs = row.resumePositionMs?.takeIf { it > 0 }
-                                        LibraryListRow(
-                                            row = row,
-                                            thumbnail = itemFor(row)?.thumbnail,
-                                            tileDescription = TileSemantics.describe(row, frag),
-                                            durationFallback = "—",
-                                            dualShotLabel = plLabel,
-                                            dims = dims,
-                                            latest = isLatest,
-                                            latestEyebrowText = eyebrow,
-                                            latestPillText = if (isLatest) {
-                                                resumeMs?.let { stringResource(R.string.library_latest_resume, SmartTitle.durationLabel(it)) } ?: playLabel
-                                            } else {
-                                                ""
-                                            },
-                                            latestPillDescription = if (isLatest) {
-                                                resumeMs?.let { stringResource(R.string.library_a11y_latest_resume, SmartTitle.durationLabel(it)) }
-                                                    ?: stringResource(R.string.library_a11y_latest_play)
-                                            } else {
-                                                ""
-                                            },
-                                            portraitWord = portraitWord,
-                                            landscapeWord = landscapeWord,
-                                            playSideDescriptionTemplate = playSideTemplate,
-                                            sideActionLabelTemplate = sideActionTemplate,
-                                            onPlaySide = { s ->
-                                                if (selection.active) onTileClick(row.stableKey) else play(row.stableKey, s.stableKey)
-                                            },
-                                            onClick = { onTileClick(row.stableKey) },
-                                            modifier = if (row.stableKey == pendingFocusKey) Modifier.focusRequester(rowFocusRequester) else Modifier,
-                                            isSelectionMode = selection.active,
-                                            isSelected = row.stableKey in selection.keys,
-                                            onLongClick = { onTileLong(row.stableKey) },
-                                            selectedLabel = selectedLabel,
-                                            notSelectedLabel = notSelectedLabel,
+                                // ---- leading chrome (BentoListIndex.LEADING_ITEM_COUNT = 4) ----
+                                item(key = "hdr-recovery-warn") {
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 0)
+                                    Box(mod) { RecoveryAndWarnings() }
+                                }
+                                item(key = "stats") {
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 1)
+                                    // Frozen spec §1: "{n} recordings · {size}" at rest; "{x} of {y}
+                                    // recordings" under filter/search. 11.5sp textDim, scrolls with content.
+                                    val statsText = if (isFiltered) {
+                                        stringResource(R.string.library_stats_filtered, collection.size, visibleRows.size)
+                                    } else {
+                                        pluralStringResource(
+                                            R.plurals.library_stats_resting,
+                                            ui.usage.sessionCount,
+                                            ui.usage.sessionCount,
+                                            StorageFormat.size(ui.usage.totalBytes, Locale.getDefault()),
                                         )
                                     }
+                                    Text(
+                                        statsText,
+                                        modifier = mod.padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp),
+                                        color = LocalGlassEnvironment.current.palette.textDim,
+                                        fontSize = 11.5.sp,
+                                    )
+                                }
+                                item(key = "chips") {
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 2)
+                                    Column(mod) { discoveryChips() }
+                                }
+                                item(key = "vault-door") {
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, 3)
+                                    VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = mod)
+                                }
+
+                                // ---- day timeline (BentoListIndex.build) ----
+                                built.entries.forEachIndexed { i, entry ->
+                                    val key = built.keyForEntry[i]
+                                    val staggerIdx = BentoListIndex.LEADING_ITEM_COUNT + i
+                                    when (entry) {
+                                        is BentoListIndex.Entry.MonthDivider -> item(key = key) {
+                                            val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
+                                            // Final-review F6 — frozen spec §1 "Grid": 10.5sp / 700 / 0.22em
+                                            // tracking / textDim, centered, 22dp top / 12dp bottom (was an
+                                            // undocumented 11sp/left/10dp-vertical approximation).
+                                            Text(
+                                                entry.label,
+                                                modifier = mod
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = LibraryDimens.screenPadH)
+                                                    .padding(top = 22.dp, bottom = 12.dp),
+                                                textAlign = TextAlign.Center,
+                                                color = LocalGlassEnvironment.current.palette.textDim,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 0.22.em,
+                                            )
+                                        }
+                                        is BentoListIndex.Entry.Header -> stickyHeader(key = key) {
+                                            val g = groupsByEpoch[entry.dayEpochMillis]
+                                            val groupKeys = g?.rows?.map { it.stableKey } ?: emptyList()
+                                            val totalDurationLabel = SmartTitle.durationLabel(g?.rows?.sumOf { it.durationMs } ?: 0L)
+                                            BentoDayHeader(
+                                                dayEpochMillis = entry.dayEpochMillis,
+                                                nowMillis = nowMillis,
+                                                recordingCount = groupKeys.size,
+                                                totalDurationLabel = totalDurationLabel,
+                                                pinned = entry.dayEpochMillis == pinnedEpoch,
+                                                selecting = selection.active,
+                                                allSelected = groupKeys.isNotEmpty() && selection.keys.containsAll(groupKeys),
+                                                onSelectDay = { selection = SelectionReducer.selectAll(selection, groupKeys) },
+                                            )
+                                        }
+                                        is BentoListIndex.Entry.BentoRow -> item(key = key) {
+                                            val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
+                                            Row(
+                                                mod
+                                                    .padding(horizontal = 16.dp)
+                                                    .height(entry.pattern.heightDp.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            ) {
+                                                entry.pattern.spans.forEachIndexed { paneIdx, span ->
+                                                    val memberKey = entry.memberKeys.getOrNull(paneIdx)
+                                                    val row = memberKey?.let { collectionByKey[it] }
+                                                    if (row != null) {
+                                                        // bento Task 8 req 5 — BentoTile's onPlay callback forwards the
+                                                        // tapped VideoSide's `.name` (not a stableKey) for a diptych pane;
+                                                        // resolve it back to that side's own stableKey here (index 0 =
+                                                        // Portrait = LEFT, per BentoTile's own portrait-first ordering).
+                                                        BentoTile(
+                                                            row = row,
+                                                            heightDp = entry.pattern.heightDp,
+                                                            span = span,
+                                                            isLatest = row.stableKey == latestKey,
+                                                            selecting = selection.active,
+                                                            selected = row.stableKey in selection.keys,
+                                                            onPlay = { sideToken ->
+                                                                val sideKey = sideToken?.let { token ->
+                                                                    row.sides.firstOrNull { it.side.name == token }?.stableKey
+                                                                }
+                                                                play(row.stableKey, sideKey)
+                                                            },
+                                                            onToggleSelect = { onTileLong(row.stableKey) },
+                                                            onEnterSelection = {},
+                                                            thumbnailFor = { k -> thumbnailByKey[k] },
+                                                            modifier = (
+                                                                if (row.stableKey == pendingFocusKey) {
+                                                                    Modifier.focusRequester(rowFocusRequester)
+                                                                } else {
+                                                                    Modifier
+                                                                }
+                                                            ).weight(span.toFloat()),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                item(key = "endcap") {
+                                    val mod = bentoItemMotion(reduceMotion, bootActive, BentoListIndex.LEADING_ITEM_COUNT + built.entries.size)
+                                    Text(
+                                        stringResource(R.string.library_endcap, collection.size),
+                                        modifier = mod
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 26.dp, vertical = 44.dp),
+                                        textAlign = TextAlign.Center,
+                                        color = LocalGlassEnvironment.current.palette.textFaint,
+                                        fontSize = 10.5.sp,
+                                        letterSpacing = 0.08.em,
+                                    )
                                 }
                             }
                             // Date fast-scroll rail (self-hides when < 2 day groups).
                             LibraryScrubber(
-                                segments = scrubberSegments,
+                                segments = built.scrubberSegments,
                                 firstVisibleItemIndex = listState.firstVisibleItemIndex,
                                 railLabel = scrubberRailLabel,
                                 onScrollToItemIndex = { idx -> coroutineScope.launch { listState.scrollToItem(idx) } },
@@ -646,12 +856,19 @@ fun LibraryScreen(
                         selection = SelectionReducer.clear(selection)
                         coroutineScope.launch {
                             val res = viewModel.batchMoveToVault(keys)
+                            // bento Task 8 review fix 2 — the vault door count reads vaultViewModel's own
+                            // list, which only refreshed once on screen entry; re-read now that the move
+                            // (both suspend calls return only after their move completes) landed.
+                            vaultViewModel.refresh()
                             snackbarHostState.showSnackbar(
                                 context.getString(R.string.library_vault_batch_result, res.moved, res.skipped),
                             )
                         }
                     } else {
-                        coroutineScope.launch { viewModel.moveToVault(sid) }
+                        coroutineScope.launch {
+                            viewModel.moveToVault(sid)
+                            vaultViewModel.refresh()
+                        }
                     }
                 },
                 dismissText = stringResource(R.string.dialog_cancel),
@@ -675,72 +892,82 @@ fun LibraryScreen(
             )
         }
 
-        renameTarget?.let { row ->
-            LibraryRenameDialog(
-                currentTitle = row.title,
-                titleLabel = stringResource(R.string.library_rename_title),
-                fieldHint = stringResource(R.string.library_rename_hint),
-                confirmLabel = stringResource(R.string.library_rename_confirm),
-                cancelLabel = stringResource(R.string.dialog_cancel),
-                onRename = { viewModel.renameSession(row.stableKey, it) },
-                onDismiss = { renameTarget = null },
-            )
-        }
-
-        sheetTarget?.let { row ->
+        // bento Task 9 — keyed lookup (not a frozen row snapshot) so favorite/rename reflect live
+        // as soon as the VM's row list updates, while the sheet stays open (frozen behavior).
+        sheetTargetKey?.let(rowByKey::get)?.let { row ->
             val item = itemFor(row)
-            // P8 — session-identity header: title (WHEN) + meta (clips · duration · size), reusing the
-            // same pure SessionCaption the list row renders (no new formatter, no manifest read).
-            val sheetClipLabel = if (row.clipCount > 1) {
-                pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
-            } else {
-                ""
+            val isDualForSheet = row.sides.size == 2
+            val portraitThumb = row.sides.getOrNull(0)?.let { thumbnailByKey[it.stableKey] }
+            val landscapeThumb = row.sides.getOrNull(1)?.let { thumbnailByKey[it.stableKey] }
+            val longDateFmt = remember(locale, tz) { SimpleDateFormat("MMMM d, yyyy", locale).apply { timeZone = tz } }
+            val timeFmt = remember(locale, tz) { SimpleDateFormat("h:mm a", locale).apply { timeZone = tz } }
+            val clipsLabel = pluralStringResource(R.plurals.library_hero_clip_count, row.clipCount, row.clipCount)
+            val orientationWord = when {
+                isDualForSheet -> stringResource(R.string.library_filter_pl)
+                row.orientation == LibraryOrientation.PORTRAIT -> stringResource(R.string.library_orientation_portrait)
+                row.orientation == LibraryOrientation.LANDSCAPE -> stringResource(R.string.library_orientation_landscape)
+                else -> ""
             }
-            val sheetMeta = SessionCaption.listMeta(
-                clipCountLabel = sheetClipLabel,
-                durationLabel = if (row.durationMs > 0) SmartTitle.durationLabel(row.durationMs) else "",
-                sizeLabel = StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+            val factsLine1 = stringResource(
+                R.string.library_facts_line1,
+                longDateFmt.format(Date(row.dateMillis)),
+                timeFmt.format(Date(row.dateMillis)),
+                timeFmt.format(Date(row.dateMillis + row.durationMs)),
             )
+            // Final-review F9 — join only non-blank segments; an unknown orientation left
+            // orientationWord="" and the fixed-arity string template dangled a trailing " · ".
+            val factsLine2 = listOf(
+                SmartTitle.durationLabel(row.durationMs),
+                clipsLabel,
+                StorageFormat.size(row.sizeBytes, Locale.getDefault()),
+                orientationWord,
+            ).filter { it.isNotBlank() }.joinToString(" · ")
             LibraryItemSheet(
                 isFavorite = row.favorite,
                 movable = row.topology != com.aritr.rova.data.CaptureTopology.DualShot && item?.sessionId != null,
-                headerTitle = row.title,
-                headerMeta = sheetMeta,
-                headerThumbnail = item?.thumbnail,
+                isDualShot = isDualForSheet,
+                title = row.title,
+                factsLine1 = factsLine1,
+                factsLine2 = factsLine2,
+                heroThumbnail = item?.thumbnail,
+                portraitThumbnail = portraitThumb,
+                landscapeThumbnail = landscapeThumb,
+                durationPillLabel = SmartTitle.durationLabel(row.durationMs),
                 playLabel = stringResource(R.string.library_action_play),
-                selectLabel = stringResource(R.string.library_action_select),
-                shareLabel = shareLabel,
+                portraitLabel = stringResource(R.string.library_orientation_portrait),
+                landscapeLabel = stringResource(R.string.library_orientation_landscape),
+                closeLabel = stringResource(R.string.library_sheet_close_cd),
+                renameLabel = stringResource(R.string.library_action_rename),
+                renameFieldHint = stringResource(R.string.library_rename_hint),
                 favoriteLabel = favoriteLabel,
                 unfavoriteLabel = unfavoriteLabel,
-                renameLabel = stringResource(R.string.library_action_rename),
                 vaultLabel = stringResource(R.string.library_action_vault),
                 vaultUnavailableReason = stringResource(R.string.library_action_vault_unavailable_dualshot),
-                viewSettingsLabel = stringResource(R.string.library_action_view_settings),
+                shareLabel = shareLabel,
                 deleteLabel = stringResource(R.string.library_action_delete),
-                onPlay = { sheetTarget = null; play(row.stableKey) },
-                onSelect = { sheetTarget = null; selection = SelectionReducer.enter(SelectionState(), row.stableKey) },
-                onShare = { sheetTarget = null; shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(setOf(row.stableKey), rowByKey))) },
-                onToggleFavorite = { sheetTarget = null; viewModel.toggleFavorite(row.stableKey) },
-                onRename = { sheetTarget = null; renameTarget = row },
-                onMoveToVault = { sheetTarget = null; pendingMoveToVaultSessionId = item?.sessionId },
-                onViewSettings = {
-                    sheetTarget = null
-                    coroutineScope.launch {
-                        val cfg = viewModel.loadSessionConfig(item?.sessionId)
-                        if (cfg != null) viewSettingsConfig = cfg
-                        else snackbarHostState.showSnackbar(context.getString(R.string.history_settings_unavailable))
-                    }
+                onPlay = { sideToken ->
+                    sheetTargetKey = null
+                    val sideKey = sideToken?.let { token -> row.sides.firstOrNull { it.side.name == token }?.stableKey }
+                    play(row.stableKey, sideKey)
                 },
-                onDelete = { sheetTarget = null; pendingDeleteConfirm = setOf(row.stableKey) },
-                onDismiss = { sheetTarget = null },
-            )
-        }
-
-        if (sortSheetOpen) {
-            LibrarySortSheet(
-                current = sort,
-                onSelect = { viewModel.setSort(it); sortSheetOpen = false },
-                onDismiss = { sortSheetOpen = false },
+                onRename = { newTitle -> viewModel.renameSession(row.stableKey, newTitle) },
+                onToggleFavorite = { viewModel.toggleFavorite(row.stableKey) },
+                onShare = {
+                    sheetTargetKey = null
+                    shareItems(viewModel.itemsForKeys(LibrarySessionKeys.expand(setOf(row.stableKey), rowByKey)))
+                },
+                onMoveToVault = {
+                    // frozen v3 codex Critical — drop from selection BEFORE closing.
+                    selection = SelectionReducer.removeAll(selection, setOf(row.stableKey))
+                    sheetTargetKey = null
+                    pendingMoveToVaultSessionId = item?.sessionId
+                },
+                onDelete = {
+                    selection = SelectionReducer.removeAll(selection, setOf(row.stableKey))
+                    sheetTargetKey = null
+                    pendingDeleteConfirm = setOf(row.stableKey)
+                },
+                onDismiss = { sheetTargetKey = null },
             )
         }
 
@@ -756,5 +983,80 @@ fun LibraryScreen(
                 )
             }
         }
+    }
+}
+
+/** True when [a] and [b] fall in the same calendar month+year in [tz] (bento Task 8 req 2 — month dividers). */
+private fun isSameMonth(a: Long, b: Long, tz: TimeZone): Boolean {
+    val ca = Calendar.getInstance(tz).apply { timeInMillis = a }
+    val cb = Calendar.getInstance(tz).apply { timeInMillis = b }
+    return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) && ca.get(Calendar.MONTH) == cb.get(Calendar.MONTH)
+}
+
+/** How long a boot-time stagger step waits before the next item starts (bento Task 8 req 8). */
+private const val BOOT_STAGGER_STEP_MS = 30L
+
+/**
+ * Frozen spec caps the stagger index at 14 (`--i:${Math.min(idx,14)}`, library-bento.html) so no tile
+ * waits more than 14·30ms = 420ms: without the cap a tile at absolute index N (e.g. one scrolled into
+ * view during the 3s boot window on a long list) would hold at translateY/scale for N·30ms then settle
+ * late (peer-review parity finding). Bounds the delay to the spec's ceiling. (2026-07-05 re-review.)
+ */
+private const val BOOT_STAGGER_MAX_INDEX = 14
+
+/** Per-item entrance animation duration. */
+private const val BOOT_STAGGER_DURATION_MS = 500
+
+/** Frozen entrance easing (spec 2026-07-04). */
+private val BOOT_STAGGER_EASING = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+
+/** Entrance rise distance. */
+private val BOOT_STAGGER_TRANSLATE_Y = 14.dp
+
+/**
+ * ponytail: a fixed cap rather than computing an exact "last item finishes" bound — generous enough
+ * to cover every item likely visible at first paint (~80 items of 30ms stagger + the 500ms anim);
+ * items scrolled into view after this window just use [androidx.compose.foundation.lazy.LazyItemScope.animateItem].
+ */
+private const val BOOT_STAGGER_WINDOW_MS = 3000L
+
+/**
+ * bento Task 8 review fix 1 — single branch point for the per-item motion modifier so the
+ * reduce-motion / boot-stagger / animateItem choice lives in ONE place instead of being repeated
+ * at every `item { }` call site. Under reduced motion NO animation modifier applies at all (not
+ * even [androidx.compose.foundation.lazy.LazyItemScope.animateItem]'s placement animation) — ADR-0020.
+ */
+@Composable
+private fun LazyItemScope.bentoItemMotion(reduceMotion: Boolean, bootActive: Boolean, index: Int): Modifier =
+    when {
+        reduceMotion -> Modifier
+        bootActive -> Modifier.bentoStaggerEntrance(index)
+        else -> Modifier.animateItem()
+    }
+
+/**
+ * bento Task 8 req 8 — boot-only entrance (translateY 14dp + scale .97 -> rest, 500ms, frozen easing),
+ * staggered 30ms per [index]. Callers apply this ONLY while `bootActive && !reduceMotion`; once boot
+ * ends (or under reduced motion) they use `Modifier.animateItem()` instead — this function never
+ * calls `animateItem()` itself since that requires a `LazyItemScope` receiver only available at the
+ * `item { }` call site.
+ */
+@Composable
+private fun Modifier.bentoStaggerEntrance(index: Int): Modifier {
+    var revealed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(minOf(index, BOOT_STAGGER_MAX_INDEX) * BOOT_STAGGER_STEP_MS)
+        revealed = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (revealed) 1f else 0f,
+        animationSpec = tween(durationMillis = BOOT_STAGGER_DURATION_MS, easing = BOOT_STAGGER_EASING),
+        label = "bentoEntrance",
+    )
+    return this.graphicsLayer {
+        translationY = (1f - progress) * BOOT_STAGGER_TRANSLATE_Y.toPx()
+        val scale = 0.97f + 0.03f * progress
+        scaleX = scale
+        scaleY = scale
     }
 }
