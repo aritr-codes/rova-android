@@ -178,8 +178,15 @@ fun MainScreen(
                     }
                 }
                 // System back (gesture / button) would otherwise pop-and-destroy; intercept it so it
-                // takes the same state-retaining route as the top-bar arrow.
-                androidx.activity.compose.BackHandler { backToRecordRetaining() }
+                // takes the same state-retaining route as the top-bar arrow — but ONLY when Record is
+                // the home (start destination). When the app is launched straight into Library (the
+                // "recording finished → view in Library" notification sets startDestination = "history",
+                // RovaRecordingService), Record is NOT below on the stack, so retain-navigating here
+                // would re-push Record endlessly and trap the user with no way to exit. On that path we
+                // let system-back fall through to the default (finish the activity). Final-review #1.
+                if (startDestination != "history") {
+                    androidx.activity.compose.BackHandler { backToRecordRetaining() }
+                }
                 LibraryScreen(
                     onNavigateToRecord = backToRecordRetaining,
                     onOpenVault = onOpenVault,

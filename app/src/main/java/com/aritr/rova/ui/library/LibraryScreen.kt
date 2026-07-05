@@ -185,11 +185,32 @@ fun LibraryScreen(
     // initially-composed item needs to play its stagger delay (index * 30ms) + 500ms animation;
     // after it flips false, item moves (e.g. a delete closing a gap) use Modifier.animateItem()
     // instead of replaying an entrance. Both are skipped under reduced motion (ADR-0020).
+    // Final-review #2 — SAVEABLE, so the entrance plays ONCE per screen presence. Nav-Compose
+    // disposes this composition when the player is pushed on top; a plain `remember` would reset to
+    // true on the pop and replay the whole entrance — and because the stagger delay is the ABSOLUTE
+    // built index, a return to a scrolled-down list would hold those tiles at translateY/scale for up
+    // to ~1.3s and then settle, exactly the "reposition after a moment" Item 2 forbids. The saveable
+    // flag (restored via the retained History NavBackStackEntry) keeps it false across every re-entry.
     val reduceMotion = rememberReduceMotion()
-    var bootActive by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        delay(BOOT_STAGGER_WINDOW_MS)
-        bootActive = false
+    var bootActive by rememberSaveable { mutableStateOf(true) }
+    if (bootActive) {
+        LaunchedEffect(Unit) {
+            delay(BOOT_STAGGER_WINDOW_MS)
+            bootActive = false
+        }
+    }
+
+    // Final-review #3 — back cancels an active selection / closes the search field BEFORE leaving the
+    // screen (standard Android expectation for a management surface). Enabled only while one of them is
+    // active, so otherwise system-back falls through to the nav-retention handler (MainScreen) or the
+    // default exit — this inner handler is composed deeper than MainScreen's, so it wins when enabled.
+    androidx.activity.compose.BackHandler(enabled = selection.active || searchActive) {
+        if (selection.active) {
+            selection = SelectionReducer.clear(selection)
+        } else {
+            searchActive = false
+            viewModel.setSearch("")
+        }
     }
 
     // Dialog / sheet targets.
@@ -500,7 +521,8 @@ fun LibraryScreen(
         selection = if (selection.active) SelectionReducer.toggle(selection, key) else SelectionReducer.enter(selection, key)
     }
 
-    val movableSelectedExists = remember(selection, byKey) {
+    // Final-review #5 — key on what the lambda actually reads (selection + ui.rows), not byKey.
+    val movableSelectedExists = remember(selection, ui.rows) {
         selection.keys.any { (ui.rows.firstOrNull { r -> r.stableKey == it }?.topology) != com.aritr.rova.data.CaptureTopology.DualShot }
     }
 
