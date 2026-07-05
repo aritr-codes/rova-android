@@ -163,19 +163,25 @@ fun MainScreen(
                         launchKeyguard = { intent -> activity.startActivity(intent) },
                     )
                 }
+                // Item 1 (owner ruling 2026-07-05) — leaving Library toward Record MUST retain the
+                // History NavBackStackEntry (its ViewModelStore → HistoryViewModel's loaded list +
+                // scroll position), so a re-entry renders the last-known library instantly instead of
+                // flashing the cold skeleton. `popBackStack()` from here destroys that store; the
+                // saveState/restoreState navigate to the start destination saves it. `record` is the
+                // start destination so this lands on the same screen popBackStack would — only the VM
+                // survives. Every Library→Record exit (top-bar back arrow AND system back) routes here.
+                val backToRecordRetaining: () -> Unit = {
+                    navController.navigate("record") {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+                // System back (gesture / button) would otherwise pop-and-destroy; intercept it so it
+                // takes the same state-retaining route as the top-bar arrow.
+                androidx.activity.compose.BackHandler { backToRecordRetaining() }
                 LibraryScreen(
-                    onNavigateToRecord = {
-                        // Nav-retention fix — symmetric save/restore so the
-                        // History tab's state is saved on the way back to
-                        // Record and restored next time Library opens. Keeps
-                        // the loaded list + scroll position instead of cold
-                        // re-querying. See toHistory above.
-                        navController.navigate("record") {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onNavigateToRecord = backToRecordRetaining,
                     onOpenVault = onOpenVault,
                     onOpenPlayer = { sessionId, side ->
                         // Phase 2.5 — argumented routes do NOT use
@@ -198,7 +204,7 @@ fun MainScreen(
                         }
                         navController.navigate(route)
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = backToRecordRetaining,
                 )
             }
             composable(

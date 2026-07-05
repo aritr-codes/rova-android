@@ -38,10 +38,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -423,45 +421,30 @@ fun LibraryScreen(
         selection = SelectionReducer.reconcile(selection, built.visibleStableKeys)
     }
 
-    // Slice 5 (remediation row 23) — focus restore on return from the player. ON_RESUME also fires on
-    // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
-    // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
+    // Focus restore on return from the player (accessibility). ON_RESUME also fires on first entry,
+    // so guard on pendingFocusKey; clear after every attempt. Focus-only — the viewport is restored by
+    // the saveable LazyListState (Item 2 owner ruling: no auto-scroll).
     val lifecycleOwner = LocalLifecycleOwner.current
-    // Final-review F5 — `built` recomputes on the midnight re-stamp above (nowMillis feeds the
-    // regroup chain), but the observer closure below is created once at DisposableEffect(lifecycleOwner)
-    // and would otherwise freeze the FIRST composition's `built`; rememberUpdatedState reads the
-    // live value at ON_RESUME time instead of the stale capture.
-    val builtState = rememberUpdatedState(built)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
             // PR-C midnight fix — re-stamp so day groups/labels recompute if the day flipped
-            // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
+            // while backgrounded (regroup ≈12ms, keys stable → LazyColumn keeps position, no scroll).
             nowMillisState.longValue = System.currentTimeMillis()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
             coroutineScope.launch {
-                // Final-review F5 — await a frame first so the re-stamp above (nowMillisState) has a
-                // chance to recompose `built` before we read it; otherwise a stale first-composition
-                // index could target the wrong row after a day flip.
+                // Item 2 (owner ruling 2026-07-05, release blocker): NEVER auto-scroll or reposition
+                // on return from the player. The saveable LazyListState already restores the EXACT
+                // pre-open viewport; the previous scrollToItem here fought that restoration and
+                // jump-scrolled the list "after a moment", breaking spatial memory. We now only
+                // restore FOCUS (accessibility) — and only when the opened tile is already within the
+                // restored viewport (it was on-screen when tapped, so the restored viewport shows it),
+                // so requestFocus never triggers an implicit scroll. Viewport is never disturbed.
                 withFrameNanos { }
-                // bento Task 8 req 6 — index source is BentoListIndex's own lookup now (the retired
-                // FocusRestorePolicy.targetItemIndex assumed the pre-bento flattened item shape).
-                val index = builtState.value.itemIndexByStableKey[key]
-                if (index == null) {
-                    pendingFocusKey = null
-                    return@launch
+                val visible = listState.layoutInfo.visibleItemsInfo.any { it.key == key }
+                if (visible) {
+                    runCatching { rowFocusRequester.requestFocus() }
                 }
-                // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
-                // The saveable lazy state restores the pre-open position on the pop, so the common
-                // return needs no scroll; a redundant scrollToItem jump-scrolls the list and stalls
-                // the UI thread. Focus is still restored below in every case (all input modalities).
-                val visibleKeys = { listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String } }
-                if (FocusRestorePolicy.shouldScroll(key, visibleKeys())) {
-                    listState.scrollToItem(index)
-                    snapshotFlow { key in visibleKeys() }.first { it }
-                }
-                withFrameNanos { } // one frame so the conditional focusRequester is attached before we request
-                runCatching { rowFocusRequester.requestFocus() }
                 pendingFocusKey = null
             }
         }
@@ -585,7 +568,12 @@ fun LibraryScreen(
                 // Body state taxonomy mirrors LibraryStatePolicy (Loading / Empty / SearchEmpty /
                 // Content); the inline branch keeps the structural nesting (shared discovery chips +
                 // RecoveryAndWarnings) the pure resolver can't express. See LibraryStatePolicy.
-                !ui.hasLoaded -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
+                // Item 1 (owner ruling 2026-07-05) — the skeleton is a placeholder of LAST RESORT.
+                // Once any rows have ever loaded, the retained VM/StateFlow keeps serving them, so a
+                // re-entry renders the last-known library instantly and refresh() updates it async
+                // (loadItemsList never clears _items or resets _hasLoaded mid-refresh). The skeleton
+                // shows ONLY when there is genuinely nothing renderable yet (true cold first load).
+                !ui.hasLoaded && ui.rows.isEmpty() -> LibraryLoading(Modifier.fillMaxSize().padding(innerPadding))
                 ui.rows.isEmpty() -> Column(
                     Modifier
                         .fillMaxSize()

@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -34,11 +36,14 @@ import com.aritr.rova.ui.components.RovaAnimations
 import com.aritr.rova.ui.components.rememberReduceMotion
 
 /**
- * Polish P4 (2026-06-15) — skeleton loading placeholder. Replaces the bare spinner with a column of
- * card-shaped placeholders so the load reads as "Library, populating" rather than a generic wait.
- * Shimmer is reduce-motion gated (WCAG 2.2 AA SC 2.3.3, ADR-0020 / [checkA11yAnimationGated]):
- * [RovaAnimations.pulsingOpacity] self-holds a static alpha under reduced motion, and the explicit
- * [reduce] branch keeps a visible static placeholder regardless — both paths are gate-safe.
+ * Cold-start loading placeholder — shown ONLY when there is genuinely no renderable data yet (true
+ * first load; a retained library renders its last-known rows instantly, Item 1 owner ruling 2026-07-05).
+ * Shaped like the Bento featured tier (a day-header line, then hero → [3,3] → [4,2] → [3,3] tile rows on
+ * the frozen 6-col / 10dp-gap / 16dp-radius grid, spec §1) rather than generic bars, so the cold load
+ * reads as "the Library, arriving" and the hand-off to real tiles is seamless. Shimmer is reduce-motion
+ * gated (WCAG 2.2 AA SC 2.3.3, ADR-0020 / [checkA11yAnimationGated]): [RovaAnimations.pulsingOpacity]
+ * self-holds a static alpha under reduced motion, and the explicit [reduce] branch keeps a visible
+ * static placeholder regardless — both paths are gate-safe. Decorative only (no semantics).
  */
 @Composable
 fun LibraryLoading(modifier: Modifier = Modifier) {
@@ -46,16 +51,55 @@ fun LibraryLoading(modifier: Modifier = Modifier) {
     val shimmerAlpha = if (reduce) 0.12f else RovaAnimations.pulsingOpacity(
         durationMillis = 900, minAlpha = 0.06f, maxAlpha = 0.16f,
     )
-    Column(modifier.padding(horizontal = LibraryDimens.screenPadH)) {
-        repeat(5) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = LibraryDimens.cardPadV)
-                    .clip(RoundedCornerShape(LibraryDimens.cardRadius))
-                    .background(Color.White.copy(alpha = shimmerAlpha))
-                    .padding(vertical = 28.dp),
-            )
+    val tile = RoundedCornerShape(16.dp)
+
+    @Composable
+    fun RowScopePlaceholder(rowWeight: Float, heightDp: Int, scope: androidx.compose.foundation.layout.RowScope) = with(scope) {
+        Box(
+            Modifier
+                .weight(rowWeight)
+                .height(heightDp.dp)
+                .clip(tile)
+                .background(Color.White.copy(alpha = shimmerAlpha)),
+        )
+    }
+
+    Column(
+        modifier
+            .padding(horizontal = LibraryDimens.screenPadH)
+            .padding(top = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // Day-header line.
+        Box(
+            Modifier
+                .padding(bottom = 4.dp)
+                .size(width = 132.dp, height = 15.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White.copy(alpha = shimmerAlpha)),
+        )
+        // Hero (featured first slot).
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .clip(tile)
+                .background(Color.White.copy(alpha = shimmerAlpha)),
+        )
+        // [3,3] pair.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RowScopePlaceholder(1f, 150, this)
+            RowScopePlaceholder(1f, 150, this)
+        }
+        // [4,2] mirror.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RowScopePlaceholder(2f, 160, this)
+            RowScopePlaceholder(1f, 160, this)
+        }
+        // [3,3] pair.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            RowScopePlaceholder(1f, 150, this)
+            RowScopePlaceholder(1f, 150, this)
         }
     }
 }

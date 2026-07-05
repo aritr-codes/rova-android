@@ -2,10 +2,9 @@ package com.aritr.rova.ui.library
 
 /**
  * Pure bookkeeping for the bento LazyColumn shape. ONE place computes item
- * order, keys, scrubber segments and focus lookups so assembly, the rail
- * and focus restore can never disagree (codex plan round: the old flattened
- * assumptions in ScrubberIndex/FocusRestorePolicy call sites break with
- * month dividers + 4 leading chrome items).
+ * order, keys, scrubber segments and per-key lookups so assembly and the rail
+ * can never disagree (codex plan round: the old flattened assumptions in the
+ * ScrubberIndex call site break with month dividers + 4 leading chrome items).
  *
  * Item order contract (frozen):
  *   [0] recovery/warnings   [1] stats   [2] chips   [3] vault door
