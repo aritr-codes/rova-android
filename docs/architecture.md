@@ -445,7 +445,7 @@ graph TD
     end
 
     subgraph HistoryScreen["history (drill-down)"]
-        HS_LIST[Library grid + recovery cards]
+        HS_LIST[Library Bento Timeline + recovery cards]
         HS_PLAYER[→ player/{sessionId}]
     end
 

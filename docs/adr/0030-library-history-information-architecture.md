@@ -72,7 +72,9 @@ Spec: docs/superpowers/specs/2026-07-02-library-session-list-design.md. Owner-ap
 
 ## Amendment (2026-07-04) — Thumbnail-first presentation: Adaptive Bento Timeline
 
-**Canonical visual spec: `docs/design/library-bento.html` (v3.2, FROZEN 2026-07-04).** Owner-selected from three
+**Status: IMPLEMENTED & SHIPPED — PR #172, merged to `master` `b96614894` (2026-07-05), released in `Rova-0.10.0` (versionCode 5).** This is the current production Library presentation; the pre-bento list/grid/hero implementation is fully retired. Built HTML-first (11-task SDD) transcribing the frozen spec, then two peer reviews + one adversarial staff review + device verification on RZCYA1VBQ2H.
+
+**Canonical visual spec: `docs/design/library-bento.html` (v3.2.1, FROZEN 2026-07-04).** Owner-selected from three
 codex-reviewed interactive concepts, then refined across three codex-reconciled review rounds (token/tap-model
 pass, usability pass, header de-chroming). Per the HTML-first workflow (CLAUDE.md "Design workflow"): Compose
 *transcribes* the frozen spec; ambiguities discovered during implementation route back to the HTML for

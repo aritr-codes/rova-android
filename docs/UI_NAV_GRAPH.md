@@ -60,7 +60,7 @@ flowchart TD
         REC_HUD_MERGE["HUD: Merging<br/>(progress N/total)<br/>shipped — Phase 2.4 (32c5cb3)"]:::shipped
     end
 
-    LIB["history<br/>(Library grid + recovery card + Empty State)"]:::shipped
+    LIB["history<br/>(Library Bento Timeline + recovery card + Empty State)"]:::shipped
     PLAYER["player/{sessionId}<br/>(Media3 ExoPlayer, segmented timeline)<br/>shipped — Phase 2.5 (PR #1)"]:::shipped
     SETTINGS["settings<br/>(5 sections, App settings re-skin)"]:::shipped
     EDITOR["editor<br/>(17 tools)<br/>NO-GO for v1.0"]:::nogo
@@ -129,9 +129,9 @@ Legend:
 - **Recovery echo banner.** Already shipped (`RecoveryEchoBanner.kt`). Read-only; tapping the CTA navigates to `history`.
 - **Phase owner.** Already shipped (Slice 2 idle + Slice 3 active HUD). Phase 2.4 extends with Merging end-states.
 
-### 4.3 `history` (shipped — re-skin only)
+### 4.3 `history` (shipped — Adaptive Bento Timeline, ADR-0030 amendment 2026-07-04, PR #172)
 
-- **List state.** Grid of cards (real thumbnails), 3-dot menu per card with three options (`Open`, `Edit`, `View Settings`).
+- **List state.** Thumbnail-first Bento Timeline: one vertical scroll of day sections, each a 6-column bento grid of tap-to-play tiles (DualShot = diptych, Portrait left). Selection mode (long-press + top-bar) hosts info/rename/favorite/vault/delete; details replace the old per-card 3-dot menu. Date-scrub rail + ground-wash sticky day headers. NO autoplay.
 - **Empty state.** New for Phase 2.3. Replaces the current "no header / empty list" with the mockup's empty state.
 - **3-dot menu actions.**
   - `Open` → navigate to `player/{sessionId}` (Phase 2.5).
