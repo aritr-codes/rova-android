@@ -609,18 +609,24 @@ fun LibraryScreen(
                     // P6 storage/usage footprint — directly under the top bar, above the discovery bar
                     // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
                     LibraryUsageLine(ui.usage)
-                    // bento Task 8 review fix — single chips path: search field + filter chips render
-                    // ONLY as LazyColumn item[2] (below), including when the collection is filtered to
-                    // nothing (the filtered-empty views below carry their own "Clear filters" CTA, so
-                    // the user can always escape a filter without a second pinned chips row).
+                    // Final-review F2 — single mount point: the search field renders here, above the
+                    // collection.isEmpty() split, so it stays mounted across the filtered-empty <->
+                    // LazyColumn swap below (was previously duplicated into both branches, which
+                    // unmounted the focused TextField and dropped the keyboard mid-keystroke at the
+                    // zero-match boundary). Filter chips (unaffected by that split) stay in their own
+                    // LazyColumn item further down.
+                    if (searchActive) {
+                        LibrarySearchField(
+                            value = filter.search,
+                            onValueChange = { viewModel.setSearch(it) },
+                            onClear = { viewModel.setSearch("") },
+                        )
+                    }
+                    // bento Task 8 review fix — filter chips render ONLY as LazyColumn item[2] (below),
+                    // including when the collection is filtered to nothing (the filtered-empty views
+                    // below carry their own "Clear filters" CTA, so the user can always escape a filter
+                    // without a second pinned chips row).
                     val discoveryChips: @Composable () -> Unit = {
-                        if (searchActive) {
-                            LibrarySearchField(
-                                value = filter.search,
-                                onValueChange = { viewModel.setSearch(it) },
-                                onClear = { viewModel.setSearch("") },
-                            )
-                        }
                         LibraryFilterChips(
                             filter = filter,
                             onAll = { viewModel.clearFilters(); searchActive = false },
@@ -644,16 +650,6 @@ fun LibraryScreen(
                             // Final-review F1 — same vault-door escape hatch as the true-empty branch.
                             if (vaultItems.isNotEmpty()) {
                                 VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = Modifier.fillMaxWidth())
-                            }
-                            // Final-review F2 — keep the search TextField mounted while searchActive so
-                            // a zero-match keystroke doesn't unmount it (was destroyed with the whole
-                            // "chips" LazyColumn item, dropping focus + keyboard mid-typing).
-                            if (searchActive) {
-                                LibrarySearchField(
-                                    value = filter.search,
-                                    onValueChange = { viewModel.setSearch(it) },
-                                    onClear = { viewModel.setSearch("") },
-                                )
                             }
                             Box(Modifier.fillMaxSize().weight(1f)) {
                                 when (
