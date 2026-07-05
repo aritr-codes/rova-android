@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -427,6 +428,11 @@ fun LibraryScreen(
     // first entry, so guard on pendingFocusKey; clear after every attempt. Await composition via
     // snapshotFlow (codex) before requestFocus so a recycled/off-screen target is actually laid out.
     val lifecycleOwner = LocalLifecycleOwner.current
+    // Final-review F5 — `built` recomputes on the midnight re-stamp above (nowMillis feeds the
+    // regroup chain), but the observer closure below is created once at DisposableEffect(lifecycleOwner)
+    // and would otherwise freeze the FIRST composition's `built`; rememberUpdatedState reads the
+    // live value at ON_RESUME time instead of the stale capture.
+    val builtState = rememberUpdatedState(built)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
@@ -434,14 +440,18 @@ fun LibraryScreen(
             // while backgrounded (regroup ≈12ms, keys stable → no scroll jump; PR #164 pattern).
             nowMillisState.longValue = System.currentTimeMillis()
             val key = pendingFocusKey ?: return@LifecycleEventObserver
-            // bento Task 8 req 6 — index source is BentoListIndex's own lookup now (the retired
-            // FocusRestorePolicy.targetItemIndex assumed the pre-bento flattened item shape).
-            val index = built.itemIndexByStableKey[key]
-            if (index == null) {
-                pendingFocusKey = null
-                return@LifecycleEventObserver
-            }
             coroutineScope.launch {
+                // Final-review F5 — await a frame first so the re-stamp above (nowMillisState) has a
+                // chance to recompose `built` before we read it; otherwise a stale first-composition
+                // index could target the wrong row after a day flip.
+                withFrameNanos { }
+                // bento Task 8 req 6 — index source is BentoListIndex's own lookup now (the retired
+                // FocusRestorePolicy.targetItemIndex assumed the pre-bento flattened item shape).
+                val index = builtState.value.itemIndexByStableKey[key]
+                if (index == null) {
+                    pendingFocusKey = null
+                    return@launch
+                }
                 // Jitter fix (2026-07-01): only scroll when the opened tile isn't already on screen.
                 // The saveable lazy state restores the pre-open position on the pop, so the common
                 // return needs no scroll; a redundant scrollToItem jump-scrolls the list and stalls
@@ -587,6 +597,12 @@ fun LibraryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     RecoveryAndWarnings()
+                    // Final-review F1 — the vault door was the ONLY route to the vault once the
+                    // top-bar icon was retired (bento Task 7); a fully-empty library must still
+                    // offer it when vaulted sessions exist.
+                    if (vaultItems.isNotEmpty()) {
+                        VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = Modifier.fillMaxWidth())
+                    }
                     LibraryEmpty(onGoToRecord = onNavigateToRecord)
                 }
                 else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
@@ -624,21 +640,39 @@ fun LibraryScreen(
                         // M2 — pick educational copy per active facet (FilteredEmptyPolicy) instead of
                         // always showing search wording for a filter that carries no search.
                         val onClearFilters: () -> Unit = { viewModel.clearFilters(); searchActive = false }
-                        when (
-                            FilteredEmptyPolicy.resolve(
-                                hasSearch = filter.search.isNotBlank(),
-                                favoritesOnly = filter.favoritesOnly,
-                                isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
-                            )
-                        ) {
-                            FilteredEmptyKind.Favorites ->
-                                LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.DualShot ->
-                                LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.Search ->
-                                LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
-                            FilteredEmptyKind.Generic ->
-                                LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                        Column(Modifier.fillMaxSize()) {
+                            // Final-review F1 — same vault-door escape hatch as the true-empty branch.
+                            if (vaultItems.isNotEmpty()) {
+                                VaultDoorRow(count = vaultItems.size, onClick = onOpenVault, modifier = Modifier.fillMaxWidth())
+                            }
+                            // Final-review F2 — keep the search TextField mounted while searchActive so
+                            // a zero-match keystroke doesn't unmount it (was destroyed with the whole
+                            // "chips" LazyColumn item, dropping focus + keyboard mid-typing).
+                            if (searchActive) {
+                                LibrarySearchField(
+                                    value = filter.search,
+                                    onValueChange = { viewModel.setSearch(it) },
+                                    onClear = { viewModel.setSearch("") },
+                                )
+                            }
+                            Box(Modifier.fillMaxSize().weight(1f)) {
+                                when (
+                                    FilteredEmptyPolicy.resolve(
+                                        hasSearch = filter.search.isNotBlank(),
+                                        favoritesOnly = filter.favoritesOnly,
+                                        isDualShot = filter.topology == com.aritr.rova.data.CaptureTopology.DualShot,
+                                    )
+                                ) {
+                                    FilteredEmptyKind.Favorites ->
+                                        LibraryFavoritesEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.DualShot ->
+                                        LibraryDualShotEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.Search ->
+                                        LibrarySearchEmpty(onClearFilters, Modifier.fillMaxSize())
+                                    FilteredEmptyKind.Generic ->
+                                        LibraryFilteredEmpty(onClearFilters, Modifier.fillMaxSize())
+                                }
+                            }
                         }
                     } else {
                         Box(Modifier.fillMaxSize().weight(1f)) {
@@ -681,13 +715,20 @@ fun LibraryScreen(
                                     when (entry) {
                                         is BentoListIndex.Entry.MonthDivider -> item(key = key) {
                                             val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
+                                            // Final-review F6 — frozen spec §1 "Grid": 10.5sp / 700 / 0.22em
+                                            // tracking / textDim, centered, 22dp top / 12dp bottom (was an
+                                            // undocumented 11sp/left/10dp-vertical approximation).
                                             Text(
                                                 entry.label,
-                                                modifier = mod.padding(horizontal = LibraryDimens.screenPadH, vertical = 10.dp),
-                                                color = LocalGlassEnvironment.current.palette.textFaint,
-                                                fontSize = 11.sp,
+                                                modifier = mod
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = LibraryDimens.screenPadH)
+                                                    .padding(top = 22.dp, bottom = 12.dp),
+                                                textAlign = TextAlign.Center,
+                                                color = LocalGlassEnvironment.current.palette.textDim,
+                                                fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                letterSpacing = 0.08.em,
+                                                letterSpacing = 0.22.em,
                                             )
                                         }
                                         is BentoListIndex.Entry.Header -> stickyHeader(key = key) {
@@ -856,13 +897,14 @@ fun LibraryScreen(
                 timeFmt.format(Date(row.dateMillis)),
                 timeFmt.format(Date(row.dateMillis + row.durationMs)),
             )
-            val factsLine2 = stringResource(
-                R.string.library_facts_line2,
+            // Final-review F9 — join only non-blank segments; an unknown orientation left
+            // orientationWord="" and the fixed-arity string template dangled a trailing " · ".
+            val factsLine2 = listOf(
                 SmartTitle.durationLabel(row.durationMs),
                 clipsLabel,
                 StorageFormat.size(row.sizeBytes, Locale.getDefault()),
                 orientationWord,
-            )
+            ).filter { it.isNotBlank() }.joinToString(" · ")
             LibraryItemSheet(
                 isFavorite = row.favorite,
                 movable = row.topology != com.aritr.rova.data.CaptureTopology.DualShot && item?.sessionId != null,

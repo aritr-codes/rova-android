@@ -162,10 +162,12 @@ fun LibraryScrubber(
             }
         }
         // Rail + thumb. Slider node: discrete progress + setProgress; NO live region here.
+        // Final-review F3 — gesture INPUT area widened to 48dp (WCAG 2.2 AA target size, ADR-0020);
+        // the 44dp thumb visual drawn below is unchanged, this Box only accepts touches.
         Box(
             Modifier
                 .fillMaxHeight()
-                .width(24.dp)
+                .width(48.dp)
                 .onSizeChanged { railHeightPx = it.height.toFloat().coerceAtLeast(1f) }
                 .pointerInput(segments) {
                     detectVerticalDragGestures(

@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSizeIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -154,7 +154,12 @@ fun BentoDayHeader(
             val selectAllCd = stringResource(R.string.library_day_select_all_cd, title)
             Box(
                 Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    // Final-review F4 — the parent Row is clamped to the fixed 37dp HEADER_HEIGHT,
+                    // so a plain sizeIn's minHeight=48dp got shrunk back down to 37dp by that parent
+                    // constraint. requiredSizeIn ignores incoming constraints and forces the full
+                    // 48x48 touch target (WCAG 2.2 AA, ADR-0020); harmless overdraw above/below the
+                    // 37dp row, circle visual (24dp) unchanged.
+                    .requiredSizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clickable(role = Role.Button, onClick = onSelectDay)
                     .semantics { contentDescription = selectAllCd },
                 contentAlignment = Alignment.Center,
