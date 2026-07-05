@@ -890,9 +890,7 @@
     <string name="library_deleted_count">Deleted %1$d recording(s)</string>
     <string name="library_delete_failed">Couldn\'t delete %1$d recording(s)</string>
     <string name="library_vault_batch_result">Moved %1$d, skipped %2$d</string>
-    <string name="library_rename_title">Rename recording</string>
     <string name="library_rename_hint">Title</string>
-    <string name="library_rename_confirm">Save</string>
     <string name="library_a11y_selected">Selected</string>
     <string name="library_a11y_not_selected">Not selected</string>
     <string name="library_sidecar_write_error">Couldn\'t save that change</string>

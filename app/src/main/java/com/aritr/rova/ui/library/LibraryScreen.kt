@@ -79,7 +79,6 @@ import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryItemSheet
 import com.aritr.rova.ui.library.components.LibraryFilterChips
 import com.aritr.rova.ui.library.components.LibraryLoading
-import com.aritr.rova.ui.library.components.LibraryRenameDialog
 import com.aritr.rova.ui.library.components.LibraryScrubber
 import com.aritr.rova.ui.library.components.LibrarySearchField
 import com.aritr.rova.ui.library.components.LibrarySelectionTopBar
@@ -198,7 +197,6 @@ fun LibraryScreen(
     // Dialog / sheet targets.
     var viewSettingsConfig by remember { mutableStateOf<SessionConfig?>(null) }
     var pendingMoveToVaultSessionId by remember { mutableStateOf<String?>(null) }
-    var renameTarget by remember { mutableStateOf<LibraryRow?>(null) }
     // bento Task 9 — keyed (not row-snapshot) so the sheet reflects live favorite/rename state
     // instead of freezing the row as it stood when the sheet opened.
     var sheetTargetKey by remember { mutableStateOf<String?>(null) }
@@ -833,18 +831,6 @@ fun LibraryScreen(
                 },
                 dismissText = stringResource(R.string.dialog_cancel),
                 onDismiss = { pendingDeleteConfirm = null },
-            )
-        }
-
-        renameTarget?.let { row ->
-            LibraryRenameDialog(
-                currentTitle = row.title,
-                titleLabel = stringResource(R.string.library_rename_title),
-                fieldHint = stringResource(R.string.library_rename_hint),
-                confirmLabel = stringResource(R.string.library_rename_confirm),
-                cancelLabel = stringResource(R.string.dialog_cancel),
-                onRename = { viewModel.renameSession(row.stableKey, it) },
-                onDismiss = { renameTarget = null },
             )
         }
 

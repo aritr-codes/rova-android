@@ -888,9 +888,7 @@
     <string name="library_deleted_count">Se eliminaron %1$d grabación(es)</string>
     <string name="library_delete_failed">No se pudieron eliminar %1$d grabación(es)</string>
     <string name="library_vault_batch_result">Movidas %1$d, omitidas %2$d</string>
-    <string name="library_rename_title">Cambiar nombre de la grabación</string>
     <string name="library_rename_hint">Título</string>
-    <string name="library_rename_confirm">Guardar</string>
     <string name="library_a11y_selected">Seleccionada</string>
     <string name="library_a11y_not_selected">No seleccionada</string>
     <string name="library_sidecar_write_error">No se pudo guardar el cambio</string>
