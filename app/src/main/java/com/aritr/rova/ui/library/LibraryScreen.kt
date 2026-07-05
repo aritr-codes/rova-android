@@ -400,7 +400,11 @@ fun LibraryScreen(
         groups.mapIndexed { i, g ->
             if (g.label.isEmpty()) return@mapIndexed null // header-less flat bucket (non-chronological sort)
             val prev = groups.getOrNull(i - 1)
-            val sameMonth = prev != null && prev.label.isNotEmpty() && isSameMonth(prev.dayEpochMillis, g.dayEpochMillis, tz)
+            // Frozen spec (library-bento.html: `prevMonth!==null && mo!==prevMonth`) emits a month divider
+            // only BETWEEN groups on a month change — NEVER above the first/newest group (peer-review parity
+            // finding, 2026-07-05). No prev ⇒ first group ⇒ suppress.
+            if (prev == null) return@mapIndexed null
+            val sameMonth = prev.label.isNotEmpty() && isSameMonth(prev.dayEpochMillis, g.dayEpochMillis, tz)
             if (sameMonth) null else monthFmt.format(Date(g.dayEpochMillis)).uppercase(locale)
         }
     }
@@ -992,6 +996,14 @@ private fun isSameMonth(a: Long, b: Long, tz: TimeZone): Boolean {
 /** How long a boot-time stagger step waits before the next item starts (bento Task 8 req 8). */
 private const val BOOT_STAGGER_STEP_MS = 30L
 
+/**
+ * Frozen spec caps the stagger index at 14 (`--i:${Math.min(idx,14)}`, library-bento.html) so no tile
+ * waits more than 14·30ms = 420ms: without the cap a tile at absolute index N (e.g. one scrolled into
+ * view during the 3s boot window on a long list) would hold at translateY/scale for N·30ms then settle
+ * late (peer-review parity finding). Bounds the delay to the spec's ceiling. (2026-07-05 re-review.)
+ */
+private const val BOOT_STAGGER_MAX_INDEX = 14
+
 /** Per-item entrance animation duration. */
 private const val BOOT_STAGGER_DURATION_MS = 500
 
@@ -1033,7 +1045,7 @@ private fun LazyItemScope.bentoItemMotion(reduceMotion: Boolean, bootActive: Boo
 private fun Modifier.bentoStaggerEntrance(index: Int): Modifier {
     var revealed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(index * BOOT_STAGGER_STEP_MS)
+        delay(minOf(index, BOOT_STAGGER_MAX_INDEX) * BOOT_STAGGER_STEP_MS)
         revealed = true
     }
     val progress by animateFloatAsState(
