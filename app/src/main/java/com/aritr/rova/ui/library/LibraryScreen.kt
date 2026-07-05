@@ -76,7 +76,6 @@ import com.aritr.rova.ui.library.components.LibraryEmpty
 import com.aritr.rova.ui.library.components.LibraryFavoritesEmpty
 import com.aritr.rova.ui.library.components.LibraryFilteredEmpty
 import com.aritr.rova.ui.library.components.LibrarySearchEmpty
-import com.aritr.rova.ui.library.components.LibraryUsageLine
 import com.aritr.rova.ui.library.components.LibraryItemSheet
 import com.aritr.rova.ui.library.components.LibraryFilterChips
 import com.aritr.rova.ui.library.components.LibraryLoading
@@ -606,9 +605,9 @@ fun LibraryScreen(
                     LibraryEmpty(onGoToRecord = onNavigateToRecord)
                 }
                 else -> Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                    // P6 storage/usage footprint — directly under the top bar, above the discovery bar
-                    // (shown for both Content and the filtered SearchEmpty body; hidden on Loading/Empty).
-                    LibraryUsageLine(ui.usage)
+                    // F7 (owner ruling 2026-07-05) — the storage/usage footprint is no longer pinned;
+                    // per ADR-0030 §7 + frozen spec §1 the stats line scrolls away with content, so it
+                    // lives in the LazyColumn "stats" item below reading "{n} recordings · {size}".
                     // Final-review F2 — single mount point: the search field renders here, above the
                     // collection.isEmpty() split, so it stays mounted across the filtered-empty <->
                     // LazyColumn swap below (was previously duplicated into both branches, which
@@ -684,16 +683,24 @@ fun LibraryScreen(
                                 }
                                 item(key = "stats") {
                                     val mod = bentoItemMotion(reduceMotion, bootActive, 1)
-                                    if (isFiltered) {
-                                        Text(
-                                            stringResource(R.string.library_stats_filtered, collection.size, visibleRows.size),
-                                            modifier = mod.padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp),
-                                            color = LocalGlassEnvironment.current.palette.textDim,
-                                            fontSize = 12.sp,
-                                        )
+                                    // Frozen spec §1: "{n} recordings · {size}" at rest; "{x} of {y}
+                                    // recordings" under filter/search. 11.5sp textDim, scrolls with content.
+                                    val statsText = if (isFiltered) {
+                                        stringResource(R.string.library_stats_filtered, collection.size, visibleRows.size)
                                     } else {
-                                        Spacer(mod)
+                                        pluralStringResource(
+                                            R.plurals.library_stats_resting,
+                                            ui.usage.sessionCount,
+                                            ui.usage.sessionCount,
+                                            StorageFormat.size(ui.usage.totalBytes, Locale.getDefault()),
+                                        )
                                     }
+                                    Text(
+                                        statsText,
+                                        modifier = mod.padding(horizontal = LibraryDimens.screenPadH, vertical = 4.dp),
+                                        color = LocalGlassEnvironment.current.palette.textDim,
+                                        fontSize = 11.5.sp,
+                                    )
                                 }
                                 item(key = "chips") {
                                     val mod = bentoItemMotion(reduceMotion, bootActive, 2)

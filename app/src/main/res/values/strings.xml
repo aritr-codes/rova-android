@@ -923,6 +923,10 @@
     <!-- bento Task 7 — chrome reflow: top-bar select entry + filtered stats copy (Task 8 wires the latter) -->
     <string name="library_select_open_cd">Select recordings</string>
     <string name="library_stats_filtered">%1$d of %2$d recordings</string>
+    <plurals name="library_stats_resting">
+        <item quantity="one">%1$d recording · %2$s</item>
+        <item quantity="other">%1$d recordings · %2$s</item>
+    </plurals>
     <!-- bento Task 8 — trailing timeline endcap, e.g. "— 12 RECORDINGS —" -->
     <string name="library_endcap">— %1$d RECORDINGS —</string>
 </resources>
