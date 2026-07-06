@@ -1,63 +1,63 @@
 package com.aritr.rova.ui.screens
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 /**
- * JVM-only tests for the [HistoryDeleter] orchestration. Pins the
- * delete-then-discard order contract without an `AndroidViewModel`,
- * a real `ContentResolver`, or a real `SessionStore`.
+ * JVM-only tests for the [HistoryDeleter] batch orchestration
+ * (ADR-0036). Pins the two-step transaction — delete artifacts, then
+ * commit (or retain) each session's manifest — without an
+ * `AndroidViewModel`, a real `ContentResolver`, or a real
+ * `SessionStore`.
  *
- * The order contract matters because:
- *   * Discarding the session manifest before the gallery delete
- *     succeeds would leak app-private segment files.
- *   * Discarding when the gallery delete fails leaves the user with
- *     a half-consistent state — visible artifact, no manifest.
- *   * The visible part of the operation (gallery delete) drives the
- *     success/failure return; manifest cleanup is best-effort and
- *     never flips the result.
+ * The order contract matters because the manifest is the only handle
+ * the Library has on a session's artifacts: discarding it while any
+ * artifact survives strands that artifact (Defect A, codex PR-B
+ * last-pass 2026-07-03), and for MULTI_SEGMENT_KEPT sessions the
+ * sibling files live inside the session directory, so a premature
+ * discard destroys them (Defect B, 2026-07-06 branch analysis).
  */
 class HistoryDeleterTest {
 
-    private fun item(sessionId: String? = null): VideoItem = VideoItem(
-        file = File("/tmp/rova/${sessionId ?: "legacy"}.mp4"),
+    private fun item(
+        sessionId: String? = null,
+        name: String = sessionId ?: "legacy",
+    ): VideoItem = VideoItem(
+        file = File("/tmp/rova/$name.mp4"),
         thumbnail = null,
         resolution = "FHD",
         shareUri = null,
-        sessionId = sessionId
+        sessionId = sessionId,
     )
 
+    // ---- Carried-over single-item contract (pre-ADR-0036 suite) ----
+
     @Test
-    fun `manifest-backed item - artifact delete success triggers discardSession`() {
+    fun `single item covering its session - artifact success triggers one discard`() {
         val discardCalls = mutableListOf<String>()
         val deleter = HistoryDeleter(
             deleteArtifact = { true },
             discardSession = { sid -> discardCalls += sid },
         )
-        val result = deleter.delete(item(sessionId = "s-1"))
-        assertTrue(result)
+        val target = item(sessionId = "s-1")
+        val failed = deleter.deleteAll(listOf(target), listedItems = listOf(target))
+        assertTrue(failed.isEmpty())
         assertEquals(listOf("s-1"), discardCalls)
     }
 
     @Test
-    fun `manifest-backed item - artifact delete failure does NOT trigger discardSession`() {
-        // Critical contract: a half-completed delete (manifest gone,
-        // gallery still present) is worse than a full failure. If the
-        // gallery row could not be removed we must NOT remove the
-        // manifest — the user might retry, and the manifest is the
-        // only handle the recovery + history paths still have on the
-        // session.
+    fun `artifact delete failure does NOT trigger discardSession`() {
         val discardCalls = mutableListOf<String>()
         val deleter = HistoryDeleter(
             deleteArtifact = { false },
             discardSession = { sid -> discardCalls += sid },
         )
-        val result = deleter.delete(item(sessionId = "s-2"))
-        assertFalse(result)
+        val target = item(sessionId = "s-2")
+        val failed = deleter.deleteAll(listOf(target), listedItems = listOf(target))
+        assertEquals(setOf(target.stableKey), failed)
         assertTrue("discardSession must not run on artifact failure", discardCalls.isEmpty())
     }
 
@@ -68,18 +68,18 @@ class HistoryDeleterTest {
             deleteArtifact = { true },
             discardSession = { sid -> discardCalls += sid },
         )
-        val result = deleter.delete(item(sessionId = null))
-        assertTrue(result)
+        val target = item(sessionId = null)
+        val failed = deleter.deleteAll(listOf(target), listedItems = listOf(target))
+        assertTrue(failed.isEmpty())
         assertTrue("legacy items must skip discardSession", discardCalls.isEmpty())
     }
 
     @Test
-    fun `discardSession failure does NOT flip the artifact-delete result`() {
-        // The artifact is gone from the user's gallery — the visible
-        // outcome is success. A subsequent failure to clean the
-        // app-private session dir is logged via onDiscardError but
-        // must not cause the History screen to show "Could not
-        // delete" for a recording the user can clearly see is gone.
+    fun `discardSession failure is swallowed and does NOT mark the batch failed`() {
+        // The artifacts are gone from the user's gallery — the visible
+        // outcome is success. A ghost manifest is the acceptable
+        // residue (ADR-0036 I3); reporting it as a delete failure would
+        // claim a visible file survived when none did.
         var loggedSid: String? = null
         var loggedError: Throwable? = null
         val deleter = HistoryDeleter(
@@ -88,25 +88,153 @@ class HistoryDeleterTest {
             onDiscardError = { sid, t ->
                 loggedSid = sid
                 loggedError = t
-            }
+            },
         )
-        val result = deleter.delete(item(sessionId = "s-3"))
-        assertTrue(result)
+        val target = item(sessionId = "s-3")
+        val failed = deleter.deleteAll(listOf(target), listedItems = listOf(target))
+        assertTrue(failed.isEmpty())
         assertEquals("s-3", loggedSid)
         assertEquals("disk gone", loggedError?.message)
     }
 
     @Test
-    fun `discardSession is not invoked when artifact delete fails - even with onDiscardError set`() {
-        // Defense for the contract above. The error sink must stay
-        // silent when the discard path is never reached.
+    fun `error sink stays silent when the discard step is never reached`() {
         var loggedSid: String? = null
         val deleter = HistoryDeleter(
             deleteArtifact = { false },
             discardSession = { error("should not be called") },
-            onDiscardError = { sid, _ -> loggedSid = sid }
+            onDiscardError = { sid, _ -> loggedSid = sid },
         )
-        deleter.delete(item(sessionId = "s-4"))
+        val target = item(sessionId = "s-4")
+        deleter.deleteAll(listOf(target), listedItems = listOf(target))
         assertNull(loggedSid)
+    }
+
+    // ---- ADR-0036 batch transaction ----
+
+    @Test
+    fun `defect A regression - dualshot partial failure retains the manifest`() {
+        // Portrait artifact deletes OK, landscape fails. Pre-ADR-0036
+        // the portrait success discarded the shared manifest and the
+        // surviving landscape file became an unreachable orphan in the
+        // system gallery (codex PR-B last-pass, 2026-07-03).
+        val discardCalls = mutableListOf<String>()
+        val portrait = item(sessionId = "s-dual", name = "s-dual-p")
+        val landscape = item(sessionId = "s-dual", name = "s-dual-l")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { it.stableKey == portrait.stableKey },
+            discardSession = { sid -> discardCalls += sid },
+        )
+        val failed = deleter.deleteAll(
+            listOf(portrait, landscape),
+            listedItems = listOf(portrait, landscape),
+        )
+        assertEquals(setOf(landscape.stableKey), failed)
+        assertTrue("manifest must be retained (I1)", discardCalls.isEmpty())
+    }
+
+    @Test
+    fun `dualshot full success - discard fires exactly once per session`() {
+        val discardCalls = mutableListOf<String>()
+        val portrait = item(sessionId = "s-dual", name = "s-dual-p")
+        val landscape = item(sessionId = "s-dual", name = "s-dual-l")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { true },
+            discardSession = { sid -> discardCalls += sid },
+        )
+        val failed = deleter.deleteAll(
+            listOf(portrait, landscape),
+            listedItems = listOf(portrait, landscape),
+        )
+        assertTrue(failed.isEmpty())
+        assertEquals(listOf("s-dual"), discardCalls)
+    }
+
+    @Test
+    fun `defect B regression - segment subset never discards the session`() {
+        // 1 of 3 kept segments in the batch. Pre-ADR-0036 the discard
+        // ran deleteRecursively on the session dir and destroyed the
+        // sibling segment files (2026-07-06 branch analysis).
+        val discardCalls = mutableListOf<String>()
+        val seg0 = item(sessionId = "s-multi", name = "s-multi-seg0")
+        val seg1 = item(sessionId = "s-multi", name = "s-multi-seg1")
+        val seg2 = item(sessionId = "s-multi", name = "s-multi-seg2")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { true },
+            discardSession = { sid -> discardCalls += sid },
+        )
+        val failed = deleter.deleteAll(
+            listOf(seg0),
+            listedItems = listOf(seg0, seg1, seg2),
+        )
+        assertTrue(failed.isEmpty())
+        assertTrue("sibling segments survive → no discard (I2)", discardCalls.isEmpty())
+    }
+
+    @Test
+    fun `discard executes only after ALL artifact deletes have run`() {
+        // Pins the transaction shape itself: step 1 (artifacts) fully
+        // precedes step 2 (commit). Pre-ADR-0036 the discard fired
+        // inside the per-item loop.
+        val events = mutableListOf<String>()
+        val portrait = item(sessionId = "s-dual", name = "s-dual-p")
+        val landscape = item(sessionId = "s-dual", name = "s-dual-l")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { events += "artifact:${it.stableKey}"; true },
+            discardSession = { sid -> events += "discard:$sid" },
+        )
+        deleter.deleteAll(
+            listOf(portrait, landscape),
+            listedItems = listOf(portrait, landscape),
+        )
+        assertEquals(
+            listOf(
+                "artifact:${portrait.stableKey}",
+                "artifact:${landscape.stableKey}",
+                "discard:s-dual",
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun `one artifact failure does not abort the rest of the batch`() {
+        // Best-effort artifact pass (retention relies on this): a
+        // failure is recorded and the remaining items are still
+        // attempted.
+        val attempted = mutableListOf<String>()
+        val a = item(sessionId = "sA")
+        val b = item(sessionId = "sB")
+        val c = item(sessionId = "sC")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { attempted += it.stableKey; it.sessionId != "sB" },
+            discardSession = { },
+        )
+        val failed = deleter.deleteAll(
+            listOf(a, b, c),
+            listedItems = listOf(a, b, c),
+        )
+        assertEquals(listOf(a.stableKey, b.stableKey, c.stableKey), attempted)
+        assertEquals(setOf(b.stableKey), failed)
+    }
+
+    @Test
+    fun `retention boundary - one side in batch while sibling stays listed keeps the manifest`() {
+        // The retention keep-window slices per item, so the surplus can
+        // contain one DualShot side while its sibling is KEPT. The kept
+        // side's visibility must survive.
+        val discardCalls = mutableListOf<String>()
+        val surplusSide = item(sessionId = "s-dual", name = "s-dual-l")
+        val keptSide = item(sessionId = "s-dual", name = "s-dual-p")
+        val deleter = HistoryDeleter(
+            deleteArtifact = { true },
+            discardSession = { sid -> discardCalls += sid },
+        )
+        val failed = deleter.deleteAll(
+            listOf(surplusSide),
+            listedItems = listOf(surplusSide, keptSide),
+        )
+        assertTrue(failed.isEmpty())
+        assertTrue("kept sibling still listed → no discard", discardCalls.isEmpty())
     }
 }

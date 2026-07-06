@@ -1,28 +1,35 @@
 package com.aritr.rova.ui.screens
 
 /**
- * Pluggable orchestrator for the History delete pipeline so the
- * delete/discard sequence can be JVM-unit-tested without an
+ * Batch orchestrator for the Library delete pipeline (ADR-0036).
+ * Pluggable seams so the transaction can be JVM-unit-tested without an
  * `AndroidViewModel`, a real `ContentResolver`, or a real
- * `SessionStore`. Two seams in, one boolean result out.
+ * `SessionStore`.
  *
- * Order contract:
- *   1. Delete the public-gallery artifact via [deleteArtifact].
- *   2. ONLY if step 1 succeeds AND [VideoItem.sessionId] is non-null,
- *      invoke [discardSession] to remove the per-session manifest +
- *      session directory.
+ * Transaction (ADR-0036 §Transaction structure):
+ *   1. Delete every artifact in the batch via [deleteArtifact],
+ *      recording per-item success. A failure never aborts the pass —
+ *      cleanup stays best-effort.
+ *   2. Commit manifest deletion — or retain it: [discardSession] runs
+ *      once per session that [SessionDiscardPlanner] marks eligible
+ *      (every batch outcome of the session succeeded AND the batch
+ *      covers all of the session's listed artifacts).
  *
- * If [discardSession] throws (`SessionStore.discardSession` itself is
- * defensive but disk failures are possible), the exception is logged
- * via [onDiscardError] and swallowed — the artifact is already gone
- * from the user's gallery, which is the visible part of the
- * operation. A leaked app-private session directory is invisible to
- * the user and at worst burns a few KB of internal storage until the
- * next cleanup pass; counting it as a delete failure would mislead
- * the user into thinking the gallery delete also failed.
+ * Never call [discardSession] per item: the artifact→session relation
+ * is N:1 (DualShot sides; MULTI_SEGMENT_KEPT segments whose files live
+ * INSIDE the session directory). A per-item discard orphaned the
+ * surviving DualShot side on partial failure (codex PR-B last-pass,
+ * 2026-07-03) and destroyed sibling kept segments outright (2026-07-06
+ * branch analysis).
  *
- * The helper is `internal` so tests in the same package can access
- * it without exposing it to consumer modules.
+ * If [discardSession] throws, the exception is logged via
+ * [onDiscardError] and swallowed — every artifact of that session is
+ * already gone, so the visible operation succeeded; the residue is a
+ * ghost manifest, the acceptable failure under ADR-0036 I3. It never
+ * marks the batch failed.
+ *
+ * The helper is `internal` so tests in the same package can access it
+ * without exposing it to consumer modules.
  */
 internal class HistoryDeleter(
     private val deleteArtifact: (VideoItem) -> Boolean,
@@ -30,20 +37,45 @@ internal class HistoryDeleter(
     private val onDiscardError: (sessionId: String, t: Throwable) -> Unit = { _, _ -> }
 ) {
     /**
-     * Returns whether the gallery artifact was deleted. The
-     * session-metadata cleanup is fire-and-forget after a successful
-     * artifact delete and never flips the result to `false`.
+     * Runs the two-step deletion transaction over [batch].
+     * [listedItems] is the current Library listing snapshot the batch
+     * was resolved from; it supplies the session-membership input to
+     * the eligibility decision. Returns the [VideoItem.stableKey]s
+     * whose ARTIFACT delete failed (discard outcomes never affect it).
      */
-    fun delete(item: VideoItem): Boolean {
-        val artifactDeleted = deleteArtifact(item)
-        val sid = item.sessionId
-        if (artifactDeleted && sid != null) {
+    fun deleteAll(
+        batch: Collection<VideoItem>,
+        listedItems: Collection<VideoItem>,
+    ): Set<String> {
+        val outcomes = batch.map { item ->
+            SessionDiscardPlanner.Outcome(
+                stableKey = item.stableKey,
+                sessionId = item.sessionId,
+                deleted = deleteArtifact(item),
+            )
+        }
+        val listedKeysBySession = listedItems
+            .filter { it.sessionId != null }
+            .groupBy({ it.sessionId!! }, { it.stableKey })
+            .mapValues { (_, keys) -> keys.toSet() }
+        val eligible = SessionDiscardPlanner.plan(outcomes, listedKeysBySession)
+        for (sid in eligible) {
             try {
                 discardSession(sid)
             } catch (t: Throwable) {
                 onDiscardError(sid, t)
             }
         }
-        return artifactDeleted
+        return outcomes.filterNot { it.deleted }.mapTo(mutableSetOf()) { it.stableKey }
     }
+
+    /**
+     * TEMPORARY bridge for the pre-ADR-0036 call sites; removed in the
+     * same branch once HistoryViewModel routes through [deleteAll].
+     * Treats the single item as covering its whole session — the OLD
+     * (defective) semantics, kept only so intermediate commits compile.
+     */
+    @Deprecated("ADR-0036: route batches through deleteAll")
+    fun delete(item: VideoItem): Boolean =
+        deleteAll(listOf(item), listedItems = listOf(item)).isEmpty()
 }
