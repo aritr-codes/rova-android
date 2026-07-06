@@ -298,8 +298,8 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Derived Library state (ADR-0030 / spec §5): joins [items] + captured
      * [manifestFactsByKey] + the sidecar snapshot into [LibraryRow]s via
-     * [LibraryRowMapper]. Recomputes when items, the view mode, or the sidecar
-     * revision changes. Mapping is pure CPU work over in-memory snapshots.
+     * [LibraryRowMapper]. Recomputes when items, the load latch, or the store's
+     * sidecar revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
         combine(items, hasLoaded, sidecarRevision) { rows, loaded, _ ->
