@@ -215,7 +215,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * so within a single load pass the rows the UI sees have matching facts.
      *
      * Eventual-consistency note: this field and [_items] are separate values, so a
-     * recompute triggered by another input (e.g. [_sidecarRevision]) between a
+     * recompute triggered by another input (e.g. [sidecarRevision]) between a
      * facts assignment and the next [_items] emit — or two overlapping refreshes —
      * can briefly map a stale row against newer facts. Because facts key on
      * `stableKey`, a mismatch only yields neutral defaults (a missing duration/badge
@@ -250,12 +250,18 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     private val settings = RovaSettings(getApplication())
 
     /**
-     * Bumped after a SUCCESSFUL sidecar write so the derived rows recompute.
-     * Single-writer contract: [toggleFavorite] is the only production writer today.
-     * Any FUTURE sidecar mutation (rename / lastPlayedAt / prune) MUST also bump
-     * this, or `libraryUiState` will serve a stale snapshot.
+     * Sidecar invalidation source — the store's own [LibraryMetadataStore.revision],
+     * bumped after every successful write by ANY caller (this VM, `RovaApp.
+     * writeResumePosition`, prune, future writers). Replaces the retired private
+     * per-writer bump contract, which `writeResumePosition` structurally could not
+     * honor: on back-while-playing the only position write lands from
+     * PlayerViewModel.onCleared AFTER this screen re-subscribed, so the hairline
+     * stayed stale until process restart (v3.3 staff-review BLOCKING finding).
+     * Fallback flow only for non-RovaApp test applications.
      */
-    private val _sidecarRevision = MutableStateFlow(0)
+    private val sidecarRevision: StateFlow<Int> =
+        (getApplication() as? RovaApp)?.libraryMetadataStore?.revision
+            ?: MutableStateFlow(0) // non-RovaApp test application → inert
 
     /**
      * Slice 4 (spec §5.4) — Discovery sort + filter/search state. Thin reactive
@@ -296,7 +302,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
      * revision changes. Mapping is pure CPU work over in-memory snapshots.
      */
     val libraryUiState: StateFlow<LibraryUiState> =
-        combine(items, hasLoaded, _sidecarRevision) { rows, loaded, _ ->
+        combine(items, hasLoaded, sidecarRevision) { rows, loaded, _ ->
             val snapshot = libraryStore?.snapshot() ?: emptyMap()
             val locale = Locale.getDefault()
             val tz = TimeZone.getDefault()
@@ -420,7 +426,7 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // alias), THEN apply the real transform to the canonical entry.
                 keys.dropLast(1).forEach { store.update(it) { e -> e } }
                 store.update(keys.last()) { it.copy(favorite = !it.favorite) }
-                _sidecarRevision.update { it + 1 } // success → recompute reads the new snapshot
+                // Recompute rides the store's own revision bump — no manual signal.
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.toggleFavorite: sidecar write failed for $stableKey", t)
                 _sidecarWriteError.update { it + 1 } // UI unchanged; surface a non-blocking notice
@@ -447,7 +453,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 // alias), THEN apply the real transform to the canonical entry.
                 keys.dropLast(1).forEach { store.update(it) { e -> e } }
                 store.update(keys.last()) { it.copy(customTitle = trimmed.ifBlank { null }) }
-                _sidecarRevision.update { it + 1 }
             } catch (t: Throwable) {
                 RovaLog.e("HistoryViewModel.renameSession: sidecar write failed for $stableKey", t)
                 _sidecarWriteError.update { it + 1 }

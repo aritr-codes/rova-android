@@ -1,6 +1,9 @@
 package com.aritr.rova.ui.library
 
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * ADR-0030 — file-backed sidecar for Library UI metadata (favorite / rename /
@@ -11,6 +14,17 @@ import java.io.File
  * Thread-safety: in-memory map guarded by a lock; each write rewrites the whole
  * file (the map is tiny — one small record per recording). Callers invoke off the
  * main thread.
+ *
+ * Invalidation: [revision] bumps after every SUCCESSFUL mutation (any writer, any
+ * process-internal call site — favorite, rename, resume position, prune, future).
+ * Derived flows that read [snapshot] inside a transform join [revision] into their
+ * `combine` so a write from ANYWHERE (e.g. `RovaApp.writeResumePosition` landing
+ * after PlayerViewModel.onCleared) recomputes them. This replaced HistoryViewModel's
+ * private per-writer bump contract, which `writeResumePosition` structurally could
+ * not honor — the Library served a stale hairline until process restart (v3.3
+ * staff-review BLOCKING finding, 2026-07-06). Bumped inside the lock, only after
+ * [writeAtomic] returns, so a revision N collector never reads a snapshot older
+ * than write N, and a failed write (throw before the bump) leaves it untouched.
  *
  * Construct ONE instance per [filesDir] (production: the `RovaApp` lazy prop). The
  * in-memory cache is per-instance, so a second instance over the same directory
@@ -28,6 +42,11 @@ class LibraryMetadataStore(private val filesDir: File) {
     private val lock = Any()
 
     @Volatile private var cache: MutableMap<String, LibraryMetadataEntry>? = null
+
+    private val _revision = MutableStateFlow(0)
+
+    /** Monotonic write counter — see class KDoc "Invalidation". */
+    val revision: StateFlow<Int> = _revision.asStateFlow()
 
     private fun load(): MutableMap<String, LibraryMetadataEntry> {
         cache?.let { return it }
@@ -93,6 +112,7 @@ class LibraryMetadataStore(private val filesDir: File) {
         }
     }
 
+    /** Persist + publish. Always called inside [lock]; a throw skips the bump. */
     private fun writeAtomic(map: Map<String, LibraryMetadataEntry>) {
         if (!filesDir.exists()) filesDir.mkdirs()
         tmp.writeText(LibraryMetadataCodec.toJson(map))
@@ -100,6 +120,7 @@ class LibraryMetadataStore(private val filesDir: File) {
             target.delete()
             if (!tmp.renameTo(target)) { target.writeText(tmp.readText()); tmp.delete() }
         }
+        _revision.value += 1
     }
 
     companion object { const val FILE_NAME = "library_metadata.json" }

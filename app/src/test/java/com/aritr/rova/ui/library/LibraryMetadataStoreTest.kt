@@ -1,5 +1,12 @@
 package com.aritr.rova.ui.library
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -133,5 +140,60 @@ class LibraryMetadataStoreTest {
         store.update(keysLandscapeFirst.last()) { it.copy(favorite = true) }
 
         assertEquals("Sunset", LibraryMetadataStore(tmpDir).get("session:s2")!!.customTitle)
+    }
+
+    // ── revision — store-level invalidation (v3.3 staff-review BLOCKING fix) ──
+
+    @Test fun `revision bumps once per successful write, from every mutator`() {
+        val s = store()
+        assertEquals(0, s.revision.value)
+        s.update("/a.mp4") { it.copy(favorite = true) }                       // stableKey overload
+        assertEquals(1, s.revision.value)
+        s.update(RecordingIdentity.MetaKey("session:s1", null)) {            // MetaKey overload
+            it.withPosition("", 5_000L)
+        }
+        assertEquals(2, s.revision.value)
+        s.prune(setOf("/a.mp4"))                                              // drops session:s1
+        assertEquals(3, s.revision.value)
+    }
+
+    @Test fun `revision does not bump on a no-op prune or a failed write`() {
+        val s = store()
+        s.update("/a.mp4") { it.copy(favorite = true) }
+        s.prune(setOf("/a.mp4")) // nothing to drop → no write → no bump
+        assertEquals(1, s.revision.value)
+
+        // filesDir is a regular FILE → writeAtomic's temp write throws before the bump.
+        val broken = LibraryMetadataStore(tmp.newFile("not-a-dir"))
+        assertTrue(runCatching { broken.update("/x.mp4") { it.copy(favorite = true) } }.isFailure)
+        assertEquals(0, broken.revision.value)
+    }
+
+    /**
+     * Regression for the v3.3 stale-hairline defect (staff review, 2026-07-06): open a
+     * recording → player persists a resume position (the `RovaApp.writeResumePosition`
+     * body, which may land from PlayerViewModel.onCleared AFTER the Library is back on
+     * screen) → a Library-shaped `combine(items, revision) { snapshot()… }` MUST re-emit
+     * the new position on the SAME store instance — no process restart. Pre-fix, no
+     * revision flow existed, the write was invisible, and the combine never re-ran.
+     */
+    @Test fun `user journey - resume write re-emits a Library-shaped combine without restart`() = runBlocking {
+        val s = store()
+        val key = RecordingIdentity.MetaKey("session:s1", legacy = null)
+        val items = MutableStateFlow(listOf("session:s1"))
+        val emissions = mutableListOf<Long?>()
+        val job = launch(Dispatchers.Unconfined) {
+            // Shape of HistoryViewModel.libraryUiState: snapshot read INSIDE the transform,
+            // hairline slot read EXACT (positionsBySide[slot], spec v3.3 — not positionFor).
+            combine(items, s.revision) { rows, _ ->
+                s.snapshot()[rows.single()]?.positionsBySide?.get("")
+            }.collect { emissions += it }
+        }
+        yield()
+        assertEquals(listOf<Long?>(null), emissions)          // Library open: bare tile
+        s.update(key) { it.withPosition("", 42_000L) }         // player writes resume position
+        yield()
+        job.cancelAndJoin()
+        assertEquals(listOf(null, 42_000L), emissions)         // hairline recomputes, no restart
     }
 }
