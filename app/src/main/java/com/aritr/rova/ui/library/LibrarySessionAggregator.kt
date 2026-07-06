@@ -62,7 +62,7 @@ object LibrarySessionAggregator {
             favorite = group.any { it.favorite },
             orientation = null,
             side = null,
-            sides = ordered.map { LibrarySessionSide(it.side!!, it.stableKey, it.durationMs, it.clipCount) },
+            sides = ordered.map { LibrarySessionSide(it.side!!, it.stableKey, it.durationMs, it.clipCount, it.resumePositionMs) },
             // Resume pill reads the side the row tap plays: PORTRAIT-first non-null (spec §3.3/§3.4).
             resumePositionMs = ordered.firstNotNullOfOrNull { it.resumePositionMs },
         )

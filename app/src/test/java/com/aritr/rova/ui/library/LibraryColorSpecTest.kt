@@ -73,6 +73,13 @@ class LibraryColorSpecTest {
         }
     }
 
+    @Test fun `media-progress resolves to the accent fill (v3_3 — distinct role, same value today)`() {
+        // Its own contrast contract (>=3:1 vs the bottom-scrim composite) lives in TokenContrastTest.
+        for (p in listOf(aurora, daylight)) {
+            assertEquals(LibraryColorSpec.accentFill(p), LibraryColorSpec.mediaProgress(p))
+        }
+    }
+
     @Test fun `state layers are textHigh at the frozen alphas`() {
         for (p in listOf(aurora, daylight)) {
             assertEquals(p.textHigh.copy(alpha = 0.05f), LibraryColorSpec.fill1(p))

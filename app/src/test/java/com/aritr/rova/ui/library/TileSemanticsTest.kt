@@ -66,4 +66,27 @@ class TileSemanticsTest {
         val label = TileSemantics.bentoPaneLabel(selecting = false, side = "Portrait", dayAndTime = "Today 11:42 am", duration = "2m")
         assertEquals("Play Portrait side, Today 11:42 am, 2m", label)
     }
+
+    // ── v3.3 hairline spoken fraction (spec pgSpeak) ──────────────────────
+
+    @Test fun `bento labels speak the watched fraction when playing`() {
+        val single = TileSemantics.bentoLabel(
+            selecting = false, orientationWord = null, dayAndTime = "Today 11:42 am",
+            duration = "2m", favorite = false, latest = false, progressPercent = 37,
+        )
+        assertEquals("Play Today 11:42 am, 2m, partially watched 37%", single)
+
+        val pane = TileSemantics.bentoPaneLabel(
+            selecting = false, side = "Landscape", dayAndTime = "Today 11:42 am", duration = "2m", progressPercent = 8,
+        )
+        assertEquals("Play Landscape side, Today 11:42 am, 2m, partially watched 8%", pane)
+    }
+
+    @Test fun `selection mode never speaks the fraction (bar is hidden)`() {
+        val label = TileSemantics.bentoLabel(
+            selecting = true, orientationWord = null, dayAndTime = "Today 11:42 am",
+            duration = "2m", favorite = false, latest = false, progressPercent = 37,
+        )
+        assertEquals("Select Today 11:42 am, 2m", label)
+    }
 }

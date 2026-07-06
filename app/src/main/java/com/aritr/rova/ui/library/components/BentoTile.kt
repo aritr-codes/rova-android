@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,6 +57,7 @@ import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.library.LibraryOrientation
 import com.aritr.rova.ui.library.LibraryRow
 import com.aritr.rova.ui.library.LibrarySessionSide
+import com.aritr.rova.ui.library.PlaybackProgress
 import com.aritr.rova.ui.library.PressFeedback
 import com.aritr.rova.ui.library.SmartTitle
 import com.aritr.rova.ui.library.TileSemantics
@@ -149,12 +151,20 @@ fun BentoTile(
                 ordered.forEach { side ->
                     val sideOrientation = if (side.side == VideoSide.PORTRAIT) LibraryOrientation.PORTRAIT else LibraryOrientation.LANDSCAPE
                     val sideWord = orientationWord(sideOrientation) ?: ""
-                    val paneLabel = TileSemantics.bentoPaneLabel(selecting, sideWord, timeLabel, SmartTitle.durationLabel(side.durationMs))
+                    // v3.3 hairline — per-pane, each side's own exact-slot position; hidden while
+                    // selecting (the selection ring owns that edge). Bars stop at the seam like the scrims.
+                    val sideProgress = if (selecting) null else PlaybackProgress.fraction(side.resumePositionMs, side.durationMs)
+                    val paneLabel = TileSemantics.bentoPaneLabel(
+                        selecting, sideWord, timeLabel, SmartTitle.durationLabel(side.durationMs),
+                        progressPercent = sideProgress?.let { PlaybackProgress.percent(it) },
+                    )
                     BentoPane(
                         selected = selected,
                         reduceMotion = reduceMotion,
                         label = paneLabel,
                         bitmap = thumbnailFor(side.stableKey),
+                        progress = sideProgress,
+                        progressColor = colors.mediaProgress,
                         onTap = { if (selecting) onToggleSelect() else onPlay(side.side.name) },
                         onLongPress = { onEnterSelection(); onToggleSelect() },
                         modifier = Modifier.weight(1f).fillMaxSize(),
@@ -162,12 +172,19 @@ fun BentoTile(
                 }
             }
         } else {
-            val label = TileSemantics.bentoLabel(selecting, orientationWord(row.orientation), timeLabel, SmartTitle.durationLabel(row.durationMs), row.favorite, isLatest)
+            // v3.3 hairline — exact-slot resume position vs manifest duration; hidden while selecting.
+            val progress = if (selecting) null else PlaybackProgress.fraction(row.resumePositionMs, row.durationMs)
+            val label = TileSemantics.bentoLabel(
+                selecting, orientationWord(row.orientation), timeLabel, SmartTitle.durationLabel(row.durationMs), row.favorite, isLatest,
+                progressPercent = progress?.let { PlaybackProgress.percent(it) },
+            )
             BentoPane(
                 selected = selected,
                 reduceMotion = reduceMotion,
                 label = label,
                 bitmap = thumbnailFor(row.stableKey),
+                progress = progress,
+                progressColor = colors.mediaProgress,
                 onTap = { if (selecting) onToggleSelect() else onPlay(null) },
                 onLongPress = { onEnterSelection(); onToggleSelect() },
                 modifier = Modifier
@@ -249,6 +266,8 @@ private fun BentoPane(
     reduceMotion: Boolean,
     label: String,
     bitmap: Bitmap?,
+    progress: Float?,
+    progressColor: Color,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -285,6 +304,20 @@ private fun BentoPane(
                 .fillMaxSize()
                 .background(if (selected) Brush.linearGradient(listOf(SELECTED_DIM, SELECTED_DIM)) else bottomScrimBrush()),
         )
+        // v3.3 playback-progress hairline (frozen spec `.pg`): 2dp, flush bottom, full-bleed,
+        // fill-only — the scrim is the backing, the pane edge is the 100% mark. Above the scrim,
+        // below the tile-level overlays; clipped by the tile radius (parent clip). Width is
+        // truthful and unclamped. Static forever — no animation for reduced-motion to gate.
+        // Decorative: the pane label already speaks the fraction (WCAG 1.4.11 alternative).
+        if (progress != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(progress)
+                    .height(2.dp)
+                    .background(progressColor),
+            )
+        }
     }
 }
 

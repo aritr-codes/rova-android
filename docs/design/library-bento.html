@@ -38,6 +38,12 @@
     --accent-fill:#FF8FC7; --accent-ink:#2a1420;      /* flat accent fills */
     --cta-start:#FF8FC7; --cta-end:#FF6FAE; --cta-ink:#2a1420; /* gradient fills */
     --accent-text:color-mix(in srgb, var(--accent) 72%, var(--tHigh)); /* accent AS text on surfaces */
+    /* v3.3 — playback-progress hairline over media. Themed (follows the accent,
+       like the LATEST chip), but a distinct semantic role: its contract is
+       ≥3:1 against the tile's bottom-scrim composite in EVERY palette
+       (accent-fill's own contract is AA vs accent-ink). Compose:
+       LibraryColorSpec.mediaProgress + a TokenContrastTest case. */
+    --media-progress:var(--accent-fill);
 
     /* locked semantics — identical across all 12 palettes */
     --gold:#FBBF24; --danger:#EF4444;
@@ -297,6 +303,26 @@
   @media (hover:hover){ .panebtn:hover img{transform:scale(1.06)} }
   .tilebtn.duo::after{display:none}
 
+  /* ============ Playback-progress hairline (v3.3) ============
+     Resume-point indicator, NOT watch history: present iff the player would
+     resume (ResumePolicy verbatim — position > 0, duration known, not within
+     the near-end window). 2px · flush bottom · full-bleed · fill-only —
+     the scrim is the backing, the tile edge is the 100% mark. Width is
+     truthful, never clamped: the indicator favors truthful representation
+     over exaggerated visibility at extremely small playback fractions —
+     a barely-started recording may show no perceptible mark, and that is
+     the correct reading (same law that hides duration below span 3).
+     Sits above the scrim (z-index), below
+     every overlay. Static forever: no entrance, no width tween, nothing
+     for reduced-motion to gate. Not focusable, no semantics of its own —
+     the tile's label speaks the fraction. On DualShot, each pane carries
+     its own bar from its own side's position; bars stop at the seam like
+     the scrims do. Hidden throughout selection mode — the 2px accent
+     selection ring owns that edge. */
+  .pg{position:absolute;left:0;right:0;bottom:0;height:2px;pointer-events:none;z-index:1}
+  .pg i{position:absolute;left:0;top:0;bottom:0;display:block;background:var(--media-progress)}
+  .selecting .pg{display:none}
+
   /* tile metadata grammar — one pill, bottom-left, leading with the
      recording's SHAPE: single = its orientation glyph (▯ or ▭); DualShot =
      the ▯▭ pair in pane order (Portrait is always left, everywhere). Then
@@ -551,7 +577,7 @@
 <body>
 
 <div class="stagehead">
-  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING · v3.2.1 FROZEN — 2026-07-04</div>
+  <div class="kicker">ROVA · LIBRARY VISUAL SPEC · LIVING · v3.3.1 FROZEN — 2026-07-06</div>
   <h1>Library — Adaptive Bento Timeline</h1>
   <nav class="conceptnav">
     <a class="active" href="library-bento.html">Living spec</a>
@@ -563,7 +589,9 @@
   <b>v3 · Freeze pass:</b> full semantic-token restructure + 12-palette preview (RovaPalette.kt verbatim; accent fills AA-resolved by a JS port of DialogActionColors.resolve — Compose uses the real one) · media-relative overlay constants (paint on video never re-themes) · <b>tap now plays</b> (DualShot pane = that side; restores shipped row-tap behavior), details sheet moves to the selection ⓘ · filters scroll away — day headers own the top · unified radius/type/elevation/motion scales, exits ≈70% of enters · AA sweep (informational text ≥ textDim, darker media pills, 44px toast/selbar/rail targets) · explicit sheet close, hidden chrome is <b>inert</b>, rename-Escape stays local · resume pill dropped — the shipped player already resumes (#137). No autoplay anywhere, by design.<br>
   <b>v3.1 · pre-freeze usability pass:</b> day headers are now two-state — plain content at rest, glass veil only while actually pinned, native push-off by the next day (kills the "persistent chrome strip" feel without losing context) · orientation made legible everywhere: the meta pill leads with the recording's shape (single = ▯ or ▭; DualShot = ▯▭ in pane order, Portrait always left), echoed in sheet facts, player subtitle, reader labels, and an aspect-honest player frame · DualShot consistency: panes share the single-tile loading placeholder, seam tokenized as <b>--media-seam</b>. No treatment added to mute the diptych — its salience is information (two recordings, two tap targets), and singles stay content-first.<br>
   <b>v3.2 · header de-chroming (owner round 2):</b> the pinned day header is no longer glass — no blur, no border, no surface fill, no bottom edge. While pinned, the page's <b>own</b> color (--bgTop) dissolves over the exit edge (solid behind the label, ~34px fade tail), so the timeline itself appears to carry the date label; anatomy, typography and text colors are identical in both states, and every palette washes with its own ground (Daylight = paper, Eclipse = near-black). Fully-naked pinned text was evaluated and fails — themed text over arbitrary thumbnails has unbounded contrast, and a text-shadow halo can't save the 11.5px dim meta line. --chrome token retired (selection bar/toast/rail keep --chrome-solid). codex round: wash primed <b>synchronously</b> at render (a pinned header never paints naked over thumbnails, IO alone lands a frame late) + wash geometry locked to explicit text metrics (21px line-heights → 37px header box, 31px solid hold, 63px total).<br>
-  <b>v3.2.1 · frozen (post-freeze correction):</b> sheet action relabeled <b>Share</b> (was "Export" — ADR-0030 §1: export is not a Library action; Share hands a content-URI to another app and saves nothing, matching shipped behavior). Label-only fix at Compose transcription kickoff.</p>
+  <b>v3.2.1 · frozen (post-freeze correction):</b> sheet action relabeled <b>Share</b> (was "Export" — ADR-0030 §1: export is not a Library action; Share hands a content-URI to another app and saves nothing, matching shipped behavior). Label-only fix at Compose transcription kickoff.<br>
+  <b>v3.3 · playback-progress hairline (formal freeze amendment, 2026-07-06):</b> a passive <b>resume-point hairline</b> on tiles — 2px tall, flush to the tile's bottom edge, full-bleed, fill-only (no track: the bottom scrim is the backing and the tile edge is the 100% mark), painted in the new <b>--media-progress</b> token (resolves to accent-fill, themed like the LATEST chip; named separately because its contract differs — ≥3:1 against the bottom-scrim composite in every palette; Compose verifies via TokenContrastTest). <b>Renders iff a usable resume point exists</b>, the player's own ResumePolicy predicate verbatim: position &gt; 0 AND duration known AND not inside the near-end window (2% of duration, clamped 1–3s). Never-opened and fully-reviewed both render bare — this is a resume-point indicator, not a watch-history ledger: Rova persists only resume positions, and a persistent "watched" bar would advertise a resume the player doesn't do. <b>Width is truthful and unclamped</b> — the indicator intentionally favors truthful representation over exaggerated visibility at extremely small playback fractions: a barely-started recording may show no perceptible mark, and that is the correct reading — the same law that hides duration below span 3: small tiles carry less information. <b>DualShot:</b> per-pane hairlines from exact per-side positions only (never the legacy single-slot fallback — that would paint one side's truth on both panes); each pane's bar stops at the seam exactly like its scrim. <b>No text, no icons, no thumb, no animation ever</b> (static state, nothing for reduced-motion to gate), non-interactive, not focusable, no semantics node of its own — the fraction is spoken on the tile's existing label ("partially watched, N%"), which is also the WCAG 1.4.11 conforming alternative. <b>Hidden during selection mode</b> (the 2px accent selection ring owns that edge; progress is irrelevant to manage/share/delete). Rows without a known duration render bare. Design record: <code>mockups/playback-progress/progress-hairline-explorations.html</code> (competitive research incl. Jellyfin/VLC source; six-candidate minimum-width exploration — clamps and alternative leading-edge geometries rejected for honesty).<br>
+  <b>v3.3.1 · accessibility correction (post-freeze, staff review 2026-07-06):</b> the spoken fraction on the tile's Play label floors at 1% — <code>max(1, round(f×100))</code> — so a visible resume point never announces the self-contradictory "partially watched 0%" (a &lt;0.5% resume, e.g. 2s into a 10-minute recording, rounded to 0). Spoken alternative only: the hairline's visual width stays truthful and unfloored per the v3.3 honesty rule.</p>
 </div>
 
 <div class="phone">
@@ -779,11 +807,17 @@ const sessions=[];
       // the whole cross-concept comparison dataset) byte-identical.
       // Portrait-dominant, matching how the app is actually used.
       const orient = ((id*2654435761)>>>0)%100<68 ? 'P' : 'L';
+      // v3.3 — resume positions off id hashes too (same byte-identical-stream
+      // rule as `orient`). ~1 in 5 slots carries a mid-review resume point at
+      // 8–88% of duration; DualShot sides hash independently — per-side
+      // positions are real data (positionsBySide), sides legitimately differ.
+      const resFor = salt => { const h=(((id+salt)*2654435761)>>>0)%100; return h<19 ? Math.round(durS*(0.08 + (h/19)*0.80)) : 0; };
       sessions.push({
         id:id++, d, date, h:t.h, m:t.m, durS, orient,
         clips: Math.min(15, Math.max(1, Math.round(durS/(45+rnd()*45)))),
         sizeMB: Math.round(durS*(0.8+rnd()*0.5)*10)/10,
         dual: rnd()<.38, fav: rnd()<.14, deleted:false, vaulted:false, name,
+        resS: resFor(7), resPS: resFor(13), resLS: resFor(29),
       });
     }
   }
@@ -857,18 +891,29 @@ function buildRows(ds, tier, d){
    DualShot panes are separate buttons so the side you tap is the side that
    plays, with honest keyboard/reader stops per side. In selection mode the
    same buttons toggle the session. */
+/* v3.3 — resume-point hairline. Show/hide is the player's ResumePolicy,
+   verbatim: near-end (2% of duration, clamped 1–3s) means "no resume point"
+   → no bar. Fraction is honest (never clamped, capped at 1 defensively). */
+const nearEndS = dur => Math.min(3, Math.max(1, dur*0.02));
+const pgFrac = (pos, dur) => (pos>0 && dur>0 && pos < dur-nearEndS(dur)) ? Math.min(pos/dur, 1) : null;
+const pgHTML = f => f==null ? '' : `<span class="pg" aria-hidden="true"><i style="width:${(f*100).toFixed(2)}%"></i></span>`;
+/* v3.3.1 — spoken fraction floors at 1%: a visible resume point must never announce
+   "partially watched 0%" (self-contradictory to a reader). Visual width stays truthful
+   and unfloored — this floors only the WCAG 1.4.11 spoken alternative. */
+const pgSpeak = f => f==null ? '' : `, partially watched ${Math.max(1, Math.round(f*100))}%`;
 function tileHTML(s, span, hpx, idx, isLatest){
   const w=Math.round(span*68*1.7), h=Math.round(hpx*1.7);
   const wide = span>=3;
   const ow = s.dual ? '' : (s.orient==='P'?'portrait':'landscape');
   const base = `${ow?ow+' recording, ':''}${dayLabel(s)} ${timeLabel(s)}, ${fmtDur(s.durS)}${s.fav?', favorite':''}${isLatest?', latest recording':''}`;
-  const act = side => selecting ? `Select ${base}` : `Play ${side?side+' side, ':''}${base}`;
+  const fP = pgFrac(s.resPS, s.durS), fL = pgFrac(s.resLS, s.durS), f0 = pgFrac(s.resS, s.durS);
+  const act = (side, f) => selecting ? `Select ${base}` : `Play ${side?side+' side, ':''}${base}${pgSpeak(f)}`;
   const inner = s.dual
     ? `<div class="tilebtn duo" role="group" aria-label="DualShot, ${base}">
-         <button class="panebtn" data-side="Portrait" aria-label="${act('Portrait')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h)}"></button>
-         <button class="panebtn" data-side="Landscape" aria-label="${act('Landscape')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h,'b')}"></button>
+         <button class="panebtn" data-side="Portrait" aria-label="${act('Portrait',fP)}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h)}">${pgHTML(fP)}</button>
+         <button class="panebtn" data-side="Landscape" aria-label="${act('Landscape',fL)}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,Math.round(w/2),h,'b')}">${pgHTML(fL)}</button>
        </div>`
-    : `<button class="tilebtn" aria-label="${act('')}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,w,h)}"></button>`;
+    : `<button class="tilebtn" aria-label="${act('',f0)}"><img loading="lazy" decoding="async" alt="" src="${imgURL(s,w,h)}">${pgHTML(f0)}</button>`;
   return `
   <div class="tile ${s.fav?'fav':''} ${selected.has(s.id)?'sel':''}"
        data-id="${s.id}" style="grid-column:span ${span};height:${hpx}px;--i:${Math.min(idx,14)}">

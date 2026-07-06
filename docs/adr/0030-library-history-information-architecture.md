@@ -74,7 +74,7 @@ Spec: docs/superpowers/specs/2026-07-02-library-session-list-design.md. Owner-ap
 
 **Status: IMPLEMENTED & SHIPPED — PR #172, merged to `master` `b96614894` (2026-07-05), released in `Rova-0.10.0` (versionCode 5).** This is the current production Library presentation; the pre-bento list/grid/hero implementation is fully retired. Built HTML-first (11-task SDD) transcribing the frozen spec, then two peer reviews + one adversarial staff review + device verification on RZCYA1VBQ2H.
 
-**Canonical visual spec: `docs/design/library-bento.html` (v3.2.1, FROZEN 2026-07-04).** Owner-selected from three
+**Canonical visual spec: `docs/design/library-bento.html` (v3.3.1, FROZEN — v3.2.1 frozen 2026-07-04; v3.3 playback-progress amendment + v3.3.1 accessibility correction frozen 2026-07-06).** Owner-selected from three
 codex-reviewed interactive concepts, then refined across three codex-reconciled review rounds (token/tap-model
 pass, usability pass, header de-chroming). Per the HTML-first workflow (CLAUDE.md "Design workflow"): Compose
 *transcribes* the frozen spec; ambiguities discovered during implementation route back to the HTML for
@@ -136,3 +136,33 @@ the 2026-06-24 safety-stop amendment continue to bind.
 §2 (sidecar-only metadata, `checkLibraryNoManifestWrite`) is unchanged and continues to bind: favorite,
 rename, and playback-position metadata go only through their existing stores; the new presentation adds no
 manifest writes.
+
+## Amendment (2026-07-06) — Playback-progress hairline (spec v3.3 / v3.3.1)
+
+**Status: IMPLEMENTED & SHIPPED — PR #173.** Spec amendments v3.3 (feature freeze) and v3.3.1
+(post-freeze accessibility correction) in `docs/design/library-bento.html`; built HTML-first, transcribed
+after freeze, staff-reviewed + independently investigated, repro-path device-verified on RZCYA1VBQ2H.
+
+1. **Resume-point indicator, NOT watch history.** A passive 2dp hairline flush to a tile's bottom edge,
+   painted in the `--media-progress` token (resolves to accent-fill; distinct semantic role with its own
+   ≥3:1 contrast contract vs the bottom-scrim composite, asserted ×12 palettes in `TokenContrastTest`).
+   It renders **iff the player would actually resume** — the show/hide predicate is `ResumePolicy`
+   verbatim (position > 0 AND duration known AND outside the near-end window, 2% clamped 1–3 s). Rova
+   persists only resume positions, so never-opened and fully-reviewed tiles both render bare; a
+   persistent "watched" bar would advertise a resume the player doesn't do.
+2. **Width is truthful, never clamped** — the indicator favors truthful representation over exaggerated
+   visibility at extremely small fractions (same law that hides duration below span 3).
+3. **DualShot: per-pane bars from EXACT per-side sidecar slots only** — never the legacy `""`-slot
+   fallback, which would paint one side's truth on both panes. Bars stop at the seam like the scrims.
+   (The Player's resume read keeps `positionFor`'s fallback; only the Library display is exact-slot.)
+4. **Accessibility.** No semantics node of its own; the fraction is spoken on the tile's existing Play
+   label ("partially watched N%") as the WCAG 1.4.11 conforming alternative. **v3.3.1:** the spoken
+   fraction floors at 1% (`max(1, round(f×100))`) so a visible resume point never announces "partially
+   watched 0%"; visual width stays unfloored. Hidden during selection mode. No animation ever.
+5. **Invalidation architecture (§2 corollary).** `LibraryMetadataStore` is the single invalidation
+   source for sidecar-derived UI: `revision: StateFlow<Int>` bumps inside the store lock after every
+   successful atomic write (failed writes throw before the bump), and `HistoryViewModel` joins it into
+   the `libraryUiState` combine. This retired the private per-writer bump counter, which
+   `RovaApp.writeResumePosition` (fired from `PlayerViewModel.onCleared` after the Library re-subscribes)
+   structurally could not honor — the defect surfaced as a hairline stale until process restart. Any
+   future sidecar writer invalidates automatically; no manual signal exists to forget.

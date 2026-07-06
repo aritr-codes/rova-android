@@ -44,8 +44,11 @@ data class LibraryRow(
     val sides: List<LibrarySessionSide> = emptyList(),
     /**
      * Saved playback position (ms) for the side this row's tap would play: the row's own side for
-     * single/per-side rows, the PORTRAIT-first non-null side on aggregated session rows. Drives the
-     * latest-row Resume pill copy only (spec §3.3) — the player re-reads its own resume position.
+     * single/per-side rows, the PORTRAIT-first non-null side on aggregated session rows. Sole
+     * consumer is the v3.3 playback-progress hairline (the bento redesign retired the resume pill),
+     * so this is the EXACT sidecar slot value — never the legacy ""-slot fallback the player's own
+     * resume read keeps (spec v3.3: a legacy position must not paint one side's truth on both
+     * panes) — and the player still re-reads its own resume position on open.
      */
     val resumePositionMs: Long? = null,
 )
@@ -53,12 +56,14 @@ data class LibraryRow(
 /**
  * One playable side of an aggregated DualShot session row (spec §3.4).
  * [stableKey] is the ORIGINAL per-side row key — PR-B resolves it to the playable file/uri.
+ * [resumePositionMs] is that side's exact-slot saved position (v3.3 per-pane hairline).
  */
 data class LibrarySessionSide(
     val side: VideoSide,
     val stableKey: String,
     val durationMs: Long,
     val clipCount: Int,
+    val resumePositionMs: Long? = null,
 )
 
 /** Sort options for the Library (decision C). */

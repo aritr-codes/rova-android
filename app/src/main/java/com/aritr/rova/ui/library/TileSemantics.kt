@@ -51,6 +51,7 @@ object TileSemantics {
         duration: String,
         favorite: Boolean,
         latest: Boolean,
+        progressPercent: Int? = null,
     ): String = buildString {
         append(if (selecting) "Select" else "Play")
         if (!selecting && orientationWord != null) {
@@ -62,11 +63,24 @@ object TileSemantics {
         append(", ").append(duration)
         if (favorite) append(", favorite")
         if (latest) append(", latest recording")
+        appendProgress(selecting, progressPercent)
     }
 
     /** Bento diptych pane label (spec §8 / Task 4) — names the side ("Portrait"/"Landscape side"). */
-    fun bentoPaneLabel(selecting: Boolean, side: String, dayAndTime: String, duration: String): String =
-        "${if (selecting) "Select" else "Play"} $side side, $dayAndTime, $duration"
+    fun bentoPaneLabel(selecting: Boolean, side: String, dayAndTime: String, duration: String, progressPercent: Int? = null): String =
+        buildString {
+            append("${if (selecting) "Select" else "Play"} $side side, $dayAndTime, $duration")
+            appendProgress(selecting, progressPercent)
+        }
+
+    /**
+     * v3.3 hairline spoken fraction (spec `pgSpeak`) — the WCAG 1.4.11 conforming alternative for
+     * the 2dp bar, folded into the tile/pane label so it is not a separate focus stop. Play labels
+     * only: selection mode hides the bar, so it speaks nothing.
+     */
+    private fun StringBuilder.appendProgress(selecting: Boolean, percent: Int?) {
+        if (!selecting && percent != null) append(", partially watched ").append(percent).append('%')
+    }
 
     private fun durationSpeech(ms: Long): String {
         val totalSec = ms / 1000
