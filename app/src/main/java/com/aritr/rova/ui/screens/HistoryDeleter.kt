@@ -68,14 +68,4 @@ internal class HistoryDeleter(
         }
         return outcomes.filterNot { it.deleted }.mapTo(mutableSetOf()) { it.stableKey }
     }
-
-    /**
-     * TEMPORARY bridge for the pre-ADR-0036 call sites; removed in the
-     * same branch once HistoryViewModel routes through [deleteAll].
-     * Treats the single item as covering its whole session — the OLD
-     * (defective) semantics, kept only so intermediate commits compile.
-     */
-    @Deprecated("ADR-0036: route batches through deleteAll")
-    fun delete(item: VideoItem): Boolean =
-        deleteAll(listOf(item), listedItems = listOf(item)).isEmpty()
 }

@@ -1,61 +1,48 @@
 package com.aritr.rova.ui.screens
 
 /**
- * Pure cleanup policy for the "keep latest N finalized recordings"
- * retention rule wired in Settings. Pluggable so the
- * delete-and-discard sequence can be swapped for an in-memory fake
- * during JVM unit tests; production wires it to the same
- * [HistoryDeleter]-backed pipeline that powers the manual History
- * delete button so the gallery row + per-session manifest are
- * cleaned up via the same audited code path.
+ * Pure SELECTION policy for the "keep latest N finalized recordings"
+ * retention rule wired in Settings (ADR-0036 reshape). This class no
+ * longer deletes anything: it names the surplus, and the caller routes
+ * it through the same [HistoryDeleter.deleteAll] batch transaction
+ * that powers the manual Library delete — so the retention path gets
+ * the manifest-discard-last guarantee (I1/I2) instead of the per-item
+ * discard that could orphan a KEPT DualShot side whose sibling fell
+ * outside the keep window (2026-07-06 branch analysis).
  *
  * Inputs:
- *  * [enabled] — settings toggle. When `false` the cleaner returns
- *    [Result.NoOp] without touching anything.
+ *  * [enabled] — settings toggle. When `false` the selector returns
+ *    empty without touching anything.
  *  * [keepLatest] — number of finalized recordings to keep. Values
  *    `<= 0` are treated as "off" too, so a misconfigured persistence
  *    read can never delete the user's entire library.
  *  * [items] — full History list, **already sorted newest-first**.
- *    Only entries with a non-null [VideoItem.sessionId] are eligible
- *    for cleanup; legacy file-only entries are skipped (their
- *    discard path is not yet plumbed in this slice).
+ *    Only entries with a non-null [VideoItem.sessionId] are eligible;
+ *    legacy file-only entries are skipped (their discard path is not
+ *    plumbed).
  *
- * Order contract: cleanup walks the surplus tail oldest-last and
- * delegates each entry to [deleteItem]. A `false` return from
- * [deleteItem] increments [Result.failed] and DOES NOT abort the
- * batch — we want best-effort cleanup of the rest of the surplus,
- * matching the manual delete path's per-item failure handling.
- *
- * The helper is `internal` so tests in the same package can access
- * it without exposing it to consumer modules.
+ * The helper is `internal` so tests in the same package can access it
+ * without exposing it to consumer modules.
  */
-internal class RecordingRetentionCleaner(
-    private val deleteItem: (VideoItem) -> Boolean
-) {
+internal object RecordingRetentionCleaner {
+
+    /** Batch outcome summary surfaced via RetentionCleanupNotice. */
     data class Result(val deleted: Int, val failed: Int) {
         companion object {
             val NoOp = Result(deleted = 0, failed = 0)
         }
     }
 
-    fun clean(
+    /** Names the surplus tail beyond the keep window; deletes nothing. */
+    fun surplus(
         enabled: Boolean,
         keepLatest: Int,
-        items: List<VideoItem>
-    ): Result {
-        if (!enabled) return Result.NoOp
-        if (keepLatest <= 0) return Result.NoOp
-        // Only finalized manifest-backed entries count toward the
-        // keep window. Legacy file-only entries (sessionId == null)
-        // are passed through untouched in this slice.
+        items: List<VideoItem>,
+    ): List<VideoItem> {
+        if (!enabled) return emptyList()
+        if (keepLatest <= 0) return emptyList()
         val finalized = items.filter { it.sessionId != null }
-        if (finalized.size <= keepLatest) return Result.NoOp
-        val surplus = finalized.drop(keepLatest)
-        var deleted = 0
-        var failed = 0
-        surplus.forEach { item ->
-            if (deleteItem(item)) deleted++ else failed++
-        }
-        return Result(deleted = deleted, failed = failed)
+        if (finalized.size <= keepLatest) return emptyList()
+        return finalized.drop(keepLatest)
     }
 }

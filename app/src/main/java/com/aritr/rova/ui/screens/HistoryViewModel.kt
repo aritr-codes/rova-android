@@ -120,9 +120,13 @@ data class VideoItem(
      * session's per-segment fanout. Identifies which segment of the session
      * this row represents. Null for all other rows (single-mode, P+L, legacy).
      *
-     * Delete handler uses this to remove the per-segment file
-     * (`sessionDir/segment_$segmentIndex.mp4`) and update the manifest's
-     * segments list.
+     * Deleting a segment row removes only its own file
+     * (`sessionDir/segment_$segmentIndex.mp4`); the manifest's segments
+     * list is deliberately NOT rewritten — the listing's
+     * exists-and-non-empty filter drops the row, and the session
+     * directory is discarded only when the LAST listed segment goes
+     * (ADR-0036 I2; a premature discard destroyed sibling kept
+     * segments — 2026-07-06 branch analysis).
      */
     val segmentIndex: Int? = null,
     /**
@@ -715,14 +719,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Applies the user's retention policy to the current snapshot if
-     * the toggle is on. Routes each surplus delete through the same
-     * [HistoryDeleter]-orchestrated artifact-then-discard pipeline as
-     * manual History delete, so a retention-driven cleanup is
-     * indistinguishable from the user tapping Delete on the same
-     * entries — gallery row goes via `MediaStore`, then
-     * `SessionStore.discardSession` removes the per-session
-     * directory. Failures are logged via [RovaLog]; they do not
+     * Slice 13B — opt-in "keep latest N" retention cleanup, applied at
+     * most once per refresh pass on the freshly loaded item list.
+     * ADR-0036: the surplus is selected by the pure
+     * [RecordingRetentionCleaner.surplus] and deleted through the same
+     * [HistoryDeleter.deleteAll] batch transaction as the manual
+     * Library delete, so a surplus side whose DualShot sibling is KEPT
+     * can no longer discard the shared manifest (the kept side stays
+     * visible). Failures are logged via [RovaLog]; they do not
      * propagate to the UI snackbar because retention cleanup is a
      * background-y maintenance step the user did not request
      * synchronously.
@@ -733,6 +737,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         val app = getApplication<Application>()
         val settings = RovaSettings(app)
         if (!settings.autoDeleteEnabled) return RecordingRetentionCleaner.Result.NoOp
+        val surplus = RecordingRetentionCleaner.surplus(
+            enabled = true,
+            keepLatest = settings.autoDeleteKeepLatest,
+            items = items
+        )
+        if (surplus.isEmpty()) return RecordingRetentionCleaner.Result.NoOp
         val resolver = app.contentResolver
         val sessionStore = (app as? RovaApp)?.let {
             runCatching { it.sessionStore }.getOrNull()
@@ -747,11 +757,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         )
-        val cleaner = RecordingRetentionCleaner(deleteItem = { deleter.delete(it) })
-        val result = cleaner.clean(
-            enabled = true,
-            keepLatest = settings.autoDeleteKeepLatest,
-            items = items
+        // `items` is the freshly loaded listing this pass — the most
+        // current membership snapshot available.
+        val failedKeys = deleter.deleteAll(surplus, listedItems = items)
+        val result = RecordingRetentionCleaner.Result(
+            deleted = surplus.size - failedKeys.size,
+            failed = failedKeys.size
         )
         if (result.deleted > 0) {
             RovaLog.d {
@@ -1150,10 +1161,12 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             )
-            val failed = mutableSetOf<String>()
-            items.forEach { item ->
-                if (!deleter.delete(item)) failed += item.stableKey
-            }
+            // ADR-0036 — two-step transaction: all artifact deletes run
+            // first; discardSession fires once per session the planner
+            // marks eligible. The listing snapshot supplies session
+            // membership so a surviving sibling (other DualShot side,
+            // other kept segment) retains the manifest.
+            val failed = deleter.deleteAll(items, listedItems = _items.value)
             refresh()
             failed
         }
