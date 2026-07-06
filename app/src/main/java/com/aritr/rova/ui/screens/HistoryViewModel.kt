@@ -368,7 +368,9 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 sessionId = item.sessionId,
                 thumbWidthPx = item.thumbnail?.width ?: 0,
                 thumbHeightPx = item.thumbnail?.height ?: 0,
-                resumePositionMs = meta?.positionFor(RecordingIdentity.sideSlot(item.side)),
+                // EXACT slot read, not positionFor: the hairline (spec v3.3) must never paint a
+                // legacy ""-slot position on a named DualShot side. The player keeps positionFor.
+                resumePositionMs = meta?.positionsBySide?.get(RecordingIdentity.sideSlot(item.side)),
             ),
             locale, tz,
         )

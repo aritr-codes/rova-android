@@ -137,4 +137,22 @@ class LibrarySessionAggregatorTest {
         val bothNull = listOf(pNull, l.copy(resumePositionMs = null))
         assertNull(LibrarySessionAggregator.aggregate(bothNull).single().resumePositionMs)
     }
+
+    @Test
+    fun collapse_sidesCarryTheirOwnResumePositions() {
+        // v3.3 per-pane hairline: each LibrarySessionSide keeps ITS side's exact position — the
+        // scalar portrait-first fold must not erase the landscape pane's own value.
+        val p = row("/p.mp4", CaptureTopology.DualShot, "session:s1", VideoSide.PORTRAIT)
+            .copy(resumePositionMs = 11_000L)
+        val l = row("/l.mp4", CaptureTopology.DualShot, "session:s1", VideoSide.LANDSCAPE)
+            .copy(resumePositionMs = 22_000L)
+        val sides = LibrarySessionAggregator.aggregate(listOf(p, l)).single().sides
+        assertEquals(11_000L, sides.first { it.side == VideoSide.PORTRAIT }.resumePositionMs)
+        assertEquals(22_000L, sides.first { it.side == VideoSide.LANDSCAPE }.resumePositionMs)
+
+        val pNull = p.copy(resumePositionMs = null)
+        val sides2 = LibrarySessionAggregator.aggregate(listOf(pNull, l)).single().sides
+        assertNull(sides2.first { it.side == VideoSide.PORTRAIT }.resumePositionMs)
+        assertEquals(22_000L, sides2.first { it.side == VideoSide.LANDSCAPE }.resumePositionMs)
+    }
 }

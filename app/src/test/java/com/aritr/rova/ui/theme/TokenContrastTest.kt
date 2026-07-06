@@ -109,6 +109,30 @@ class TokenContrastTest {
     }
 
     @Test
+    fun `media-progress hairline meets 3 to 1 over the bottom-scrim composite in every palette`() {
+        // v3.3 Library playback-progress hairline (--media-progress). A 2dp non-text UI graphic,
+        // so SC 1.4.11 (>=3:1), asserted against its real backing: the bento tile's bottom scrim
+        // stop (seam #060308 @ 0.58) composited over the dark-scene reference — the same
+        // scene-variable caveat as the record-chrome tokens. Frozen spec v3.3 names this exact
+        // contract as WHY mediaProgress is a distinct semantic role and not accentFill reuse.
+        val seam = intArrayOf(0x06, 0x03, 0x08)
+        val a = 0.58
+        val bg = IntArray(3) { (a * seam[it] + (1 - a) * chromeDarkRef[it]).toInt() }
+        val bgLum = ContrastMath.relativeLuminance(bg[0], bg[1], bg[2])
+        com.aritr.rova.ui.theme.rovaPalettes.forEach { (theme, palette) ->
+            val fill = com.aritr.rova.ui.library.LibraryColorSpec.mediaProgress(palette)
+            val lum = ContrastMath.relativeLuminance(
+                (fill.red * 255).toInt(), (fill.green * 255).toInt(), (fill.blue * 255).toInt(),
+            )
+            val ratio = ContrastMath.contrastRatio(lum, bgLum)
+            assertTrue(
+                "$theme mediaProgress must meet 3:1 over the bottom-scrim composite (was ${"%.2f".format(ratio)}:1)",
+                ratio >= 3.0,
+            )
+        }
+    }
+
+    @Test
     fun `light quiet text (solid onSurfaceVariant) meets AA over the light background`() {
         // B2: on light, rovaQuietText returns SOLID onSurfaceVariant (Ink80)
         // over the light background (Sand30). Regression guard for the AA fix.

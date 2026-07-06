@@ -42,6 +42,12 @@ data class LibraryColors(
     val heroScrim: Brush,
     val accentFill: Color,
     val accentInk: Color,
+    /**
+     * v3.3 playback-progress hairline over media. Resolves to [accentFill] (themed like the LATEST
+     * chip) but is a DISTINCT semantic role: its contract is ≥3:1 against the tile's bottom-scrim
+     * composite in every palette (accentFill's own contract is AA vs accentInk) — TokenContrastTest.
+     */
+    val mediaProgress: Color,
     val fill1: Color,
     val fill2: Color,
     val press: Color,
@@ -72,6 +78,7 @@ fun rememberLibraryColors(): LibraryColors {
             heroScrim = Brush.verticalGradient(listOf(Color.Transparent, LibraryColorSpec.OVERLAY_SCRIM)),
             accentFill = LibraryColorSpec.accentFill(palette),
             accentInk = LibraryColorSpec.accentInk(palette),
+            mediaProgress = LibraryColorSpec.mediaProgress(palette),
             fill1 = LibraryColorSpec.fill1(palette),
             fill2 = LibraryColorSpec.fill2(palette),
             press = LibraryColorSpec.press(palette),
@@ -148,6 +155,14 @@ object LibraryColorSpec {
 
     /** On-accent label ink — white when it clears AA on the resolved fill, else [ACCENT_INK_DARK]. */
     fun accentInk(p: RovaPalette): Color = if (accentCta(p).contentWhite) Color.White else ACCENT_INK_DARK
+
+    /**
+     * v3.3 `--media-progress` — the playback-progress hairline paint. Same resolved value as
+     * [accentFill] today, but a separate semantic role by design (frozen spec v3.3): the hairline
+     * sits over the bottom-scrim composite, so ITS contract is ≥3:1 against that composite in all
+     * 12 palettes (verified by TokenContrastTest), not accentFill's fill-vs-ink AA.
+     */
+    fun mediaProgress(p: RovaPalette): Color = accentFill(p)
 
     // Frozen state-layer alphas over textHigh (bento spec — not theme-tunable).
     private const val FILL1_ALPHA = 0.05f
