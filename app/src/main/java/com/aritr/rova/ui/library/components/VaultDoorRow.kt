@@ -55,7 +55,9 @@ fun VaultDoorRow(
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = LibraryDimens.screenPadH)
+            // Frozen spec `.vault{margin:0 16px 16px}` — 16dp below the door before
+            // the first day section (pixel-parity fix, vertical-rhythm pass).
+            .padding(start = LibraryDimens.screenPadH, end = LibraryDimens.screenPadH, bottom = 16.dp)
             .heightIn(min = ROW_MIN_HEIGHT)
             .background(colors.fill1, shape)
             .border(ROW_BORDER, colors.hairline, shape)

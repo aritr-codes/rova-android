@@ -765,9 +765,23 @@ fun LibraryScreen(
                                         }
                                         is BentoListIndex.Entry.BentoRow -> item(key = key) {
                                             val mod = bentoItemMotion(reduceMotion, bootActive, staggerIdx)
+                                            // Frozen-spec vertical rhythm (pixel-parity fix): `.bento{gap:10px}`
+                                            // puts 10dp above every row (the first row's 10dp doubles as
+                                            // `.dayhdr{margin-bottom:10px}`), and `.day{margin-bottom:24px}`
+                                            // follows a day's last row. Padding lives on the item (not LazyColumn
+                                            // spacedBy) so the sticky header box stays 37dp and scrubber/scroll
+                                            // index math is untouched.
+                                            val next = built.entries.getOrNull(i + 1)
+                                            val lastRowOfDay = next !is BentoListIndex.Entry.BentoRow ||
+                                                next.dayEpochMillis != entry.dayEpochMillis
                                             Row(
                                                 mod
-                                                    .padding(horizontal = 16.dp)
+                                                    .padding(
+                                                        start = 16.dp,
+                                                        end = 16.dp,
+                                                        top = 10.dp,
+                                                        bottom = if (lastRowOfDay) 24.dp else 0.dp,
+                                                    )
                                                     .height(entry.pattern.heightDp.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                             ) {
@@ -814,9 +828,11 @@ fun LibraryScreen(
                                     val mod = bentoItemMotion(reduceMotion, bootActive, BentoListIndex.LEADING_ITEM_COUNT + built.entries.size)
                                     Text(
                                         stringResource(R.string.library_endcap, collection.size),
+                                        // Frozen spec `.endcap{padding:26px 0 44px}` — top 26 / bottom 44,
+                                        // no horizontal inset (the old 26h/44v was a transposed read).
                                         modifier = mod
                                             .fillMaxWidth()
-                                            .padding(horizontal = 26.dp, vertical = 44.dp),
+                                            .padding(top = 26.dp, bottom = 44.dp),
                                         textAlign = TextAlign.Center,
                                         color = LocalGlassEnvironment.current.palette.textFaint,
                                         fontSize = 10.5.sp,
