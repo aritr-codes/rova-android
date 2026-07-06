@@ -94,11 +94,14 @@ data class VideoItem(
      * legacy file-only entries that the fallback file-system scan
      * still surfaces for upgrade continuity.
      *
-     * The History delete path uses this to call
-     * [com.aritr.rova.data.SessionStore.discardSession] AFTER a
-     * successful artifact delete, so the per-session manifest +
-     * `videos/<sessionId>/` directory do not linger as invisible
-     * disk waste once the gallery row is gone.
+     * The History delete path groups artifacts by this id so
+     * [com.aritr.rova.data.SessionStore.discardSession] fires at most
+     * once per session, and only when [SessionDiscardPlanner] marks it
+     * eligible — every batch artifact deleted AND no surviving sibling
+     * still listed (ADR-0036, batch-level in [HistoryDeleter.deleteAll]).
+     * A discarded manifest removes the `videos/<sessionId>/` directory
+     * so it does not linger as invisible disk waste once the last row
+     * is gone; a session with a surviving sibling keeps its manifest.
      */
     val sessionId: String? = null,
     /**
