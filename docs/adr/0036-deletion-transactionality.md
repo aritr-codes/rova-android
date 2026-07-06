@@ -1,6 +1,6 @@
 # ADR-0036: Deletion transactionality — manifest-discard-last
 
-**Status:** Accepted (2026-07-06)
+**Status:** Accepted (2026-07-06) — **Implemented & merged 2026-07-06** (PR #174, master `560fb9b1`). The invariants I1–I5 remain a standing contract for the Library delete + retention pipelines; this ADR stays in force (not superseded). Device-verified on RZCYA1VBQ2H; a dedicated static gate (`checkDiscardSessionGated`) remains **deferred** (owner decision) with the pure-planner + pipeline tests as the protection.
 
 ## Context
 
