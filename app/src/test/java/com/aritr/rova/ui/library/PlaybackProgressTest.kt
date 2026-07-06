@@ -42,10 +42,12 @@ class PlaybackProgressTest {
         assertNull(PlaybackProgress.fraction(61_000L, 60_000L))
     }
 
-    @Test fun `percent is the rounded spoken fraction`() {
+    @Test fun `percent is the rounded spoken fraction, floored at 1 (v3_3_1)`() {
         assertEquals(37, PlaybackProgress.percent(0.374f))
         assertEquals(38, PlaybackProgress.percent(0.375f))
-        assertEquals(0, PlaybackProgress.percent(0.002f))
+        // v3.3.1: a visible resume point never speaks "0%" — sub-0.5% fractions floor to 1.
+        assertEquals(1, PlaybackProgress.percent(0.002f))
+        assertEquals(1, PlaybackProgress.percent(0.005f))
         assertEquals(100, PlaybackProgress.percent(1f))
     }
 }

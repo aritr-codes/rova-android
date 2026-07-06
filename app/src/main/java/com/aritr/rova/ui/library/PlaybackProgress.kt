@@ -22,6 +22,10 @@ object PlaybackProgress {
         return (pos.toDouble() / durationMs).toFloat().coerceAtMost(1f)
     }
 
-    /** Spoken percent for the tile label ("partially watched N%") — Math.round of the spec. */
-    fun percent(fraction: Float): Int = Math.round(fraction * 100f)
+    /**
+     * Spoken percent for the tile label ("partially watched N%") — the spec's `pgSpeak`,
+     * v3.3.1: floors at 1 so a visible resume point never announces the self-contradictory
+     * "partially watched 0%". Spoken alternative only — [fraction] stays unfloored.
+     */
+    fun percent(fraction: Float): Int = Math.round(fraction * 100f).coerceAtLeast(1)
 }
