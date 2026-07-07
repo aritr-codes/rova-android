@@ -6,6 +6,8 @@
 > **Source of truth for export options surface:** `mockups/new_uiux/09-notification-export.html` (overlay-only — sheet on `s-lib`).
 > **Branch:** `master`.
 >
+> **Route args amended — ADR-0037 playback identity (2026-07-07, PR #175):** the player route is now `player/{sessionId}?side={side}&secure={secure}&seg={seg}`. The optional args carry the full `PlaybackIdentity` (sessionId, side?, segmentIndex?) minted by the Library — "transported, never reconstructed". `seg` selects a kept-raw segment (MULTI_SEGMENT_KEPT) by index into the full interleaved `manifest.segments`; missing `seg` = merged playback (byte-identical pre-0037 path); a present-but-malformed `seg` parses to `-1` and is rejected fail-closed by the resolver's validity matrix. See `docs/adr/0037-playback-identity-contract.md`.
+>
 > **Nav model amended — Record-home redesign R1 (2026-05-12, branch `feat/record-home-redesign-r1`):** there is no longer an app-wide persistent `NavigationBar`. The `record` screen is the home and carries its OWN bottom nav (Library / center Start/Stop FAB / Settings). `history` and `settings` are now **drill-down** routes — pushed onto the back stack with `launchSingleTop = true`, each with a back arrow (`navController.popBackStack()`), like `player/{sessionId}` already was. The old `TOP_LEVEL_ROUTES` collapse mechanism is removed. Back-stack: `record` is the post-onboarding start destination; Library/Settings push onto it; system-back from Library/Settings → Record; system-back from Record → exits the app. See `docs/superpowers/specs/2026-05-12-record-home-redesign-r1-design.md` for the full R1 spec.
 
 ---
