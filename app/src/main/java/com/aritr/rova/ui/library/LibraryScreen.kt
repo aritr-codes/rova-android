@@ -131,7 +131,7 @@ import java.util.TimeZone
 fun LibraryScreen(
     viewModel: HistoryViewModel = viewModel(),
     onNavigateToRecord: () -> Unit = {},
-    onOpenPlayer: (sessionId: String, side: VideoSide?) -> Unit = { _, _ -> },
+    onOpenPlayer: (sessionId: String, side: VideoSide?, segmentIndex: Int?) -> Unit = { _, _, _ -> },
     onOpenVault: () -> Unit = {},
     onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -308,7 +308,7 @@ fun LibraryScreen(
             // Hand the already-decoded tile thumbnail to the player so it paints over the black
             // shutter until the first video frame renders (no "block" flash on entry).
             com.aritr.rova.ui.screens.player.PlayerPosterHandoff.set(sid, item.thumbnail)
-            onOpenPlayer(sid, item.side)
+            onOpenPlayer(sid, item.side, item.segmentIndex)
         } else {
             // Legacy file-only row (no manifest): keep the PreviewActivity path.
             item.file?.let { f ->

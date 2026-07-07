@@ -105,6 +105,7 @@ fun PlayerScreen(
     // B5 / ADR-0025 — deterministic secure flag passed by the vault list
     // (true from the first composition). See the `shouldSecure` block below.
     secure: Boolean = false,
+    segmentIndex: Int? = null,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -114,9 +115,11 @@ fun PlayerScreen(
     // side), each routing to a distinct VM/ExoPlayer instance. Keying
     // by sessionId alone would force the second nav to re-bind the
     // first side's player to the second URI mid-composition.
+    // Task 4 — segmentIndex also joins the key so a kept-raw segment gets
+    // its own VM/ExoPlayer instance (ADR-0037 §3).
     val viewModel: PlayerViewModel = viewModel(
-        factory = PlayerViewModel.factory(app, sessionId, side),
-        key = "player-$sessionId-${side?.name ?: "single"}"
+        factory = PlayerViewModel.factory(app, sessionId, side, segmentIndex),
+        key = "player-$sessionId-${side?.name ?: "single"}-${segmentIndex ?: "merged"}"
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
