@@ -4,6 +4,7 @@ import com.aritr.rova.data.ExportState
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.R
 import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.Terminated
 import com.aritr.rova.data.VaultState
 import com.aritr.rova.service.dualrecord.VideoSide
 import com.aritr.rova.ui.text.UiText
@@ -25,10 +26,12 @@ import com.aritr.rova.ui.text.UiText
  *  - Tier 2 / Tier 3 (pre-Q): the artifact is at
  *    `manifest.publicTargetPath`. ExoPlayer accepts `file://` URIs.
  *
- * The screen never plays a non-finalized session: a row only reaches
- * the player from the History list, which is itself filtered to
- * [ExportState.FINALIZED]. The resolver re-asserts that gate so a
- * future caller (deep link, programmatic open) cannot bypass it.
+ * ADR-0037 §5 — the resolver owns the full playback-identity validity
+ * matrix (V1–V5), not just the merged-artifact FINALIZED gate: a
+ * `segmentIndex` argument names a kept-raw segment artifact (a
+ * MULTI_SEGMENT_KEPT session's individual segment file) and is validated
+ * on its own branch, before the FINALIZED gate below, which applies only
+ * to the merged artifact kind.
  *
  * This object is intentionally NOT folded into [HistoryArtifactMapper]
  * because the two have divergent return shapes: History needs a
@@ -61,6 +64,17 @@ internal object PlayerUriResolver {
     const val VAULT_FILE_SCHEME = "vaultfile://"
 
     /**
+     * ADR-0037 §5 V2 — sentinel scheme for a kept-raw segment artifact:
+     * `keptsegment://<bare segment filename>`. The resolver stays pure (it
+     * cannot know the app-private session directory); the Android wrapper
+     * ([PlayerViewModel.resolvePlaybackUri]) joins the filename with
+     * `sessionStore.sessionDir(sessionId)` and round-trips through
+     * FileProvider — same mechanism and reason as [VAULT_FILE_SCHEME]
+     * (app-private path ⇒ FileUriExposedException on raw file://).
+     */
+    const val KEPT_SEGMENT_SCHEME = "keptsegment://"
+
+    /**
      * Resolves a manifest into [PlayerUiState]. `null` manifest →
      * [PlayerUiState.Unavailable]; non-finalized export → Unavailable;
      * Tier 1 with no `pendingUri` → Unavailable; Tier 2/3 with no
@@ -88,9 +102,46 @@ internal object PlayerUriResolver {
      * pre-smoke-fix-#3 behavior. The [side] default of `null`
      * preserves source-compat for single-mode callers that omit it.
      */
-    fun resolve(manifest: SessionManifest?, side: VideoSide? = null): PlayerUiState {
+    fun resolve(
+        manifest: SessionManifest?,
+        side: VideoSide? = null,
+        segmentIndex: Int? = null
+    ): PlayerUiState {
         if (manifest == null) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_available))
+        }
+        // ADR-0037 §5 — kept-raw segment identity dispatch. segmentIndex != null
+        // names a kept-raw segment artifact and never consults exportState (which
+        // describes only the merged artifact kind). Fail closed on every
+        // malformed / mismatched shape: V4 (non-KEPT manifest — a FINALIZED
+        // session's segment files are merge inputs the cleanup path may delete),
+        // V4b (side + segmentIndex — coordinates are mutually exclusive, §1),
+        // V5 (index out of range).
+        if (segmentIndex != null) {
+            if (side != null) {
+                return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_available)) // V4b
+            }
+            if (manifest.terminated != Terminated.MULTI_SEGMENT_KEPT) {
+                return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_available)) // V4
+            }
+            val seg = manifest.segments.getOrNull(segmentIndex)
+                ?: return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_file_not_found)) // V5
+            // Single-clip timeline (ADR-0037 §5): the artifact IS one clip.
+            val stamp = seg.startedAtWallClock
+            val wallStart = stamp
+                ?: (manifest.startedAt +
+                    manifest.segments.take(segmentIndex).sumOf { it.durationMs })
+            return PlayerUiState.Ready(
+                mediaUri = KEPT_SEGMENT_SCHEME + seg.filename,
+                sessionId = manifest.sessionId,
+                startedAt = manifest.startedAt,
+                segmentDurationsMs = listOf(seg.durationMs),
+                perClipDurationMs = manifest.config.durationSeconds * 1000L,
+                totalClips = 1,
+                totalDurationFromSegmentsMs = seg.durationMs,
+                segmentWallStartsMs = listOf(wallStart),
+                wallStartIsApproxMask = listOf(stamp == null)
+            )
         }
         if (manifest.exportState != ExportState.FINALIZED) {
             return PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_not_finished))

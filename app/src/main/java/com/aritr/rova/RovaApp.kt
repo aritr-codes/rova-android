@@ -150,31 +150,39 @@ class RovaApp : Application() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
     }
 
-    /** Reads the saved resume position for a recording side, or null if unavailable. */
+    /**
+     * Reads the saved resume position for a recording side, or null if unavailable.
+     * Slot derivation delegated to RecordingIdentity.slotFor (ADR-0037 §3 — no hand-built slots).
+     */
     suspend fun readResumePosition(
         sessionId: String,
-        side: com.aritr.rova.service.dualrecord.VideoSide?
+        side: com.aritr.rova.service.dualrecord.VideoSide?,
+        segmentIndex: Int? = null
     ): Long? {
         val key = com.aritr.rova.ui.library.RecordingIdentity.MetaKey(
             canonical = com.aritr.rova.ui.library.RecordingIdentity.sessionKey(sessionId),
             legacy = null
         )
         return libraryMetadataStore.get(key)
-            ?.positionFor(com.aritr.rova.ui.library.RecordingIdentity.sideSlot(side))
+            ?.positionFor(com.aritr.rova.ui.library.RecordingIdentity.slotFor(side, segmentIndex))
     }
 
-    /** Persists the current playback position; dispatches on [sidecarWriteScope] and survives VM teardown. */
+    /**
+     * Persists the current playback position; dispatches on [sidecarWriteScope] and survives VM teardown.
+     * Slot derivation delegated to RecordingIdentity.slotFor (ADR-0037 §3 — no hand-built slots).
+     */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun writeResumePosition(
         sessionId: String,
         side: com.aritr.rova.service.dualrecord.VideoSide?,
+        segmentIndex: Int? = null,
         positionMs: Long
     ) {
         val key = com.aritr.rova.ui.library.RecordingIdentity.MetaKey(
             canonical = com.aritr.rova.ui.library.RecordingIdentity.sessionKey(sessionId),
             legacy = null
         )
-        val slot = com.aritr.rova.ui.library.RecordingIdentity.sideSlot(side)
+        val slot = com.aritr.rova.ui.library.RecordingIdentity.slotFor(side, segmentIndex)
         sidecarWriteScope.launch {
             runCatching {
                 libraryMetadataStore.update(key) { it.withPosition(slot, positionMs) }

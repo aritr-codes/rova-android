@@ -57,9 +57,10 @@ class PlayerViewModel(
     application: Application,
     private val sessionId: String,
     private val side: VideoSide?,
+    private val segmentIndex: Int? = null,
     private val loadManifest: suspend (String) -> SessionManifest?,
-    private val readResume: suspend (String, VideoSide?) -> Long? = { _, _ -> null },
-    private val writeResume: (String, VideoSide?, Long) -> Unit = { _, _, _ -> },
+    private val readResume: suspend (String, VideoSide?, Int?) -> Long? = { _, _, _ -> null },
+    private val writeResume: (String, VideoSide?, Int?, Long) -> Unit = { _, _, _, _ -> },
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
@@ -159,14 +160,14 @@ class PlayerViewModel(
             }
             _isVaulted.value =
                 manifest?.vaultState == com.aritr.rova.data.VaultState.VAULTED
-            val resolved = PlayerUriResolver.resolve(manifest, side)
+            val resolved = PlayerUriResolver.resolve(manifest, side, segmentIndex)
             // Task 8 — read the saved resume position before attaching so
             // ExoPlayer can seek to it as the initial position (no first-frame
             // flash). totalDurationFromSegmentsMs is available on the Ready
             // value; use 0L for Unavailable (ResumePolicy returns 0 for that).
             val totalDurationMs = (resolved as? PlayerUiState.Ready)
                 ?.totalDurationFromSegmentsMs ?: 0L
-            val savedPosition = withContext(Dispatchers.IO) { runCatching { readResume(sessionId, side) }.getOrNull() }
+            val savedPosition = withContext(Dispatchers.IO) { runCatching { readResume(sessionId, side, segmentIndex) }.getOrNull() }
             val startMs = PlayerResumeMath.startPositionMs(savedPosition, totalDurationMs)
             // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
             // uiState to Ready. The screen's `update` block reads
@@ -235,6 +236,15 @@ class PlayerViewModel(
      * rooted at `res/xml/file_paths.xml`'s `videos/` entry.
      */
     private fun resolvePlaybackUri(app: Application, uri: String): Uri {
+        if (uri.startsWith(PlayerUriResolver.KEPT_SEGMENT_SCHEME)) {
+            // ADR-0037 §5 V2 — kept-raw segment file lives in the app-private
+            // session dir; FileProvider round-trip for the same reason as vault.
+            val filename = uri.removePrefix(PlayerUriResolver.KEPT_SEGMENT_SCHEME)
+            val dir = (app as RovaApp).sessionStore.sessionDir(sessionId)
+            return androidx.core.content.FileProvider.getUriForFile(
+                app, "${app.packageName}.provider", java.io.File(dir, filename)
+            )
+        }
         if (!uri.startsWith(PlayerUriResolver.VAULT_FILE_SCHEME)) {
             return Uri.parse(uri)
         }
@@ -248,7 +258,7 @@ class PlayerViewModel(
 
     private fun persistPosition() {
         val pos = exoPlayer?.currentPosition?.coerceAtLeast(0L) ?: return
-        writeResume(sessionId, side, pos)
+        writeResume(sessionId, side, segmentIndex, pos)
     }
 
     fun togglePlayPause() {
@@ -477,7 +487,8 @@ class PlayerViewModel(
         fun factory(
             app: RovaApp,
             sessionId: String,
-            side: VideoSide? = null
+            side: VideoSide? = null,
+            segmentIndex: Int? = null
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -492,9 +503,10 @@ class PlayerViewModel(
                         application = app,
                         sessionId = sessionId,
                         side = side,
+                        segmentIndex = segmentIndex,
                         loadManifest = loader,
-                        readResume = { sid, s -> app.readResumePosition(sid, s) },
-                        writeResume = { sid, s, pos -> app.writeResumePosition(sid, s, pos) },
+                        readResume = { sid, s, seg -> app.readResumePosition(sid, s, seg) },
+                        writeResume = { sid, s, seg, pos -> app.writeResumePosition(sid, s, seg, pos) },
                     ) as T
                 }
             }

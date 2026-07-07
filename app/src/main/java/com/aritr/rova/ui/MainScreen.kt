@@ -193,7 +193,7 @@ fun MainScreen(
                 LibraryScreen(
                     onNavigateToRecord = backToRecordRetaining,
                     onOpenVault = onOpenVault,
-                    onOpenPlayer = { sessionId, side ->
+                    onOpenPlayer = { sessionId, side, segmentIndex ->
                         // Phase 2.5 — argumented routes do NOT use
                         // launchSingleTop because each (route, args)
                         // pair is its own back-stack entry; reusing
@@ -207,10 +207,17 @@ fun MainScreen(
                         // the two cards per sessionId. Single-mode omits
                         // the query arg so the route stays byte-identical
                         // to the pre-smoke-fix-#3 shape.
-                        val route = if (side != null) {
+                        var route = if (side != null) {
                             "player/$sessionId?side=${side.name}"
                         } else {
                             "player/$sessionId"
+                        }
+                        // Task 4 / ADR-0037 §3 — kept-raw rows always have
+                        // side == null, so in practice this appends
+                        // "?seg=N" (V4b: side + segmentIndex are mutually
+                        // exclusive coordinates).
+                        if (segmentIndex != null) {
+                            route += (if ('?' in route) "&" else "?") + "seg=$segmentIndex"
                         }
                         navController.navigate(route)
                     },
@@ -218,7 +225,7 @@ fun MainScreen(
                 )
             }
             composable(
-                route = "player/{sessionId}?side={side}&secure={secure}",
+                route = "player/{sessionId}?side={side}&secure={secure}&seg={seg}",
                 arguments = listOf(
                     navArgument("sessionId") { type = NavType.StringType },
                     navArgument("side") {
@@ -232,6 +239,14 @@ fun MainScreen(
                     navArgument("secure") {
                         type = NavType.BoolType
                         defaultValue = false
+                    },
+                    // Task 4 / ADR-0037 §3 — kept-raw segment index. StringType
+                    // because NavType.IntType cannot be nullable; parsed
+                    // fail-closed to null below.
+                    navArgument("seg") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -253,6 +268,14 @@ fun MainScreen(
                 // the player hadn't yet acquired via isVaulted the flag dropped
                 // to zero and steady-state playback was screenshottable.
                 val secure = backStackEntry.arguments?.getBoolean("secure") ?: false
+                // Task 4 / ADR-0037 §3 — fail-closed parse. A MISSING seg arg is
+                // the merged identity (null). A PRESENT-but-unparseable seg arg
+                // must NOT silently degrade to merged playback ("transported,
+                // never reconstructed") — it becomes -1, which the resolver
+                // rejects as out-of-range (V5). Unreachable from real transport
+                // (the Library mints from a typed Int?; no navDeepLink exists) —
+                // codex final-review hardening, 2026-07-07.
+                val segmentIndex = backStackEntry.arguments?.getString("seg")?.let { it.toIntOrNull() ?: -1 }
                 RovaDarkSurface {
                     CompositionLocalProvider(
                         LocalGlassEnvironment provides PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current),
@@ -261,6 +284,7 @@ fun MainScreen(
                             sessionId = sessionId,
                             side = side,
                             secure = secure,
+                            segmentIndex = segmentIndex,
                             onBack = { navController.popBackStack() }
                         )
                     }

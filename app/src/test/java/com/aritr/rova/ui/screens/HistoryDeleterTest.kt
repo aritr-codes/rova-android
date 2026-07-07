@@ -1,9 +1,22 @@
 package com.aritr.rova.ui.screens
 
+import com.aritr.rova.data.AudioMode
+import com.aritr.rova.data.ExportState
+import com.aritr.rova.data.ExportTier
+import com.aritr.rova.data.SegmentRecord
+import com.aritr.rova.data.SessionConfig
+import com.aritr.rova.data.SessionManifest
+import com.aritr.rova.data.SessionStore
+import com.aritr.rova.data.StopReason
+import com.aritr.rova.data.Terminated
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
@@ -21,6 +34,21 @@ import java.io.File
  * discard destroys them (Defect B, 2026-07-06 branch analysis).
  */
 class HistoryDeleterTest {
+
+    @get:Rule
+    val tmp: TemporaryFolder = TemporaryFolder()
+
+    private lateinit var store: SessionStore
+
+    @Before
+    fun setUpStore() {
+        store = SessionStore(tmp.newFolder("videos"))
+    }
+
+    @After
+    fun tearDownStore() {
+        store.close()
+    }
 
     private fun item(
         sessionId: String? = null,
@@ -236,5 +264,65 @@ class HistoryDeleterTest {
         )
         assertTrue(failed.isEmpty())
         assertTrue("kept sibling still listed → no discard", discardCalls.isEmpty())
+    }
+
+    // ---- ADR-0037 §1: segments-array stability ----
+
+    @Test
+    fun `subset delete never reorders or compacts the segments array`() {
+        // Real SessionStore (not the fake lambdas above): a 3-segment
+        // MULTI_SEGMENT_KEPT session, subset-delete ONE segment's file
+        // (siblings stay listed → I2 keeps the manifest per the defect-B
+        // test above), then reload and diff manifest.segments byte-for-byte
+        // against the pre-delete array (ADR-0037 §1 — append-only at tail,
+        // never reordered/compacted by a deletion).
+        val sid = "s-adr37-stability"
+        val segments = (0..2).map { i ->
+            SegmentRecord(
+                filename = "segment_%04d.mp4".format(i + 1),
+                durationMs = 1_000L,
+                sizeBytes = 1L,
+                sha1 = "sha-$i",
+            )
+        }
+        val dir = store.sessionDir(sid).also { it.mkdirs() }
+        segments.forEach { seg -> File(dir, seg.filename).writeBytes(byteArrayOf(0x00)) }
+        val manifest = SessionManifest(
+            sessionId = sid,
+            startedAt = 0L,
+            config = SessionConfig(durationSeconds = 5, intervalSeconds = 60, resolution = "720p", loopCount = 0),
+            segments = segments,
+            exportTier = ExportTier.TIER1_API29_PLUS,
+            exportState = ExportState.NOT_STARTED,
+            terminated = Terminated.MULTI_SEGMENT_KEPT,
+            terminatedAt = 1L,
+            stopRequested = false,
+            stopReason = StopReason.NONE,
+            audioMode = AudioMode.VIDEO_ONLY,
+        )
+        File(dir, "manifest.json").writeText(manifest.toJson().toString())
+
+        val items = segments.mapIndexed { index, seg ->
+            item(sessionId = sid, name = "unused-$index").copy(
+                file = File(dir, seg.filename),
+                segmentIndex = index,
+            )
+        }
+        val deleter = HistoryDeleter(
+            deleteArtifact = { it.file?.delete() ?: false },
+            discardSession = { s -> store.discardSession(s) },
+        )
+        // Delete only segment 0's file; segments 1 and 2 stay listed —
+        // sibling survivors keep the manifest (I2), so discardSession
+        // must never fire and the array must survive untouched.
+        val failed = deleter.deleteAll(listOf(items[0]), listedItems = items)
+        assertTrue(failed.isEmpty())
+
+        val reloaded = store.loadManifest(sid)!!
+        assertEquals(
+            "manifest.segments must stay element-for-element identical after a subset delete",
+            segments,
+            reloaded.segments,
+        )
     }
 }

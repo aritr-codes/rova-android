@@ -1,5 +1,7 @@
 package com.aritr.rova.ui.library
 
+import com.aritr.rova.service.dualrecord.VideoSide
+
 /**
  * Session-level sidecar metadata for one recording. favorite/customTitle/lastPlayedAt are
  * session-level; playback position is per-side (DualShot P+L has two independent streams), carried
@@ -14,9 +16,27 @@ data class LibraryMetadataEntry(
     fun isEmpty(): Boolean =
         !favorite && customTitle == null && lastPlayedAt == null && positionsBySide.values.none { it > 0L }
 
-    /** Saved position for a side slot; a P+L side with no own value falls back to single "". */
-    fun positionFor(slot: String): Long? =
-        positionsBySide[slot] ?: if (slot.isNotEmpty()) positionsBySide[""] else null
+    /**
+     * Saved position for a slot. A P+L side with no own value falls back to the
+     * single "" slot (pre-seam grace). Segment slots ("#seg…", ADR-0037 §4) are
+     * EXACT MATCH ONLY — falling a kept-raw clip back to the session position
+     * would bleed resume state across distinct playable artifacts.
+     */
+    fun positionFor(slot: String): Long? = when {
+        slot.startsWith("#seg") -> positionsBySide[slot]
+        slot.isNotEmpty() -> positionsBySide[slot] ?: positionsBySide[""]
+        else -> positionsBySide[slot]
+    }
+
+    /**
+     * Hairline resume read (spec v3.3 + ADR-0037 §4, review round 1) — EXACT slot read, never
+     * [positionFor]: the Library hairline must not paint a legacy ""-slot
+     * position on a named DualShot side, and a kept-raw segment row reads its
+     * own "#seg<N>" slot only — no resume bleed between distinct playable
+     * artifacts. The player keeps [positionFor].
+     */
+    fun hairlineResumeMs(side: VideoSide?, segmentIndex: Int?): Long? =
+        positionsBySide[RecordingIdentity.slotFor(side, segmentIndex)]
 
     /** Returns a copy with [slot] set to [positionMs], or the slot dropped when non-positive. */
     fun withPosition(slot: String, positionMs: Long): LibraryMetadataEntry {
