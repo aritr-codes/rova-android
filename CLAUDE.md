@@ -210,9 +210,48 @@ If a UX or visual change is desired after Design Freeze, **the HTML specificatio
 - At **Freeze design**, exact values (dp/sp grids, colors, radii, motion durations/easings) are inlined into the implementation spec (existing mockups convention), and any behavioral invariants get their ADR amendment before code.
 - **Pixel-match review** compares device screenshots against the frozen HTML before merge; mismatches are findings.
 
+## Independent Review Workflow
+
+Independent review is **mandatory** before merge. The reviewing implementation may change over time — the workflow describes **roles, not tools**, and must never depend on any particular model or vendor. Whoever (or whatever) fills the Review Agent role, the contract below holds.
+
+**Canonical pipeline:**
+
+```mermaid
+flowchart TD
+    A[Research] --> B[Implementer]
+    B --> C[Review]
+    C --> D[Reconciliation]
+    D --> D2[Documentation / ADR]
+    D2 --> E[Verification]
+    E --> F[Release]
+    F --> G[Merge]
+```
+
+- The **Implementer Agent** owns design and implementation (and its tests + docs).
+- The **Review Agent** independently validates the implementation. It is never the same agent (or context) that produced the change.
+- **Reconciliation** resolves findings: every **Required Fix** is fixed, or the disagreement is explicitly surfaced to the owner ("review flagged X; went with Y because Z"). The Implementer reconciles; the Review Agent does not fix.
+- **Documentation/ADR updates** capture any architectural decision the cycle produced — ADR clause amended, matching `check*` gate extended, before code lands (per the existing ADR workflow above).
+- **Merge occurs only after review and reconciliation** (and, for behavior-touching work, device verification per existing conventions).
+
+The Review Agent contract:
+
+- Remains **independent** from implementation — fresh context, no shared draft state.
+- **Distrusts implementation summaries until evidenced** — validates actual repo state (reads files, diffs, test output; never trusts a summary), requests evidence whenever needed, and challenges assumptions.
+- Classifies each finding as **Required Fix** / **Recommended Improvement** / **Observation**.
+- Produces exactly one verdict: **GO** / **GO WITH FIXES** / **NO-GO**.
+
+## Agent Roles
+
+- **Implementer Agent** — design, implementation, documentation, testing, reconciliation of review findings. **Never self-approves.**
+- **Review Agent** — independently validates the implementation: architecture, correctness, maintainability, tests. Prefers repository evidence over implementation summaries. Produces findings (Required Fix / Recommended Improvement / Observation) and one verdict (GO / GO WITH FIXES / NO-GO). *The Review Agent attempts to falsify the implementation rather than confirm it.*
+- **Research Agent** — internal repository investigation first; external research when appropriate. Labels every claim: **VERIFIED** / **RECOMMENDATION** / **ASSUMPTION** / **FUTURE** / **DISPUTED**. The last three keep architectural branches open without relying on web research alone — an ASSUMPTION or DISPUTED branch is a legitimate design input as long as it stays labeled.
+- **Release Agent** — release readiness: repository audit, documentation consistency, ADR status, backlog status, version verification, changelog, git state, packaging verification, and known-limitations-vs-blockers triage.
+
+Roles are responsibilities, not fixed processes — one session may wear several hats sequentially, but the Review Agent role must always be filled by an independent context.
+
 ## Existing tooling guidance (global)
 
-This project inherits two project-level mechanisms from the user's global `CLAUDE.md`:
+Two standing mechanisms apply here — the first is defined by the in-repo "Independent Review Workflow" above (mirrored by the peer-review contract in the user's global `CLAUDE.md`), the second is inherited from the global config:
 
-- **codex MCP peer review** — call `mcp__codex__codex` for code changes >5 lines, architecture/design decisions, security-sensitive recommendations, migration plans, performance claims. Skip for conversational replies, status updates, trivial edits. See `memory/feedback_codex_consult_policy.md` — consult on contested architecture / novel patterns; not for clear-precedent routine choices.
+- **Independent review agent** — dispatch an independent review agent (see "Independent Review Workflow" above) for code changes >5 lines, architecture/design decisions, security-sensitive recommendations, migration plans, performance claims. Skip for conversational replies, status updates, trivial edits. See `memory/feedback_review_agent_consult_policy.md` — consult on contested architecture / novel patterns; not for clear-precedent routine choices.
 - **CodeGraph** is initialized (`.codegraph/` present). **Never** call `codegraph_explore` or `codegraph_context` from the main session — spawn an Explore agent instead. Direct main-session use is limited to `codegraph_search`, `codegraph_callers`, `codegraph_callees`, `codegraph_impact`, `codegraph_node` (targeted lookups before edits, not exploration).

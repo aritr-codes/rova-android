@@ -4,6 +4,35 @@ Living checklist for cutting an internal-beta release of `com.aritr.rova`.
 Update with the actual values per release; the structure is fixed, the
 contents change.
 
+## Release Agent role
+
+This file is the concrete artifact of the **Release Agent** role
+(`CLAUDE.md` → "Agent Roles"). Running a release cut means executing this
+checklist top-to-bottom plus the repo-audit items below, then recording one
+verdict: **GO** / **GO WITH FIXES** / **NO-GO** with the blocker list if not
+GO. Every unchecked item is either resolved or explicitly triaged as a
+**known limitation** (ship) vs a **blocker** (hold).
+
+### Documentation & repo audit (per cut)
+
+- [ ] `pwsh scripts/preflight.ps1` (POSIX: `bash scripts/preflight.sh`) —
+  resolve every `[FLAG]`; untracked `gradle_*.log` noise is whitelisted.
+- [ ] `CLAUDE.md` status tails match reality (ADR statuses, gate count,
+  latest merged PRs).
+- [ ] ADR statuses current in `docs/adr/` (Proposed / Accepted / Closed;
+  amendments dated).
+- [ ] `docs/BACKLOG.md` triaged — items closed by this release marked done;
+  new device-verify findings filed.
+- [ ] Frozen HTML specs in `docs/design/` at the version the shipped
+  Compose transcribes.
+- [ ] Memory index (`memory/MEMORY.md`) pointer updated for the cycle.
+- [ ] Changelog entry written (user-visible changes + known limitations).
+- [ ] Git state: release commit on `master`; `git rev-parse HEAD` matches
+  `origin/master` (trust `rev-parse`/`ls-remote`, not cached `git log`);
+  no stale post-merge branches.
+- [ ] Artifact named per scheme `Rova-<name>-vc<code>-release-<date>`;
+  fresh-install AND upgrade-in-place both launch, record, play back.
+
 ## Current cut
 
 | Field | Value |
