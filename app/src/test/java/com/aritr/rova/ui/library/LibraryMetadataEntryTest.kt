@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.library
 
+import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -85,5 +86,21 @@ class LibraryMetadataEntryTest {
         assertNull(entry.positionFor("#seg0"))          // absent means absent
         // Legacy P+L grace fallback is preserved for side slots:
         assertEquals(5_000L, entry.positionFor("PORTRAIT"))
+    }
+
+    // ADR-0037 §4 + spec v3.3 (review round 1) — hairline is an EXACT read: no
+    // ""-fallback for sides, no session-slot bleed into kept-raw segment rows.
+    @Test
+    fun `hairlineResumeMs reads exact slot only - no bleed`() {
+        val entry = LibraryMetadataEntry(
+            positionsBySide = mapOf("" to 5_000L, "#seg1" to 9_000L, "PORTRAIT" to 7_000L),
+        )
+        // kept-raw segment rows: own slot only
+        assertEquals(9_000L, entry.hairlineResumeMs(null, 1))
+        assertNull(entry.hairlineResumeMs(null, 0))          // NOT 5000 — no bleed
+        // merged rows: legacy slots, still exact (no ""-fallback on named side)
+        assertEquals(5_000L, entry.hairlineResumeMs(null, null))
+        assertEquals(7_000L, entry.hairlineResumeMs(VideoSide.PORTRAIT, null))
+        assertNull(entry.hairlineResumeMs(VideoSide.LANDSCAPE, null))  // NOT 5000
     }
 }

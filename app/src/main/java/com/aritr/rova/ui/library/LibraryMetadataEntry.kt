@@ -1,5 +1,7 @@
 package com.aritr.rova.ui.library
 
+import com.aritr.rova.service.dualrecord.VideoSide
+
 /**
  * Session-level sidecar metadata for one recording. favorite/customTitle/lastPlayedAt are
  * session-level; playback position is per-side (DualShot P+L has two independent streams), carried
@@ -25,6 +27,16 @@ data class LibraryMetadataEntry(
         slot.isNotEmpty() -> positionsBySide[slot] ?: positionsBySide[""]
         else -> positionsBySide[slot]
     }
+
+    /**
+     * Hairline resume read (spec v3.3 + ADR-0037 §4, review round 1) — EXACT slot read, never
+     * [positionFor]: the Library hairline must not paint a legacy ""-slot
+     * position on a named DualShot side, and a kept-raw segment row reads its
+     * own "#seg<N>" slot only — no resume bleed between distinct playable
+     * artifacts. The player keeps [positionFor].
+     */
+    fun hairlineResumeMs(side: VideoSide?, segmentIndex: Int?): Long? =
+        positionsBySide[RecordingIdentity.slotFor(side, segmentIndex)]
 
     /** Returns a copy with [slot] set to [positionMs], or the slot dropped when non-positive. */
     fun withPosition(slot: String, positionMs: Long): LibraryMetadataEntry {
