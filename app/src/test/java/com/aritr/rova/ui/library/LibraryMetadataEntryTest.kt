@@ -74,4 +74,16 @@ class LibraryMetadataEntryTest {
     @Test fun isEmpty_trueWhenOnlyNonPositivePositions() {
         assertTrue(LibraryMetadataEntry(positionsBySide = mapOf("" to 0L)).isEmpty())
     }
+
+    // ADR-0037 §4 (codex BLOCKING finding 2026-07-07) — a kept-raw segment slot
+    // must NEVER inherit the session-level "" position: that is exactly the
+    // cross-artifact resume bleed the contract forbids.
+    @Test
+    fun `positionFor segment slot is exact match with no empty-slot fallback`() {
+        val entry = LibraryMetadataEntry(positionsBySide = mapOf("" to 5_000L, "#seg2" to 9_000L))
+        assertEquals(9_000L, entry.positionFor("#seg2"))
+        assertNull(entry.positionFor("#seg0"))          // absent means absent
+        // Legacy P+L grace fallback is preserved for side slots:
+        assertEquals(5_000L, entry.positionFor("PORTRAIT"))
+    }
 }
