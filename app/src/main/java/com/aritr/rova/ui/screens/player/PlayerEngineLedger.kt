@@ -63,6 +63,16 @@ class PlayerEngineLedger {
         takeoverSnapshots[staleToken] = positionMs
     }
 
+    /**
+     * Review round 2 Required Fix — true only while [token] is the live
+     * owner. The VM gates every player-mutating call on this so a stale
+     * VM (outgoing nav entry whose ON_STOP / late UI callbacks fire after
+     * a newer VM took the player over) can neither pause the new owner's
+     * playback nor persist the new session's position under its own
+     * resume identity.
+     */
+    fun isOwner(token: Int): Boolean = state == State.ACTIVE && token == currentOwner
+
     fun detach(token: Int): DetachDecision {
         if (state == State.ACTIVE && token == currentOwner) {
             currentOwner = null

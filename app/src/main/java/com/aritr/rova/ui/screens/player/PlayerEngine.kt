@@ -106,6 +106,26 @@ class PlayerEngine(private val app: Application) {
         playbackThread = null
     }
 
+    /**
+     * Review round 2 Required Fix — ownership query for the VM's
+     * player-mutating call sites (pause/seek/scrub/persist). Pure read,
+     * no player mutation: stays inside the lifecycle-only boundary.
+     */
+    fun isOwner(token: Int): Boolean {
+        requireMain()
+        return ledger.isOwner(token)
+    }
+
+    /**
+     * Review round 2 Recommended Improvement — true once [destroy] has
+     * released the player. A VM's late onCleared must not call even
+     * `removeListener` on a released instance (Media3 documents released
+     * players as unusable; post-release tolerance is implementation-
+     * defined at 1.4.1).
+     */
+    val isDestroyed: Boolean
+        get() = ledger.state == PlayerEngineLedger.State.DESTROYED
+
     /** Memory-pressure mapping: drop the cache only when nobody is playing. */
     fun destroyIfParked() {
         requireMain()

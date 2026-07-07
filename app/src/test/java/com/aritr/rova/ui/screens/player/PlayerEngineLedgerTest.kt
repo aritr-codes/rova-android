@@ -133,6 +133,23 @@ class PlayerEngineLedgerTest {
         assertEquals(PlayerEngineLedger.State.PARKED, ledger.state)
     }
 
+    // ---- isOwner (review round 2 Required Fix) ---------------------------
+
+    @Test
+    fun `isOwner true only for the live owner`() {
+        val ledger = PlayerEngineLedger()
+        assertFalse(ledger.isOwner(1))
+        val a = ledger.acquire()
+        assertTrue(ledger.isOwner(a.token))
+        val b = ledger.acquire() // takeover
+        assertFalse(ledger.isOwner(a.token))
+        assertTrue(ledger.isOwner(b.token))
+        ledger.detach(b.token) // parked — nobody owns
+        assertFalse(ledger.isOwner(b.token))
+        ledger.destroy()
+        assertFalse(ledger.isOwner(b.token))
+    }
+
     // ---- destroy ---------------------------------------------------------
 
     @Test

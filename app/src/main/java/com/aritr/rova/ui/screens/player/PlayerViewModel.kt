@@ -284,13 +284,27 @@ class PlayerViewModel(
         )
     }
 
+    /**
+     * Review round 2 Required Fix — the shared player means a stale VM's
+     * `exoPlayer` field and the new owner's leased player are the SAME
+     * instance after a takeover. The outgoing nav entry's ON_STOP (which
+     * fires [pauseForBackground] well before onCleared) — or any late UI
+     * callback — must therefore never touch the player unless this VM is
+     * still the live owner: a stale pause would halt the new session's
+     * playback, and a stale persist would write the NEW session's live
+     * position under THIS VM's ADR-0037 resume slot. Every
+     * player-mutating entry point below dereferences through this helper.
+     */
+    private fun ownedPlayer(): ExoPlayer? =
+        exoPlayer?.takeIf { engine.isOwner(leaseToken) }
+
     private fun persistPosition() {
-        val pos = exoPlayer?.currentPosition?.coerceAtLeast(0L) ?: return
+        val pos = ownedPlayer()?.currentPosition?.coerceAtLeast(0L) ?: return
         writeResume(sessionId, side, segmentIndex, pos)
     }
 
     fun togglePlayPause() {
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         if (p.isPlaying) { p.pause(); persistPosition() } else p.play()
         pushProgress()
     }
@@ -305,13 +319,15 @@ class PlayerViewModel(
      * notification surface to drive ambient playback safely).
      */
     fun pauseForBackground() {
-        exoPlayer?.takeIf { it.isPlaying }?.pause()
+        // Review round 2 Required Fix — ownedPlayer(): a stale VM's ON_STOP
+        // during the nav transition must not pause the new owner's playback.
+        ownedPlayer()?.takeIf { it.isPlaying }?.pause()
         persistPosition()
         pushProgress(isPlaying = false)
     }
 
     fun seekRelative(deltaMs: Long) {
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         val target = (p.currentPosition + deltaMs).coerceIn(0L, p.duration.coerceAtLeast(0L))
         p.seekTo(target)
         pushProgress()
@@ -324,7 +340,7 @@ class PlayerViewModel(
      * duration isn't yet known (pre-STATE_READY).
      */
     fun seekTo(positionMs: Long) {
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         val dur = p.duration.takeIf { it > 0L } ?: return
         p.seekTo(positionMs.coerceIn(0L, dur))
         pushProgress()
@@ -343,7 +359,7 @@ class PlayerViewModel(
      * nothing is persisted.
      */
     fun setPlaybackSpeed(speed: Float) {
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         if (!p.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) return
         val applied = PlaybackSpeedPolicy.clampToSupported(speed)
         p.setPlaybackSpeed(applied)
@@ -378,7 +394,7 @@ class PlayerViewModel(
      * position authority to the user's finger.
      */
     fun beginScrub() {
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         scrubWasPlaying = p.isPlaying
         p.pause()
         p.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
@@ -404,7 +420,7 @@ class PlayerViewModel(
     fun updateScrub(targetMs: Long) {
         // M-1 — ignore stray updates not bracketed by an active beginScrub.
         if (!scrubActive) return
-        val p = exoPlayer ?: return
+        val p = ownedPlayer() ?: return
         val dur = p.duration.takeIf { it > 0L } ?: return
         val target = targetMs.coerceIn(0L, dur)
         _progress.update { it.copy(positionMs = target) }
@@ -428,7 +444,7 @@ class PlayerViewModel(
         // M-1 — capture whether a scrub was actually active; a spurious
         // endScrub without a matching beginScrub must not seek/resume.
         val wasActive = scrubActive
-        val p = exoPlayer
+        val p = ownedPlayer()
         val dur = p?.duration?.takeIf { it > 0L }
         // I-1 — the committed seek + EXACT restore + resume-play are
         // conditional on a valid player/duration AND an active scrub…
@@ -464,7 +480,11 @@ class PlayerViewModel(
     }
 
     private fun pushProgress(isPlaying: Boolean? = null) {
-        val p = exoPlayer ?: return
+        // Review round 2 — ownedPlayer() here too: after a takeover the new
+        // owner's play events still reach this stale VM's listener until its
+        // onCleared runs, and a stale poll tick would otherwise publish the
+        // NEW session's position into this dying screen's progress flow.
+        val p = ownedPlayer() ?: return
         val dur = if (p.duration > 0L) p.duration else 0L
         _progress.value = PlaybackProgress(
             // I-2 — during an active scrub the optimistic, finger-driven
@@ -502,7 +522,13 @@ class PlayerViewModel(
         // position is the position of THIS VM's session, never the new
         // owner's. writeResume runs on app scope (sidecarWriteScope) —
         // NOT viewModelScope — so it is not dropped here.
-        exoPlayer?.removeListener(playerListener)
+        // Review round 2 Recommended Improvement — skip removeListener once
+        // the engine has destroyed (released) the player: Media3 documents a
+        // released player as unusable, and post-release removeListener
+        // tolerance is implementation-defined at 1.4.1. Reachable when the
+        // activity finishes mid-playback (MainActivity.onDestroy destroys the
+        // engine before super.onDestroy clears the ViewModelStore).
+        if (!engine.isDestroyed) exoPlayer?.removeListener(playerListener)
         val snapshotMs = engine.detach(leaseToken)
         if (snapshotMs != null) {
             writeResume(sessionId, side, segmentIndex, snapshotMs.coerceAtLeast(0L))
