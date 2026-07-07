@@ -268,9 +268,14 @@ fun MainScreen(
                 // the player hadn't yet acquired via isVaulted the flag dropped
                 // to zero and steady-state playback was screenshottable.
                 val secure = backStackEntry.arguments?.getBoolean("secure") ?: false
-                // Task 4 / ADR-0037 §3 — fail-closed parse; a malformed/missing
-                // seg arg becomes null (merged playback), never a crash.
-                val segmentIndex = backStackEntry.arguments?.getString("seg")?.toIntOrNull()
+                // Task 4 / ADR-0037 §3 — fail-closed parse. A MISSING seg arg is
+                // the merged identity (null). A PRESENT-but-unparseable seg arg
+                // must NOT silently degrade to merged playback ("transported,
+                // never reconstructed") — it becomes -1, which the resolver
+                // rejects as out-of-range (V5). Unreachable from real transport
+                // (the Library mints from a typed Int?; no navDeepLink exists) —
+                // codex final-review hardening, 2026-07-07.
+                val segmentIndex = backStackEntry.arguments?.getString("seg")?.let { it.toIntOrNull() ?: -1 }
                 RovaDarkSurface {
                     CompositionLocalProvider(
                         LocalGlassEnvironment provides PinnedGlassEnvironment.forPinnedRoute(LocalGlassEnvironment.current),
