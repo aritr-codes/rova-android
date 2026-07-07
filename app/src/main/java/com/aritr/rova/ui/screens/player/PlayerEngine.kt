@@ -6,8 +6,10 @@ import android.os.Looper
 import androidx.media3.exoplayer.ExoPlayer
 
 /**
- * perf/player-lifecycle — app-scoped lifecycle holder for the ONE shared
- * ExoPlayer behind the Player route.
+ * perf/player-lifecycle — app-scoped lifecycle holder for the ExoPlayer
+ * behind the Player route: one lease at a time, each lease a fresh
+ * instance on a shared warm playback thread (see [acquire] for why
+ * instances are not reused across leases).
  *
  * WHY: with a player per NavBackStackEntry-scoped VM, every Library→Player
  * paid a full `ExoPlayer.Builder().build()` (~210 ms main-thread) and every
@@ -45,9 +47,8 @@ import androidx.media3.exoplayer.ExoPlayer
  * entry's VM init. [acquire] therefore takes over from a still-attached
  * owner (snapshotting its position first); the stale token's later
  * [detach] mutates nothing and receives that snapshot exactly once.
- * Known benign window: the stale VM's [androidx.media3.common.Player.Listener]
- * stays registered on the shared player until its onCleared runs — its
- * callbacks only write the dying VM's own StateFlows.
+ * The stale VM's [androidx.media3.common.Player.Listener] dies with its
+ * released instance — the new owner's fresh player never sees it.
  */
 class PlayerEngine(private val app: Application) {
 
@@ -59,11 +60,38 @@ class PlayerEngine(private val app: Application) {
     private var playbackThread: HandlerThread? = null
 
     /**
-     * Hand the shared player to a new owner. Builds it fresh when
-     * DESTROYED; reuses it when PARKED; takes it over when a stale owner
-     * is still attached. The player arrives in the neutral parked state
-     * (no media, no surface, stopped) — the VM applies all playback
-     * configuration itself.
+     * Retired instances awaiting their deferred release. park() hygiene
+     * (clear surface → stop → clear media) is ~2 ms on the nav path; the
+     * actual release() still costs ~25-100 ms of main-thread time
+     * (codec teardown, measured RZCYA1VBQ2H) — so it is posted
+     * [RELEASE_DELAY_MS] later, after the pop transition has finished,
+     * where the block lands on an idle Library frame instead of the
+     * navigation animation. Release must stay on the main thread (it is
+     * the player's application thread); deferring, not off-threading, is
+     * the only Media3-legal move. [destroy] flushes these immediately.
+     */
+    private val pendingReleases = mutableListOf<Pair<ExoPlayer, Runnable>>()
+    private val mainHandler = android.os.Handler(Looper.getMainLooper())
+
+    /**
+     * Hand a player to a new owner. The lease always carries a FRESH
+     * ExoPlayer instance built on the warm shared playback thread; when a
+     * stale owner is still attached its playback is snapshotted and its
+     * instance released first (takeover). The player arrives neutral —
+     * the VM applies all playback configuration itself.
+     *
+     * Device-verified pivot (RZCYA1VBQ2H, 2026-07-07): the original
+     * design REUSED one player instance across leases, but rapid
+     * Library→Player→Library→Player navigation reproducibly wedged the
+     * reused video codec into black output on this Exynos (Media3 swaps
+     * the codec's output surface via MediaCodec.setOutputSurface, which
+     * is unreliable on some OMX/Exynos decoders; once wedged, every
+     * subsequent lease stayed black). A fresh player per lease gets a
+     * fresh codec + fresh surface attach — the wedge is structurally
+     * impossible — while the expensive parts stay amortized: the
+     * playback HandlerThread is warm ([setPlaybackLooper]) and classes/
+     * codec service connections are process-warm, so build cost is ~10 ms
+     * (vs ~150 ms cold) and release never joins a thread exit.
      */
     fun acquire(): Lease {
         requireMain()
@@ -73,8 +101,8 @@ class PlayerEngine(private val app: Application) {
             ledger.recordTakeoverSnapshot(stale, p.currentPosition.coerceAtLeast(0L))
             park(p)
         }
-        val p = if (d.needsBuild) build() else requireNotNull(player) { "reusable ledger state with no player" }
-        return Lease(d.token, p)
+        player?.let { park(it) } // PARKED leftover (defensive; park() nulls the field)
+        return Lease(d.token, build())
     }
 
     /**
@@ -93,15 +121,12 @@ class PlayerEngine(private val app: Application) {
         return snapshot
     }
 
-    /** End of reusability: release the player and quit the shared playback thread. */
+    /** End of reusability: release any live player and quit the shared playback thread. */
     fun destroy() {
         requireMain()
         if (!ledger.destroy()) return
-        player?.let {
-            park(it)
-            it.release()
-        }
-        player = null
+        player?.let { park(it) }
+        flushPendingReleases()
         playbackThread?.quitSafely()
         playbackThread = null
     }
@@ -145,16 +170,43 @@ class PlayerEngine(private val app: Application) {
     }
 
     /**
-     * Parking hygiene — lifecycle-neutral state only. Clearing the video
-     * surface BEFORE stop/release keeps the surface-detach wait (its own
-     * 2000 ms budget in Media3) off the release path, and guarantees no
-     * frame of the previous session's video can ever surface for the next
-     * owner (vault/FLAG_SECURE observation from review).
+     * Parking hygiene — releases the instance (see [acquire] KDoc for why
+     * instances are not reused). Clearing the video surface BEFORE
+     * stop/release keeps the surface-detach wait (its own 2000 ms budget
+     * in Media3) off the release path, and guarantees no frame of the
+     * previous session's video can ever surface for the next owner
+     * (vault/FLAG_SECURE observation from review). release() here never
+     * joins a thread exit: the playback looper is externally owned
+     * ([playbackThread]) and Media3 does not quit external loopers.
      */
     private fun park(p: ExoPlayer) {
         p.clearVideoSurface()
         p.stop()
         p.clearMediaItems()
+        player = null
+        val runnable = Runnable {
+            pendingReleases.removeAll { it.first === p }
+            p.release()
+        }
+        pendingReleases.add(p to runnable)
+        mainHandler.postDelayed(runnable, RELEASE_DELAY_MS)
+    }
+
+    private fun flushPendingReleases() {
+        // Iterate over a copy: each runnable mutates pendingReleases.
+        pendingReleases.toList().forEach { (p, r) ->
+            mainHandler.removeCallbacks(r)
+            p.release()
+        }
+        pendingReleases.clear()
+    }
+
+    private companion object {
+        /**
+         * Longer than the pop-transition animation (~300 ms default nav
+         * transition) so the deferred release lands on an idle frame.
+         */
+        const val RELEASE_DELAY_MS = 400L
     }
 
     private fun requireMain() {

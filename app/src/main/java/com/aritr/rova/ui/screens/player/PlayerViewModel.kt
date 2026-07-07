@@ -522,13 +522,14 @@ class PlayerViewModel(
         // position is the position of THIS VM's session, never the new
         // owner's. writeResume runs on app scope (sidecarWriteScope) —
         // NOT viewModelScope — so it is not dropped here.
-        // Review round 2 Recommended Improvement — skip removeListener once
-        // the engine has destroyed (released) the player: Media3 documents a
-        // released player as unusable, and post-release removeListener
-        // tolerance is implementation-defined at 1.4.1. Reachable when the
-        // activity finishes mid-playback (MainActivity.onDestroy destroys the
-        // engine before super.onDestroy clears the ViewModelStore).
-        if (!engine.isDestroyed) exoPlayer?.removeListener(playerListener)
+        // Review round 2 Recommended Improvement (tightened by the
+        // fresh-player-per-lease pivot) — only the live owner may touch its
+        // instance: a taken-over or engine-destroyed VM's player was already
+        // RELEASED by the engine, and Media3 documents a released player as
+        // unusable (post-release removeListener tolerance is
+        // implementation-defined at 1.4.1). Skipping is sound: the listener
+        // died with the released instance.
+        if (engine.isOwner(leaseToken)) exoPlayer?.removeListener(playerListener)
         val snapshotMs = engine.detach(leaseToken)
         if (snapshotMs != null) {
             writeResume(sessionId, side, segmentIndex, snapshotMs.coerceAtLeast(0L))
