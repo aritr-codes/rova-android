@@ -27,7 +27,13 @@ class PlayerEngineLedger {
     enum class State { DESTROYED, PARKED, ACTIVE }
 
     /**
-     * @param needsBuild engine must build a fresh player before use
+     * @param needsBuild true when no engine resources exist yet (state was
+     *   DESTROYED). Since the fresh-instance-per-lease pivot (review round
+     *   3 R1) the engine builds a player on EVERY acquire and only the
+     *   playback thread is reused, so this flag now means "the shared
+     *   playback thread must also be started" rather than "a player must
+     *   be built"; the ledger keeps reporting it so the state machine
+     *   stays fully described and testable.
      * @param parkStaleToken non-null when this acquire is a takeover:
      *   the engine must snapshot+park the previous owner's playback and
      *   stash the snapshot via [recordTakeoverSnapshot] for this token.

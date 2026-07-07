@@ -69,6 +69,13 @@ class PlayerEngine(private val app: Application) {
      * navigation animation. Release must stay on the main thread (it is
      * the player's application thread); deferring, not off-threading, is
      * the only Media3-legal move. [destroy] flushes these immediately.
+     *
+     * Reviewed tradeoff (round 3 R2): a re-acquire inside this window
+     * puts TWO live ExoPlayers on the one shared playback looper for up
+     * to [RELEASE_DELAY_MS] — the retired one stopped+cleared (idle
+     * message pump), the new one active. Device-verified RZCYA1VBQ2H:
+     * the rapid-renav pass re-acquired ~350 ms after park (inside the
+     * window) and rendered 3/3.
      */
     private val pendingReleases = mutableListOf<Pair<ExoPlayer, Runnable>>()
     private val mainHandler = android.os.Handler(Looper.getMainLooper())

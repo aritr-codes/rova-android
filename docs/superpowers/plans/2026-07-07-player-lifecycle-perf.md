@@ -3,6 +3,37 @@
 Date: 2026-07-07 · Branch: `perf/player-lifecycle` · Base: master `cc496041`
 Status: owner-approved architecture (candidate B + Review Agent Required Fixes 1 & 2 + owner refinements)
 
+## OUTCOME (post-implementation, 2026-07-07)
+
+Landed as three commits: `b79aed77` (engine + ledger + VM rewire), `3b274a6b` (review round 2:
+isOwner lease-guards), `ec7721ca` (device-driven pivot, below). Suite 2271/0-0-0, 48 gates GREEN.
+
+**Device verification falsified instance reuse.** Rapid Library→Player→Library→Player wedged the
+REUSED codec into black output on RZCYA1VBQ2H (3/3 repro, pixel-verified; `MediaCodec.setOutputSurface`
+unreliability on this Exynos OMX decoder; wedge sticky across leases). Final shape — same states,
+tokens, guards, ownership boundary — is **fresh ExoPlayer per lease on the warm shared playback
+thread**, park() = cheap hygiene (~2 ms) + **release deferred 400 ms** onto the main handler (past
+the pop transition; release must stay on the application/main thread). 3/3 rapid-renav renders
+after the pivot. PARKED now holds only the warm thread — no codec, no surface, by construction.
+
+**Measured (identical probe methodology, same tile, 10× loop, RZCYA1VBQ2H):**
+
+| main-thread span | baseline (master) | branch (final) |
+|---|---|---|
+| back-nav clear/detach | 31 ms median / 61 ms max | **2.1 ms median / 2.5 ms max** |
+| warm attach | 10.5 ms median | 8.8 ms median |
+| cold first-entry attach | 146 ms | 117 ms |
+| gfxinfo janky % / p90/p95/p99 | 13.38% / 53/81/350 ms | 12.96% / 53/77/350 ms (loop dominated by playback frames) |
+
+Note: the briefed 210/450 ms did not reproduce at those magnitudes on this content (10 s clips);
+the release stall measured 27–61 ms baseline. The mechanism is the same; the win is the nav-path
+teardown dropping to ~2 ms and the codec teardown moving to an idle frame.
+
+Re-verified on device: warm reuse + resume position, poster handoff on re-entry
+(onRenderedFirstFrame refires), rapid-renav rendering, ON_STOP background pause with no
+auto-resume (play icon on return), cold rebuild after process start. FLAG_SECURE/vault and
+ADR-0037 paths untouched by design (review observation).
+
 ## Problem
 
 ExoPlayer lifetime is coupled 1:1 to the player NavBackStackEntry. Every Library→Player pays a
