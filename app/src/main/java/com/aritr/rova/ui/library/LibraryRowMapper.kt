@@ -37,6 +37,8 @@ object LibraryRowMapper {
         /** Decoded thumbnail pixel size (rotation-corrected) — orientation source for single-mode rows. */
         val thumbWidthPx: Int = 0,
         val thumbHeightPx: Int = 0,
+        /** Kept-raw segment index (null for merged artifacts). */
+        val segmentIndex: Int? = null,
         val resumePositionMs: Long? = null,
     )
 

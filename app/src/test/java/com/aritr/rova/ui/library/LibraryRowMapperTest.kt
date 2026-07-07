@@ -137,4 +137,56 @@ class LibraryRowMapperTest {
         )
         assertEquals(42_000L, row.resumePositionMs)
     }
+
+    @Test
+    fun `per_segment_kept_raw_reads_own_slot_no_bleed`() {
+        // Kept-raw segment rows must read from their own "#seg<N>" slot, not the legacy ""
+        // slot. Metadata has both "" (5_000L) and "#seg1" (9_000L). Segment 0 row should read
+        // from "#seg0" (not in metadata) → null (NOT 5_000L). Segment 1 row should read from
+        // "#seg1" → 9_000L. ADR-0037 §4 truthfulness.
+        val row0 = LibraryRowMapper.map(
+            LibraryRowMapper.Input(
+                stableKey = "/path/seg0.mp4",
+                startedAtMillis = 1_000L,
+                dateMillis = 1_000L,
+                dateLabel = "Jul 2",
+                sizeBytes = 10L,
+                segmentDurationsMs = listOf(30_000L),
+                topologyPersisted = "Single",
+                terminated = null,
+                stopReason = StopReason.NONE,
+                exportState = ExportState.FINALIZED,
+                customTitle = null,
+                favorite = false,
+                side = null,
+                sessionId = null,
+                segmentIndex = 0,
+                resumePositionMs = null, // Will be computed from slotFor(null, 0) = "#seg0"
+            ),
+            Locale.US, TimeZone.getTimeZone("UTC"),
+        )
+        val row1 = LibraryRowMapper.map(
+            LibraryRowMapper.Input(
+                stableKey = "/path/seg1.mp4",
+                startedAtMillis = 1_000L,
+                dateMillis = 1_000L,
+                dateLabel = "Jul 2",
+                sizeBytes = 10L,
+                segmentDurationsMs = listOf(30_000L),
+                topologyPersisted = "Single",
+                terminated = null,
+                stopReason = StopReason.NONE,
+                exportState = ExportState.FINALIZED,
+                customTitle = null,
+                favorite = false,
+                side = null,
+                sessionId = null,
+                segmentIndex = 1,
+                resumePositionMs = 9_000L, // Will be read from slotFor(null, 1) = "#seg1"
+            ),
+            Locale.US, TimeZone.getTimeZone("UTC"),
+        )
+        assertNull(row0.resumePositionMs)
+        assertEquals(9_000L, row1.resumePositionMs)
+    }
 }

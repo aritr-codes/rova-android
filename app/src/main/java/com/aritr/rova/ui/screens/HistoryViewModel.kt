@@ -381,9 +381,14 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
                 sessionId = item.sessionId,
                 thumbWidthPx = item.thumbnail?.width ?: 0,
                 thumbHeightPx = item.thumbnail?.height ?: 0,
+                segmentIndex = item.segmentIndex,
                 // EXACT slot read, not positionFor: the hairline (spec v3.3) must never paint a
                 // legacy ""-slot position on a named DualShot side. The player keeps positionFor.
-                resumePositionMs = meta?.positionsBySide?.get(RecordingIdentity.sideSlot(item.side)),
+                // ADR-0037 §4 — kept-raw rows read their own "#seg<N>" slot (slotFor), never the
+                // session-level slot: no resume bleed between distinct playable artifacts.
+                resumePositionMs = meta?.positionsBySide?.get(
+                    RecordingIdentity.slotFor(item.side, item.segmentIndex)
+                ),
             ),
             locale, tz,
         )
