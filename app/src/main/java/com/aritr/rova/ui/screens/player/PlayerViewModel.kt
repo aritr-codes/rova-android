@@ -31,17 +31,23 @@ import kotlinx.coroutines.withContext
  *
  * Owns:
  *  - the manifest-driven [PlayerUiState] (Loading → Ready / Unavailable)
- *  - the singleton [ExoPlayer] for the screen, released in [onCleared]
+ *  - ALL playback behavior on the leased [ExoPlayer]: media item,
+ *    prepare, playWhenReady, listener, seeking, scrub, speed, resume
  *  - a 250 ms position-poll loop that updates [PlaybackProgress] while
  *    playback is live; the loop is cheap (one `currentPosition` read per
  *    tick) and does not run while paused / unavailable
  *
- * Deliberately non-singleton: a player instance per VM is the contract.
- * If the user navigates to a different `player/{sessionId}`, a fresh VM
- * is created via the NavHost composable scope and the prior VM is
- * cleared (releasing the prior `ExoPlayer`). MainScreen.kt uses
- * `launchSingleTop = true` for tab routes only; argumented routes get
- * a fresh entry per id.
+ * perf/player-lifecycle (2026-07-07): the VM no longer owns the player's
+ * LIFETIME — it leases the app-scoped shared player from [PlayerEngine]
+ * in [attachExoPlayer] and detaches (never releases) in [onCleared].
+ * This moved the per-navigation `Builder().build()` (~210 ms) and the
+ * synchronous `release()` thread-join (~450 ms) off the nav transition.
+ * The ownership boundary is owner-mandated: engine = lifecycle only,
+ * VM = playback only. If the user navigates to a different
+ * `player/{sessionId}`, a fresh VM is created via the NavHost composable
+ * scope; the prior VM detaches its lease (the engine parks — or hands
+ * over — the shared player). MainScreen.kt uses `launchSingleTop = true`
+ * for tab routes only; argumented routes get a fresh entry per id.
  *
  * The [loadManifest] seam mirrors the [com.aritr.rova.ui.recovery.RecoveryViewModel]
  * pattern so JVM tests can pass a synthetic loader. The manifest read
@@ -61,6 +67,7 @@ class PlayerViewModel(
     private val loadManifest: suspend (String) -> SessionManifest?,
     private val readResume: suspend (String, VideoSide?, Int?) -> Long? = { _, _, _ -> null },
     private val writeResume: (String, VideoSide?, Int?, Long) -> Unit = { _, _, _, _ -> },
+    private val engine: PlayerEngine,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
@@ -90,6 +97,14 @@ class PlayerViewModel(
     val firstFrameRendered: StateFlow<Boolean> = _firstFrameRendered.asStateFlow()
 
     private var exoPlayer: ExoPlayer? = null
+
+    /**
+     * perf/player-lifecycle — proof of ownership for [PlayerEngine.detach].
+     * -1 until [attachExoPlayer] takes a lease; a never-attached VM (cleared
+     * before the init coroutine reached attach) detaches with -1, which the
+     * engine treats as unknown → guaranteed no-op.
+     */
+    private var leaseToken: Int = -1
     private var pollJob: Job? = null
 
     /**
@@ -203,16 +218,29 @@ class PlayerViewModel(
 
     /**
      * Lazily acquired by [PlayerScreen] via [getOrCreatePlayer]. The VM
-     * keeps the reference so it can release in [onCleared] regardless
-     * of how many recompositions / configuration changes the screen
-     * goes through.
+     * keeps the reference so it can detach its lease in [onCleared]
+     * regardless of how many recompositions / configuration changes the
+     * screen goes through. Called on EVERY recomposition (incl. 250 ms
+     * poll ticks) — must stay a cheap cached-reference read.
      */
     fun getOrCreatePlayer(): ExoPlayer? = exoPlayer
 
     private fun attachExoPlayer(uri: String, startMs: Long = 0L) {
         val app = getApplication<Application>()
         _firstFrameRendered.value = false
-        val player = ExoPlayer.Builder(app).build().apply {
+        // perf/player-lifecycle — lease the shared player instead of building
+        // one. The engine hands it over in the neutral parked state (no media,
+        // no surface, stopped); everything below is playback configuration and
+        // stays the VM's job.
+        val lease = engine.acquire()
+        leaseToken = lease.token
+        val player = lease.player.apply {
+            // A reused player retains the previous session's playback
+            // parameters; reset the session-scoped ones so a fresh nav is
+            // byte-identical to the old fresh-build behavior (speed chip
+            // starts 1×, seeks start on the default policy).
+            setPlaybackParameters(PlaybackParameters.DEFAULT)
+            setSeekParameters(androidx.media3.exoplayer.SeekParameters.DEFAULT)
             setMediaItem(MediaItem.fromUri(resolvePlaybackUri(app, uri)))
             addListener(playerListener)
             if (startMs > 0L) seekTo(startMs) // honored as the initial position on prepare
@@ -464,11 +492,20 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        persistPosition() // writeResume runs on app scope (sidecarWriteScope) — NOT viewModelScope — so it is not dropped here
         stopPolling()
-        exoPlayer?.let {
-            it.removeListener(playerListener)
-            it.release()
+        // perf/player-lifecycle — detach the lease instead of releasing.
+        // The VM removes ITS listener (playback ownership); the engine
+        // parks the player (lifecycle ownership) and returns the position
+        // snapshot it took at park — or, if a newer VM already took the
+        // player over (stale-token race, review Required Fix 1), the
+        // snapshot captured at takeover. Either way the persisted resume
+        // position is the position of THIS VM's session, never the new
+        // owner's. writeResume runs on app scope (sidecarWriteScope) —
+        // NOT viewModelScope — so it is not dropped here.
+        exoPlayer?.removeListener(playerListener)
+        val snapshotMs = engine.detach(leaseToken)
+        if (snapshotMs != null) {
+            writeResume(sessionId, side, segmentIndex, snapshotMs.coerceAtLeast(0L))
         }
         exoPlayer = null
         super.onCleared()
@@ -507,6 +544,7 @@ class PlayerViewModel(
                         loadManifest = loader,
                         readResume = { sid, s, seg -> app.readResumePosition(sid, s, seg) },
                         writeResume = { sid, s, seg, pos -> app.writeResumePosition(sid, s, seg, pos) },
+                        engine = app.playerEngine,
                     ) as T
                 }
             }

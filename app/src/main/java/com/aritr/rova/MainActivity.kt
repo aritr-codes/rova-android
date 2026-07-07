@@ -88,6 +88,15 @@ class MainActivity : FragmentActivity() {
         handleNotificationAction(intent)
     }
 
+    override fun onDestroy() {
+        // perf/player-lifecycle — contract condition 1 (player ceases to be
+        // reusable): the app's UI is going away for real. isFinishing gates
+        // out config-change recreates, which must keep the parked player
+        // warm. Runs on main, satisfying PlayerEngine's threading contract.
+        if (isFinishing) (application as RovaApp).playerEngine.destroy()
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
