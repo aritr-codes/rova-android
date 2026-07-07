@@ -24,6 +24,19 @@ object RecordingIdentity {
     /** Per-side playback-position slot inside the session entry. "" = single; side name for P+L. */
     fun sideSlot(side: VideoSide?): String = side?.name ?: ""
 
+    /**
+     * ADR-0037 §4 — resume slot for a playback identity. The single slot
+     * composer: no caller builds slot strings by hand. Merged artifacts
+     * (segmentIndex == null) keep the legacy [sideSlot] byte-identically.
+     * Kept-raw segment artifacts get "#seg<index>" — side-blind, because
+     * segmentIndex indexes the FULL interleaved segments array and is
+     * already unique across DualShot sides (ADR-0037 §1, coordinates
+     * mutually exclusive). '#' cannot occur in a VideoSide name, so no
+     * legacy slot can collide with a segment slot.
+     */
+    fun slotFor(side: VideoSide?, segmentIndex: Int?): String =
+        if (segmentIndex == null) sideSlot(side) else "#seg$segmentIndex"
+
     data class MetaKey(val canonical: String, val legacy: String?)
 
     /**

@@ -2,6 +2,7 @@ package com.aritr.rova.ui.library
 
 import com.aritr.rova.service.dualrecord.VideoSide
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -46,5 +47,27 @@ class RecordingIdentityTest {
         val viaContentUri = RecordingIdentity.forItem(sessionId = "s1", absolutePath = null, docUri = "content://media/external/video/media/42")
         assertEquals(viaPath.canonical, viaContentUri.canonical)
         assertEquals("session:s1", viaPath.canonical)
+    }
+
+    // ADR-0037 §4 — slotFor is the ONLY resume-slot composer.
+    @Test
+    fun `slotFor without segmentIndex equals legacy sideSlot`() {
+        assertEquals("", RecordingIdentity.slotFor(null, null))
+        assertEquals("PORTRAIT", RecordingIdentity.slotFor(VideoSide.PORTRAIT, null))
+        assertEquals("LANDSCAPE", RecordingIdentity.slotFor(VideoSide.LANDSCAPE, null))
+    }
+
+    @Test
+    fun `slotFor with segmentIndex ignores side and is injective per index`() {
+        assertEquals("#seg0", RecordingIdentity.slotFor(null, 0))
+        assertEquals("#seg3", RecordingIdentity.slotFor(null, 3))
+        // ADR-0037 §1 — coordinates mutually exclusive; a side passed alongside an
+        // index must not change the slot (the identity is malformed upstream, V4b,
+        // but the slot function stays total and side-blind).
+        assertEquals("#seg3", RecordingIdentity.slotFor(VideoSide.PORTRAIT, 3))
+        // Distinct indices → distinct slots; no collision with legacy values.
+        assertNotEquals(RecordingIdentity.slotFor(null, 1), RecordingIdentity.slotFor(null, 2))
+        assertNotEquals("", RecordingIdentity.slotFor(null, 0))
+        assertNotEquals("PORTRAIT", RecordingIdentity.slotFor(VideoSide.PORTRAIT, 0))
     }
 }
