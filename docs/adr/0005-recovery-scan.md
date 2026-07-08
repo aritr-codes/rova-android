@@ -1,11 +1,12 @@
 # ADR 0005 — Recovery Scan
 
-- **Status:** Accepted (amended by ADR 0006 §"Cross-Phase Ordering Invariant")
-- **Date:** 2026-04-29 (amended 2026-04-30)
+- **Status:** Accepted (amended by ADR 0006 §"Cross-Phase Ordering Invariant"; amended 2026-07-08 §"Merge Admission" — predicate authoritative for merge)
+- **Date:** 2026-04-29 (amended 2026-04-30, 2026-07-08)
 - **Phase:** 1.5 (cold-launch recovery)
 - **Supersedes:** —
 - **Superseded by:** —
 - **Amended by:** ADR 0006 — adds the [TerminalAction.SKIPPED_EXPORT_PENDING] branch when `manifest.exportState in {MUXING, COPYING, FINALIZED} && terminated == null`, deferring those sessions to Phase 1.7 export-recovery. `ExportState.FAILED` and `ExportState.NOT_STARTED` continue to flow through the original ADR 0005 classification matrix — they are Phase 1.5 inputs, not Phase 1.7 inputs. The 3-arg `markTerminated(sessionId, terminated, stopReason)` API replaces the 2-arg form per ADR 0006 §"Atomic terminal-write API"; Phase 1.5 call sites pass `StopReason.USER` (`stopRequested=true` branch) or `StopReason.NONE` (`KILLED_FORCE_STOP` and `KILLED_BY_SYSTEM` branches) per the ADR 0006 migration table.
+  - **Amended 2026-07-08 (PR #177, merge `3f286282`):** the `validateMediaFile` predicate defined in §"Media Validity Rules" is now **authoritative for merge admission** as well as recovery classification — every merge path admits segments through the same predicate (never a size-only `exists() && length() > 0` gate). See the new §"Merge Admission" below.
 - **Related:** ROADMAP_v6.md §1.5 (Recovery Scanning), ROADMAP_v4.md §1.5 (carry-over scope), ADR 0001 (receiver lifetimes that motivate Guard B), ADR 0003 (tier-specific export recovery — the merged-output owner), ADR 0006 (Recording Lifecycle Robustness — owns the cross-phase invariant), Phase 1.3 stop-path implementation
 
 ---
@@ -111,6 +112,16 @@ Returns `true` iff **all** hold:
 Used for: **every segment file the classifier touches** — both in-manifest segments and orphan segments. The earlier "skip in-manifest validation to avoid flapping" reasoning is dropped: per-session live re-check (concurrency invariant 5 below) excludes any session owned by a live `ServiceController`, so a tick cannot race the scan on a session the scan is processing. Validating all segment files is the only way a corrupt acknowledged segment surfaces as `InvalidManifestSegmentAnomaly` rather than slipping silently into a finish-merge.
 
 **Not** used for: merged output files. Phase 1.5 does not validate merged output (out of scope per "Scope Boundary" above). Any non-segment file is `UnknownArtifactAnomaly`.
+
+### Merge Admission — the predicate is authoritative (amended 2026-07-08, PR #177)
+
+> Added 2026-07-08 (owner sign-off, merge `3f286282`). Extends the `validateMediaFile` contract above from *recovery classification only* to *all merge admission*. Frozen design: `docs/superpowers/specs/2026-07-08-dualshot-merge-validity-predicate-design.md`. Guarded by `MergeSegmentFilterTest` (T1–T7) + `MediaFileValidatorBufferTest`.
+
+**Invariant — one definition of a valid recording throughout the recording pipeline.** No merge path admits a segment on a size-only `exists() && length() > 0` check. Every merge admits segments through the same `validateMediaFile` decode predicate (§"Media Validity Rules" gates 1–6), so a frameless artifact — the audio-only stub a DualShot side can finalize when its video track starves under dual-HW-encode contention — is rejected instead of being baked into the output as a false, frozen clip.
+
+- **Universal chokepoint.** `VideoMerger.preflight` filters its candidate list through the predicate (via the pure `MergeSegmentFilter.partition`, default predicate `::validateMediaFile`). Every merge caller — single-mode, DualShot per-side assembly, recovery finish-merge, Tier 1/2/3 export — routes through `preflight`, so the predicate is the authoritative gate even where an upstream stage pre-filters on `length()` for cheap defensiveness (that pre-filter can only *remove* candidates the predicate would also remove; it can never *admit* one the predicate rejects).
+- **Independent per-side filtering (no symmetry assumption).** DualShot assembly filters each side independently on `Dispatchers.IO` with the same predicate; it never reconciles, truncates, or pads one side against the other. `maxOf()` over the two validated lists is retained. If the two sides come out symmetric, that is an *outcome*, never an input assumption. Per-drop and per-side divergence are logged at warning level with `sessionId` (classification collapses filesystem-vs-decode causes into `MISSING`/`EMPTY`/`INVALID_MEDIA` — truthful and sufficient; not expanded to distinguish internal decode failure modes).
+- **Buffer sizing (RF1).** The predicate's probe read-buffer is sized from `MediaFormat.KEY_MAX_INPUT_SIZE` with a 1 MB floor (`MediaFileValidator.chooseInspectionBufferSize`), in both `inspectMediaFile` and `validateMediaFromFd`, so a large FHD/4K IDR keyframe cannot be truncated and cause a **healthy** segment to false-fail gate 5 (`readSampleData > 0`). Device-verified at genuine 4K (18–22 MB segments admitted with zero false drops).
 
 ### Discard Eligibility (Phase 1.5 emits flags; never deletes)
 
