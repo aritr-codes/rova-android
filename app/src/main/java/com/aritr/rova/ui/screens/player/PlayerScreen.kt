@@ -365,6 +365,12 @@ private fun PlayerReady(
                 android.view.LayoutInflater.from(ctx)
                     .inflate(com.aritr.rova.R.layout.player_surface, null) as PlayerView
             },
+            // perf/player-lifecycle — the ExoPlayer is now app-scoped and
+            // shared (PlayerEngine); a disposed PlayerView must not keep a
+            // reference to it. setPlayer(null) only clears the player's
+            // output if it still points at THIS view's surface, so a late
+            // onRelease can't blank a newer screen's rebind.
+            onRelease = { view -> view.player = null },
             update = { view ->
                 bindPlayerView(view)
                 // Audit F#2 — keep the screen on while playback is

@@ -151,6 +151,29 @@ class RovaApp : Application() {
     }
 
     /**
+     * perf/player-lifecycle — app-scoped lifecycle holder for the ONE shared
+     * ExoPlayer behind the Player route (see [com.aritr.rova.ui.screens.player.PlayerEngine]
+     * for the ownership contract + state machine). Lazy is safe despite the
+     * looper-sensitivity of ExoPlayer construction: the engine constructor
+     * builds nothing, and its `acquire()` both runs on and explicitly pins
+     * the main looper (review Required Fix 2). Destruction mapping:
+     * MainActivity.onDestroy(isFinishing) and [onTrimMemory] below.
+     */
+    val playerEngine: com.aritr.rova.ui.screens.player.PlayerEngine by lazy {
+        com.aritr.rova.ui.screens.player.PlayerEngine(this)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Contract condition 2 (player ceases to be reusable): memory
+        // pressure while nobody is playing → drop the parked player.
+        // Touching the lazy here is harmless — a fresh engine has no
+        // player and destroyIfParked() no-ops. onTrimMemory is delivered
+        // on the main thread, satisfying the engine's threading contract.
+        playerEngine.destroyIfParked()
+    }
+
+    /**
      * Reads the saved resume position for a recording side, or null if unavailable.
      * Slot derivation delegated to RecordingIdentity.slotFor (ADR-0037 §3 — no hand-built slots).
      */
