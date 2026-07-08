@@ -55,6 +55,7 @@ fun inspectMediaFile(file: File): MediaFileInspection {
 
         var videoTrackIndex = -1
         var durationUs = 0L
+        var maxInputSize = 0
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
@@ -63,13 +64,20 @@ fun inspectMediaFile(file: File): MediaFileInspection {
                 if (format.containsKey(MediaFormat.KEY_DURATION)) {
                     durationUs = format.getLong(MediaFormat.KEY_DURATION)
                 }
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    maxInputSize = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                }
                 break
             }
         }
         if (videoTrackIndex < 0) return MediaFileInspection.INVALID
 
         extractor.selectTrack(videoTrackIndex)
-        val buffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+        // RF1: size the probe buffer to the track's max input size (floored
+        // at 1 MB) so a large FHD/4K IDR keyframe is read whole — a fixed
+        // 64 KB buffer risked truncating it and false-dropping a HEALTHY
+        // segment. See [chooseInspectionBufferSize].
+        val buffer = ByteBuffer.allocate(chooseInspectionBufferSize(maxInputSize))
         val read = extractor.readSampleData(buffer, 0)
         if (read <= 0) MediaFileInspection.INVALID
         else MediaFileInspection(isValid = true, durationMs = durationUs / 1000L)
@@ -113,18 +121,24 @@ fun validateMediaFromFd(fd: FileDescriptor): Boolean {
         if (extractor.trackCount <= 0) return false
 
         var videoTrackIndex = -1
+        var maxInputSize = 0
         for (i in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
             if (mime.startsWith("video/")) {
                 videoTrackIndex = i
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    maxInputSize = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                }
                 break
             }
         }
         if (videoTrackIndex < 0) return false
 
         extractor.selectTrack(videoTrackIndex)
-        val buffer = ByteBuffer.allocate(SAMPLE_BUFFER_BYTES)
+        // RF1: buffer sized to the keyframe (floored at 1 MB) — see
+        // [chooseInspectionBufferSize] and the [inspectMediaFile] note.
+        val buffer = ByteBuffer.allocate(chooseInspectionBufferSize(maxInputSize))
         extractor.readSampleData(buffer, 0) > 0
     } catch (t: Throwable) {
         RovaLog.w("validateMediaFromFd: extractor failure", t)
@@ -138,4 +152,19 @@ fun validateMediaFromFd(fd: FileDescriptor): Boolean {
     }
 }
 
-private const val SAMPLE_BUFFER_BYTES = 64 * 1024
+/**
+ * RF1 (frozen spec 2026-07-08) — minimum inspection read-buffer floor. The
+ * one-sample validity probe reads the first video sample into a buffer sized
+ * to the track's `KEY_MAX_INPUT_SIZE` but never below this floor, so a large
+ * FHD/4K IDR keyframe is never truncated → never false-dropped as INVALID.
+ * Mirrors `VideoMerger.runMux`'s `KEY_MAX_INPUT_SIZE` sizing (default 1 MB).
+ */
+private const val MIN_INSPECTION_BUFFER_BYTES = 1024 * 1024
+
+/**
+ * Read-buffer size for the one-sample probe: the video track's advertised
+ * max input size, floored at [MIN_INSPECTION_BUFFER_BYTES]. Pure — unit
+ * tested. A non-positive/absent `maxInputSize` yields the floor.
+ */
+internal fun chooseInspectionBufferSize(maxInputSize: Int): Int =
+    maxOf(maxInputSize, MIN_INSPECTION_BUFFER_BYTES)

@@ -105,7 +105,16 @@ object VideoMerger {
         if (segments.isEmpty()) {
             throw IllegalArgumentException("No segments to merge")
         }
-        val validSegments = segments.filter { it.exists() && it.length() > 0 }
+        // Frozen invariant (spec 2026-07-08, ADR-0005): the universal merge
+        // chokepoint admits a segment ONLY via the single validity predicate
+        // (video track + ≥1 readable video sample) — not the old size-only
+        // `length() > 0`, which let a frameless audio-only stub through. Drops
+        // are logged (previously silent). Runs on the callers' Dispatchers.IO.
+        val filtered = MergeSegmentFilter.partition(segments, ::validateMediaFile)
+        filtered.dropped.forEach { drop ->
+            Log.w(TAG, "preflight dropped invalid segment ${drop.file.name}: ${drop.reason}")
+        }
+        val validSegments = filtered.kept
         if (validSegments.isEmpty()) {
             throw IllegalArgumentException("No valid segments found")
         }

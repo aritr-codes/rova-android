@@ -100,6 +100,8 @@ import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.utils.RovaCrashReporter
 import com.aritr.rova.BuildConfig
 import com.aritr.rova.utils.RovaLog
+import com.aritr.rova.utils.MergeSegmentFilter
+import com.aritr.rova.utils.validateMediaFile
 import androidx.camera.video.VideoRecordEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
@@ -3956,14 +3958,36 @@ class RovaRecordingService : Service(), LifecycleOwner {
             } else null
 
             if (manifest != null && sessionDir != null && manifest.config.captureTopology == "DualShot") {
-                val portraitSegments = manifest.segments
+                // Frozen invariant (spec 2026-07-08, RF2): admit each side with
+                // the SAME validity predicate as VideoMerger.preflight
+                // (::validateMediaFile — video track + ≥1 readable video
+                // sample), per side INDEPENDENTLY (no cross-side reconciliation,
+                // truncation, padding, or symmetry assumption). The per-segment
+                // MediaExtractor open runs on Dispatchers.IO — serviceScope is
+                // Main, so this must NOT inspect on the caller thread. Validating
+                // here, before performMergeDual's maxOf, also makes the completion
+                // count truthful. Drops + per-side divergence are logged (were
+                // silent).
+                val portraitCandidates = manifest.segments
                     .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.PORTRAIT }
                     .map { File(sessionDir, it.filename) }
-                    .filter { it.exists() && it.length() > 0 }
-                val landscapeSegments = manifest.segments
+                val landscapeCandidates = manifest.segments
                     .filter { it.side == com.aritr.rova.service.dualrecord.VideoSide.LANDSCAPE }
                     .map { File(sessionDir, it.filename) }
-                    .filter { it.exists() && it.length() > 0 }
+                val (portraitSegments, landscapeSegments) = withContext(Dispatchers.IO) {
+                    val portraitFilter = MergeSegmentFilter.partition(portraitCandidates, ::validateMediaFile)
+                    val landscapeFilter = MergeSegmentFilter.partition(landscapeCandidates, ::validateMediaFile)
+                    portraitFilter.dropped.forEach {
+                        RovaLog.w("DualShot merge [$sessionId] dropped invalid portrait segment ${it.file.name}: ${it.reason}")
+                    }
+                    landscapeFilter.dropped.forEach {
+                        RovaLog.w("DualShot merge [$sessionId] dropped invalid landscape segment ${it.file.name}: ${it.reason}")
+                    }
+                    MergeSegmentFilter.divergenceMessage(
+                        sessionId, portraitFilter.kept.size, landscapeFilter.kept.size
+                    )?.let { RovaLog.w(it) }
+                    portraitFilter.kept to landscapeFilter.kept
+                }
 
                 if (portraitSegments.isNotEmpty() || landscapeSegments.isNotEmpty()) {
                     performMergeDual(portraitSegments, landscapeSegments)
