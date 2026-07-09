@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Trust System Visual Spec · Warnings + Recovery</title>
+<style>
+  /* ==================================================================
+     TOKEN REGISTRY — THREE STRICT FAMILIES.
+     The split IS the contract. Compose mirrors it exactly.
+
+       1. IDENTITY      — retints per palette. Derived from RovaPalette.kt.
+       2. LOCKED SEVERITY — identical across all 12 palettes (RovaSemantics,
+                          ADR-0028 §1.3 / ADR-0031 §3). Never retints,
+                          never takes a per-call alpha.
+       3. LOCKED PINNED / OVER-MEDIA — the Record route is pinned-dark
+                          (ADR-0028 §2.4). Its inks are white constants
+                          because the route never adopts the palette's
+                          surface colors — that is the pinned contract,
+                          not palette-blindness.
+
+     Registry-complete: tokens declared with no consumer on this surface
+     are kept and marked, as library-bento.html does for --glass.
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec page only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444;
+
+    /* ── FAMILY 1 · IDENTITY (themed; RovaPalette.kt verbatim; default Aurora) ── */
+    --bgTop:#2C3658; --bgBot:#141622;
+    --surface:#141622;                            /* == RovaPalette.surfaceBase (== bgBot on dark) */
+    --surface-hi:#242737;                         /* DERIVED, spec-introduced: mix(white 8%, surfaceBase).
+                                                     RovaPalette has NO surfaceHi member. It exists because
+                                                     the recovery card stops being a pinned near-black island
+                                                     and adopts an elevated themed surface. */
+    --accent:#5B9DFF; --accent2:#7C5BFF;
+    --tHigh:rgba(255,255,255,.94); --tDim:rgba(255,255,255,.62); --tFaint:rgba(255,255,255,.40);
+    /* quietTextColor(isDark, onSurfaceVariant, dimAlpha) — QuietText.kt:17, shipped.
+       On a LIGHT scheme the alpha is DROPPED and the solid ink returned: alpha-dimmed
+       secondary text is mathematically below AA over a light background. On dark it is
+       tDim verbatim. Every themed dim/body ink routes through this, not through --tDim. */
+    --tQuiet:rgba(255,255,255,.62);
+    --edge:rgba(255,255,255,.10); --edgeTop:rgba(255,255,255,.18);
+    --glass:rgba(18,22,32,.58);                   /* registry-complete — no consumer on this surface */
+
+    /* AA-resolved accent paint. JS ports DialogActionColors.resolve verbatim
+       (AA=4.5, STEP=.12, MAX_DEEPEN=.6, WHITE_DEEPEN_LIMIT=.4). This resolver
+       owns ACCENT fills ONLY — never the locked severity fills. See §APPX-C.
+       --accent-ink is white, or the house near-black #0E1116 (RovaDialogs.kt:214,
+       == LibraryColors.ACCENT_INK_DARK) when the accent is too light to deepen. */
+    --accent-fill:#5B9DFF; --accent-ink:#0E1116;
+    /* accent AS TEXT is written per-backing by the resolver (--acc-ink), never a
+       fixed mix: mix(accent 72%, tHigh) reads 4.24:1 on Daylight's tinted chips. */
+
+    /* state layers — keyed to text ink so direction flips with the theme */
+    --fill-1:color-mix(in srgb, var(--tHigh) 5%, transparent);
+    --fill-2:color-mix(in srgb, var(--tHigh) 8%, transparent);
+    --press:color-mix(in srgb, var(--tHigh) 12%, transparent);
+    --hairline:color-mix(in srgb, var(--tHigh) 6%, transparent);
+
+    /* ── FAMILY 2 · LOCKED SEVERITY (never themed, never alpha-mutated) ── */
+    --sev-hard:#EF4444;         /* == RovaSemantics.error      */
+    --sev-soft:#FBBF24;         /* == RovaSemantics.warning    */
+    --sev-escalating:#F97316;   /* == RovaSemantics.escalating */
+    --sev-advisory:#5B7FFF;     /* Warnings-unique (no RovaSemantics twin) */
+
+    /* severityCtaInk — the near-black label on a solid severity fill.
+       NOT debt. WARN-02: white-on-severity reads 1.67–3.76:1 and fails;
+       this ink clears 4.5:1 on all four fills. Graduated from a call-site
+       literal to a named locked token. Zero visual delta. */
+    --sev-cta-ink:#1A1A1A;
+
+    --sev-chip-fill-pct:20%;     /* decorative backing — see §APPX-D */
+
+    /* ── FAMILY 3 · LOCKED PINNED / OVER-MEDIA (never themed) ── */
+    --pin-surface:#0B0D14;       /* was two raw hexes: banner + recovery card */
+    /* ONE alpha for every pinned container that floats OVER MEDIA — the banner and
+       the snooze chip. Banner was .88 (passed by 0.004) and the chip was
+       Color.Black @ .55 (failed outright, 3.61:1). The SHEET is opaque: it is modal
+       and covers the viewfinder, so it composites against nothing. See §APPX-B. */
+    --pin-container-alpha:.94;
+    --media-ink:rgba(255,255,255,.94);      /* banner title was .88, chip label .78 — both raised, see APPX-F */
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge:rgba(255,255,255,.08);
+    --media-edge-top:rgba(255,255,255,.12);
+    /* registry-complete — declared, no consumer on this surface:
+       --glass, --fill-2, --press, --hairline, --media-edge. Kept so the registry is a
+       full mirror of the palette contract, exactly as library-bento.html keeps --glass.
+       This list is audited against the stylesheet, never asserted from memory —
+       --edgeTop and --fill-1 look unused and are in fact consumed. */
+
+    /* ── GEOMETRY — one radius ladder, adopted from library-bento.html ── */
+    --r-sm:10px;      /* settings chip · severity chip · banner icon box */
+    --r-md:14px;      /* history strip card · sheet CTA */
+    --r-lg:18px;      /* top banner · recovery card (was 20px — the app's one outlier) */
+    --r-sheet:26px;   /* modal sheet */
+    --r-pill:999px;   /* snooze chip */
+
+    /* ── SPACING — 4dp base grid ── */
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --hair:1px; --focus:2px;
+
+    /* ── TARGETS — ADR-0020 §Decision-1 (48dp, stricter than AA's 24dp) ── */
+    --target:48px;
+
+    /* ── MOTION — one vocabulary app-wide (bento verbatim) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+  }
+  /* Reduced motion: the ONLY gate. Nothing below carries meaning by motion. */
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:70ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  /* ── stage controls ── */
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .swatch{width:26px;height:26px;border-radius:8px;border:1.5px solid transparent;
+          cursor:pointer;padding:0;position:relative}
+  .swatch[aria-pressed="true"]{border-color:var(--stage-hi);
+          box-shadow:0 0 0 2px rgba(255,255,255,.14)}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:8px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);
+       border-color:transparent}
+
+  /* ── panels ── */
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);
+         border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);
+     white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .num{font-variant-numeric:tabular-nums;text-align:right}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:var(--fail)}
+  .t-hard{background:color-mix(in srgb,#EF4444 20%,transparent);color:#ff9494}
+  .t-crit{background:color-mix(in srgb,#F97316 20%,transparent);color:#ffb478}
+  .t-adv{background:color-mix(in srgb,#5B7FFF 22%,transparent);color:#9db0ff}
+  .t-na{background:rgba(255,255,255,.07);color:var(--stage-faint)}
+
+  /* ══════════════════════════════════════════════════════════════════
+     APP SPECIMENS — everything below renders with app tokens only.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* substrate A — over-app-surface (themed host: Library / Settings) */
+  .stage-app{background:linear-gradient(180deg,var(--bgTop),var(--bgBot));
+             border-radius:var(--r-lg);padding:var(--s5);min-height:120px}
+  /* substrate B — over-media (pinned Record route, above the live viewfinder) */
+  .stage-media{border-radius:var(--r-lg);padding:var(--s5);position:relative;overflow:hidden;
+               min-height:120px;background:var(--frame)}
+  .stage-media::before{content:"";position:absolute;inset:0;background:var(--frame-img);
+               background-size:cover;background-position:center;opacity:var(--frame-op,1)}
+  .stage-media>*{position:relative}
+
+  /* ── The severity chip (shared atom) ───────────────────────────── */
+  /* Severity marks take their paint from --lbl-ink / --dot-ink, and accent-as-text
+     from --acc-ink; the `resolveInk` resolver writes all three per (hue × backing).
+     NEVER from --sev / --accent directly: a fixed derivation cannot clear AA on both
+     a near-black and a near-white backing. See §APPX-D. */
+  .sevchip{display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-sm);
+           padding:var(--s1) var(--s2);
+           background:color-mix(in srgb,var(--sev) var(--sev-chip-fill-pct),transparent)}
+  .sevchip .dot{width:5px;height:5px;border-radius:50%;background:var(--dot-ink,var(--sev));flex:none}
+  .sevchip .lbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+           color:var(--lbl-ink,var(--sev))}
+  .sevchip .glyph{width:11px;height:11px;color:var(--dot-ink,var(--sev));flex:none}
+  .recov>.trustrow>.dot, .setchip>.dot{background:var(--dot-ink,var(--sev))}
+
+  /* ── TrustRow: the shared anatomy. Four Answers, in order. ──────── */
+  .trustrow{display:flex;gap:var(--s3);align-items:flex-start}
+  .trustrow .mark{flex:none}
+  .trustrow .col{flex:1;min-width:0}
+  /* A1…A4 are an ORDERING, not four classes. There are deliberately no .a1….a4 rules:
+     empty rules would imply markup no specimen has. The order is enforced by the
+     source order of the elements. */
+
+  .t-eyebrow{font:600 9.5px/1.3 inherit;letter-spacing:.13em;text-transform:uppercase;
+             color:var(--ink-dim);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .t-title{font:600 15px/1.32 inherit;color:var(--ink-high);margin:var(--s2) 0 0;
+           letter-spacing:-.005em}
+  .t-body{font:400 12.5px/1.55 inherit;color:var(--ink-body);margin:var(--s2) 0 0;
+          max-width:60ch}
+  .t-num{font-variant-numeric:tabular-nums;font-weight:500}
+
+  /* ── CTAs — exactly three roles ─────────────────────────────────── */
+  .ctas{display:flex;gap:var(--s2);margin-top:var(--s4);flex-wrap:wrap}
+  .cta{min-height:var(--target);border-radius:var(--r-md);border:0;cursor:pointer;
+       font:600 13px/1.2 inherit;padding:var(--s3) var(--s5);flex:1 1 auto;
+       transition:transform var(--t-micro) var(--ease-std),
+                  background var(--t-micro) var(--ease-std)}
+  .cta:active{transform:scale(.985)}
+  .cta:focus-visible{outline:var(--focus) solid var(--ink-high);outline-offset:2px}
+  .cta[disabled]{opacity:.38;cursor:not-allowed}
+  /* PRIMARY (accent) — AA-resolved by DialogActionColors.resolve */
+  .cta-accent{background:var(--accent-fill);color:var(--accent-ink)}
+  /* PRIMARY (severity) — solid locked fill + locked near-black ink. Do NOT
+     route through DialogActionColors.resolve: it would deepen 3 of the 4
+     locked fills and flip the label. §APPX-C */
+  .cta-sev{background:var(--sev);color:var(--sev-cta-ink)}
+  /* GHOST */
+  .cta-ghost{background:color-mix(in srgb,var(--ink-high) 7%,transparent);
+             color:var(--ink-body);border:var(--hair) solid color-mix(in srgb,var(--ink-high) 12%,transparent)}
+  .cta-ghost:hover{background:color-mix(in srgb,var(--ink-high) 12%,transparent)}
+  /* DESTRUCTIVE — always terminal in the stack, never the primary slot, and
+     never full-width: an irreversible action must not read as the obvious one. */
+  .cta-dest{background:transparent;flex:0 0 auto;
+            color:color-mix(in srgb,var(--sev-hard) 62%,var(--ink-high));
+            border:var(--hair) solid color-mix(in srgb,var(--sev-hard) 30%,transparent)}
+  .cta-dest:hover{background:color-mix(in srgb,var(--sev-hard) 9%,transparent)}
+
+  /* invisible hit-area expansion — visual size preserved (ADR-0020 §Decision-1,
+     Compose: Modifier.minimumInteractiveComponentSize()). §APPX-E */
+  .hit{position:relative;display:inline-flex;align-items:center;justify-content:center;
+       background:none;border:0;color:var(--ink-dim);cursor:pointer;padding:0}
+  .hit::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+       width:var(--target);height:var(--target)}
+  .hit:focus-visible{outline:var(--focus) solid var(--ink-high);outline-offset:3px;border-radius:8px}
+  .hit svg{display:block}
+  .ovf{width:28px;height:28px}        /* sheet ⋯   — visual 28, hit 48 */
+  /* registry-complete — no specimen renders it: the banner ⋯ exists only for the two
+     auto-stop echo ids, which declare an `overflow` list. Kept so APPX-E's row is real. */
+  .ovf-lg{width:40px;height:40px}     /* banner ⋯  — visual 40, hit 48 */
+
+  /* ── SHEET ──────────────────────────────────────────────────────── */
+  .sheet{background:var(--pin-surface);border-radius:var(--r-sheet) var(--r-sheet) 0 0;
+         padding:var(--s5) var(--s5) var(--s6);position:relative;overflow:hidden;
+         border-top:var(--hair) solid var(--media-edge-top);max-width:420px}
+  .sheet .handle{width:32px;height:4px;border-radius:99px;margin:0 auto var(--s5);
+         background:color-mix(in srgb,var(--media-ink) 20%,transparent)}
+  .sheet .ovfslot{position:absolute;top:14px;right:18px}
+  .sheeticon{width:56px;height:56px;border-radius:var(--r-lg);display:grid;place-items:center;
+         position:relative;margin:0 auto var(--s4);
+         background:color-mix(in srgb,var(--sev) 16%,transparent);
+         border:var(--hair) solid color-mix(in srgb,var(--sev) 22%,transparent);
+         color:var(--dot-ink,var(--sev))}
+  .sheeticon::before{content:"";position:absolute;inset:-22px;border-radius:50%;z-index:-1;
+         background:radial-gradient(closest-side,color-mix(in srgb,var(--sev) 45%,transparent),transparent);
+         filter:blur(22px)}
+  .sheet.center{text-align:center}
+  .sheet.center .t-eyebrow{justify-content:center}
+  .sheet.center .t-body{margin-left:auto;margin-right:auto}
+  .whyrow{min-height:36px;border-radius:var(--r-sm);margin-top:var(--s4);width:100%;
+         border:var(--hair) solid color-mix(in srgb,var(--ink-high) 20%,transparent);
+         background:none;color:color-mix(in srgb,var(--ink-high) 78%,transparent);
+         font:600 12px/1 inherit;cursor:pointer;padding:0 var(--s3);
+         display:flex;align-items:center;justify-content:center;gap:6px}
+  .whybody{font:400 12px/1.6 inherit;color:var(--ink-dim);margin-top:var(--s3);text-align:left}
+
+  /* ── TOP BANNER (over media, pinned) ────────────────────────────── */
+  /* The severity-tinted border is SHIPPED chrome (WarningTopBannerV3.kt:74, α.30).
+     It is decorative: the icon, title and Stop label carry the meaning. §APPX-D exempt list. */
+  .banner{display:flex;align-items:center;gap:var(--s3);border-radius:var(--r-lg);
+    padding:var(--s3);max-width:420px;
+    background:color-mix(in srgb,var(--pin-surface) var(--pin-container-alpha), transparent);
+    border:var(--hair) solid color-mix(in srgb,var(--sev) 30%,transparent);
+    box-shadow:0 8px 28px rgba(0,0,0,.42)}
+  .banner .iconbox{width:36px;height:36px;border-radius:var(--r-sm);flex:none;display:grid;
+    place-items:center;color:var(--dot-ink,var(--sev));
+    background:color-mix(in srgb,var(--sev) 16%,transparent)}
+  .banner .col{flex:1;min-width:0}
+  .banner .ttl{font:600 12.5px/1.3 inherit;color:var(--media-ink)}
+  .banner .sub{font:400 11px/1.4 inherit;color:var(--media-ink-dim);margin-top:2px}
+  /* Trailing STOP pill — the banner's answer (3). Rendered whenever there is no
+     autoAction; with the CountdownRing removed (Q1) that is now EVERY banner id.
+     Label ink is resolved (--stop-ink): the shipped severityColor@.95 on its own
+     20% tint reads 3.44–4.38:1 over a bright frame and fails SC 1.4.3. */
+  /* Visual capsule stays ~32dp — a 48dp-tall pill would grow the banner and occlude
+     more viewfinder. The hit box is expanded invisibly, per APPX-E / ADR-0020 §Decision-1. */
+  .banner .stop{border:0;cursor:pointer;flex:none;border-radius:var(--r-sm);position:relative;
+    padding:var(--s2) var(--s3);
+    background:color-mix(in srgb,var(--sev) 20%,transparent);
+    color:var(--lbl-ink,var(--sev));
+    font:600 11px/1 inherit;letter-spacing:.09em;text-transform:uppercase}
+  .banner .stop::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:100%;min-width:var(--target);height:var(--target)}
+  .banner .stop:focus-visible{outline:var(--focus) solid var(--media-ink);outline-offset:2px}
+
+  /* ── SNOOZE CHIP (over media, pinned) ───────────────────────────── */
+  /* 48dp min-height IS the hit box; the visual capsule is the 34px inner pill —
+     zero extra viewfinder occlusion (Compose: minimumInteractiveComponentSize). */
+  .snooze{display:inline-flex;align-items:center;justify-content:center;
+    min-height:var(--target);background:none;border:0;padding:0;cursor:pointer}
+  .snooze .pill{display:inline-flex;align-items:center;gap:var(--s2);
+    border-radius:var(--r-pill);height:34px;padding:0 var(--s4);
+    background:color-mix(in srgb,var(--pin-surface) var(--pin-container-alpha),transparent);
+    border:var(--hair) solid color-mix(in srgb,var(--sev) 25%,transparent);
+    color:var(--media-ink);font:600 12px/1 inherit}
+  .snooze:focus-visible{outline:var(--focus) solid var(--media-ink);outline-offset:2px;border-radius:var(--r-pill)}
+  .snooze .glyph{width:12px;height:12px;color:var(--media-ink-dim);flex:none;display:grid;place-items:center}
+  .snooze .dot{width:7px;height:7px;border-radius:50%;background:var(--dot-ink,var(--sev));flex:none}
+  /* The pulse marks a BLOCKING condition only — WarningSnoozeChip.kt:63 gates it on
+     warningSurfaceFor(id) == HardBlockSheet. An advisory chip never pulses. */
+  .snooze[data-blocking="1"] .dot{animation:pulse 1.6s var(--ease-std) infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+  /* ── HISTORY STRIP CARD (themed host) ───────────────────────────── */
+  .strip{display:flex;align-items:flex-start;gap:var(--s3);border-radius:var(--r-md);
+    padding:var(--s3) var(--s3) var(--s3) var(--s4);
+    background:color-mix(in srgb,var(--sev) 8%,var(--surface));
+    border:var(--hair) solid color-mix(in srgb,var(--sev) 25%,transparent)}
+
+  /* ── SETTINGS CHIP (themed host, NOT dismissible) ───────────────── */
+  .setchip{display:flex;align-items:center;gap:var(--s3);border-radius:var(--r-sm);
+    padding:var(--s3) var(--s4);min-height:var(--target);
+    background:color-mix(in srgb,var(--sev) 8%,var(--surface));
+    border:var(--hair) solid color-mix(in srgb,var(--sev) 25%,transparent)}
+  .setchip .col{flex:1;min-width:0}
+  /* accent AS text — resolved per backing by the ink resolver (--acc-ink). */
+  .setchip .go{color:var(--acc-ink,var(--accent));font:600 12px/1 inherit;white-space:nowrap}
+
+  /* ── RECOVERY CARD (themed host — Library) ──────────────────────── */
+  .recov{border-radius:var(--r-lg);padding:var(--s4);position:relative;overflow:hidden;
+    background:var(--surface-hi);border:var(--hair) solid var(--edge);max-width:460px}
+  .recov::before{content:"";position:absolute;left:0;right:0;top:0;height:60px;pointer-events:none;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--sev) 50%,transparent),transparent);
+    filter:blur(28px);opacity:.5}
+  .recov>*{position:relative}
+  /* paint comes from the .recov>.trustrow>.dot rule above — never raw --sev */
+  .recov .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .recov .dot.pulsing{animation:pulse 1.6s var(--ease-std) infinite}
+  .artifacts{margin-top:var(--s3);display:flex;flex-direction:column;gap:var(--s1)}
+  .artifacts li{font:400 11.5px/1.5 inherit;color:var(--ink-dim);list-style:none}
+  .progress{display:flex;align-items:center;gap:var(--s3);margin-top:var(--s4)}
+  .cells{display:flex;gap:4px;flex:1}
+  .cell{height:7px;border-radius:3.5px;flex:1;background:var(--fill-1)}
+  .cell.on{background:var(--accent-fill)}
+  .numchip{min-width:36px;text-align:center;font:500 11px/1 inherit;color:var(--ink-dim);
+    font-variant-numeric:tabular-nums}
+  .vendor{margin-top:var(--s3);font:600 12px/1 inherit;color:var(--acc-ink,var(--accent));
+    background:none;border:0;padding:var(--s3) 0;cursor:pointer;min-height:var(--target);
+    display:flex;align-items:center;gap:6px}
+  .failbox{margin-top:var(--s3);border-radius:var(--r-sm);padding:var(--s3);
+    background:color-mix(in srgb,var(--sev-hard) 8%,transparent);
+    border:var(--hair) solid color-mix(in srgb,var(--sev-hard) 22%,transparent);
+    font:400 12px/1.5 inherit;color:var(--ink-body)}
+
+  /* ink aliasing per host — this is the ONE place ink is chosen.
+     Themed dim/body inks route through --tQuiet (quietTextColor), NOT raw --tDim:
+     on Daylight, tDim @ .60α reads 4.25–4.37:1 over any severity-tinted container. */
+  .host-pinned{--ink-high:var(--media-ink);--ink-dim:var(--media-ink-dim);--ink-body:var(--media-ink-body)}
+  .host-themed{--ink-high:var(--tHigh);--ink-dim:var(--tQuiet);--ink-body:var(--tQuiet)}
+
+  /* ── a11y inspector ─────────────────────────────────────────────── */
+  .a11y{display:none;margin-top:var(--s3);border-left:2px solid var(--stage-accent);
+    padding:8px 12px;background:rgba(91,157,255,.07);border-radius:0 8px 8px 0}
+  :root[data-a11y="1"] .a11y{display:block}
+  .a11y dt{font:600 9px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--stage-accent);margin-top:6px}
+  .a11y dt:first-child{margin-top:0}
+  .a11y dd{margin:2px 0 0;font:400 11.5px/1.5 ui-monospace,Menlo,monospace;color:var(--stage-dim)}
+
+  .specimen{margin-bottom:26px}
+  .specimen>.caption{display:flex;justify-content:space-between;align-items:center}
+  ul.rules{margin:0;padding-left:18px;color:var(--stage-dim);font-size:12.5px;line-height:1.75}
+  ul.rules b{color:var(--stage-hi)}
+  ul.rules code{font-size:11.5px}
+  .noderive{border-left:2px solid var(--pass);background:rgba(52,211,153,.06);
+    padding:10px 14px;border-radius:0 8px 8px 0;font-size:12.5px;color:var(--stage-dim);margin-top:14px}
+  .noderive b{color:var(--pass)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">ROVA · TRUST SYSTEM VISUAL SPEC · LIVING · v1.0 FROZEN — 2026-07-09</div>
+  <h1>Warnings + Recovery — one Trust System</h1>
+  <p class="stagenote">
+  <b>DESIGN FROZEN V1 · 2026-07-09.</b> This file <b>IS</b> the canonical design source for Warnings + Recovery
+  (HTML-first workflow). <b>Compose must faithfully transcribe this document. Behavioral changes require a new
+  HTML design iteration before implementation.</b> The only changes permitted after freeze are bug fixes,
+  accessibility improvements, performance improvements, implementation parity (making Compose match this file),
+  and theme compatibility — and each of those lands <i>here</i> first, then in Compose. Grown from
+  <code>docs/superpowers/specs/2026-07-09-warnings-recovery-design-foundation.md</code>; this document supersedes
+  it and is self-contained. No earlier document is needed to implement it.<br><br>
+  <b>Scope:</b> methodological parity with the Library — one color entry point, tested contrast contracts,
+  one radius/motion ladder, total reduced-motion gating, honest affordances. <b>Not</b> a visual
+  restyle toward the bento aesthetic: we adopt the method, never the appearance. No new warning states
+  (NO-GO #1), no hub screen (NO-GO #9), no <code>blur</code> on the record surface, no schema change (NO-GO #4),
+  no precedence / gating / snooze / hysteresis / merge-state-machine change.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Palette</span><span id="themerow" style="display:flex;gap:5px"></span></div>
+    <div class="ctlgrp"><span class="ctllbl">Media frame</span>
+      <button class="tog" data-frame="dark">Dark</button>
+      <button class="tog" data-frame="bright">Bright</button>
+      <button class="tog" data-frame="white" aria-pressed="true">Worst-case white</button>
+    </div>
+    <div class="ctlgrp"><span class="ctllbl">Inspect</span>
+      <button class="tog" id="rmBtn" aria-pressed="false">Reduced motion</button>
+      <button class="tog" id="a11yBtn" aria-pressed="false">Accessibility</button>
+      <button class="tog" id="oldBtn" aria-pressed="false">Show pre-freeze values</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s1">
+  <div class="sechead"><span class="secnum">01</span><div>
+    <h2>The Four Answers</h2>
+    <p class="subtle">The ordering law of the whole system. Every trust surface answers these, in this order, or it does not ship.</p>
+  </div></div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The law</div>
+      <ol style="margin:0;padding-left:20px;color:var(--stage-dim);font-size:13px;line-height:2">
+        <li><b style="color:var(--stage-hi)">What happened?</b> → severity mark · eyebrow · recency · title</li>
+        <li><b style="color:var(--stage-hi)">What does it mean?</b> → body, ≤3 lines, in the user's terms</li>
+        <li><b style="color:var(--stage-hi)">What should I do?</b> → exactly one primary CTA, or none</li>
+        <li><b style="color:var(--stage-hi)">What else can I do?</b> → ghost actions, then destructive, then ⋯</li>
+      </ol>
+      <div class="noderive"><b>Consequences that bind:</b> a ghost or destructive action may never precede
+      the primary. A surface that has no answer to (3) renders (1) + (2) + (4) and <b>does not fabricate a
+      primary action</b> — an echo banner offers only Dismiss. Destructive is always terminal in the stack,
+      and is never full-width: an irreversible action must not read as the obvious one.</div>
+      <div class="caption" style="margin-top:16px">Which fill does the primary take?</div>
+      <table><thead><tr><th>Primary answers…</th><th>Fill</th><th>Example</th></tr></thead><tbody>
+        <tr><td>…the severity condition itself</td><td><code>--sev</code> (locked)</td><td>sheet: "Open settings", "Allow microphone"</td></tr>
+        <tr><td>…a constructive recovery choice</td><td><code>--accent-fill</code></td><td>recovery card: "Combine clips", "Retry"</td></tr>
+      </tbody></table>
+      <p class="subtle" style="margin-top:8px">A severity fill means <i>"this button resolves the red thing."</i>
+      Combining clips is not resolving a severity — it is the ordinary, hoped-for path. Painting it red would make
+      a good outcome look like an alarm, violating the report-not-alarm law of §07.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">TrustRow — the shared atom</div>
+      <p class="subtle" style="margin-bottom:12px">What is unified is the <b>ordering</b>, not the markup: every
+      surface answers 1→4 in this sequence. The recovery card realizes it literally (<code>.trustrow</code>); the
+      sheet centers the same order under a 56dp mark; the banner elides (3)→a single Stop and has no (4); the strip
+      and settings chip stop after (2)+(3). The <b>container</b> and the <b>dismissibility</b> stay per-host,
+      exactly as <code>WarningCenterContract.md</code> §6 specifies. We unify the atom, not the behavior.</p>
+      <pre style="margin:0;font:500 11.5px/1.9 ui-monospace,Menlo,monospace;color:var(--stage-dim)">
+┌──────────────────────────────────────────┐
+│ [mark]  A1 eyebrow · recency             │
+│         A1 title                    [⋯]  │
+│         A2 body                          │
+│                                          │
+│         A3 [ primary ]                   │
+│         A4 [ ghost ] [ destructive ]     │
+└──────────────────────────────────────────┘</pre>
+      <p class="subtle" style="margin-top:12px">Hierarchy comes from <b>weight and opacity</b>, never size.
+      The type scale is 9.5–15px, exactly as the Library's is 10–14.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s2">
+  <div class="sechead"><span class="secnum">02</span><div>
+    <h2>Token registry</h2>
+    <p class="subtle">Three families. The split is the contract. Values are <code>RovaPalette.kt</code> / <code>RovaTokens.kt</code> verbatim.</p>
+  </div></div>
+  <div class="grid3" id="tokenGrid"></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s3">
+  <div class="sechead"><span class="secnum">03</span><div>
+    <h2>Contrast inspector</h2>
+    <p class="subtle">Live, per palette, per frame. <b>A specimen that fails cannot be frozen.</b> This is the HTML analogue of <code>TokenContrastTest</code>.</p>
+  </div></div>
+  <div class="panel">
+    <table><thead><tr>
+      <th>Pair</th><th>Foreground</th><th>Backing (composited)</th>
+      <th class="num">Ratio</th><th class="num">Needs</th><th>Verdict</th>
+    </tr></thead><tbody id="contrastBody"></tbody></table>
+    <div class="noderive" id="contrastNote"></div>
+    <div class="caption" style="margin-top:18px">Full-matrix sweep — runs on load</div>
+    <div id="sweep"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s4">
+  <div class="sechead"><span class="secnum">04</span><div>
+    <h2>Severity matrix</h2>
+    <p class="subtle">Four locked colors × the shared atoms. Flip any palette: these four never move. Meaning survives without color — dot <b>+</b> label <b>+</b> glyph (WCAG 1.4.1).</p>
+  </div></div>
+  <!-- background is --surface, because that is the backing the `chip` site resolves against. -->
+  <div class="panel host-themed" id="sevMatrix" style="display:grid;gap:16px;background:var(--surface)"></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s5">
+  <div class="sechead"><span class="secnum">05</span><div>
+    <h2>Record host — pinned dark, over media</h2>
+    <p class="subtle">The Record route never adopts the palette's surface colors (ADR-0028 §2.4). Its white inks are the <b>pinned contract</b>, not palette-blindness. Only the banner and the snooze chip float over the live viewfinder.</p>
+  </div></div>
+
+  <div class="grid2">
+    <div class="specimen">
+      <div class="caption"><span>Hard-block sheet · non-dismissible · gates Start</span><span class="tag t-hard">hard</span></div>
+      <div class="stage-media host-pinned" style="padding:0;display:flex;align-items:flex-end;min-height:430px">
+        <div class="sheet center" data-sev="hard" style="--sev:var(--sev-hard);width:100%;max-width:none">
+          <!-- NO drag handle. A handle affords a drag-to-dismiss the sheet refuses.
+               Truthful before beautiful — an affordance may not depict a state we don't have. -->
+          <div class="sheeticon" id="ic-hard" style="margin-top:var(--s2)"></div>
+          <div class="t-eyebrow"><span class="sevchip" data-sev="hard" style="--sev:var(--sev-hard)"><span class="dot"></span><span class="lbl">Blocked</span></span></div>
+          <h3 class="t-title">Camera access is off</h3>
+          <p class="t-body">Rova can't record without the camera. Recording is unavailable until you allow access.</p>
+          <div class="ctas">
+            <button class="cta cta-sev">Open settings</button>
+            <button class="cta cta-ghost">Not now</button>
+          </div>
+          <button class="whyrow">Why this matters</button>
+          <dl class="a11y">
+            <dt>Role</dt><dd>dialog · scrim/back dismiss BLOCKED · "Not now" → collapses to chip</dd>
+            <dt>Spoken</dt><dd>"Blocked. Camera access is off. Rova can't record without the camera…"</dd>
+            <dt>Live region</dt><dd>none (modal — focus moves here)</dd>
+            <dt>Note</dt><dd>Putting the sheet away does NOT ungate Start: gating reads the signals directly, never the resolved warning.</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="subtle"><b>"Not now" is shipped behavior and is preserved</b> (<code>WarningSheetContent.kt:113</code>
+      → <code>WarningCenter.kt:168</code> dismisses unconditionally). A hard block refuses <i>accidental</i>
+      dismissal — scrim tap and back are inert — but never traps the user in a modal. The Start button stays
+      disabled regardless, because <code>gatesStart</code> reads signals, not the sheet.</p>
+    </div>
+
+    <div class="specimen">
+      <div class="caption"><span>Advisory sheet · dismissible → collapses to chip</span><span class="tag t-adv">advisory</span></div>
+      <div class="stage-media host-pinned" style="padding:0;display:flex;align-items:flex-end;min-height:430px">
+        <div class="sheet center" data-sev="advisory" style="--sev:var(--sev-advisory);width:100%;max-width:none">
+          <div class="handle"></div>
+          <button class="hit ovfslot" aria-label="More options"><span class="ovf" id="ovf-a"></span></button>
+          <div class="sheeticon" id="ic-adv"></div>
+          <div class="t-eyebrow"><span class="sevchip" data-sev="advisory" style="--sev:var(--sev-advisory)"><span class="dot"></span><span class="lbl">Advisory</span></span></div>
+          <h3 class="t-title">Microphone access is off</h3>
+          <p class="t-body">Your recordings will have no sound. Everything else works normally.</p>
+          <div class="ctas">
+            <button class="cta cta-sev">Allow microphone</button>
+            <button class="cta cta-ghost">Not now</button>
+          </div>
+          <dl class="a11y">
+            <dt>Role</dt><dd>dialog · dismissible</dd>
+            <dt>⋯ menu</dt><dd>"Snooze this warning" (durable, ADR-0014)</dd>
+            <dt>Hit target</dt><dd>⋯ visual 28dp, hit box 48dp</dd>
+            <dt>Spoken</dt><dd>"Advisory. Microphone access is off. Your recordings will have no sound…"</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="subtle">Answer (4) is the ghost + ⋯. Never above the primary.</p>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:8px">
+    <div class="specimen">
+      <div class="caption"><span>Top banner · mid-session, non-blocking</span><span class="tag t-crit">critical</span></div>
+      <div class="stage-media host-pinned">
+        <div class="banner" data-sev="escalating" style="--sev:var(--sev-escalating)">
+          <div class="iconbox" id="ic-ban"></div>
+          <div class="col">
+            <div class="ttl">Device is getting hot</div>
+            <div class="sub">Recording continues. Rova will stop if it gets hotter.</div>
+          </div>
+          <button class="stop">Stop</button>
+        </div>
+        <dl class="a11y">
+          <dt>Live region</dt><dd>polite</dd>
+          <dt>Spoken</dt><dd>"Device is getting hot. Recording continues. Rova will stop if it gets hotter." · "Stop, button"</dd>
+          <dt>Overflow ⋯</dt><dd>NOT rendered here. Only <code>STORAGE_FULL_AUTOSTOPPED</code> and <code>THERMAL_AUTOSTOPPED</code> declare an <code>overflow</code> list (<code>WarningSheetContent.kt:302,310</code>); every other banner id has none, and the ⋯ is hidden when the list is empty (<code>WarningTopBannerV3.kt:151</code>).</dd>
+          <dt>Removed</dt><dd>CountdownRing — depicted a countdown the system never ran (Q1, owner: remove).</dd>
+        </dl>
+      </div>
+      <p class="subtle">Capsule opacity <b>0.94</b> (was 0.88). At 0.88 the sub-text cleared AA by
+      <b>four thousandths</b> over a white frame — a margin no frozen token should carry. The snooze chip, at
+      <code>Color.Black</code> @ 0.55 with a <code>White @ 0.78</code> label, <b>failed outright</b> (3.61:1).
+      Exact ratios: APPX-B (computed, not typed).<br><br>
+      <b>The trailing element is the STOP pill, not the ring.</b> The banner renders the ring only when
+      <code>autoAction != null</code>; deleting the ring (Q1) leaves <code>WarningTopBannerV3.kt:129</code>'s
+      <code>else</code> arm — the Stop CTA — for <i>every</i> banner id. This specimen shows what the code will
+      render, not a ring-shaped hole. Its label ink is <b>resolved</b>: the shipped
+      <code>severityColor @ 0.95</code> on its own 20% tint reads <b>3.44–4.38:1</b> and fails SC 1.4.3 (§APPX-D).
+      The severity-tinted border is shipped chrome (<code>:74</code>) and is restored.</p>
+    </div>
+
+    <div class="specimen">
+      <div class="caption"><span>Snooze chip · collapsed state of a dismissed sheet</span><span class="tag t-na">chip</span></div>
+      <div class="stage-media host-pinned" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <button class="snooze" data-sev="hard" data-blocking="1" style="--sev:var(--sev-hard)">
+          <span class="pill"><span class="dot"></span><span class="glyph" id="chip-g1"></span>1 warning</span></button>
+        <button class="snooze" data-sev="advisory" style="--sev:var(--sev-advisory)">
+          <span class="pill"><span class="dot"></span><span class="glyph" id="chip-g2"></span>2 warnings</span></button>
+        <dl class="a11y" style="flex-basis:100%">
+          <dt>Role</dt><dd>button</dd>
+          <dt>Spoken</dt><dd>"1 warning. Double-tap to review."</dd>
+          <dt>Hit target</dt><dd>48dp min-height; dot, glyph and pulse are decorative (<code>contentDescription = null</code>)</dd>
+          <dt>Reduced motion</dt><dd>pulse → static. The chip's information is the <b>count</b>, which is text. Severity is decoration here: it is never the only carrier of anything, because the chip carries nothing but "N warnings, tap to review".</dd>
+        </dl>
+      </div>
+      <p class="subtle">The pulse marks a <b>blocking</b> condition only — <code>WarningSnoozeChip.kt:63</code> gates
+      it on <code>warningSurfaceFor(id) == HardBlockSheet</code>. The advisory chip is static. A pulse on every chip
+      would make the animation mean nothing, which is the only reason §11 lets it survive. The glyph and the
+      severity-tinted border are shipped (<code>:83, :97</code>) and are preserved: only the <i>fill</i> changed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s6">
+  <div class="sechead"><span class="secnum">06</span><div>
+    <h2>Themed hosts — Library &amp; Settings</h2>
+    <p class="subtle">These are NOT pinned. Their ink derives from <code>palette.textHigh / textDim</code>. Flip to <b>Daylight</b>: they follow. Today's hardcoded <code>#0B0D14</code> recovery card would stay a near-black island on paper-white — that is the palette-blindness this freeze removes.</p>
+  </div></div>
+
+  <div class="stage-app host-themed">
+    <div class="caption" style="color:var(--tFaint)">History strip card · multi-active · dismissible (X)</div>
+    <div class="strip" data-sev="soft" style="--sev:var(--sev-soft)">
+      <span class="sevchip on-tint" data-sev="soft" style="--sev:var(--sev-soft);flex:none"><span class="dot"></span><span class="lbl">Storage</span></span>
+      <div class="col" style="flex:1;min-width:0">
+        <div class="t-title" style="margin:0;font-size:13.5px">Recording stopped — storage full</div>
+        <div class="t-body" style="margin-top:4px">Your last session was saved. Free up space before recording again.</div>
+      </div>
+      <button class="hit" aria-label="Dismiss"><span class="ovf" id="x-strip"></span></button>
+    </div>
+
+    <div class="caption" style="color:var(--tFaint);margin-top:24px">Settings chip · multi-active · NOT dismissible (clears with the signal)</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="setchip" data-sev="hard" style="--sev:var(--sev-hard)">
+        <span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--dot-ink,var(--sev));flex:none"></span>
+        <div class="col"><div class="t-title" style="margin:0;font-size:13px">Camera access denied</div></div>
+        <span class="go">Fix</span>
+      </div>
+      <div class="setchip" data-sev="advisory" style="--sev:var(--sev-advisory)">
+        <span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--dot-ink,var(--sev));flex:none"></span>
+        <div class="col"><div class="t-title" style="margin:0;font-size:13px">Battery optimization is on</div></div>
+        <span class="go">Fix</span>
+      </div>
+    </div>
+    <dl class="a11y">
+      <dt>Settings chips</dt><dd>role=button · no X · disappear only when the signal flips off</dd>
+      <dt>History strip</dt><dd>role=button + separate X (per-session in-memory dismiss; re-surfaces on signal down-edge)</dd>
+      <dt>Invariant</dt><dd>activeWarning == WarningPrecedence.allActive(…).firstOrNull()  — untouched</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s7">
+  <div class="sechead"><span class="secnum">07</span><div>
+    <h2>Recovery cards</h2>
+    <p class="subtle">Six kinds + the merge states. An interruption is a <b>report</b>, not an alarm.
+    The severity of each kind is <code>severityColorFor(kind)</code> (<code>RecoveryCard.kt:246-253</code>)
+    transcribed verbatim — a design freeze may not silently re-assign meaning.</p>
+  </div></div>
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">Severity per kind — source of truth, not a design choice</div>
+    <table><thead><tr><th>Kind</th><th>Severity</th><th>Pulse</th><th>Why the code says so</th></tr></thead><tbody>
+      <tr><td><code>KILLED_BY_SYSTEM</code></td><td><span class="tag t-hard">hard</span></td><td>yes</td><td>the only kind that <b>recurs until the user changes an OS setting</b>; it is the one card carrying a vendor-guidance CTA (<code>:101</code> → <code>pulsing = isHardSeverity</code>)</td></tr>
+      <tr><td><code>SCHEDULED_END</code></td><td><span class="tag t-adv">advisory</span></td><td>—</td><td>"neutral/informational, NOT an alarm" (<code>:248</code>, verbatim comment)</td></tr>
+      <tr><td><code>KILLED_FORCE_STOP</code> · <code>SAFETY_STOPPED</code> · <code>ERROR_STOPPED</code> · <code>USER_STOPPED</code></td><td><span class="tag t-crit" style="background:color-mix(in srgb,#FBBF24 20%,transparent);color:#ffd97a">soft</span></td><td>—</td><td>the user acted, the OS acted, or the app reported — nothing is destroyed and nothing recurs</td></tr>
+    </tbody></table>
+    <div class="noderive"><b>Do not re-derive this mapping.</b> It is transcribed verbatim from
+    <code>RecoveryCard.kt:246–253</code>, not chosen here. The law it encodes: <b>red is earned by a condition the
+    user must act on <i>outside Rova</i> to prevent</b> — so <code>KILLED_BY_SYSTEM</code> is hard and pulsing, and
+    "something went wrong once" (<code>ERROR_STOPPED</code>) is a report and stays amber. Re-tinting any kind is a
+    behavior change: it needs an ADR and a new HTML iteration, never a transcription-time decision.</div>
+  </div>
+  <div class="stage-app host-themed" id="recovStage" style="display:grid;gap:20px"></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s8">
+  <div class="sechead"><span class="secnum">08</span><div>
+    <h2>Merge failure — the closed reason set</h2>
+    <p class="subtle">A raw Java exception message is never shown to a user, in any locale. Four localized causes; the exception goes to logs.</p>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Reason contract (Q6, owner-locked)</div>
+      <table><thead><tr><th>Cause</th><th>Copy</th></tr></thead><tbody>
+        <tr><td><code>STORAGE</code></td><td>Storage became unavailable.</td></tr>
+        <tr><td><code>UNREADABLE</code></td><td>One of the recording files couldn't be read.</td></tr>
+        <tr><td><code>INCOMPLETE</code></td><td>The recording couldn't be completed.</td></tr>
+        <tr><td><code>UNKNOWN</code></td><td>Couldn't finish creating the recording.</td></tr>
+      </tbody></table>
+      <div class="noderive"><b>Invariant:</b> the set is closed. A new cause needs a new <code>@StringRes</code>
+      and a mapping entry — never a pass-through. Every reason is followed by the same standing
+      reassurance: <i>"Your clips are safe."</i> Retry is primary; keeping them separate is the ghost.</div>
+    </div>
+    <div class="stage-app host-themed">
+      <div class="recov" data-sev="hard" style="--sev:var(--sev-hard)">
+        <div class="trustrow">
+          <span class="dot" style="margin-top:5px"></span>
+          <div class="col">
+            <div class="t-eyebrow"><span>Merge failed</span><span aria-hidden="true">·</span><span class="t-num">2 hours ago</span></div>
+            <h3 class="t-title">Couldn't combine your clips</h3>
+            <div class="failbox">Storage became unavailable. <b style="color:var(--tHigh)">Your clips are safe.</b></div>
+            <div class="ctas">
+              <button class="cta cta-accent">Retry</button>
+              <button class="cta cta-ghost">Keep as separate clips</button>
+            </div>
+            <div class="ctas" style="margin-top:8px"><button class="cta cta-dest">Discard session</button></div>
+          </div>
+        </div>
+        <dl class="a11y">
+          <dt>Live region</dt><dd>assertive (failure) · polite (progress)</dd>
+          <dt>Spoken</dt><dd>"Merge failed, 2 hours ago. Couldn't combine your clips. Storage became unavailable. Your clips are safe. Interrupted at 4:12 PM on July 9."</dd>
+          <dt>Absolute time</dt><dd>a11y label + "why" expander + diagnostics only — never the primary UI</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s9">
+  <div class="sechead"><span class="secnum">09</span><div>
+    <h2>Interaction demonstrations</h2>
+    <p class="subtle">Three surviving animations, and no more. Every one degrades to static under reduced motion with zero loss of meaning.</p>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Sheet → dismiss → chip → restore</div>
+      <div class="stage-media host-pinned" id="collapseStage" style="min-height:300px;display:flex;align-items:flex-end;padding:0">
+        <div class="sheet center" id="demoSheet" data-sev="advisory" style="--sev:var(--sev-advisory);width:100%;max-width:none">
+          <div class="handle"></div>
+          <div class="sheeticon" id="ic-demo"></div>
+          <div class="t-eyebrow" style="justify-content:center"><span class="sevchip" data-sev="advisory" style="--sev:var(--sev-advisory)"><span class="dot"></span><span class="lbl">Advisory</span></span></div>
+          <h3 class="t-title">Notifications are off</h3>
+          <p class="t-body">You won't see recording status in your notification shade.</p>
+          <div class="ctas">
+            <button class="cta cta-sev">Allow</button>
+            <button class="cta cta-ghost" id="dismissBtn">Not now</button>
+          </div>
+        </div>
+        <button class="snooze" id="demoChip" data-sev="advisory" style="--sev:var(--sev-advisory);display:none;position:absolute;left:20px;bottom:20px">
+          <span class="pill"><span class="dot"></span><span class="glyph" id="chip-g3"></span>1 warning</span></button>
+      </div>
+      <p class="subtle">The collapse must read <i>as a collapse</i> — <code>--t-exit</code> out, <code>--t-container</code> in.
+      Otherwise the chip appears from nowhere and the user loses the object.</p>
+    </div>
+
+    <div class="panel">
+      <div class="caption">Recovery merge — idle → in-flight → failed → retry</div>
+      <div class="stage-app host-themed" id="mergeStage"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="tog" data-merge="idle" aria-pressed="true">Idle</button>
+        <button class="tog" data-merge="running">In-flight</button>
+        <button class="tog" data-merge="failed">Failed</button>
+      </div>
+      <p class="subtle">In-flight disables Merge <b>and</b> Keep, and leaves Discard live — the user is never
+      trapped. This adaptive stack is shipped behavior, preserved verbatim.<br><br>
+      <b>The strip's denominator is <code>survivingArtifacts.size</code></b> — the clip count the card already
+      prints one line above — and its numerator is <code>progress × that</code>. Nothing else exists:
+      <code>RecoveryCardState</code> carries no expected-segment count, and inventing one needs a schema change
+      (NO-GO #4). Today's chip prints <code>N / N</code> for every frame of the merge
+      (<code>RecoveryCard.kt:408</code> passes <code>artifactCount</code> twice), which is the
+      artifact-count-as-progress proxy principle 1 forbids. The frozen strip prints
+      <code>filled / total</code>, and the two numbers agree with the clip line. The strip is rendered only while
+      merging; idle, it is a row of filled cells restating a number already on screen, so it is not drawn.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s10">
+  <div class="sechead"><span class="secnum">10</span><div>
+    <h2>State gallery — all 21 <code>WarningId</code> values</h2>
+    <p class="subtle" id="countNote"></p>
+  </div></div>
+  <div class="panel">
+    <table><thead><tr>
+      <th class="num">#</th><th>WarningId</th><th>Tier</th><th>Gates Start</th>
+      <th>History</th><th>Settings</th><th>Record surface</th>
+      <th>Scrim/back dismiss</th><th>Secondary CTA (verbatim)</th>
+    </tr></thead><tbody id="galleryBody"></tbody></table>
+    <p class="subtle" style="margin-top:12px">Every id routes to <b>Record</b> (the catch-all, single precedence-resolved
+    <code>activeWarning</code>). History and Settings are allowlists. Surface tally: <span id="tally"></span></p>
+    <div class="noderive"><b>Tier ≠ surface ≠ gating ≠ dismissal — four orthogonal axes.</b>
+    <code>warningSurfaceFor(id)</code> is the authority for the container; <code>tier</code> is only banner chrome;
+    <code>gatesStart</code> is behavior. <b>Dismissal itself has two axes, and they must not be collapsed.</b>
+    <code>WarningCenter.kt:191</code> blocks <i>scrim/back</i> for <code>HardBlockSheet</code> only, while
+    <code>:168</code> dismisses on <i>"Not now"</i> unconditionally — and all three hard-block ids ship one
+    (<code>WarningSheetContent.kt:113,119,125</code>). <b>No sheet is undismissable</b>, so every hard-block
+    specimen in this document carries its "Not now". Putting a hard block away never ungates Start, because gating
+    reads the signals, not the sheet.</div>
+    <div class="noderive" style="border-left-color:var(--fail);background:rgba(239,68,68,.06)">
+    <b style="color:var(--fail)">Known doc-vs-code divergence — out of scope for this specification.</b>
+    <code>WarningCenterContract.md</code> row 2 and <code>CLAUDE.md</code> both describe
+    <code>EXACT_ALARM_DENIED</code> as "a flat non-gating <b>banner</b>". The code maps it to
+    <code>HardBlockSheet</code> — a <b>scrim/back-resistant modal</b> — for a condition that does not block recording
+    (the loop falls back to inexact alarms and drifts). <b>This specification transcribes the code</b>: the gallery
+    row above and every specimen render <code>EXACT_ALARM_DENIED</code> as a hard-block sheet, and Compose must do
+    the same. Whether that container is the <i>right</i> one is a <b>behavior question</b>, not a visual one: it
+    changes what the surface does, so it belongs to a separate ADR and its own HTML iteration. It does not block
+    this freeze, and no implementation decision depends on it.</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s11">
+  <div class="sechead"><span class="secnum">11</span><div>
+    <h2>Responsive &amp; reduced motion</h2>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Responsive</div>
+      <ul class="rules">
+        <li><b>Rotation.</b> Banner and chip rotate with the Record chrome group. The sheet stays bottom-anchored to the <b>device</b>, not the chrome.</li>
+        <li><b>Width.</b> Sheet caps at <b>420dp</b> content width and centers on wide screens/foldables. Body copy caps at <b>60ch</b>.</li>
+        <li><b>Text scale.</b> Every height is a <code>min-height</code>, never fixed — 200% font scale (SC 1.4.4) must not clip a label. CTA stacks reflow vertically; the severity chip wraps <i>below</i> the title rather than truncating it.</li>
+        <li><b>Truncation.</b> Title 2 lines · body 3 lines · the "why" expander owns the remainder. <b>A severity label never truncates.</b></li>
+        <li><b>Insets.</b> Banner respects status-bar + display cutout; sheet respects the navigation bar. Over-media surfaces never occlude the record FAB or the HUD.</li>
+        <li><b><code>reduceTransparency</code>.</b> Over-media substrates render fully opaque. Currently unread by these surfaces; the freeze wires it.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Motion — the whole inventory</div>
+      <ul class="rules">
+        <li><b>Severity pulse</b>, on exactly two dots: the snooze chip when the collapsed warning is a
+        <code>HardBlockSheet</code> id (<code>WarningSnoozeChip.kt:63</code>), and the recovery tag when the kind is
+        <code>KILLED_BY_SYSTEM</code> (<code>RecoveryCard.kt:101</code>). <b>Nothing else pulses</b> — an advisory
+        chip that pulses makes the pulse mean nothing, and then it is decoration that fails the bar this inventory
+        sets: an animation ships only if it carries a state no static mark carries.</li>
+        <li><b>ProcessingGlyph</b> during merge. Distinguishes "working" from "hung" on a long silent operation.</li>
+        <li><b>Sheet enter/exit + chip collapse/restore.</b> <code>--t-container</code> in, <code>--t-exit</code> out, <code>--ease-std</code>.</li>
+      </ul>
+      <div class="noderive"><b>The rule that makes the gate safe:</b> no animation may be the sole carrier of
+      meaning — stated per surface, because the surfaces differ:
+      <br>· <b>Recovery card:</b> the pulse rides a dot that sits beside an uppercase severity tag and a status
+      glyph. Kill the motion and the tag still reads <code>INTERRUPTED</code>.
+      <br>· <b>Snooze chip:</b> the chip's information is the <b>count</b> ("1 warning"), and that is text. Severity
+      there is decoration — the chip does not claim to tell you which warning it is, only that one exists and where
+      to tap. Nothing is lost when the pulse stops, because the pulse never carried the count.
+      <br><b>Removed:</b> <code>CountdownRing</code> — animation-shaped chrome that neither animated nor counted.
+      It may return only when backed by a real countdown.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section id="s12">
+  <div class="sechead"><span class="secnum">12</span><div>
+    <h2>Spec appendix — do not re-derive</h2>
+    <p class="subtle">Compose transcribes these values. It does not recompute them.</p>
+  </div></div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-A · Geometry, spacing, motion</div>
+    <table><thead><tr><th>Token</th><th>Value</th><th>Applies to</th><th>Change from today</th></tr></thead><tbody>
+      <tr><td><code>r-sm</code></td><td class="num">10dp</td><td>settings chip · severity chip · banner icon box</td><td>chip 6→10 · sev chip 11→10</td></tr>
+      <tr><td><code>r-md</code></td><td class="num">14dp</td><td>history strip · sheet CTA</td><td>strip 8→14 · CTA ✓</td></tr>
+      <tr><td><code>r-lg</code></td><td class="num">18dp</td><td>top banner · recovery card</td><td>banner ✓ · <b>recovery 20→18</b></td></tr>
+      <tr><td><code>r-sheet</code></td><td class="num">26dp</td><td>modal sheet</td><td>✓</td></tr>
+      <tr><td><code>pill</code></td><td class="num">999dp</td><td>snooze chip</td><td>✓</td></tr>
+      <tr><td>spacing scale</td><td class="num">4 / 8 / 12 / 16 / 20 / 24</td><td>everything</td><td>no inline dp literal for padding, gap or radius</td></tr>
+      <tr><td>card padding</td><td class="num">16 / 16</td><td>recovery card</td><td>was 16/18</td></tr>
+      <tr><td>banner padding</td><td class="num">12 / 12</td><td>top banner</td><td><b>vertical 11→12</b> (<code>bannerVerticalPadding</code> was off-ladder)</td></tr>
+      <tr><td>why-row radius</td><td class="num">10dp</td><td>"Why this matters"</td><td><b>11→10</b> (<code>whyRowCornerRadius</code> was off-ladder)</td></tr>
+      <tr><td>hairline · focus</td><td class="num">1dp · 2dp</td><td>borders · focus ring</td><td>✓ (SC 2.4.7)</td></tr>
+      <tr><td><code>ease-std</code></td><td class="num">cubic-bezier(.2,.8,.2,1)</td><td>all motion</td><td>adopted from bento</td></tr>
+      <tr><td>durations</td><td class="num">micro 120 · small 200 · container 300 · exit 220</td><td>all motion</td><td>adopted from bento</td></tr>
+    </tbody></table>
+    <div class="noderive"><b>Shape primitives are not spacing.</b> The ladder governs padding, gaps and radii. A
+    handful of values are the intrinsic size of a drawn shape and are declared here rather than pretended into the
+    4dp grid: severity dot <b>5dp</b> (in-chip) / <b>7dp</b> (leading, chip &amp; card), progress cell
+    <b>7dp</b> tall with a <b>3.5dp</b> radius, chip glyph <b>11–12dp</b>, and the <b>6dp</b> mark↔label gap. These
+    six are the complete list. The rule is therefore <i>"no inline dp literal for padding, gap or radius"</i> — not
+    "no inline dp literal", which the shapes above would falsify on sight.</div>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-B · The pinned container — one token, one alpha</div>
+    <p class="subtle">The banner's sub-text carried no AA rationale, unlike the sheet body (0.55α, documented) and
+    the recovery body (0.65α, documented). It looked like the SC 1.4.3 suspect. <b>Computed, it is not the
+    failure.</b> The <b>snooze chip</b> is.</p>
+    <table><thead><tr><th>Element</th><th>Container</th><th>Ink</th><th>Frame</th><th class="num">Ratio</th><th>Verdict</th></tr></thead><tbody>
+      <tr><td>Banner sub-text</td><td><code>#0B0D14</code> @ 0.88 <i>(today)</i></td><td>White @ 0.48</td><td>worst-case white</td><td class="num" id="b88">—</td><td id="b88v"></td></tr>
+      <tr><td>Banner sub-text</td><td><b><code>#0B0D14</code> @ 0.94 <i>(frozen)</i></b></td><td>White @ 0.48</td><td>worst-case white</td><td class="num" id="b94">—</td><td id="b94v"></td></tr>
+      <tr><td>Snooze chip label</td><td><code>Color.Black</code> @ 0.55 <i>(today)</i></td><td>White @ <b>0.78</b> <i>(source)</i></td><td>worst-case white</td><td class="num" id="c55">—</td><td id="c55v"></td></tr>
+      <tr><td>Snooze chip label</td><td><b><code>#0B0D14</code> @ 0.94 <i>(frozen)</i></b></td><td>White @ 0.78 <i>(ink unchanged)</i></td><td>worst-case white</td><td class="num" id="c78">—</td><td id="c78v"></td></tr>
+      <tr><td>Snooze chip label</td><td><b><code>#0B0D14</code> @ 0.94 <i>(frozen)</i></b></td><td>White @ 0.94 <i>(frozen ink)</i></td><td>worst-case white</td><td class="num" id="c94">—</td><td id="c94v"></td></tr>
+    </tbody></table>
+    <div class="noderive"><b>What the numbers actually say.</b> The banner sub-text clears AA at 0.88 — by
+    <b>0.004</b>. The snooze chip (<code>WarningSnoozeChip.kt:80</code> — <code>Color.Black</code>, not
+    <code>pinSurface</code>) reads <b>3.61:1</b> and <b>fails</b>. So there is one genuine violation and one pass
+    with a four-thousandths margin that nobody had ever computed. <b>Neither margin is defensible in a frozen
+    token.</b> Both close on the same move: <code>pinSurface #0B0D14</code> at <b>0.94</b> — the alpha the recovery
+    card already used — for the banner and the chip. Two raw <code>0xFF0B0D14</code> literals and three divergent
+    alphas (0.88 / 0.94 / 0.55, one of them a different color entirely) collapse into one token at one
+    value.<br><br>
+    <b>The container fix alone is sufficient; the ink change is separate and is disclosed.</b> At the frozen
+    container the chip label passes at its <i>shipped</i> 0.78 ink (see row 3, <b>10.76:1</b>). The freeze
+    nevertheless raises it to <code>mediaInk</code> 0.94 — the same disclosed move as the banner title's 0.88→0.94 —
+    so that the three pinned surfaces share <b>one</b> ink scale rather than four alphas. That is an aesthetic
+    unification, not an AA repair, and APPX-F lists it as such. No reader of this appendix should be able to
+    mistake one for the other.<br><br>
+    <b>The standing rule of this appendix.</b> <i>Contrast is proven by the inspector, never by eye and never by
+    hand.</i> Two things follow, and both are binding on anyone who edits this table. <b>One:</b> no ratio may be
+    typed in — every number in the Ratio column is rendered live by §03's sweep from the ink, the alpha and the
+    backing beside it. <b>Two:</b> a computed ratio over a <i>fabricated input</i> is still a wrong number, so every
+    input cites the source line it was read from (e.g. the chip's 0.78 ink is
+    <code>WarningSnoozeChip.kt:106</code>, <code>Color.White.copy(alpha = 0.78f)</code> — not the 0.94 the pinned
+    scale uses elsewhere). A hand-computed sRGB transfer curve is exactly one division away from asserting that a
+    passing surface fails; a typed-in ink is exactly one alpha away from asserting that a failing surface passes.
+    Cite the line, let the page do the arithmetic.<br><br>
+    <b>No structural scrim primitive.</b> An 88%-opaque capsule was never the Library's 0%-opaque-thumbnail problem,
+    and a 94% one certainly is not. Generalizing <code>CaptionScrim</code> here would be machinery bought for a bug
+    that one number fixes.</div>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-C · Two CTA resolvers — the boundary this freeze establishes</div>
+    <table><thead><tr><th>Fill</th><th>Varies per palette?</th><th>Resolver</th><th>Label</th></tr></thead><tbody>
+      <tr><td>Accent (dialogs, Record FAB, Retry)</td><td>Yes</td><td><code>DialogActionColors.resolve</code></td><td>white, or near-black if the accent is too light to deepen</td></tr>
+      <tr><td>Locked severity (sheet primary CTA)</td><td><b>No</b> — locked</td><td><b>none</b> — a locked-ink constant</td><td><code>severityCtaInk</code> <code>#1A1A1A</code></td></tr>
+    </tbody></table>
+    <div class="noderive"><b>Do not route severity fills through <code>DialogActionColors.resolve</code>.</b>
+    It prefers a white label and deepens the fill toward black. Fed the locked severity fills it would return a
+    darkened fill + white label for <code>hard</code>, <code>advisory</code>, and likely <code>escalating</code> —
+    flipping shipped, AA-proven CTAs and darkening the very locked color the token families exist to protect.
+    The near-black label is not a raw-hex defect; it is the answer (WARN-02). Verify in the inspector: white on
+    <code>hard</code> fails; the locked ink passes on all four.</div>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-D · Hue as ink — one resolver, and what is deliberately exempt</div>
+    <ul class="rules">
+      <li><b>No fixed derivation works.</b> Rendering severity text as a constant
+      <code>color-mix(sev 62%, textHigh)</code> clears 4.5:1 on the 11 dark palettes and reads <b>2.85:1</b> on
+      Daylight; the raw-hue dot reads <b>1.36:1</b> there (gold on pale gold). A constant
+      <code>accent-text = color-mix(accent 72%, tHigh)</code> reads <b>4.24:1</b> on Daylight's severity-tinted
+      chips. Every one of those numbers is a real specimen on the one shipping light palette, and every one of them
+      is invisible if the design is validated on Aurora alone. <b>Any hue used as ink must be resolved against
+      whatever it sits on.</b> One resolver, not two — and no third fixed mix.</li>
+      <li><b><code>resolveInk(hue, backing, target, top, mix)</code></b> — a pure resolver; the deepen half is the
+      house's <code>DialogActionColors.resolve</code> primitive reused. Direction is chosen by the
+      <i>backing's</i> luminance (<code>DARK_BACKING = 0.18</code>, a declared constant, not a feel):
+      <br>· <b>dark backing</b> → the committed lighten derivation: <code>mix(hue, mix, top)</code>, where
+      <code>top</code> is the host's composited high ink and <code>mix</code> is 0.62 for a severity label, 0.72 for
+      accent-as-text, and <b>0</b> for a mark (which stays the raw locked hue). <b>Zero visual delta on all 11 dark
+      palettes.</b> The dark branch returns without consulting <code>target</code>; that it clears the target is a
+      fact the on-load sweep proves, not an invariant the function enforces.
+      <br>· <b>light backing</b> → <code>deepen(hue, t)</code> at the minimum <code>t ∈ {0, .12, … .6}</code> that
+      clears the target. Hue is preserved <i>on this branch only</i> — deepen is a proportional RGB scale; the
+      lighten branch mixes toward the host ink and therefore desaturates by design.
+      <br>Only Daylight ever takes the deepen branch. Targets: <b>4.5:1</b> label / accent text, <b>3:1</b> mark.</li>
+      <li><b>The locked hue is not the rendered hue — and that is the point.</b> <code>#EF4444</code> remains the
+      single locked identity of "hard" across all 12 palettes; <code>resolveInk</code> is a <i>rendering</i>
+      function over it, never a second token. This is the same separation as accent-vs-<code>accent-fill</code>.
+      Compose: a pure <code>ResolveInk.of(hue, backing, target, top, mix)</code> + <code>TokenContrastTest</code>.</li>
+      <li><b>Themed dim/body ink is <code>quietTextColor</code>, not <code>textDim</code>.</b> Daylight's
+      <code>textDim</code> is <code>#141A28 @ 0.60α</code>: it reads 4.51:1 on bare white — and <b>4.25:1</b> on a
+      severity-tinted strip, <b>4.37:1</b> inside a 7% ghost fill, <b>4.42:1</b> in the fail box. Every one of
+      those is a real frozen specimen. The app already solved this: <code>QuietText.kt:17</code> drops the alpha on a light scheme and returns
+      the solid ink, because "alpha-dimming is mathematically below AA over a light background." Every themed
+      <code>--ink-dim</code> / <code>--ink-body</code> routes through it. Zero delta on the 11 dark palettes.</li>
+      <li><b>The 8 mark/label sites and their real backings.</b> A mark is resolved against what is <i>actually
+      behind it</i>, which is not always the surface: the history strip's chip sits on
+      <code>color-mix(sev 8%, surface)</code>, not on <code>surface</code>; the banner's icon box and Stop pill sit
+      on the <b>0.94 capsule composited over the live frame</b>, so they are resolved per frame. The sweep walks the
+      eight <code>INK_SITES</code> keys — <code>sheeticon · pinchip · banner · snooze · chip · stripchip · set ·
+      recov</code>, where <code>banner</code> resolves two backings (the 16% icon box and the 20% Stop pill) —
+      × 4 severities × 12 palettes × 3 frames.</li>
+      <li><b>Explicitly exempt from SC 1.4.11 — and why.</b> This spec does <i>not</i> claim "every border and
+      surface clears 3:1." Four things never could, and each is a decoration whose meaning is carried elsewhere:
+      <br>· <b>Severity chip fill (0.20α)</b> — identity is carried by dot + uppercase label + glyph. The
+      0.14→0.20 bump (<code>RecoveryCard.kt:300</code>) bought perceptibility, not conformance.
+      <br>· <b>Ghost / destructive CTA borders</b> (12% ink, 30% hard) — <b>1.26–1.49:1</b> across the 12 palettes.
+      The label is the control's identity; the border is a hairline hint. Removing it changes nothing a user can read.
+      <br>· <b>Banner and chip severity borders</b> (30% / 25%) — shipped chrome, decorative, same argument.
+      <br>· <b>Progress cells</b> (filled vs track — as low as <b>2.12:1</b> on Aurora) — the count they depict is printed as text
+      <i>adjacent to them</i> ("2 / 4") and spoken by a polite live region. They are a redundant echo of a label,
+      which is exactly the case SC 1.4.11 does not bind.
+      <br>Everything <i>not</i> on this list is asserted by the inspector and blocks the freeze if it fails.</li>
+      <li><b>One fixed mix survives, and it survives by proof.</b> The destructive CTA's label —
+      <code>color-mix(sev-hard 62%, ink-high)</code> — is <i>not</i> routed through the resolver. It sits on the
+      untinted card surface, not on a 20% chip of its own hue, and the sweep asserts it on all 36 cells — the
+      worst is <b>5.70:1 on Jade</b>, the best <b>7.37:1 on Eclipse</b>. It stays fixed because it is tested, not
+      because it is special. Should a future host put it on a tinted backing, the assertion fails and the freeze breaks —
+      which is the whole point of the sweep.</li>
+      <li><b>The dot</b> is the 1.4.1 non-color-alone partner and carries ≥3:1 against its own backing — at every
+      mark site, all of which have <i>different</i> backings. The on-load sweep proves all of them, in all 12
+      palettes, on all 3 frames.</li>
+      <li><b>The severity glow is a bloom, not a background blur.</b> The sheet icon's radial bloom
+      (<code>sheetIconGlowBlur</code> 22dp) and the recovery card's top-edge glow
+      (<code>recoveryCardGlowBlur</code> 28dp) are shipped, decorative, <code>contentDescription = null</code>
+      layers. They are <b>not</b> <code>Modifier.blur</code> on the record surface or on a banner background, and
+      therefore do not touch NO-GO #3 or <code>checkRecordSurfaceNoBlur</code>. Stated here so a transcriber does
+      not delete them as a gate violation.</li>
+    </ul>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-E · Touch targets — 48dp hit box, visual size preserved</div>
+    <table><thead><tr><th>Element</th><th>Today</th><th>Frozen visual</th><th>Frozen hit box</th></tr></thead><tbody>
+      <tr><td>Sheet primary / secondary CTA</td><td>46dp</td><td>48dp</td><td>48dp <i>(min-height)</i></td></tr>
+      <tr><td>Recovery Merge / Keep / Discard / Retry</td><td>40dp</td><td>48dp</td><td>48dp <i>(min-height)</i></td></tr>
+      <tr><td>Sheet overflow ⋯</td><td>28dp</td><td><b>28dp</b> (unchanged)</td><td>48dp</td></tr>
+      <tr><td>Banner overflow ⋯ <i>(only <code>STORAGE_FULL_AUTOSTOPPED</code> · <code>THERMAL_AUTOSTOPPED</code>)</i></td><td>40dp</td><td><b>40dp</b> (unchanged)</td><td>48dp</td></tr>
+      <tr><td>Banner Stop pill</td><td>≈32dp</td><td><b>capsule unchanged</b></td><td>48dp <i>(invisible expansion)</i></td></tr>
+      <tr><td>Snooze chip</td><td>≈30–38dp</td><td><b>capsule unchanged</b></td><td>48dp <i>(min-height)</i></td></tr>
+    </tbody></table>
+    <div class="noderive"><b>Owner decision Q5:</b> invisible hit-area expansion, never visual enlargement.
+    ADR-0020 §Decision-1 permits it explicitly. Zero extra viewfinder occlusion, full compliance. Heights are
+    <code>min-height</code> so 200% text scale cannot clip. The new size tokens join
+    <code>checkA11yTargetSizeToken</code>'s curated set — <b>the set IS the invariant</b>.</div>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px">
+    <div class="caption">APPX-F · Token deaths, renames, and the alias invariant</div>
+    <table><thead><tr><th>Symbol</th><th>Fate</th><th>Why</th></tr></thead><tbody>
+      <tr><td><code>sheetHandleWidth / Height / Alpha</code></td><td>DELETE</td><td>dead — the sheet uses stock <code>BottomSheetDefaults.DragHandle()</code></td></tr>
+      <tr><td><code>sheetTitleSize</code> · <code>sheetBodySize</code></td><td>DELETE</td><td>dead — the sheet uses M3 <code>titleMedium</code> / <code>bodySmall</code>. Also unpins <code>RovaWarningsV3Test</code>.</td></tr>
+      <tr><td><code>bannerCountdownRingSize</code> · <code>bannerCountdownRingStroke</code> · <code>bannerCountdownTrackAlpha</code></td><td>DELETE</td><td>the ring is removed (Q1). The trailing slot reverts to the Stop pill the <code>else</code> arm already renders.</td></tr>
+      <tr><td><code>whyRowCornerRadius</code> 11 · <code>bannerVerticalPadding</code> 11</td><td>→ 10 · 12</td><td>off-ladder by 1dp each — APPX-A</td></tr>
+      <tr><td><code>0xFF0B0D14</code> ×2</td><td>→ <code>pinSurface</code></td><td>one named token; 0.94 over media, opaque under the modal sheet</td></tr>
+      <tr><td><code>snoozeChipFillAlpha</code> 0.55 (on <code>Color.Black</code>)</td><td>→ <code>pinSurface</code> @ <code>pinContainerAlpha</code></td><td><b>fails AA</b> over a bright frame (3.61:1) — APPX-B</td></tr>
+      <tr><td>banner title <code>White@0.88</code></td><td>→ <code>mediaInk</code> (0.94)</td><td><b>disclosed bump</b>, not an AA repair; joins one ink scale</td></tr>
+      <tr><td>snooze chip label <code>White@0.78</code> (<code>:106</code>)</td><td>→ <code>mediaInk</code> (0.94)</td><td><b>disclosed bump</b>, not an AA repair — it passes at 0.78 on the frozen container (10.76:1). Joins the same ink scale.</td></tr>
+      <tr><td>snooze chip severity border (0.25) · glyph · <b>hard-only</b> pulse</td><td><b>SURVIVE</b></td><td>all three ship (<code>WarningSnoozeChip.kt:63,83,97</code>) and all three carry meaning: the border and glyph are two of the three non-color severity channels (SC 1.4.1), and a pulse on <i>every</i> chip would say nothing — <code>isHardBlock &amp;&amp; !reduceMotion</code> is the gate</td></tr>
+      <tr><td>banner severity border (0.30) · Stop pill</td><td><b>SURVIVE</b></td><td>both ship (<code>WarningTopBannerV3.kt:74</code>, <code>:129–145</code>). The Stop pill is the banner's only always-present action; the ⋯ overflow is <b>not</b> — it renders for exactly the two echo ids that carry an overflow list (<code>:151</code>)</td></tr>
+      <tr><td><code>color-mix(sev 62%, tHigh)</code> as the fixed severity ink</td><td rowspan="2">→ <code>resolveInk(hue, backing, target, top, mix)</code></td><td>fixed mix fails on Daylight (2.85:1 label / 1.36:1 mark) — APPX-D</td></tr>
+      <tr><td><code>color-mix(accent 72%, tHigh)</code> as the fixed accent-text ink</td><td>fixed mix fails on Daylight's tinted chips (4.24:1) — same bug, same fix</td></tr>
+      <tr><td>themed <code>--ink-dim</code> / <code>--ink-body</code> = <code>textDim</code></td><td>→ <code>quietTextColor(isDark, textDim, α)</code></td><td>shipped seam (<code>QuietText.kt:17</code>); Daylight's 0.60α dim ink fails on every tinted container</td></tr>
+      <tr><td>banner <code>severityColor@0.95</code> Stop label</td><td>→ <code>resolveInk(…, 4.5, …)</code></td><td>3.44–4.38:1 on its own 20% tint over a bright frame</td></tr>
+      <tr><td>accent CTA ink <code>accent × 0.16</code></td><td>→ <code>#0E1116</code></td><td>the ×0.16 near-black existed nowhere in the app; <code>RovaDialogs.kt:214</code> == <code>LibraryColors.ACCENT_INK_DARK</code></td></tr>
+      <tr><td><code>0xFF1A1A1A</code></td><td>→ <code>severityCtaInk</code></td><td><b>survives</b> — rename only, zero visual delta</td></tr>
+      <tr><td><code>RovaWarningsV3</code></td><td>→ <code>RovaTrustTokens</code></td><td>the suffix records an iteration, not a meaning</td></tr>
+      <tr><td><code>WarningSheetV3</code> · <code>WarningTopBannerV3</code></td><td>→ drop <code>V3</code></td><td>mechanical; belongs to Compose transcription, not this HTML</td></tr>
+    </tbody></table>
+    <div class="noderive"><b>Owner decision Q2 — the alias invariant.</b> <code>RovaWarnings.hard</code>,
+    <code>.soft</code>, and <code>.escalating</code> are <i>defined as</i> the <code>RovaSemantics</code> values
+    (one hex literal each). <b>Both accessors survive as separate semantic APIs and are never collapsed into one
+    namespace</b> — future divergence must remain possible. Call sites keep <code>RovaWarnings.</code>: rewriting
+    them to <code>RovaSemantics.error.copy(alpha=…)</code> would trip <code>checkStatusColorLocked</code> at dozens
+    of sites, because warnings composite alpha constantly and <code>RovaSemantics</code> is the never-mutate set.
+    <code>advisory #5B7FFF</code> has no <code>RovaSemantics</code> twin and stays Warnings-unique.</div>
+  </div>
+
+  <div class="panel">
+    <div class="caption">APPX-G · Recovery recency (owner decision Q3)</div>
+    <ul class="rules">
+      <li><b>No schema change.</b> <code>SessionManifest.startedAt</code> (non-null) and <code>terminatedAt</code>
+      (nullable) already exist; <code>RecoveryUiState.recencyKey</code> is already computed to sort, then discarded.
+      NO-GO #4 is satisfied.</li>
+      <li><b>Primary UI shows relative time</b> in the eyebrow: <code>Interrupted · 2 hours ago</code>.</li>
+      <li><b>Absolute time appears only in</b> the <code>contentDescription</code>, the "why" expander, and diagnostics.</li>
+      <li><b>Ladder</b> (pure <code>RelativeTimeLabels</code>, DST-safe, generalized from <code>LibraryDateLabels</code>):
+      <code>&lt;60s</code> → "just now" · <code>&lt;60m</code> → "N minutes ago" · <code>&lt;24h</code> → "N hours ago" ·
+      <code>&lt;48h</code> → "yesterday" · <code>&lt;7d</code> → "N days ago" · else the absolute date.</li>
+      <li><b>Recency is never a live region.</b> It changes on recomposition and would make TalkBack chatty. It is a
+      static label, spoken as part of the card's merged node.</li>
+      <li>Requires a pure clock seam injected into the mapper — the mapper deliberately avoids a <code>Clock</code>
+      today. This is a real, small architectural addition, and the only one this freeze creates.</li>
+    </ul>
+  </div>
+
+  <div class="panel" style="margin-top:18px">
+    <div class="caption">APPX-H · Count reconciliation (owner decision Q4) — documentation only</div>
+    <table><thead><tr><th>Count</th><th>Axis it measures</th><th>Status</th></tr></thead><tbody>
+      <tr><td><b>21</b></td><td><code>WarningId</code> enum values (declaration order == flat precedence)</td><td>Correct</td></tr>
+      <tr><td><b>18</b></td><td>logical warning states, C1.1–C4.5 (<code>WarningCenterContract.md</code> §4)</td><td>Correct</td></tr>
+      <tr><td><b>17</b></td><td>precedence-<i>resolver</i> rows (<code>CANT_MERGE</code> rides a transient <code>RecoveryCardState</code> field)</td><td>Correct on its own axis</td></tr>
+      <tr><td><b>17</b></td><td>"17 <code>WarningId</code> values" in <code>CLAUDE.md</code></td><td><b>Stale — the only false claim.</b> Fix the line.</td></tr>
+    </tbody></table>
+    <div class="noderive">No architecture change. No behavior change. Each document states which axis it counts.
+    NO-GO #1 is amended to <b>"no new warning state without an ADR"</b>, which is what actually happened in
+    practice — four landed, each with its own ADR.</div>
+  </div>
+
+  <div class="panel" style="margin-top:18px">
+    <div class="caption">Version history</div>
+    <ul class="rules">
+      <li><b>v1.0 · 2026-07-09 · DESIGN FROZEN.</b> First and current canonical specification of the Trust System.
+      It establishes <b>The Four Answers</b> ordering law and the <b>TrustRow</b> shared atom — unify the atom,
+      never the behavior (§01); the <b>three-family</b> token registry, identity / locked severity / locked
+      pinned-over-media (§02); the radius and motion ladders adopted from <code>library-bento.html</code> (APPX-A);
+      48dp hit boxes by invisible expansion, visual sizes preserved (APPX-E); and
+      <code>resolveInk(hue, backing, target, top, mix)</code> as the single resolver for any hue used as ink
+      (APPX-D). Every ratio it prints is rendered by the on-load sweep — <b>78 pairs × 36 cells</b> (12 palettes ×
+      3 media frames) = <b>2,808 assertions</b>, and a single failing cell blocks the freeze.</li>
+
+      <li><b>What v1.0 changes about the shipped surfaces.</b> The pinned container is unified to
+      <code>#0B0D14</code> @ 0.94, which repairs a real AA failure (the snooze chip's
+      <code>Color.Black</code> @ 0.55 fill reads <b>3.61:1</b> over a bright frame — APPX-B). The recovery card
+      drops 20→18dp and adopts the palette, ending a palette-blind near-black island on Daylight. The severity
+      chip fill rises 0.14→0.20 (<code>RecoveryCard.kt:300</code>; the banner's 0.16 icon box and 0.20 Stop pill
+      are separate sites and do not move). Two ink alphas rise to the pinned <code>mediaInk</code> 0.94 scale — the banner
+      title (0.88) and the snooze chip label (0.78) — and both are <b>disclosed aesthetic unifications, not AA
+      repairs</b> (APPX-F). The <code>CountdownRing</code>, the drag handle nothing dragged, and five dead tokens
+      are removed. Settled by owner decision: the closed merge-failure reason set, relative recency, the alias
+      invariant, and the two-CTA-resolver boundary.</li>
+
+      <li><b>Transcription notes — behavior a Compose pass must not miss.</b>
+      <br>· <b><code>RecoveryCard.kt:408</code></b> passes <code>artifactCount</code> as <i>both</i> arguments to
+      <code>R.string.recovery_progress_chip</code>, so the shipped chip reads <code>N / N</code> for every frame of
+      a merge. §09 freezes the chip as <code>filled / total</code>: the denominator is already faithful, the
+      <b>numerator</b> is the change, and that line must be updated.
+      <br>· The <b>⋯ overflow</b> renders for exactly the two auto-stop echo ids that carry an overflow list
+      (<code>WarningTopBannerV3.kt:151</code>), not for all 12 banner ids.
+      <br>· The <b>snooze pulse</b> is gated on <code>isHardBlock &amp;&amp; !reduceMotion</code>
+      (<code>WarningSnoozeChip.kt:63</code>). A pulse on every severity would carry no state, and §11 admits an
+      animation only if it carries a state no static mark carries.
+      <br>· <b>Scrim/back dismissal and "Not now" dismissal are separate axes.</b> All three hard-block ids ship a
+      "Not now" (<code>WarningSheetContent.kt:113,119,125</code>); none of them may lose it.
+      <br>· <code>--surface-hi</code> is <b>DERIVED</b> — there is no such <code>RovaPalette</code> member.
+      <br>· The accent CTA ink is the house <code>#0E1116</code> (<code>RovaDialogs.kt:214</code> ==
+      <code>LibraryColors.ACCENT_INK_DARK</code>), never a value derived from the accent.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const R = document.documentElement;
+
+/* ═══════════════ glyphs (System D — 24 grid, stroke 1.9, round caps) ═══════════════ */
+const G = (d, sz=24) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const GL = {
+  camOff : G('<path d="M2 2l20 20"/><path d="M15 11.5V8a1 1 0 0 0-1-1H8.5"/><path d="M4.5 7A1 1 0 0 0 4 8v8a1 1 0 0 0 1 1h9"/><path d="M15 13.5l6 3.5V7l-3.5 2"/>'),
+  mic    : G('<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/>'),
+  thermal: G('<path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4.5 4.5 0 1 1-4 0z"/><circle cx="12" cy="17.5" r="1.6" fill="currentColor" stroke="none"/>'),
+  bell   : G('<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/>'),
+  ovf    : G('<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'),
+  x      : G('<path d="M18 6L6 18"/><path d="M6 6l12 12"/>', 18),
+  interr : G('<path d="M12 3.5a8.5 8.5 0 1 1-8.2 6.3"/><path d="M3.5 4v4h4"/><path d="M12 8v4.5l3 1.8"/>'),
+  chevron: G('<path d="m6 9 6 6 6-6"/>', 16),
+  external:G('<path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>', 15),
+};
+
+/* ═══════════════ palettes — RovaPalette.kt verbatim ═══════════════ */
+const DARKBASE = {
+  tHigh:'rgba(255,255,255,.94)', tDim:'rgba(255,255,255,.62)', tFaint:'rgba(255,255,255,.40)',
+  edge:'rgba(255,255,255,.10)', edgeTop:'rgba(255,255,255,.18)', glass:'rgba(18,22,32,.58)',
+};
+const PALETTES = {
+  Aurora  :{bg:['#2C3658','#141622'], a:'#5B9DFF', b:'#7C5BFF'},
+  Tide    :{bg:['#16323A','#0E1A1F'], a:'#34D3C0', b:'#2AA3FF'},
+  Jade    :{bg:['#13322A','#0C1C18'], a:'#34D399', b:'#059E6B'},
+  Dusk    :{bg:['#3A241C','#1F1310'], a:'#FF8A4C', b:'#FF5FA2'},
+  Eclipse :{bg:['#050608','#000000'], a:'#8B7CFF', b:'#B56CFF',
+            edge:'rgba(255,255,255,.08)', edgeTop:'rgba(255,255,255,.12)', glass:'rgba(8,9,12,.84)'},
+  Daylight:{bg:['#E3E9F5','#F4F1EA'], a:'#5B7FFF', b:'#7C5BFF', light:true,
+            edge:'rgba(20,26,40,.07)', edgeTop:'rgba(255,255,255,.85)', glass:'rgba(255,255,255,.66)',
+            tHigh:'rgba(20,26,40,.95)', tDim:'rgba(20,26,40,.60)', tFaint:'rgba(20,26,40,.42)',
+            surface:'#F4F1EA', surfaceHi:'#FFFFFF'},
+  Blossom :{bg:['#3A2238','#1E1220'], a:'#FF8FC7', b:'#FF6FAE'},
+  Coral   :{bg:['#3A2820','#1F1510'], a:'#FFB24D', b:'#FF6A8B'},
+  Meadow  :{bg:['#22301A','#12190E'], a:'#9AE65C', b:'#34D3C0'},
+  Cobalt  :{bg:['#1C2350','#0E1230'], a:'#6F8CFF', b:'#3A45C4'},
+  Orchid  :{bg:['#3A2030','#1E1019'], a:'#FB7185', b:'#A855F7'},
+  Graphite:{bg:['#1A1C20','#0E0F12'], a:'#D2D6DE', b:'#8A8F99'},
+};
+const SEV = { hard:'#EF4444', soft:'#FBBF24', escalating:'#F97316', advisory:'#5B7FFF' };
+const SEV_CTA_INK = '#1A1A1A';
+const PIN_SURFACE = '#0B0D14';
+/* The house near-black for a label on a light accent fill — RovaDialogs.kt:214,
+   identical to LibraryColors.ACCENT_INK_DARK. NOT a derived `accent × 0.16`. */
+const ACCENT_INK_DARK = '#0E1116';
+
+/* ═══════════════ color math ═══════════════ */
+const hexToRgb = h => [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const rgbToHex = c => '#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+const lin = v => { v/=255; return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+const lum = c => 0.2126*lin(c[0]) + 0.7152*lin(c[1]) + 0.0722*lin(c[2]);
+const ratio = (a,b) => { const [x,y]=[lum(a),lum(b)]; return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
+/** src-over composite: fg rgb at alpha a, over bg rgb. */
+const over = (fg,a,bg) => fg.map((v,i)=>v*a + bg[i]*(1-a));
+/** css color-mix(in srgb, A p%, B) */
+const mixc = (A,p,B) => A.map((v,i)=>v*p + B[i]*(1-p));
+
+/* DialogActionColors.resolve — ported verbatim (AA=4.5, STEP=.12, MAX_DEEPEN=.6,
+   WHITE_DEEPEN_LIMIT=.4; worst contrast over start/mid/end). */
+const ctaResolve = (()=>{
+  const rat = (fgLum,c) => (Math.max(fgLum,lum(c))+.05)/(Math.min(fgLum,lum(c))+.05);
+  const mid = (a,b) => a.map((v,i)=>Math.floor((v+b[i])/2));
+  const deepen = (c,t) => c.map(v=>Math.min(255,Math.max(0,Math.round(v*(1-t)))));
+  const worst = (fgL,s,e) => Math.min(...[s,mid(s,e),e].map(c=>rat(fgL,c)));
+  return (start,end)=>{
+    let t=0;
+    while(t<=0.6+1e-9){
+      const ds=deepen(start,t), de=deepen(end,t);
+      if(worst(1,ds,de)>=4.5){ if(t<=0.4+1e-9) return {start:ds,end:de,white:true}; break; }
+      t+=0.12;
+    }
+    if(worst(0,start,end)>=4.5) return {start,end,white:false};
+    return {start:deepen(start,.6), end:deepen(end,.6), white:true};
+  };
+})();
+
+/* ═══════════════ resolveInk — one resolver for every hue used as ink ═══════════════
+   A hue used as ink must clear its target ratio against WHATEVER it sits on. No single
+   fixed derivation can: `color-mix(sev 62%, tHigh)` clears 4.5:1 on the 11 dark palettes
+   and reads 2.85:1 on Daylight, where gold-on-pale-gold is nearly invisible. The same
+   bug lived a second time in `color-mix(accent 72%, tHigh)` (4.24:1 on a tinted chip).
+
+   Direction is chosen by the BACKING's luminance (DARK_BACKING, a declared constant):
+     • dark backing  → the committed lighten derivation, mix(hue, `mix`, top):
+                       .62 severity label · .72 accent text · 0 = raw locked hue (marks).
+                       ZERO visual delta vs today. It does NOT consult `target` — that it
+                       clears is proven by the sweep, not enforced here.
+     • light backing → `deepen(hue, t)` — the SAME primitive DialogActionColors uses —
+                       at the minimum t ∈ {0, .12, … .6} that clears the target. Hue is
+                       preserved on THIS branch only (proportional RGB scaling); the
+                       lighten branch desaturates toward the host ink, by design.
+   Only Daylight takes the deepen branch.
+   Compose: a pure `ResolveInk.of(hue, backing, target, top, mix)` + TokenContrastTest. */
+const STEP=0.12, MAX_T=0.6, DARK_BACKING=0.18;
+const deepen = (c,t) => c.map(v=>Math.min(255,Math.max(0,Math.round(v*(1-t)))));
+function resolveInk(hueHex, backing, target, top, mix){
+  const hue = hexToRgb(hueHex);
+  if(lum(backing) < DARK_BACKING){
+    return { rgb: mix ? mixc(hue,mix,top) : hue, t: 0, dir: 'lighten' };
+  }
+  for(let t=0; t<=MAX_T+1e-9; t+=STEP){
+    const c = deepen(hue,t);
+    if(ratio(c,backing) >= target) return { rgb:c, t, dir:'deepen' };
+  }
+  return { rgb: deepen(hue,MAX_T), t: MAX_T, dir:'deepen' };
+}
+const MIX_LABEL = .62, MIX_ACCENT = .72;
+
+/* ═══════════════ state ═══════════════ */
+let THEME='Aurora', FRAME='white', SHOW_OLD=false;
+const FRAMES = { dark:[14,16,22], bright:[196,204,214], white:[255,255,255] };
+
+const surfaceOf   = p => hexToRgb(p.surface ?? p.bg[1]);
+const surfaceHiOf = p => p.surfaceHi ? hexToRgb(p.surfaceHi) : mixc([255,255,255],.08,hexToRgb(p.bg[1]));
+const tHighOf = (p,bg) => { const [c,a] = parseInk(p.tHigh ?? DARKBASE.tHigh); return over(c,a,bg); };
+/** quietTextColor(isDark, onSurfaceVariant, dimAlpha) — QuietText.kt:17 ported verbatim. */
+const quietOf = (p,bg) => { const [c,a] = parseInk(p.tDim ?? DARKBASE.tDim);
+                            return over(c, p.light ? 1 : a, bg); };
+const quietCss = p => { const [c,a] = parseInk(p.tDim ?? DARKBASE.tDim);
+                        return `rgba(${c.join(',')},${p.light?1:a})`; };
+/** The pinned capsule, composited over the CURRENT media frame. */
+const capOf = () => over(hexToRgb(PIN_SURFACE), .94, FRAMES[FRAME]);
+const tintOf = (p,sev) => mixc(hexToRgb(sev), .08, surfaceOf(p));   // strip / settings-chip fill
+
+/* EVERY place a hue lands as ink, with the backing it ACTUALLY sits on.
+   `sel` scopes the generated rule. All eight are listed because a site that is not
+   listed is not resolved and not swept: the history-strip chip sits on
+   `color-mix(sev 8%, surface)` and NOT on `surface`, and the banner's icon box, its
+   Stop pill and the sheet's 56dp emblem each sit on the capsule over the live frame. */
+const INK_SITES = [
+  { key:'sheeticon', sel:p=>'.host-pinned .sheet',
+    dot:(p,s)=>over(hexToRgb(s),.16,hexToRgb(PIN_SURFACE)),
+    top:(p)=>over([255,255,255],.94,hexToRgb(PIN_SURFACE)) },
+  { key:'pinchip',   sel:p=>'.host-pinned .sevchip',
+    dot:(p,s)=>over(hexToRgb(s),.20,hexToRgb(PIN_SURFACE)),
+    lbl:(p,s)=>over(hexToRgb(s),.20,hexToRgb(PIN_SURFACE)),
+    top:(p)=>over([255,255,255],.94,hexToRgb(PIN_SURFACE)) },
+  { key:'banner',    sel:p=>'.host-pinned .banner',
+    dot:(p,s)=>over(hexToRgb(s),.16,capOf()),          // icon box
+    lbl:(p,s)=>over(hexToRgb(s),.20,capOf()),          // Stop pill
+    top:()=>over([255,255,255],.94,capOf()) },
+  { key:'snooze',    sel:p=>'.host-pinned .snooze',
+    dot:()=>capOf(), top:()=>over([255,255,255],.94,capOf()) },
+  { key:'chip',      sel:p=>'.host-themed .sevchip',
+    dot:(p,s)=>over(hexToRgb(s),.20,surfaceOf(p)),
+    lbl:(p,s)=>over(hexToRgb(s),.20,surfaceOf(p)),
+    top:(p)=>tHighOf(p,surfaceOf(p)) },
+  { key:'stripchip', sel:p=>'.host-themed .sevchip.on-tint',
+    dot:(p,s)=>over(hexToRgb(s),.20,tintOf(p,s)),
+    lbl:(p,s)=>over(hexToRgb(s),.20,tintOf(p,s)),
+    top:(p,s)=>tHighOf(p,tintOf(p,s)) },
+  { key:'set',       sel:p=>'.host-themed .setchip',
+    dot:(p,s)=>tintOf(p,s), acc:(p,s)=>tintOf(p,s), top:(p,s)=>tHighOf(p,tintOf(p,s)) },
+  { key:'recov',     sel:p=>'.host-themed .recov',
+    dot:(p)=>surfaceHiOf(p), acc:(p)=>surfaceHiOf(p), top:(p)=>tHighOf(p,surfaceHiOf(p)) },
+];
+
+/** Writes the resolved inks as a generated stylesheet. Data, not eyeballs. */
+function applyResolvedInk(){
+  const p = PALETTES[THEME];
+  const out = [];
+  for(const site of INK_SITES){
+    for(const [k,hex] of Object.entries(SEV)){
+      const top = site.top(p,hex), decl = [];
+      if(site.dot) decl.push(`--dot-ink:${rgbToHex(resolveInk(hex, site.dot(p,hex), 3.0, top, 0).rgb)}`);
+      if(site.lbl) decl.push(`--lbl-ink:${rgbToHex(resolveInk(hex, site.lbl(p,hex), 4.5, top, MIX_LABEL).rgb)}`);
+      if(site.acc) decl.push(`--acc-ink:${rgbToHex(resolveInk(p.a, site.acc(p,hex), 4.5, top, MIX_ACCENT).rgb)}`);
+      out.push(`${site.sel(p)}[data-sev="${k}"]{${decl.join(';')}}`);
+    }
+  }
+  let el = document.getElementById('sevInk');
+  if(!el){ el = document.createElement('style'); el.id='sevInk'; document.head.appendChild(el); }
+  el.textContent = out.join('\n');
+}
+
+function applyTheme(name){
+  THEME=name;
+  const p=PALETTES[name], set=(k,v)=>R.style.setProperty(k,v);
+  const bgB=hexToRgb(p.bg[1]);
+  set('--bgTop',p.bg[0]); set('--bgBot',p.bg[1]);
+  set('--surface', p.surface ?? p.bg[1]);
+  set('--surface-hi', p.surfaceHi ?? rgbToHex(mixc([255,255,255],.08,bgB)));
+  set('--accent',p.a); set('--accent2',p.b);
+  for(const k of ['tHigh','tDim','tFaint','edge','edgeTop','glass']) set(`--${k}`, p[k] ?? DARKBASE[k]);
+  set('--tQuiet', quietCss(p));
+  const f = ctaResolve(hexToRgb(p.a), hexToRgb(p.a));
+  set('--accent-fill', rgbToHex(f.start));
+  set('--accent-ink', f.white ? '#FFFFFF' : ACCENT_INK_DARK);
+  $$('#themerow .swatch').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.theme===name)));
+  render();
+}
+function applyFrame(f){
+  FRAME=f;
+  const c=FRAMES[f];
+  R.style.setProperty('--frame', `rgb(${c.join(',')})`);
+  R.style.setProperty('--frame-img', f==='dark'
+    ? 'radial-gradient(120% 100% at 30% 20%, #23283a, #0a0b10)'
+    : f==='bright'
+      ? 'radial-gradient(120% 100% at 30% 20%, #eef2f7, #b9c2cf)'
+      : 'none');
+  $$('[data-frame]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.frame===f)));
+  render();
+}
+
+/* ═══════════════ theme row ═══════════════ */
+$('#themerow').innerHTML = Object.entries(PALETTES).map(([n,p])=>
+  `<button class="swatch" data-theme="${n}" title="${n}" aria-label="${n}"
+     style="background:linear-gradient(135deg,${p.bg[0]},${p.bg[1]});box-shadow:inset 0 0 0 6px ${p.a}22"></button>`
+).join('');
+$$('#themerow .swatch').forEach(b=>b.onclick=()=>applyTheme(b.dataset.theme));
+$$('[data-frame]').forEach(b=>b.onclick=()=>applyFrame(b.dataset.frame));
+
+/* ═══════════════ toggles ═══════════════ */
+const toggle=(btn,attr)=>{ const on=btn.getAttribute('aria-pressed')!=='true';
+  btn.setAttribute('aria-pressed',String(on)); R.setAttribute(attr,on?'1':'0'); return on; };
+$('#rmBtn').onclick   = e => toggle(e.currentTarget,'data-rm');
+$('#a11yBtn').onclick = e => toggle(e.currentTarget,'data-a11y');
+$('#oldBtn').onclick  = e => { SHOW_OLD = toggle(e.currentTarget,'data-old'); render(); };
+
+/* ═══════════════ token registry ═══════════════ */
+const TOKENS = [
+  ['1 · Identity — retints per palette', [
+    ['bgTop / bgBot','gradient ground','RovaPalette.background'],
+    ['surface','themed container','RovaPalette.surfaceBase'],
+    ['surface-hi','elevated themed container','<b>DERIVED</b> — mix(white 8%, surfaceBase). RovaPalette has no surfaceHi.'],
+    ['accent / accent2','accent gradient','RovaPalette.accent'],
+    ['accent-fill / accent-ink','AA-resolved accent CTA','DialogActionColors.resolve → white | #0E1116'],
+    ['acc-ink','accent AS text','<b>resolved per backing</b> (resolveInk, mix .72) — APPX-D'],
+    ['tHigh / tDim / tFaint','identity ink','RovaPalette.text*'],
+    ['tQuiet','themed dim + body ink','quietTextColor(isDark, tDim, α) — QuietText.kt:17'],
+    ['edge / edgeTop','hairlines','RovaPalette.edge'],
+    ['fill-1','progress track (.05)','keyed to tHigh'],
+    ['fill-2 · press · hairline','registry-complete — no consumer here','state layers .08 / .12 / .06'],
+    ['glass','registry-complete — no consumer here','RovaPalette.glassTint'],
+  ]],
+  ['2 · Locked severity — never themed', [
+    ['sev-hard #EF4444','== RovaSemantics.error','alias invariant, APPX-F'],
+    ['sev-soft #FBBF24','== RovaSemantics.warning','alias invariant, APPX-F'],
+    ['sev-escalating #F97316','== RovaSemantics.escalating','alias invariant, APPX-F'],
+    ['sev-advisory #5B7FFF','Warnings-unique (no twin)','stays in RovaWarnings'],
+    ['sev-cta-ink #1A1A1A','label on a solid severity fill','WARN-02 — not debt'],
+    ['sev-chip-fill .20α','decorative backing','APPX-D exempt list'],
+    ['lbl-ink / dot-ink','severity AS text / AS mark','<b>resolved per backing</b> (resolveInk) — never a token'],
+  ]],
+  ['3 · Locked pinned / over-media', [
+    ['pin-surface #0B0D14','sheet (opaque) · banner · snooze chip','was two raw hexes'],
+    ['pin-container-alpha .94','banner + chip ONLY (the sheet is opaque)','banner was .88, chip .55 — APPX-B'],
+    ['media-ink .94','pinned title + chip label','banner title was .88, chip label .78 — disclosed'],
+    ['media-ink-body .55','pinned body + ghost CTA label','documented AA'],
+    ['media-ink-dim .48','pinned sub-text + chip glyph','passes only at .94 container'],
+    ['media-edge-top .12','sheet top hairline','—'],
+    ['media-edge .08','registry-complete — no consumer','banner + chip carry a severity border instead'],
+  ]],
+];
+$('#tokenGrid').innerHTML = TOKENS.map(([fam,rows])=>`
+  <div class="panel"><div class="caption">${fam}</div>
+  <table><tbody>${rows.map(([t,u,n])=>
+    `<tr><td><code>${t}</code></td><td style="color:var(--stage-dim)">${u}</td>
+     <td style="color:var(--stage-faint);font-size:11px">${n}</td></tr>`).join('')}</tbody></table></div>`).join('');
+
+/* ═══════════════ contrast inspector ═══════════════ */
+function parseInk(css){ /* rgba(...) → [rgb, alpha] */
+  const m = css.match(/rgba?\(([^)]+)\)/);
+  const p = m[1].split(',').map(s=>parseFloat(s.trim()));
+  return [[p[0],p[1],p[2]], p.length>3?p[3]:1];
+}
+function cs(v){ return getComputedStyle(R).getPropertyValue(v).trim(); }
+
+/* Every TEXT and MARK pair a frozen specimen actually renders. The rule is:
+   if a specimen paints it, this list asserts it, or §APPX-D exempts it by name.
+   The list is GENERATED from the sites and roles above, never hand-written: a
+   hand-written list asserts a fraction of what the page paints and reports "clean"
+   over the pairs it forgot. Adding a specimen means adding it here. */
+function contrastRows(){
+  const p = PALETTES[THEME];
+  const frame = FRAMES[FRAME];
+  const pin = hexToRgb(PIN_SURFACE);
+  const cap94 = over(pin, .94, frame);
+  const cap88 = over(pin, .88, frame);
+  const [tHi,aHi] = parseInk(p.tHigh ?? DARKBASE.tHigh);
+  const surf = surfaceOf(p), surfHi = surfaceHiOf(p);
+  const W = [255,255,255], ink = hexToRgb(SEV_CTA_INK);
+  const rows = [];
+  const add = (pair,fg,bg,r,need) => rows.push([pair,fg,bg,r,need]);
+
+  /* ── pinned host (sheet opaque · banner & chip over the frame) ── */
+  add('Banner title','media-ink .94',`capsule .94 over ${FRAME}`, ratio(over(W,.94,cap94),cap94),4.5);
+  add('Banner sub-text','media-ink-dim .48',`capsule .94 over ${FRAME}`, ratio(over(W,.48,cap94),cap94),4.5);
+  if(SHOW_OLD) add('Banner sub-text — PRE-FREEZE','media-ink-dim .48',`capsule .88 over ${FRAME}`,
+             ratio(over(W,.48,cap88),cap88),4.5);
+  add('Sheet title','media-ink .94','pin-surface (opaque)', ratio(over(W,.94,pin),pin),4.5);
+  add('Sheet body','media-ink-body .55','pin-surface (opaque)', ratio(over(W,.55,pin),pin),4.5);
+  const gpin = over(W,.07*.94,pin);
+  add('Ghost CTA label · sheet','media-ink-body .55','ghost fill over pin-surface', ratio(over(W,.55,gpin),gpin),4.5);
+  add('"Why this matters" label','ink-high 78%','pin-surface (opaque)', ratio(over(W,.78*.94,pin),pin),4.5);
+  add('Snooze chip label','media-ink .94',`chip .94 over ${FRAME}`, ratio(over(W,.94,cap94),cap94),4.5);
+  if(SHOW_OLD){
+    const blk55 = over([0,0,0],.55,frame);
+    add('Snooze chip label — PRE-FREEZE','White .78 (source ink)',`Color.Black .55 over ${FRAME}`,
+        ratio(over(W,.78,blk55),blk55),4.5);
+  }
+
+  /* ── themed host ── */
+  const quiet = quietOf(p,surfHi), quietRaw = parseInk(p.tDim ?? DARKBASE.tDim);
+  const grec = over(tHi, aHi*.07, surfHi);
+  add('Recovery title','tHigh','surface-hi (themed)', ratio(over(tHi,aHi,surfHi),surfHi),4.5);
+  add('Recovery body','quiet ink','surface-hi (themed)', ratio(quiet,surfHi),4.5);
+  add('Ghost CTA label · recovery','quiet ink','ghost fill over surface-hi',
+      ratio(over(quietRaw[0], p.light?1:quietRaw[1], grec), grec),4.5);
+  if(SHOW_OLD) add('Ghost CTA label · recovery — PRE-FREEZE','tDim (alpha-dimmed)','ghost fill over surface-hi',
+      ratio(over(quietRaw[0],quietRaw[1],grec), grec),4.5);
+  /* color-mix(sev 62%, tHigh@a) composited over bg reduces exactly to
+     mix(sev, .62, over(tHigh, a, bg)) — the alpha cancels. */
+  const destRgb = mixc(hexToRgb(SEV.hard), .62, over(tHi,aHi,surfHi));
+  add('Destructive CTA label','mix(sev-hard 62%, ink-high)','surface-hi (themed)', ratio(destRgb,surfHi),4.5);
+  const fb = over(hexToRgb(SEV.hard),.08,surfHi);
+  add('Merge-failure body','quiet ink','fail box over surface-hi', ratio(quietOf(p,fb),fb),4.5);
+  const accRecov = resolveInk(p.a, surfHi, 4.5, tHighOf(p,surfHi), MIX_ACCENT);
+  add('Accent-as-text · vendor link',`resolveInk(${accRecov.dir})`,'surface-hi (themed)', ratio(accRecov.rgb,surfHi),4.5);
+  if(SHOW_OLD) add('Accent-as-text · vendor link — fixed mix 72% (rejected)','color-mix(accent 72%, tHigh)',
+      'surface-hi (themed)', ratio(mixc(hexToRgb(p.a),.72,tHighOf(p,surfHi)),surfHi),4.5);
+
+  for(const [k,hex] of Object.entries(SEV)){
+    const tint = tintOf(p,hex);
+    add(`Strip / settings title · ${k}`,'tHigh',`sev 8% over surface`, ratio(over(tHi,aHi,tint),tint),4.5);
+    add(`Strip body · ${k}`,'quiet ink',`sev 8% over surface`, ratio(quietOf(p,tint),tint),4.5);
+    if(SHOW_OLD) add(`Strip body · ${k} — PRE-FREEZE`,'tDim (alpha-dimmed)',`sev 8% over surface`,
+        ratio(over(quietRaw[0],quietRaw[1],tint),tint),4.5);
+    const accSet = resolveInk(p.a, tint, 4.5, tHighOf(p,tint), MIX_ACCENT);
+    add(`Accent-as-text · "Fix" · ${k}`,`resolveInk(${accSet.dir})`,`sev 8% over surface`, ratio(accSet.rgb,tint),4.5);
+    if(SHOW_OLD) add(`Accent-as-text · "Fix" · ${k} — fixed mix 72% (rejected)`,'color-mix(accent 72%, tHigh)',
+        `sev 8% over surface`, ratio(mixc(hexToRgb(p.a),.72,tHighOf(p,tint)),tint),4.5);
+  }
+
+  /* ── locked severity fills ── */
+  for(const [k,hex] of Object.entries(SEV)){
+    const fill = hexToRgb(hex);
+    add(`Severity CTA · ${k}`,'sev-cta-ink #1A1A1A',`solid ${hex}`, ratio(ink,fill),4.5);
+    if(SHOW_OLD) add(`Severity CTA · ${k} — white label (rejected)`,'#FFFFFF',`solid ${hex}`, ratio(W,fill),4.5);
+  }
+
+  /* ── every resolved mark / label site (8 sites × 4 severities) ── */
+  for(const site of INK_SITES){
+    for(const [k,hex] of Object.entries(SEV)){
+      const top = site.top(p,hex);
+      if(site.dot){
+        const bg = site.dot(p,hex), d = resolveInk(hex,bg,3.0,top,0);
+        add(`Mark · ${site.key} · ${k}`,`resolveInk(${d.dir}${d.t?` t=${d.t.toFixed(2)}`:''})`,
+            `${site.key} backing`, ratio(d.rgb,bg),3.0);
+        if(SHOW_OLD) add(`Mark · ${site.key} · ${k} — raw hue (rejected)`,hex,`${site.key} backing`,
+            ratio(hexToRgb(hex),bg),3.0);
+      }
+      if(site.lbl){
+        const bg = site.lbl(p,hex), l = resolveInk(hex,bg,4.5,top,MIX_LABEL);
+        add(`Label · ${site.key} · ${k}`,`resolveInk(${l.dir}${l.t?` t=${l.t.toFixed(2)}`:''})`,
+            `${site.key} backing`, ratio(l.rgb,bg),4.5);
+        if(SHOW_OLD){
+          add(`Label · ${site.key} · ${k} — fixed mix 62% (rejected)`,'color-mix(sev 62%, tHigh)',
+              `${site.key} backing`, ratio(mixc(hexToRgb(hex),.62,top),bg),4.5);
+          if(site.key==='banner') add(`Label · banner Stop · ${k} — severityColor@.95 (rejected)`,'sev @ .95',
+              'stop pill over capsule', ratio(over(hexToRgb(hex),.95,bg),bg),4.5);
+        }
+      }
+      /* site.acc backings are already asserted above — `set` per severity ("Fix"),
+         `recov` once (vendor link). No duplicate rows here. */
+    }
+  }
+
+  /* Resolve the accent CTA from the PALETTE, not from live CSS — otherwise the
+     12-palette sweep would silently re-test Aurora's accent twelve times. */
+  const r = ctaResolve(hexToRgb(p.a), hexToRgb(p.a));
+  const ai = r.white ? W : hexToRgb(ACCENT_INK_DARK);
+  add('Accent CTA (Combine / Retry)', r.white?'white':'#0E1116','accent-fill (resolved)', ratio(ai,r.start),4.5);
+  /* The rejected `accent × 0.16` ink is NOT listed here: it passes AA. Its defect is
+     that it exists nowhere in the app (APPX-F), and a contrast table is the wrong
+     place to argue provenance. */
+  return rows;
+}
+function renderContrast(){
+  const rows = contrastRows();
+  $('#contrastBody').innerHTML = rows.map(([pair,fg,bg,r,need])=>{
+    const ok = r >= need - 1e-9;
+    return `<tr><td>${pair}</td><td style="color:var(--stage-dim)"><code>${fg}</code></td>
+      <td style="color:var(--stage-faint)">${bg}</td>
+      <td class="num" style="color:${ok?'var(--pass)':'var(--fail)'}">${r.toFixed(2)}:1</td>
+      <td class="num">${need.toFixed(1)}:1</td>
+      <td><span class="tag ${ok?'t-pass':'t-fail'}">${ok?'pass':'fail'}</span></td></tr>`;
+  }).join('');
+  const bad = rows.filter(([p,,,r,n])=>r<n-1e-9 && !/rejected|PRE-FREEZE/.test(p));
+  $('#contrastNote').innerHTML = bad.length
+    ? `<b style="color:var(--fail)">${bad.length} frozen specimen(s) FAIL on ${THEME} / ${FRAME}.</b> A specimen that fails cannot be frozen.`
+    : `<b>All ${rows.filter(([p])=>!/rejected|PRE-FREEZE/.test(p)).length} frozen pairs pass on ${THEME} / ${FRAME}.</b>
+       Toggle <i>Show pre-freeze values</i> to see the rejected alternatives — the 0.55 snooze chip at its real
+       0.78 ink, the white severity label, the fixed 62% severity mix and 72% accent mix, the raw-hue mark, the
+       alpha-dimmed body ink, and the <code>severityColor@.95</code> Stop label. Switch to <b>Daylight</b> with
+       pre-freeze values on: most of those fail there. That is why <code>resolveInk</code> and
+       <code>quietTextColor</code> exist, and it is the whole argument for resolving a hue against its backing
+       instead of fixing a mix. (The rejected <code>accent × 0.16</code> CTA ink is absent by design — it
+       <i>passes</i> AA; its defect is that it exists nowhere in the app.)`;
+
+  // APPX-B live cells — always the worst case (white frame), independent of the picker.
+  const pin = hexToRgb(PIN_SURFACE), W=[255,255,255], WH=[255,255,255];
+  const cell = (id, containerAlpha, inkAlpha, containerRgb) => {
+    const cap = over(containerRgb ?? pin, containerAlpha, WH);
+    const r = ratio(over(W, inkAlpha, cap), cap);
+    $('#'+id).textContent = r.toFixed(2)+':1';
+    $('#'+id+'v').innerHTML = `<span class="tag ${r>=4.5?'t-pass':'t-fail'}">${r>=4.5?'pass':'fail'}</span>`;
+  };
+  cell('b88', .88, .48);            // banner sub-text, today   — 0xFF0B0D14 @ .88 (WarningTopBannerV3.kt:71)
+  cell('b94', .94, .48);            // banner sub-text, frozen  (pinSurface)
+  cell('c55', .55, .78, [0,0,0]);   // snooze chip, today — Color.Black (:80) + White@0.78 label (:106)
+  cell('c78', .94, .78);            // frozen container, SHIPPED ink — proves the container alone suffices
+  cell('c94', .94, .94);            // frozen container, frozen ink (disclosed bump)
+}
+
+/* ═══════════════ severity matrix ═══════════════ */
+const SEV_LABEL = { hard:'Blocked', soft:'Storage', escalating:'Heat', advisory:'Advisory' };
+function renderSevMatrix(){
+  $('#sevMatrix').innerHTML = Object.entries(SEV).map(([k,hex])=>`
+    <div style="--sev:${hex};display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <span class="sevchip" data-sev="${k}" style="min-width:112px"><span class="dot"></span>
+        <span class="lbl">${SEV_LABEL[k]}</span><span class="glyph">${GL.thermal}</span></span>
+      <button class="cta cta-sev" style="flex:0 0 auto;min-width:150px">Primary action</button>
+      <button class="cta cta-ghost" style="flex:0 0 auto;min-width:120px">Ghost</button>
+      <code style="color:var(--tDim)">${k} ${hex}</code>
+      <span style="color:var(--tFaint);font-size:11.5px">locked · identical in all 12 palettes</span>
+    </div>`).join('');
+}
+
+/* ═══════════════ recovery cards ═══════════════
+   `sev` and `pulse` are severityColorFor(kind) / isHardSeverity — RecoveryCard.kt:246-253
+   and :101 — transcribed, NOT chosen. `clips` is survivingArtifacts.size: it is the
+   ONLY count the state carries, and it is therefore the only denominator the strip may
+   print. `eyebrow` mirrors tagLabelResFor(kind) (:261-268). */
+const KINDS = [
+  { k:'USER_STOPPED',      sev:'soft',      eyebrow:'Stopped by you',       t:'Session ended',
+    b:'You stopped this session. Combine the clips into one recording, or keep them separate.',
+    clips:3, art:['3 clips · 4 min 12 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session' },
+  { k:'SAFETY_STOPPED',    sev:'soft',      eyebrow:'Auto-stopped',         t:'Recording stopped — device too hot',
+    b:'Rova stopped to protect your device. Nothing was lost.',
+    clips:5, art:['5 clips · 7 min 30 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session' },
+  { k:'SCHEDULED_END',     sev:'advisory',  eyebrow:'Scheduled',            t:'Scheduled session finished',
+    b:'All planned clips were recorded.',
+    clips:8, art:['8 clips · 12 min 00 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session' },
+  { k:'ERROR_STOPPED',     sev:'soft',      eyebrow:'Interrupted',          t:'Recording stopped unexpectedly',
+    b:'Something went wrong during recording. The clips that finished are safe.',
+    clips:2, art:['2 clips · 2 min 48 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session' },
+  { k:'KILLED_BY_SYSTEM',  sev:'hard',      eyebrow:'Stopped by the system', t:'The system stopped Rova',
+    b:'Your device closed Rova in the background. Allowing auto-start helps prevent this.',
+    clips:4, art:['4 clips · 6 min 05 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session', vendor:true },
+  { k:'KILLED_FORCE_STOP', sev:'soft',      eyebrow:'Force stopped',        t:'Rova was force stopped',
+    b:'Rova was closed from your device settings. The clips that finished are safe.',
+    clips:1, art:['1 clip · 0 min 58 s'], primary:'Combine clips', ghost:'Keep as separate clips', dest:'Discard session' },
+];
+/* The pulse belongs to the one kind the user must act on OUTSIDE Rova to prevent. */
+const PULSING_KIND = 'KILLED_BY_SYSTEM';
+const RECENCY = ['just now','12 minutes ago','2 hours ago','yesterday','4 days ago','on 2 July'];
+
+function recovCard(c, i, opts={}){
+  const sev = SEV[c.sev];
+  const pulsing = c.k===PULSING_KIND;
+  const running = opts.state==='running', failed = opts.state==='failed';
+  const done = running ? Math.max(1, c.clips-2) : c.clips;   // demo: merge in flight
+  return `
+  <div class="recov" data-sev="${c.sev}" style="--sev:${sev}">
+    <div class="trustrow">
+      <span class="dot ${pulsing?'pulsing':''}" style="margin-top:5px"></span>
+      <div class="col">
+        <!-- A1 · what happened -->
+        <div class="t-eyebrow">
+          <span>${failed?'Merge failed':c.eyebrow}</span><span aria-hidden="true">·</span>
+          <span class="t-num">${RECENCY[i%RECENCY.length]}</span>
+        </div>
+        <h3 class="t-title">${failed?'Couldn\'t combine your clips':c.t}</h3>
+        <!-- A2 · what it means -->
+        ${failed
+          ? `<div class="failbox">Storage became unavailable. <b style="color:var(--tHigh)">Your clips are safe.</b></div>`
+          : `<p class="t-body">${c.b}</p>`}
+        <ul class="artifacts">${c.art.map(a=>`<li>${a}</li>`).join('')}</ul>
+        ${running ? `<div class="progress">
+            <div class="cells">${Array.from({length:c.clips},(_,n)=>
+              `<span class="cell ${n<done?'on':''}"></span>`).join('')}</div>
+            <span class="numchip">${done}/${c.clips}</span></div>` : ''}
+        <!-- A3 · what should I do -->
+        <div class="ctas">
+          <button class="cta ${failed?'cta-accent':'cta-accent'}" ${running?'disabled':''}>${failed?'Retry':c.primary}</button>
+          <!-- A4 · what else -->
+          <button class="cta cta-ghost" ${running?'disabled':''}>${c.ghost}</button>
+        </div>
+        ${c.vendor?`<button class="vendor">Allow auto-start ${GL.external}</button>`:''}
+        <div class="ctas" style="margin-top:8px">
+          <button class="cta cta-dest">${c.dest}</button>
+        </div>
+        <dl class="a11y">
+          <dt>Merged node</dt><dd>"${failed?'Merge failed':c.eyebrow}, ${RECENCY[i%RECENCY.length]}. ${failed?'Couldn\'t combine your clips.':c.t+'.'} ${c.art[0]}."</dd>
+          <dt>Absolute time</dt><dd>"Interrupted at 4:12 PM on 9 July 2026" — a11y + "why" expander only</dd>
+          <dt>Live region</dt><dd>${running?'polite (merge progress)':failed?'assertive (merge failure)':'none'}</dd>
+          <dt>Recency</dt><dd>static label — NEVER a live region</dd>
+          <dt>Destructive</dt><dd>terminal in the stack · never primary · ${running?'stays ENABLED while merging':'—'}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>`;
+}
+function renderRecovery(){
+  $('#recovStage').innerHTML = KINDS.map((c,i)=>
+    `<div><div class="caption" style="color:var(--tFaint)">${c.k}${c.vendor?' · vendor guidance slot':''}</div>${recovCard(c,i)}</div>`
+  ).join('');
+}
+
+/* merge demo */
+let MERGE='idle';
+function renderMerge(){
+  $('#mergeStage').innerHTML = recovCard(KINDS[4], 2, {state:MERGE});
+  $$('[data-merge]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.merge===MERGE)));
+}
+$$('[data-merge]').forEach(b=>b.onclick=()=>{ MERGE=b.dataset.merge; renderMerge(); });
+
+/* ═══════════════ state gallery — all 21 WarningId values ═══════════════ */
+const HISTORY = new Set(['STORAGE_INSUFFICIENT','STORAGE_FULL_AUTOSTOPPED','THERMAL_AUTOSTOPPED','CANT_MERGE','NOTIFICATIONS_DENIED']);
+const SETTINGS = new Set(['CAMERA_PERMISSION_DENIED','EXACT_ALARM_DENIED','STORAGE_INSUFFICIENT','MICROPHONE_DENIED','BATTERY_OPTIMIZATION_ON','POWER_SAVE_MODE','NOTIFICATIONS_DENIED']);
+/* Surface column is `warningSurfaceFor(id)` — WarningSheetContent.kt:35-46, verbatim.
+   NOT inferred from tier: tier is banner chrome, surface is the container, and the two
+   are orthogonal (EXACT_ALARM_DENIED is HardBlockSheet yet does not gate Start).
+
+   Dismissal has TWO axes. They must never be conflated:
+     • scrim/back  — WarningCenter.kt:191 blocks it for HardBlockSheet ONLY.
+     • "Not now"   — WarningCenter.kt:168 calls dismiss(id) UNCONDITIONALLY, and all
+                     three HardBlockSheet ids ship a "Not now" secondary
+                     (WarningSheetContent.kt:113,119,125). Every sheet collapses to a chip.
+   So no sheet is truly undismissable. Start-gating is orthogonal to both.
+
+   The 5th column is the LITERAL `secondary` of warningSheetContent(id), not a rule inferred
+   from the surface. Three of them are not "Not now": MICROPHONE_DENIED offers "Continue
+   without audio" (:131) and CANT_MERGE's secondary PERFORMS an action — KEEP_SEGMENTS_ONLY
+   (:200) — before dismissing, with a destructive DISCARD tertiary below it (:201). The nine
+   TopBanner-only defensive arms carry `secondary = null` and never render as a sheet. */
+const IDS = [
+  ['CAMERA_PERMISSION_DENIED','HARD_BLOCK',true, 'HardBlockSheet','Not now'],
+  ['EXACT_ALARM_DENIED',      'HARD_BLOCK',false,'HardBlockSheet','Not now'],
+  ['STORAGE_INSUFFICIENT',    'HARD_BLOCK',true, 'HardBlockSheet','Not now'],
+  ['THERMAL_SHUTDOWN',        'CRITICAL',  false,'TopBanner',     null],
+  ['THERMAL_EMERGENCY',       'CRITICAL',  false,'TopBanner',     null],
+  ['THERMAL_CRITICAL',        'CRITICAL',  false,'TopBanner',     null],
+  ['BATTERY_CRITICAL',        'CRITICAL',  false,'TopBanner',     null],
+  ['CAMERA_IN_USE',           'CRITICAL',  false,'TopBanner',     null],
+  ['CAMERA_DISABLED',         'CRITICAL',  false,'TopBanner',     null],
+  ['BATTERY_LOW',             'ADVISORY',  false,'TopBanner',     null],
+  ['STORAGE_LOW_MID_REC',     'ADVISORY',  false,'TopBanner',     null],
+  ['STORAGE_FULL_AUTOSTOPPED','ADVISORY',  false,'TopBanner',     null],
+  ['THERMAL_AUTOSTOPPED',     'ADVISORY',  false,'TopBanner',     null],
+  ['CANT_MERGE',              'ADVISORY',  false,'AdvisorySheet', 'Keep segments only'],
+  ['THERMAL_SEVERE',          'ADVISORY',  false,'TopBanner',     null],
+  ['MICROPHONE_DENIED',       'ADVISORY',  false,'SoftSheet',     'Continue without audio'],
+  ['BATTERY_OPTIMIZATION_ON', 'ADVISORY',  false,'AdvisorySheet', 'Not now'],
+  ['POWER_SAVE_MODE',         'ADVISORY',  false,'AdvisorySheet', 'Not now'],
+  ['THERMAL_MODERATE',        'ADVISORY',  false,'TopBanner',     null],
+  ['NOTIFICATIONS_DENIED',    'ADVISORY',  false,'AdvisorySheet', 'Not now'],
+  ['SAVE_FOLDER_UNAVAILABLE', 'ADVISORY',  false,'AdvisorySheet', 'Not now'],
+];
+const TIER_TAG = { HARD_BLOCK:'t-hard', CRITICAL:'t-crit', ADVISORY:'t-adv' };
+const yes = b => b ? '<span class="tag t-pass">yes</span>' : '<span class="tag t-na">—</span>';
+const no  = () => '<span class="tag t-hard">no</span>';
+const scrimDismiss = s => s !== 'HardBlockSheet';
+$('#galleryBody').innerHTML = IDS.map(([id,tier,gates,surface,sec],i)=>`
+  <tr><td class="num">${i+1}</td><td><code>${id}</code></td>
+  <td><span class="tag ${TIER_TAG[tier]}">${tier.toLowerCase().replace('_',' ')}</span></td>
+  <td>${yes(gates)}</td>
+  <td>${yes(HISTORY.has(id))}</td>
+  <td>${yes(SETTINGS.has(id))}</td>
+  <td style="color:var(--stage-dim)"><code>${surface}</code></td>
+  <td>${scrimDismiss(surface)?yes(true):no()}</td>
+  <td style="color:var(--stage-dim)">${sec ?? '<span class="tag t-na">n/a</span>'}</td></tr>`).join('');
+/* Surface tally — must sum to 21. Proves the mapping is total. */
+const tally = IDS.reduce((m,[,,,s])=>(m[s]=(m[s]||0)+1,m),{});
+$('#tally').innerHTML = Object.entries(tally).map(([s,n])=>`<code>${s}</code> ${n}`).join(' · ')
+  + ` · <b>total ${IDS.length}</b>`;
+$('#countNote').innerHTML = `Declaration order <b>is</b> the flat precedence contract. Three counts, three axes,
+  all correct: <b>21</b> enum values · <b>18</b> logical states (contract §4) · <b>17</b> precedence-resolver rows
+  (<code>CANT_MERGE</code> has no standalone row). Only <code>CLAUDE.md</code>'s "17 <code>WarningId</code> values"
+  is stale. See APPX-H.`;
+
+/* ═══════════════ collapse demo ═══════════════ */
+$('#dismissBtn').onclick = () => {
+  const sheet=$('#demoSheet'), chip=$('#demoChip');
+  const rm = R.getAttribute('data-rm')==='1' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const done=()=>{ sheet.style.display='none'; chip.style.display='inline-flex'; };
+  if(rm){ done(); return; }
+  sheet.style.transition='transform var(--t-exit) var(--ease-std), opacity var(--t-exit) var(--ease-std)';
+  sheet.style.transform='translateY(100%)'; sheet.style.opacity='0';
+  setTimeout(done, 220);
+};
+$('#demoChip').onclick = () => {
+  const sheet=$('#demoSheet'), chip=$('#demoChip');
+  chip.style.display='none'; sheet.style.display='';
+  const rm = R.getAttribute('data-rm')==='1' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(rm){ sheet.style.transform=''; sheet.style.opacity=''; return; }
+  requestAnimationFrame(()=>{
+    sheet.style.transition='transform var(--t-container) var(--ease-std), opacity var(--t-container) var(--ease-std)';
+    sheet.style.transform=''; sheet.style.opacity='';
+  });
+};
+
+/* ═══════════════ static glyph slots ═══════════════ */
+$('#ic-hard').innerHTML = GL.camOff;
+$('#ic-adv').innerHTML  = GL.mic;
+$('#ic-demo').innerHTML = GL.bell;
+$('#ic-ban').innerHTML  = GL.thermal;
+$('#ovf-a').outerHTML   = `<span class="ovf" style="display:grid;place-items:center">${GL.ovf}</span>`;
+$('#x-strip').outerHTML = `<span class="ovf" style="display:grid;place-items:center">${GL.x}</span>`;
+/* Chip glyph — WarningSnoozeChip.kt:97 ships a SemanticIcon; it identifies WHICH
+   condition collapsed. It is one of the chip's three non-color severity channels. */
+$('#chip-g1').innerHTML = G('<path d="M2 2l20 20"/><path d="M15 11.5V8a1 1 0 0 0-1-1H8.5"/><path d="M4.5 7A1 1 0 0 0 4 8v8a1 1 0 0 0 1 1h9"/><path d="M15 13.5l6 3.5V7l-3.5 2"/>', 12);
+$('#chip-g2').innerHTML = G('<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/>', 12);
+$('#chip-g3').innerHTML = G('<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/>', 12);
+
+/* ═══════════════ full-matrix sweep — 12 palettes × 3 frames ═══════════════
+   The reviewer's lesson, made structural: a spec must not be validated on the
+   palette its author happened to open. This runs on load and refuses to stay
+   green if ANY cell fails. */
+function sweepAll(){
+  const savedT = THEME, savedF = FRAME;
+  const failures = [];
+  for(const name of Object.keys(PALETTES)){
+    for(const f of Object.keys(FRAMES)){
+      THEME = name; FRAME = f;
+      for(const [pair,,bg,r,need] of contrastRows()){
+        if(/rejected|PRE-FREEZE/.test(pair)) continue;
+        if(r < need - 1e-9) failures.push(`${name}/${f} — ${pair} (${r.toFixed(2)} < ${need})`);
+      }
+    }
+  }
+  THEME = savedT; FRAME = savedF;
+  const el = $('#sweep');
+  el.className = 'noderive';
+  if(failures.length){
+    el.style.borderLeftColor = 'var(--fail)';
+    el.style.background = 'rgba(239,68,68,.06)';
+    el.innerHTML = `<b style="color:var(--fail)">FREEZE BLOCKED — ${failures.length} failing cell(s)
+      across 12 palettes × 3 frames.</b><br>` +
+      failures.slice(0,20).map(f=>`<code>${f}</code>`).join('<br>') +
+      (failures.length>20?`<br>…and ${failures.length-20} more`:'');
+  } else {
+    const n = contrastRows().filter(([p])=>!/rejected|PRE-FREEZE/.test(p)).length;
+    el.innerHTML = `<b>Full matrix clean: 12 palettes × 3 frames × ${n} asserted pairs = ${12*3*n} cells.</b>
+      Zero failures. The pair list is generated from the eight ink sites and the specimens' own text
+      roles, not hand-written; the only things it does not assert are the four exemptions named in
+      §APPX-D. This sweep runs on load, so the frozen spec cannot silently regress: a design
+      validated on one dark palette, or asserted by a hand-written pair list, will report "clean"
+      over failures it never looked at. Every cell is looked at, every load.`;
+  }
+}
+
+function render(){ applyResolvedInk(); renderContrast(); renderSevMatrix(); renderRecovery(); renderMerge(); }
+applyFrame('white');
+applyTheme('Aurora');
+sweepAll();
+</script>
+</body>
+</html>
