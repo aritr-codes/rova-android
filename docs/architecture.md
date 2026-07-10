@@ -76,7 +76,7 @@ app/src/main/java/com/aritr/rova/
 │   ├── warnings/
 │   │   ├── WarningCenter.kt            # WarningSheet/WarningChip + WarningTopBanner
 │   │   ├── WarningCenterViewModel.kt
-│   │   ├── WarningId.kt               # 17-entry enum (precedence order; see WarningCenterContract.md)
+│   │   ├── WarningId.kt               # 21-entry enum (precedence order; see WarningCenterContract.md)
 │   │   └── WarningPrecedence.kt        # Pure resolver → WarningId? (highest-priority)
 │   └── theme/
 │       ├── Color.kt

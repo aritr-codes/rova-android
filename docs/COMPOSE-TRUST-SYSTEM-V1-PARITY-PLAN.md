@@ -76,7 +76,8 @@
 - `ui/recovery/RecoveryUiState.kt` — M3: mapper takes a Clock, `RecoveryCardState` carries a recency label input (no schema change — reads existing `startedAt`/`terminatedAt`); M9: carries `mergeFailedReasonRes` alongside the raw diagnostic.
 - `app/src/main/res/values/strings.xml` (+ every locale file) — M3 recency plurals; M9 four merge-failure reason strings; M8 any copy deltas §07 fixes (audit against `KINDS` verbatim copy).
 - `docs/adr/0013-*.md` — M0 amendment (see below).
-- `CLAUDE.md` — M0: fix stale "17 `WarningId` values" → 21 (APPX-H: "the only false claim").
+- `CLAUDE.md` — M0: fix stale "17 `WarningId` values" → 21. APPX-H calls this "the only false claim"; the M0 review found a **second** one, `docs/architecture.md:79` ("17-entry enum"), also fixed in M0. The frozen HTML is not edited for this — a spec in Design Freeze is amended only through a new design iteration, and APPX-H's miscount is a documentation observation, not a visual clause.
+- `docs/architecture.md` — M0: same stale count, line 79.
 - `build-logic/src/main/kotlin/com/aritr/rova/gradle/RovaGateRules_*.kt` — M4–M8 as new size tokens join `checkA11yTargetSizeToken`'s curated set (+ golden tests). Extension only; no gate weakened.
 
 **New files:** `ui/theme/ResolveInk.kt` (M2) · `ui/recovery/RelativeTimeLabels.kt` (M3) · `ui/recovery/MergeFailureReason.kt` (M9) · tests listed in §8.
