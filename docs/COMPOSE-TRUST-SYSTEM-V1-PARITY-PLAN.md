@@ -111,7 +111,7 @@ M4–M7 are mutually independent after M2 and may land in any order; the listed 
 
 Every milestone additionally inherits: suite green (baseline + new tests, `--max-workers=2` on this box), all 48 gates green, `:app:assembleDebug` green, independent review (Implementer ≠ Reviewer) with reconciliation before merge, `scripts/preflight.ps1` clean before branching.
 
-**Progress.** M0 ✅ MERGED (PR #178 → `9220e342`, 2026-07-10) · M1 ✅ MERGED (PR #179 → `c46b5f8b`, 2026-07-10, suite 2302/0-0-0) · M2 ✅ MERGED (PR #180 → `3ca08918`, 2026-07-10, suite 2320/0-0-0) · **M3 and M4 are both unblocked and mutually independent** (M3 is pure; M4 is the first surface to consume `ResolveInk`). M5–M11 not started.
+**Progress.** M0 ✅ MERGED (PR #178 → `9220e342`, 2026-07-10) · M1 ✅ MERGED (PR #179 → `c46b5f8b`, 2026-07-10, suite 2302/0-0-0) · M2 ✅ MERGED (PR #180 → `3ca08918`, 2026-07-10, suite 2320/0-0-0) · M3 ✅ MERGED (PR #181 → `8083b675`, 2026-07-10, suite 2348/0-0-0) · **M4 is unblocked** (the first surface to consume `ResolveInk`). M5–M11 not started. M8 (RecoveryCard) additionally needs M3 and is the first consumer of `RelativeTimeLabel` (the M3 recency `strings.xml` plurals land there, per the M1 "token lands with its first consumer" precedent — deliberately not added in M3).
 
 ---
 
@@ -173,6 +173,10 @@ Every milestone additionally inherits: suite green (baseline + new tests, `--max
 **Tests:** every ladder boundary (59s/60s, 59m/60m, 23:59/24:00, 47:59/48:00, 6d23h/7d), DST fold/gap days, clock-injection determinism.
 **Device verification:** none (pure).
 **DoD:** pure layer merged, unconsumed by UI.
+**As shipped (PR #181 → `8083b675`, 2026-07-10, suite 2348/0-0-0, independent review GO).** Two judgment calls, both review-upheld:
+- **The ladder is elapsed-duration arithmetic, with NO calendar-day math.** APPX-G's rungs are stated as elapsed windows and its "yesterday" *is* the `24h..<48h` bucket by the boundary text (`47:59/48:00`), so elapsed arithmetic is timezone/DST-invariant by construction and there is no `startOfDay`/`dayDiff` to harvest. Copying `LibraryDateLabels`' calendar rounding would make the ladder *diverge* from APPX-G (an event 90 min before local midnight would flip to "yesterday"). What is harvested is its **method** — return a KIND not user copy, inject `now`, `coerceAtLeast(0)` future-clamp — not its code. The Files line above that says "method from `LibraryDateLabels`" is honored precisely by NOT sharing the calendar code.
+- **No `strings.xml` and no absolute-date format in M3.** The Files line lists recency plurals, but they were deferred to their first consumer (M8): the frozen HTML specifies no date-format string (inventing one is a redesign), unconsumed strings would be dead resources, and M1 set the "token lands with its first consumer" precedent. `RelativeTimeLabel` carries `atMillis` so M8 can format the DATE rung and resolve every plural.
+- `RecoveryClock` is a pure `fun interface` (not `java.time.Clock` — minSdk 24, no core-library desugaring), read once and only when a card exists; required on the pure `RecoveryUiStateMapper.map(views, clock)`, defaulted to `RecoveryClock.System` at the wiring-adjacent `RecoveryViewSource`/`RecoveryViewModel`. The DST tests are vacuous today (the ladder never touches a `TimeZone`) and are kept as documented **regression pins** against a future reintroduction of calendar math. `memory/project_trust_system_relative_time.md`.
 
 ### M4 — SnoozeChip parity
 **Purpose:** Smallest surface; carries the spec's one outright AA failure (container `Color.Black@.55` + label `.78` = 3.61:1).
