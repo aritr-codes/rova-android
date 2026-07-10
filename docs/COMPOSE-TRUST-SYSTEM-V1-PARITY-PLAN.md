@@ -66,7 +66,7 @@
 
 **Modify:**
 - `ui/theme/RovaMotion.kt` — M1: add `container 300ms` / `exit 220ms` / standard easing (ladder home per ADR-0028 §3.2).
-- `ui/theme/RovaWarningsV3.kt` — M1 add Family-2/3 tokens + `surfaceHi` derivation + ladder migrations (whyRow radius 11→10, banner vertical padding 11→12, recovery radius 20→18, settings chip radius 6→10, strip radius 8→14, sev chip radius 11→10); M5/M6 delete ring/handle/title-size tokens; M11 rename → `RovaTrustTokens.kt`.
+- `ui/theme/RovaWarningsV3.kt` — M1 ✅ added Family-2/3 tokens + `surfaceHi` derivation. The **ladder migrations** (whyRow radius 11→10, banner vertical padding 11→12, recovery radius 20→18, settings chip radius 6→10, strip radius 8→14, sev chip radius 11→10) were deliberately NOT added in M1 — each lands as a new named token *with its first consumer* (M4–M8), which is also when the old value's last consumer disappears and it can be deleted. M5/M6 delete ring/handle/title-size tokens; M11 rename → `RovaTrustTokens.kt`.
 - `ui/warnings/WarningSnoozeChip.kt` — M4: container `Color.Black@.55` → `pinSurface@.94` (the genuine AA repair — 3.61:1 today); label `.78` → `mediaInk .94`; glyph → `mediaInkDim`; dot → resolved `dot-ink`; pulse gate and severity border α0.25 survive verbatim.
 - `ui/warnings/WarningTopBannerV3.kt` — M5: **delete `CountdownRing`** (Q1) and the `autoAction` render arm; trailing slot = Stop pill always; container `.88` → `pinContainerAlpha .94`; title `.88` → `mediaInk .94`; sub stays `.48` (= `mediaInkDim`); Stop-pill label `severityColor.copy(.95)` → resolved `lbl-ink` (fails SC 1.4.3 today at 3.44–4.38:1); icon-box glyph → `dot-ink`; vertical padding 11→12; Stop pill + ⋯ get 48dp invisible hit expansion; ⋯ gating (`overflow.isNotEmpty()`) unchanged. M11 rename drop V3.
 - `ui/warnings/WarningSheetV3.kt` — M6: hard-block sheet renders **no drag handle** (dismissible sheets use stock `BottomSheetDefaults.DragHandle()`; custom handle tokens die); primary severity CTA = solid `--sev` fill + `severityCtaInk` #1A1A1A (today accent fill — see M6 note); ghost CTA to spec (ink-high 7% fill, ink-body label, 1px ink-high 12% border); title/body drop `sheetTitleSize`/`sheetBodySize` for M3 type roles per spec scale; why-row radius 11→10; CTAs min-height 48; overflow ⋯ hit 48; icon glow kept (22dp bloom). M11 rename drop V3.
@@ -109,11 +109,13 @@ M4–M7 are mutually independent after M2 and may land in any order; the listed 
 
 ## 7. Milestones
 
-Every milestone additionally inherits: suite green (2285 baseline + new tests, `--max-workers=2` on this box), all 48 gates green, `:app:assembleDebug` green, independent review (Implementer ≠ Reviewer) with reconciliation before merge, `scripts/preflight.ps1` clean before branching.
+Every milestone additionally inherits: suite green (baseline + new tests, `--max-workers=2` on this box), all 48 gates green, `:app:assembleDebug` green, independent review (Implementer ≠ Reviewer) with reconciliation before merge, `scripts/preflight.ps1` clean before branching.
+
+**Progress.** M0 ✅ MERGED (PR #178 → `9220e342`, 2026-07-10) · M1 ✅ MERGED (PR #179 → `c46b5f8b`, 2026-07-10, suite 2302/0-0-0) · **M2 is next, and is the first consumer of the M1 tokens.** M3–M11 not started.
 
 ---
 
-### M0 — ADR amendment + documentation staleness
+### M0 — ADR amendment + documentation staleness — ✅ MERGED (PR #178)
 **Purpose:** House rule: ADR clause before code. ADR-0013 is the current chrome canon; the frozen HTML supersedes its visual layer.
 **Files:** `docs/adr/0013-*.md` (amendment: visual/token layer superseded by `docs/design/warnings-recovery.html` v1.0; precedence/surfacing clauses unchanged), `CLAUDE.md` (17→21 fix), optionally a one-line pointer in `docs/WarningCenterContract.md` to APPX-H for the count axes.
 **Visual outcome:** none. **Behavioral outcome:** none.
@@ -121,7 +123,8 @@ Every milestone additionally inherits: suite green (2285 baseline + new tests, `
 **Tests:** none. **Device verification:** none.
 **DoD:** ADR amendment merged; CLAUDE.md line fixed; owner sign-off on the amendment wording.
 
-### M1 — Trust token foundation (additive)
+### M1 — Trust token foundation (additive) — ✅ MERGED (PR #179 → `c46b5f8b`)
+**As shipped:** all seven tokens + `surfaceHi(palette)` + the three `RovaMotion` ladder values, 17 new pins, suite 2302/0-0-0, 48 gates green, zero production consumers. Two deviations from the text below, both deliberate and reviewed: (a) the **"ladder-migration values as new named tokens"** were NOT added — the radius/spacing rungs have no named home yet and no M1 consumer, so adding them would have been speculative; they land with their first consumer (M4+), which is when the old-value-deletion rule actually has something to delete. (b) `mediaEdge` 0.08 was omitted — the HTML marks it "registry-complete, no consumer". Neither is stale planned work; both are YAGNI deferrals recorded here.
 **Purpose:** All Family-2/3 tokens and ladder values exist and are value-pinned before any consumer changes.
 **Files:** `ui/theme/RovaWarningsV3.kt` (extend), `app/src/test/java/com/aritr/rova/ui/theme/RovaWarningsV3Test.kt` (extend pins).
 **Contents:** `pinSurface` 0xFF0B0D14 · `pinContainerAlpha` 0.94f · `mediaInk` 0.94f / `mediaInkDim` 0.48f / `mediaInkBody` 0.55f (whites) · `mediaEdgeTop` 0.12f · `severityCtaInk` 0xFF1A1A1A (named token for the existing literal — zero delta) · `surfaceHi(palette)` = mix(white 8%, `surfaceBase`), Daylight returns its explicit member · ladder-migration values as *new* named tokens beside the old ones (old values deleted only when their last consumer migrates). **Motion ladder home is `RovaMotion`** (ADR-0028 §3.2: "all animated surfaces consume these") — it already has 120/200ms; extend it with `container 300ms`, `exit 220ms`, and the `cubic-bezier(.2,.8,.2,1)` easing so M6's sheet/chip motion never lands as inline durations. Also modify `ui/theme/RovaMotion.kt` + its test.
