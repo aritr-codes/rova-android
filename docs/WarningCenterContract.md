@@ -14,6 +14,8 @@ The precedence model below (the per-category urgency ordering in §3 and §6.1) 
 **The 17 rows, in precedence order (highest first) — `WarningId` value · tier · summary:**
 
 > **Count note:** §4 below is titled "The 18 warning states" because it counts 18 logical warning states across 5 categories (C1.1–C4.5). The precedence flat list here contains 17 entries because one §4 state (C4.4 Merge failed — `CANT_MERGE`) is surfaced via a transient `RecoveryCardState` field rather than its own standalone `WarningId` row in the precedence resolver. Both counts are correct; they measure different things.
+>
+> **Count axes (added 2026-07-10).** A third axis exists: `WarningId` today declares **21** values. The 21 / 18 / 17 counts are each correct on their own axis and are reconciled once, in `docs/design/warnings-recovery.html` APPX-H. The flat table below predates four ids that landed later, each under its own ADR (`STORAGE_FULL_AUTOSTOPPED` → 0015, `THERMAL_AUTOSTOPPED` → 0016, `CANT_MERGE` → 0017, `SAVE_FOLDER_UNAVAILABLE` → 0024); `WarningId.kt` declaration order remains the live precedence contract.
 
 1. `CAMERA_PERMISSION_DENIED` · HARD_BLOCK · CAMERA not granted — recording can't run. **Gates Start.**
 2. `EXACT_ALARM_DENIED` · HARD_BLOCK · exact alarms not allowed — loop falls back to inexact and drifts. Flat banner, **does NOT gate Start.**

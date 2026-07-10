@@ -138,7 +138,7 @@ Native 4:3 source + matrix-driven 27/64 side-crops (ADR-0009). `service/dualreco
 
 ### WarningCenter
 
-`docs/WarningCenterContract.md` is authoritative. Precedence is a **single flat order over 17 `WarningId` values** (`WarningId` enum declaration order — not category-based). Only `CAMERA_PERMISSION_DENIED` and `STORAGE_INSUFFICIENT` gate Start; `EXACT_ALARM_DENIED` is a flat non-gating banner. Surfacing model is `WarningSheet` / `WarningChip` (per-tier modal sheet collapsing to a chip), not an inline strip (ADR-0007 + 0013). `WarningCenterViewModel` output is `StateFlow<WarningId?>`. The "Idle echo promotion" pattern (`effectiveIdleTopBannerId`) lives in the routing layer, not precedence — see `memory/feedback_idle_echo_promotion.md`.
+`docs/WarningCenterContract.md` is authoritative. Precedence is a **single flat order over 21 `WarningId` values** (`WarningId` enum declaration order — not category-based; the contract's flat table lists 17 *precedence-resolver rows* and §4 counts 18 *logical states* — three correct axes, reconciled in `docs/design/warnings-recovery.html` APPX-H). Only `CAMERA_PERMISSION_DENIED` and `STORAGE_INSUFFICIENT` gate Start; `EXACT_ALARM_DENIED` is a flat non-gating banner. Surfacing model is `WarningSheet` / `WarningChip` (per-tier modal sheet collapsing to a chip), not an inline strip (ADR-0007 + 0013). `WarningCenterViewModel` output is `StateFlow<WarningId?>`. The "Idle echo promotion" pattern (`effectiveIdleTopBannerId`) lives in the routing layer, not precedence — see `memory/feedback_idle_echo_promotion.md`.
 
 ### Architecture Decision Records
 
