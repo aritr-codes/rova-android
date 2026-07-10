@@ -52,6 +52,13 @@ class RecoveryViewModel(
     /** Phase 4.3 — push signal from the recovery merge lifecycle. */
     private val mergeOutcome: StateFlow<RecoveryMergeOutcomeSignal.State> =
         MutableStateFlow(RecoveryMergeOutcomeSignal.State.Idle),
+    /**
+     * M3 (APPX-G) — the recency seam. Read once per mapping, i.e. once per upstream emission.
+     * NOT a ticker: no timer, no polling, no time-based Flow drives this VM. A card's
+     * "2 hours ago" is frozen the moment it is emitted and only ever changes when the report,
+     * the dismissed set, or the merge outcome changes.
+     */
+    private val clock: RecoveryClock = RecoveryClock.System,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
@@ -60,7 +67,7 @@ class RecoveryViewModel(
 
     val uiState: StateFlow<RecoveryUiState> =
         combine(recoveryReport, dismissedIds, mergeOutcome) { report, dismissed, merge ->
-            val base = RecoveryViewSource.buildUiState(report, dismissed, loadManifest)
+            val base = RecoveryViewSource.buildUiState(report, dismissed, clock, loadManifest)
             applyMergeOutcome(base, merge)
         }.stateIn(
             scope = scope,

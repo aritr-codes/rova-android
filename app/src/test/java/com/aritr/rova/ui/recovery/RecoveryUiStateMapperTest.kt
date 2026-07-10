@@ -32,6 +32,13 @@ class RecoveryUiStateMapperTest {
 
     // ─── helpers ───────────────────────────────────────────────────
 
+    /**
+     * M3 — the mapper now takes a [RecoveryClock]. Every pre-existing case is time-agnostic,
+     * so they all map at [FIXED_NOW]; the recency contract has its own section below.
+     */
+    private fun mapAt(views: List<RecoverySessionView>, nowMillis: Long = FIXED_NOW) =
+        RecoveryUiStateMapper.map(views, RecoveryClock { nowMillis })
+
     private fun manifest(
         sessionId: String,
         terminated: Terminated?,
@@ -105,7 +112,7 @@ class RecoveryUiStateMapperTest {
 
         for (t in allTerminators) {
             for (e in allEligibilities) {
-                val ui = RecoveryUiStateMapper.map(
+                val ui = mapAt(
                     listOf(view(terminated = t, eligibility = e))
                 )
                 if (ui.cards.isEmpty()) hiding += t to e else rendering += t to e
@@ -126,7 +133,7 @@ class RecoveryUiStateMapperTest {
     @Test
     fun `null terminated hides regardless of eligibility`() {
         for (e in allEligibilities) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(view(terminated = null, eligibility = e))
             )
             assertTrue("eligibility=$e should hide", ui.cards.isEmpty())
@@ -137,7 +144,7 @@ class RecoveryUiStateMapperTest {
     @Test
     fun `COMPLETED hides regardless of eligibility`() {
         for (e in allEligibilities) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(view(terminated = Terminated.COMPLETED, eligibility = e))
             )
             assertTrue("eligibility=$e should hide", ui.cards.isEmpty())
@@ -148,7 +155,7 @@ class RecoveryUiStateMapperTest {
     @Test
     fun `BLOCKED hides for every terminator`() {
         for (t in allTerminators) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(view(terminated = t, eligibility = DiscardEligibility.BLOCKED))
             )
             assertTrue("terminator=$t should hide on BLOCKED", ui.cards.isEmpty())
@@ -158,7 +165,7 @@ class RecoveryUiStateMapperTest {
     @Test
     fun `AUTO_DISCARD_ELIGIBLE hides for every terminator`() {
         for (t in allTerminators) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(
                     view(
                         terminated = t,
@@ -182,7 +189,7 @@ class RecoveryUiStateMapperTest {
         // is in the gallery; surfacing a "Discard recording" card would
         // mislead the user (Discard wipes the private session dir, not
         // the gallery copy).
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-finalized",
@@ -200,7 +207,7 @@ class RecoveryUiStateMapperTest {
         // Force-stop case (smoke d): export pipeline never ran.
         // The card must still surface so the user can clean up the
         // unmerged session residue.
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-forced",
@@ -216,7 +223,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `KILLED_BY_SYSTEM + OFFER_DISCARD + non-finalized still surfaces`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-killed",
@@ -235,7 +242,7 @@ class RecoveryUiStateMapperTest {
         // ADR 0006 §B9: USER_STOPPED + exportState = FAILED is the
         // "Merge failed" recovery path. The user has unmerged segments
         // and no gallery copy; the card must continue to surface.
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-failed",
@@ -260,7 +267,7 @@ class RecoveryUiStateMapperTest {
             Terminated.KILLED_BY_SYSTEM,
             Terminated.KILLED_FORCE_STOP
         )) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(
                     view(
                         terminated = t,
@@ -280,7 +287,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `USER_STOPPED + OFFER_DISCARD renders with USER_STOPPED kind and no vendor slot`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-user",
@@ -301,7 +308,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `KILLED_BY_SYSTEM + OFFER_DISCARD renders with vendor slot true`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-kbs",
@@ -318,7 +325,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `KILLED_FORCE_STOP + OFFER_DISCARD renders with vendor slot false`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "s-kfs",
@@ -337,7 +344,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `empty input yields RecoveryUiState Empty`() {
-        val ui = RecoveryUiStateMapper.map(emptyList())
+        val ui = mapAt(emptyList())
         assertEquals(RecoveryUiState.Empty, ui)
     }
 
@@ -345,7 +352,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `cap to one card emits newest by terminatedAt and counts the rest as hidden`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "older",
@@ -374,7 +381,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `terminatedAt null falls back to startedAt for sort`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "with-terminated",
@@ -399,7 +406,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `mixed eligibility + only one renderable cell yields hiddenCount 0`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "hide-completed",
@@ -430,7 +437,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `five eligible inputs yield one card and hiddenCount four`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             (1..5).map { i ->
                 view(
                     sessionId = "s$i",
@@ -451,7 +458,7 @@ class RecoveryUiStateMapperTest {
         // preserve input order. Among equal-key entries the first
         // input is the "newest" survivor at index 0 of the sorted
         // descending list.
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "first",
@@ -475,7 +482,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `appendedSegmentFilenames produces recovery summary line`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     terminated = Terminated.KILLED_FORCE_STOP,
@@ -498,7 +505,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `every Anomaly subtype produces a summary line`() {
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     terminated = Terminated.USER_STOPPED,
@@ -542,7 +549,7 @@ class RecoveryUiStateMapperTest {
             Terminated.KILLED_BY_SYSTEM to R.string.recovery_body_killed_by_system,
             Terminated.KILLED_FORCE_STOP to R.string.recovery_body_force_stopped
         )) {
-            val ui = RecoveryUiStateMapper.map(
+            val ui = mapAt(
                 listOf(view(terminated = t, eligibility = DiscardEligibility.OFFER_DISCARD))
             )
             val card = ui.cards.single()
@@ -587,7 +594,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `mapper populates mergeLabel and keepRawLabel when survivingArtifacts non-empty`() {
-        val state = RecoveryUiStateMapper.map(
+        val state = mapAt(
             listOf(
                 view(
                     sessionId = "sess-1",
@@ -606,7 +613,7 @@ class RecoveryUiStateMapperTest {
 
     @Test
     fun `mapper leaves mergeLabel null when no surviving artifacts`() {
-        val state = RecoveryUiStateMapper.map(
+        val state = mapAt(
             listOf(
                 view(
                     sessionId = "sess-2",
@@ -627,7 +634,7 @@ class RecoveryUiStateMapperTest {
     fun `MULTI_SEGMENT_KEPT terminated hides the card`() {
         // Phase 4.3 — user chose keep-as-raw-clips; no recovery card
         // should surface. isEligible returns false, map returns Empty.
-        val ui = RecoveryUiStateMapper.map(
+        val ui = mapAt(
             listOf(
                 view(
                     sessionId = "sess-msk",
@@ -643,7 +650,7 @@ class RecoveryUiStateMapperTest {
     // ─── Task 6: per-reason copy derivation ───────────────────────
 
     @Test fun `thermal user-stop maps to SafetyStopped with cool-down copy`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.THERMAL))
         ).cards.single()
         assertEquals(RecoveryCardKind.SAFETY_STOPPED, card.kind)
@@ -652,7 +659,7 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test fun `low-storage user-stop uses storage copy`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.LOW_STORAGE))
         ).cards.single()
         assertEquals(RecoveryCardKind.SAFETY_STOPPED, card.kind)
@@ -660,7 +667,7 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test fun `scheduled-window user-stop maps to ScheduledEnd`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.SCHEDULE_WINDOW))
         ).cards.single()
         assertEquals(RecoveryCardKind.SCHEDULED_END, card.kind)
@@ -668,7 +675,7 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test fun `permission-revoked user-stop maps to ErrorStopped`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.PERMISSION_REVOKED))
         ).cards.single()
         assertEquals(RecoveryCardKind.ERROR_STOPPED, card.kind)
@@ -676,7 +683,7 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test fun `manual user-stop keeps existing copy`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.USER_STOPPED, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.USER))
         ).cards.single()
         assertEquals(RecoveryCardKind.USER_STOPPED, card.kind)
@@ -684,11 +691,129 @@ class RecoveryUiStateMapperTest {
     }
 
     @Test fun `system kill unchanged - showVendorHelpSlot true`() {
-        val card = RecoveryUiStateMapper.map(
+        val card = mapAt(
             listOf(view(terminated = Terminated.KILLED_BY_SYSTEM, eligibility = DiscardEligibility.OFFER_DISCARD, stopReason = StopReason.NONE))
         ).cards.single()
         assertEquals(RecoveryCardKind.KILLED_BY_SYSTEM, card.kind)
         assertTrue(card.showVendorHelpSlot)
+    }
+
+    // ─── M3: APPX-G recency — the Clock seam ──────────────────────
+    // The mapper mints ONE recency label per card, from the injected clock, at map time.
+    // APPX-G: "Recency is never a live region … It is a static label." So: no ticker, no
+    // polling, no Flow — the only thing that can ever change the label is a re-map.
+
+    @Test
+    fun `card recency is minted from the injected clock, not the wall clock`() {
+        val card = mapAt(
+            listOf(
+                view(
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = FIXED_NOW - 2 * 3_600_000L,
+                )
+            )
+        ).cards.single()
+
+        assertEquals(RelativeTimeKind.HOURS, card.recency.kind)
+        assertEquals(2, card.recency.count)
+        assertEquals(FIXED_NOW - 2 * 3_600_000L, card.recency.atMillis)
+    }
+
+    @Test
+    fun `recency anchors on terminatedAt when present`() {
+        val card = mapAt(
+            listOf(
+                view(
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    startedAt = FIXED_NOW - 6 * 86_400_000L,   // 6 days ago — must NOT win
+                    terminatedAt = FIXED_NOW - 30_000L,        // 30s ago
+                )
+            )
+        ).cards.single()
+        assertEquals(RelativeTimeKind.JUST_NOW, card.recency.kind)
+    }
+
+    @Test
+    fun `recency falls back to startedAt when terminatedAt is null`() {
+        val card = mapAt(
+            listOf(
+                view(
+                    terminated = Terminated.KILLED_FORCE_STOP,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    startedAt = FIXED_NOW - 3 * 86_400_000L,
+                    terminatedAt = null,
+                )
+            )
+        ).cards.single()
+        assertEquals(RelativeTimeKind.DAYS, card.recency.kind)
+        assertEquals(3, card.recency.count)
+    }
+
+    /**
+     * The seam is a *single read*. A clock that counts its own calls proves the mapper neither
+     * polls nor re-reads time per card — which is what makes the emitted label internally
+     * consistent (two cards mapped together can never disagree about "now").
+     */
+    @Test
+    fun `mapper reads the clock exactly once per map call`() {
+        var reads = 0
+        val counting = RecoveryClock { reads++; FIXED_NOW }
+
+        RecoveryUiStateMapper.map(
+            (1..4).map { i ->
+                view(
+                    sessionId = "s$i",
+                    terminated = Terminated.USER_STOPPED,
+                    eligibility = DiscardEligibility.OFFER_DISCARD,
+                    terminatedAt = FIXED_NOW - i * 1_000L,
+                )
+            },
+            counting,
+        )
+        assertEquals(1, reads)
+    }
+
+    /** No live updates: an already-mapped card is a frozen value; time moving on cannot touch it. */
+    @Test
+    fun `an emitted card is immutable as the clock advances`() {
+        val views = listOf(
+            view(
+                terminated = Terminated.USER_STOPPED,
+                eligibility = DiscardEligibility.OFFER_DISCARD,
+                terminatedAt = FIXED_NOW - 30_000L,
+            )
+        )
+        val card = mapAt(views).cards.single()
+        assertEquals(RelativeTimeKind.JUST_NOW, card.recency.kind)
+
+        // Advance the clock a week and re-map: the NEW card ages, the OLD card does not.
+        val later = mapAt(views, nowMillis = FIXED_NOW + 7 * 86_400_000L).cards.single()
+        assertEquals(RelativeTimeKind.DATE, later.recency.kind)
+        assertEquals(RelativeTimeKind.JUST_NOW, card.recency.kind)
+    }
+
+    /** Determinism: same views + same clock ⇒ equal states, always. */
+    @Test
+    fun `mapping is deterministic under a fixed clock`() {
+        val views = listOf(
+            view(
+                terminated = Terminated.KILLED_BY_SYSTEM,
+                eligibility = DiscardEligibility.OFFER_DISCARD,
+                terminatedAt = FIXED_NOW - 90 * 60_000L,
+            )
+        )
+        assertEquals(mapAt(views), mapAt(views))
+    }
+
+    /** An empty eligible set never touches the clock — nothing to label. */
+    @Test
+    fun `empty input does not read the clock`() {
+        var reads = 0
+        val counting = RecoveryClock { reads++; FIXED_NOW }
+        assertEquals(RecoveryUiState.Empty, RecoveryUiStateMapper.map(emptyList(), counting))
+        assertEquals(0, reads)
     }
 
     // ─── resource-content helpers (B3 i18n task 8) ────────────────
@@ -716,6 +841,9 @@ class RecoveryUiStateMapperTest {
     }
 
     private companion object {
+        /** 2026-07-09T16:12:00Z. Arbitrary but fixed — the mapper must never read the wall clock. */
+        const val FIXED_NOW = 1_783_613_520_000L
+
         val RECOVERY_BODY_RES_NAMES = listOf(
             "recovery_body_user_stopped",
             "recovery_body_killed_by_system",

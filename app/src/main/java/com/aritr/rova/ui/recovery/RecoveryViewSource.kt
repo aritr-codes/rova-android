@@ -35,17 +35,23 @@ object RecoveryViewSource {
      *
      * The mapper enforces "at most one card" and computes
      * `hiddenCount`; this adapter does not need to clamp.
+     *
+     * M3 — [clock] is the mapper's recency seam. It defaults to the wall clock *here*, at the
+     * wiring-adjacent adapter, rather than on [RecoveryUiStateMapper.map] itself: the pure core
+     * must never be able to read time by accident, while read-only consumers such as
+     * [eligibleSessionCount] (which discards the labels entirely) should not have to name one.
      */
     fun buildUiState(
         report: RecoveryReport?,
         dismissedIds: Set<String> = emptySet(),
+        clock: RecoveryClock = RecoveryClock.System,
         loadManifest: (String) -> SessionManifest?
     ): RecoveryUiState {
         if (report == null) return RecoveryUiState.Empty
         val classifications = report.classifications.values
             .filter { it.sessionId !in dismissedIds }
         val views = buildViews(classifications, loadManifest)
-        return RecoveryUiStateMapper.map(views)
+        return RecoveryUiStateMapper.map(views, clock)
     }
 
     /**
@@ -79,7 +85,8 @@ object RecoveryViewSource {
         dismissedIds: Set<String> = emptySet(),
         loadManifest: (String) -> SessionManifest?
     ): Int {
-        val ui = buildUiState(report, dismissedIds, loadManifest)
+        // The counts ignore recency entirely; any clock yields the same number.
+        val ui = buildUiState(report, dismissedIds, loadManifest = loadManifest)
         return ui.cards.size + ui.hiddenCount
     }
 }
