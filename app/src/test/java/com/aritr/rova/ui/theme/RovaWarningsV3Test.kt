@@ -1,7 +1,9 @@
 package com.aritr.rova.ui.theme
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -74,4 +76,159 @@ class RovaWarningsV3Test {
             RovaWarningsV3.iconGlow(RovaWarnings.hard, 100f) !== RovaWarningsV3.recoveryGlow(RovaWarnings.hard)
         )
     }
+
+    // ══════════════════════════════════════════════════════════════════
+    // Trust System V1 token foundation (M1) — value pins transcribed from
+    // the frozen spec `docs/design/warnings-recovery.html` §02 (:74–:89).
+    // These tokens have NO production consumer yet (M1 is additive); the
+    // pins are the only thing standing between a typo and a silent visual
+    // regression when M4–M8 wire them up.
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Family 3 · locked pinned / over-media ─────────────────────────
+
+    @Test fun pinSurface_is_0B0D14() {
+        // HTML :79 `--pin-surface:#0B0D14` — unified the banner's and the
+        // recovery card's two divergent raw hexes.
+        assertEquals(Color(0xFF0B0D14), RovaWarningsV3.pinSurface)
+    }
+
+    @Test fun pinContainerAlpha_is_0_94() {
+        // HTML :84. One alpha for every pinned container floating OVER MEDIA.
+        assertEquals(0.94f, RovaWarningsV3.pinContainerAlpha, 1e-4f)
+    }
+
+    @Test fun mediaInk_trio_are_white_at_94_48_and_55_percent() {
+        // HTML :85–:87.
+        assertEquals(Color.White.copy(alpha = 0.94f), RovaWarningsV3.mediaInk)
+        assertEquals(Color.White.copy(alpha = 0.48f), RovaWarningsV3.mediaInkDim)
+        assertEquals(Color.White.copy(alpha = 0.55f), RovaWarningsV3.mediaInkBody)
+    }
+
+    @Test fun mediaEdgeTop_is_white_at_12_percent() {
+        // HTML :89 `--media-edge-top:rgba(255,255,255,.12)`.
+        assertEquals(Color.White.copy(alpha = 0.12f), RovaWarningsV3.mediaEdgeTop)
+    }
+
+    // ── Family 2 · locked severity ────────────────────────────────────
+
+    @Test fun severityCtaInk_is_1A1A1A() {
+        // HTML :74. Graduated from a call-site literal to a named locked
+        // token. Zero visual delta — the literal it names is unchanged.
+        assertEquals(Color(0xFF1A1A1A), RovaWarningsV3.severityCtaInk)
+    }
+
+    @Test fun severityCtaInk_clears_AA_on_all_four_severity_fills() {
+        // HTML :70–:73 — "WARN-02: white-on-severity reads 1.67–3.76:1 and
+        // fails; this ink clears 4.5:1 on all four fills." This is the whole
+        // reason the token exists, so it is pinned as a contract, not a value.
+        val ink = RovaWarningsV3.severityCtaInk
+        listOf(
+            "hard" to RovaWarnings.hard,
+            "soft" to RovaWarnings.soft,
+            "escalating" to RovaWarnings.escalating,
+            "advisory" to RovaWarnings.advisory,
+        ).forEach { (name, fill) ->
+            val ratio = ContrastMath.contrastRatio(
+                ContrastMath.relativeLuminance(ink.r8(), ink.g8(), ink.b8()),
+                ContrastMath.relativeLuminance(fill.r8(), fill.g8(), fill.b8()),
+            )
+            assertTrue(
+                "severityCtaInk on $name reads %.2f:1, below the 4.5:1 AA bar".format(ratio),
+                ratio >= 4.5
+            )
+        }
+    }
+
+    @Test fun mediaInk_trio_clear_AA_on_the_pinned_capsule_over_the_worst_media_frame() {
+        // The capsule is pinSurface @ pinContainerAlpha composited over live
+        // media. The frozen inspector sweeps three reference frames; `white`
+        // (255,255,255) is the worst case for a dark capsule. Every over-media
+        // ink must still clear 4.5:1 against the capsule it sits on.
+        val frame = intArrayOf(255, 255, 255)
+        val pin = RovaWarningsV3.pinSurface
+        val capsule = ContrastMath.compositeAlphaOver(
+            pin.r8(), pin.g8(), pin.b8(),
+            RovaWarningsV3.pinContainerAlpha.toDouble(),
+            frame[0], frame[1], frame[2],
+        )
+        listOf(
+            "mediaInk" to RovaWarningsV3.mediaInk,
+            "mediaInkDim" to RovaWarningsV3.mediaInkDim,
+            "mediaInkBody" to RovaWarningsV3.mediaInkBody,
+        ).forEach { (name, ink) ->
+            val ratio = ContrastMath.contrastRatioForAlpha(
+                255, 255, 255, ink.alpha.toDouble(),
+                capsule[0], capsule[1], capsule[2],
+            )
+            assertTrue(
+                "$name on the pinned capsule reads %.2f:1, below the 4.5:1 AA bar".format(ratio),
+                ratio >= 4.5
+            )
+        }
+    }
+
+    // ── Family 1 · identity · DERIVED surfaceHi ───────────────────────
+
+    @Test fun surfaceHi_derives_mix_of_white_8_percent_over_surfaceBase() {
+        // HTML :35 + :1340 `p.surfaceHi ?? rgbToHex(mixc([255,255,255],.08,bgB))`.
+        // RovaPalette has NO surfaceHi member — the recovery card stops being a
+        // pinned near-black island and adopts an elevated themed surface.
+        // Expected values recomputed independently from each palette's bgBottom,
+        // which the HTML's PALETTES table (:1181–:1196) matches verbatim.
+        val expected = mapOf(
+            ThemeSelection.AURORA to Color(0xFF272934),
+            ThemeSelection.TIDE to Color(0xFF212C31),
+            ThemeSelection.JADE to Color(0xFF1F2E2A),
+            ThemeSelection.DUSK to Color(0xFF312623),
+            ThemeSelection.ECLIPSE to Color(0xFF141414),
+            ThemeSelection.BLOSSOM to Color(0xFF302532),
+            ThemeSelection.CORAL to Color(0xFF312823),
+            ThemeSelection.MEADOW to Color(0xFF252B21),
+            ThemeSelection.COBALT to Color(0xFF212541),
+            ThemeSelection.ORCHID to Color(0xFF30232B),
+            ThemeSelection.GRAPHITE to Color(0xFF212225),
+        )
+        expected.forEach { (sel, want) ->
+            assertEquals(
+                "surfaceHi mismatch for $sel",
+                want,
+                RovaWarningsV3.surfaceHi(rovaPalettes.getValue(sel)),
+            )
+        }
+    }
+
+    @Test fun surfaceHi_returns_the_explicit_member_for_the_light_palette() {
+        // HTML :1190 `surface:'#F4F1EA', surfaceHi:'#FFFFFF'` — Daylight is the
+        // only palette carrying an explicit member, and it is NOT the 8% mix.
+        val daylight = rovaPalettes.getValue(ThemeSelection.DAYLIGHT)
+        assertTrue("Daylight must remain the light palette", daylight.isLight)
+        assertEquals(Color.White, RovaWarningsV3.surfaceHi(daylight))
+    }
+
+    @Test fun surfaceHi_is_strictly_elevated_above_surfaceBase_for_every_palette() {
+        // The token's reason for existing: an ELEVATED container. A derivation
+        // that returned surfaceBase (mix factor 0) would silently flatten the
+        // recovery card, and every per-palette pin above would still pass if
+        // the palette's bgBottom were black. This catches that class of bug.
+        rovaPalettes.values.forEach { p ->
+            val hi = RovaWarningsV3.surfaceHi(p)
+            if (!p.isLight) {
+                val hiLum = ContrastMath.relativeLuminance(hi.r8(), hi.g8(), hi.b8())
+                val baseLum = ContrastMath.relativeLuminance(
+                    p.surfaceBase.r8(), p.surfaceBase.g8(), p.surfaceBase.b8(),
+                )
+                assertTrue("surfaceHi must be lighter than surfaceBase for ${p.id}", hiLum > baseLum)
+            }
+        }
+    }
+
+    @Test fun surfaceHiMixFraction_is_8_percent() {
+        assertEquals(0.08f, RovaWarningsV3.surfaceHiMixFraction, 1e-4f)
+    }
 }
+
+/** sRGB 8-bit channel accessors — the units [ContrastMath] speaks. */
+private fun Color.r8(): Int = (red * 255f).roundToInt()
+private fun Color.g8(): Int = (green * 255f).roundToInt()
+private fun Color.b8(): Int = (blue * 255f).roundToInt()

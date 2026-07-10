@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 /**
  * Phase 4 — v3 chrome canon for the warning surface (sheets, banners, snooze-chip,
@@ -11,9 +12,13 @@ import androidx.compose.ui.unit.sp
  * (`hard / soft / advisory / escalating`) are inherited from `RovaWarnings`; this
  * object only carries geometry + alpha + brush helpers.
  *
- * Authoritative mockup: `mockups/new_uiux/07c-warnings.html`.
- * Spec: `docs/superpowers/specs/2026-05-23-phase-4-warning-reskin-v3-design.md`.
- * ADR-0013 documents the canon.
+ * **Design authority:** `docs/design/warnings-recovery.html` v1.0 (DESIGN FROZEN
+ * 2026-07-09). Compose transcribes it and never diverges from it; a visual or
+ * interaction change is made in the HTML and re-approved first. ADR-0013's
+ * amendment (2026-07-10) retired the earlier mockup `07c-warnings.html` as an
+ * authority and superseded this object's v3 chrome values.
+ *
+ * Historical: `docs/superpowers/specs/2026-05-23-phase-4-warning-reskin-v3-design.md`.
  */
 object RovaWarningsV3 {
 
@@ -87,6 +92,86 @@ object RovaWarningsV3 {
     val snoozeChipFillAlpha = 0.55f
     val snoozeChipBorderAlpha = 0.25f
     val snoozeChipDotPulseAlpha = 0.6f
+
+    // ══════════════════════════════════════════════════════════════════
+    // Trust System V1 token foundation (ADR-0013 amendment 2026-07-10).
+    // Transcribed from the frozen spec `docs/design/warnings-recovery.html`
+    // §02 token registry. ADDITIVE: nothing below has a production consumer
+    // yet — M4–M8 migrate the call sites. Values are pinned by
+    // `RovaWarningsV3Test`; do not "tidy" them.
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Family 3 · locked pinned / over-media (never themed) ─────────
+
+    /** The one pinned container surface. HTML :79 — unifies the banner's and the recovery card's raw hexes. */
+    val pinSurface = Color(0xFF0B0D14)
+
+    /**
+     * The one alpha for every pinned container floating OVER MEDIA — banner
+     * and snooze chip. HTML :79–:84: the banner shipped .88 (passed AA by
+     * 0.004) and the chip shipped `Color.Black @ .55` (failed outright,
+     * 3.61:1). The *sheet* is opaque: it is modal and covers the viewfinder,
+     * so it composites against nothing. See APPX-B.
+     */
+    const val pinContainerAlpha = 0.94f
+
+    /** Over-media title ink. HTML :85 — the banner title was .88; disclosed bump. */
+    val mediaInk = Color.White.copy(alpha = 0.94f)
+
+    /** Over-media dim ink (metadata). HTML :86. */
+    val mediaInkDim = Color.White.copy(alpha = 0.48f)
+
+    /** Over-media body ink. HTML :87. */
+    val mediaInkBody = Color.White.copy(alpha = 0.55f)
+
+    /** Top hairline on a pinned container. HTML :89. */
+    val mediaEdgeTop = Color.White.copy(alpha = 0.12f)
+
+    // ── Family 2 · locked severity ───────────────────────────────────
+
+    /**
+     * The near-black label on a solid severity fill. NOT debt: white-on-severity
+     * reads 1.67–3.76:1 and fails AA, while this ink clears 4.5:1 on all four
+     * fills (pinned as a contract in `RovaWarningsV3Test`). HTML :70–:74 —
+     * graduated from a call-site literal to a named locked token, zero visual
+     * delta. Never routed through `DialogActionColors` (APPX-C: that resolver
+     * owns accent fills only, never the locked severity fills).
+     */
+    val severityCtaInk = Color(0xFF1A1A1A)
+
+    // ── Family 1 · identity · DERIVED surfaceHi ──────────────────────
+
+    /** The white fraction mixed into `surfaceBase` to derive [surfaceHi]. HTML :35 / :1340. */
+    const val surfaceHiMixFraction = 0.08f
+
+    /**
+     * The elevated themed container behind the recovery card — `mix(white 8%,
+     * surfaceBase)`. **DERIVED, spec-introduced: [RovaPalette] has no
+     * `surfaceHi` member** (HTML :35–:38, :1146, :1383). It exists because the
+     * recovery card stops being a pinned near-black island and adopts an
+     * elevated themed surface.
+     *
+     * Daylight — the only light palette — carries an explicit `#FFFFFF` rather
+     * than the mix (HTML :1190, `p.surfaceHi ?? mixc(...)`): white *is* the
+     * elevation on a light ground, and an 8% white mix of `#F4F1EA` would be
+     * indistinguishable from the base.
+     *
+     * The mix runs in 8-bit sRGB with the same rounding as the spec's
+     * `rgbToHex(mixc(...))`, so the Kotlin result is byte-identical to the
+     * frozen HTML's — e.g. Aurora `#141622` → `#272934`.
+     */
+    fun surfaceHi(palette: RovaPalette): Color {
+        if (palette.isLight) return Color.White
+        val base = palette.surfaceBase
+        val mixed = ContrastMath.compositeAlphaOver(
+            255, 255, 255,
+            surfaceHiMixFraction.toDouble(),
+            (base.red * 255f).roundToInt(),
+            (base.green * 255f).roundToInt(),
+            (base.blue * 255f).roundToInt(),
+        )
+        return Color(mixed[0], mixed[1], mixed[2])
+    }
 
     /**
      * Radial glow brush behind the sheet icon. Severity-tinted, ~0.46 effective alpha
