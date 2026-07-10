@@ -34,6 +34,26 @@ import com.aritr.rova.ui.text.UiText
  */
 
 /**
+ * The mapper's only source of "now" (M3, APPX-G).
+ *
+ * A pure seam, not `java.time.Clock`: the app is `minSdk 24` with no core-library desugaring,
+ * so `java.time` is unavailable in `app/src/main`. Nothing here reads a system clock — the
+ * production instance does, once, at its edge.
+ *
+ * Deliberately NOT a `Flow`, a ticker, or anything observable. APPX-G freezes recency as a
+ * **static label** ("Recency is never a live region … it would make TalkBack chatty"), so the
+ * only way a card's label can change is a re-map.
+ */
+fun interface RecoveryClock {
+    fun nowMillis(): Long
+
+    companion object {
+        /** The wall clock. The single impure instance; every other caller injects a fake. */
+        val System: RecoveryClock = RecoveryClock { java.lang.System.currentTimeMillis() }
+    }
+}
+
+/**
  * Mapper input pair for one session.
  */
 data class RecoverySessionView(
@@ -87,6 +107,16 @@ data class RecoveryCardState(
      * composable; the reason text itself is passed through verbatim.
      */
     val mergeFailedReason: String? = null,
+    /**
+     * M3 (APPX-G) — how long ago this session ended, minted ONCE at map time from the mapper's
+     * [RecoveryClock] and immutable thereafter. The primary UI shows only this relative label
+     * ("Interrupted · 2 hours ago"); the absolute instant it carries is confined to the
+     * contentDescription, the "why" expander, and diagnostics.
+     *
+     * Anchored on the same `terminatedAt ?: startedAt` key the newest-first sort already used —
+     * APPX-G's "already computed to sort, then discarded". No schema change.
+     */
+    val recency: RelativeTimeLabel,
 )
 
 /**
@@ -144,11 +174,16 @@ data class RecoveryUiState(
  */
 object RecoveryUiStateMapper {
 
-    fun map(views: List<RecoverySessionView>): RecoveryUiState {
+    /**
+     * @param clock read exactly once, and only when there is a card to label, so every card in
+     *   one emission agrees about "now". M3 — see [RecoveryClock].
+     */
+    fun map(views: List<RecoverySessionView>, clock: RecoveryClock): RecoveryUiState {
         val eligible = views.filter { isEligible(it) }
         if (eligible.isEmpty()) return RecoveryUiState.Empty
         val sorted = eligible.sortedByDescending { recencyKey(it) }
-        val visible = sorted.firstOrNull()?.let { toCard(it) }
+        val nowMillis = clock.nowMillis()
+        val visible = sorted.firstOrNull()?.let { toCard(it, nowMillis) }
             ?: return RecoveryUiState.Empty
         return RecoveryUiState(
             cards = listOf(visible),
@@ -179,7 +214,7 @@ object RecoveryUiStateMapper {
     private fun recencyKey(view: RecoverySessionView): Long =
         view.manifest.terminatedAt ?: view.manifest.startedAt
 
-    private fun toCard(view: RecoverySessionView): RecoveryCardState? {
+    private fun toCard(view: RecoverySessionView, nowMillis: Long): RecoveryCardState? {
         val terminated = view.manifest.terminated ?: return null
         if (terminated == Terminated.COMPLETED) return null
         if (view.classification.eligibility != DiscardEligibility.OFFER_DISCARD) return null
@@ -207,6 +242,7 @@ object RecoveryUiStateMapper {
             survivingArtifacts = summarize(view.classification),
             mergeLabelRes = if (view.classification.appendedSegmentFilenames.isNotEmpty()) R.string.recovery_merge_label else null,
             keepRawLabelRes = if (view.classification.appendedSegmentFilenames.isNotEmpty()) R.string.recovery_keep_raw_label else null,
+            recency = RelativeTimeLabels.label(atMillis = recencyKey(view), nowMillis = nowMillis),
         )
     }
 
