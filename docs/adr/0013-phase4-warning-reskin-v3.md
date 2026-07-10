@@ -6,7 +6,26 @@
 - **Supersedes (visually):** the original `WarningSheet` / `WarningTopBanner` chrome shipped in PR #12 (Phase 4.1) / PR #13 (Phase 4.1b) and refined in R1 / R2 (PRs #17 / #18 / #19)
 - **Amends:** ADR-0007 (record warning sheets) — the v3 canon (glow bloom, severity chip, overflow ⋯, countdown ring, snooze-chip) supersedes the §1 stripe-and-icon stack described there
 - **Does NOT supersede:** ADR-0007 §3 (Start-gate from leaf signals), `WarningPrecedence.resolve(...)`, `WarningId` (17 rows, ordinals, tier, `gatesStart`), `WarningSurface` routing, `RecoveryViewModel` / `RecoveryUiState`
-- **Related:** mockup `mockups/new_uiux/07c-warnings.html` (authoritative)
+- **Superseded (visually) by:** Amendment 2026-07-10 below — `docs/design/warnings-recovery.html` v1.0 (DESIGN FROZEN 2026-07-09, commit `09a0cba7`)
+- **Related:** mockup `mockups/new_uiux/07c-warnings.html` (authoritative until the 2026-07-10 amendment)
+
+---
+
+## Amendment — 2026-07-10: visual layer superseded by the Trust System V1 HTML freeze
+
+**Status:** Accepted. **Supersedes:** this ADR's *visual and token layer only*.
+
+`docs/design/warnings-recovery.html` (v1.0, DESIGN FROZEN 2026-07-09, commit `09a0cba7`) is now the **canonical design source** for every Warnings + Recovery surface — `WarningSheet`, `WarningTopBanner`, `WarningSnoozeChip`, the History warning strip, the Settings permission chips, `RecoveryCard`, and the merge-failure card. Per the HTML-first workflow, **Compose transcribes that document; behavioral changes require a new HTML design iteration before implementation.** `mockups/new_uiux/07c-warnings.html` is retired as an authority — an adopted spec lives in `docs/design/`, and gitignored mockups cannot be a source of truth.
+
+**What the freeze supersedes (this ADR's Decision 1 and 4):** the chrome canon and its token values. Concretely: the countdown ring is removed (it depicted a countdown the system never ran; Decision 5's deferred "real thermal-hysteresis seconds-source" is therefore closed *unbuilt* — per the freeze, the ring "may return only when backed by a real countdown"); the hard-block sheet loses its drag handle; pinned containers unify on one surface + alpha; every hue used as ink is resolved per-backing rather than mixed at a fixed alpha; radius / spacing / motion move onto shared ladders. Token geometry and alpha move from ad-hoc call sites into the Trust token registry the HTML defines. `RovaWarnings` (the four severity colors) remains untouched, exactly as Decision 4 states: `RovaWarnings` and `RovaSemantics` stay **separate semantic APIs and are never collapsed into one namespace** — three severities are defined-as their `RovaSemantics` counterpart (one hex literal each), `advisory` is Warnings-unique with no `RovaSemantics` twin, and future divergence must remain possible.
+
+**What the freeze does NOT supersede — unchanged and still binding:** Decision 2 (the file split; `WarningCenter.kt` stays the routing entrypoint), Decision 3 (additive VM state; `activeWarning` filters snoozed ids; **the Start-gate reads leaf signals directly, so snoozing or dismissing a hard block never opens the gate** — pinned by `WarningCenterAggregateTest`), ADR-0007 §3, `WarningPrecedence.resolve(...)`, the `WarningId` declaration order and its `tier` / `gatesStart` columns, `WarningSurface` routing, the History / Settings allowlists, snooze persistence (ADR-0014), thermal hysteresis (ADR-0019), and the recovery merge state machine (ADR-0017 / ADR-0018). The `docs/WarningCenterContract.md` NO-GO list stands in full.
+
+**Count correction.** This ADR's front-matter and Decision 1 cite "17 rows" / "17 idle-reachable warning sheets" — accurate on 2026-05-23, stale today. `WarningId` now declares **21** values (`WarningId.kt:25–51`); four landed after this ADR, each under its own ADR (`STORAGE_FULL_AUTOSTOPPED` → 0015, `THERMAL_AUTOSTOPPED` → 0016, `CANT_MERGE` → 0017, `SAVE_FOLDER_UNAVAILABLE` → 0024). The historical lines above are left as written; **21 is the live count.** See the frozen HTML's APPX-H for the four distinct count axes (21 enum values · 18 logical states · 17 precedence-resolver rows) and why three of them are simultaneously correct.
+
+**Known divergence, deliberately out of scope.** `EXACT_ALARM_DENIED` is described in `docs/WarningCenterContract.md` and `CLAUDE.md` as "a flat non-gating banner", while `warningSurfaceFor` maps it to `HardBlockSheet` (`WarningSheetContent.kt:36`). It is genuinely non-gating either way. The frozen HTML transcribes the code, and Compose must do the same. Whether the modal container is the *right* one is a behavior question requiring its own ADR and its own HTML iteration; it does not block this amendment, and no implementation decision depends on it.
+
+**Implementation contract:** `docs/COMPOSE-TRUST-SYSTEM-V1-PARITY-PLAN.md` (milestones, dependency graph, parity checklist). The roadmap explains implementation order; it never overrides the HTML.
 
 ---
 
