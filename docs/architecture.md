@@ -82,9 +82,12 @@ app/src/main/java/com/aritr/rova/
 │       ├── Color.kt
 │       ├── Font.kt
 │       ├── RecordChromeTokens.kt   # Record-screen pixel-faithful constants (ADR-0013)
+│       ├── RovaMotion.kt           # Motion ladder (ADR-0028 §3.2) + Trust System rungs
 │       ├── RovaTokens.kt           # Shared type/shape/spacing tokens
 │       ├── RovaTokensPreview.kt
-│       ├── RovaWarningsV3.kt       # Warning severity + notification re-skin tokens (M5)
+│       ├── RovaWarningsV3.kt       # Warning re-skin tokens + Trust System V1 token
+│       │                           # foundation (pinned/over-media + locked severity
+│       │                           # families, derived surfaceHi). → RovaTrustTokens at M11
 │       ├── SettingsSheetTokens.kt
 │       ├── Theme.kt
 │       └── Type.kt
