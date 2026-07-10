@@ -20,14 +20,26 @@ import kotlin.math.roundToInt
  */
 object ContrastMath {
 
-    /** sRGB 8-bit channel → linearized component per WCAG 2.1. */
-    private fun linearize(channel: Int): Double {
-        val c = channel.coerceIn(0, 255) / 255.0
+    /** sRGB channel (`0..255`, not necessarily integral) → linearized component per WCAG 2.1. */
+    private fun linearize(channel: Double): Double {
+        val c = channel.coerceIn(0.0, 255.0) / 255.0
         return if (c <= 0.04045) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
     }
 
     /** Relative luminance (0.0 = black … 1.0 = white) per WCAG 2.1. */
     fun relativeLuminance(r: Int, g: Int, b: Int): Double =
+        relativeLuminance(r.toDouble(), g.toDouble(), b.toDouble())
+
+    /**
+     * Relative luminance of an **un-quantized** sRGB triple (channels `0..255`).
+     *
+     * Exists because a multi-layer composite is not 8-bit until something materializes it.
+     * Rounding each intermediate layer is not free: the Trust System's frozen contrast matrix
+     * (`TrustContrastSweepTest`) has a pair clearing its bar by 0.0055, which per-step
+     * quantization erodes to 0.0011. The [Int] overload delegates here, so there is exactly one
+     * luminance implementation.
+     */
+    fun relativeLuminance(r: Double, g: Double, b: Double): Double =
         0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
 
     /** Contrast ratio of two relative luminances; symmetric, range 1.0..21.0. */
@@ -48,9 +60,33 @@ object ContrastMath {
         alpha: Double,
         br: Int, bg: Int, bb: Int,
     ): IntArray {
+        val c = compositeAlphaOverExact(
+            fr.toDouble(), fg.toDouble(), fb.toDouble(),
+            alpha,
+            br.toDouble(), bg.toDouble(), bb.toDouble(),
+        )
+        return intArrayOf(
+            c[0].roundToInt().coerceIn(0, 255),
+            c[1].roundToInt().coerceIn(0, 255),
+            c[2].roundToInt().coerceIn(0, 255),
+        )
+    }
+
+    /**
+     * Source-over composite without 8-bit quantization — returns exact `[r, g, b]` in `0..255`.
+     *
+     * CSS `color-mix(in srgb, A p%, B)` reduces to the identical expression, so this is also the
+     * one mix primitive: the frozen Trust spec's `over()` and `mixc()` are the same function.
+     * [compositeAlphaOver] is this, rounded.
+     */
+    fun compositeAlphaOverExact(
+        fr: Double, fg: Double, fb: Double,
+        alpha: Double,
+        br: Double, bg: Double, bb: Double,
+    ): DoubleArray {
         val a = alpha.coerceIn(0.0, 1.0)
-        fun mix(f: Int, b: Int) = (f * a + b * (1 - a)).roundToInt().coerceIn(0, 255)
-        return intArrayOf(mix(fr, br), mix(fg, bg), mix(fb, bb))
+        fun mix(f: Double, b: Double) = f * a + b * (1 - a)
+        return doubleArrayOf(mix(fr, br), mix(fg, bg), mix(fb, bb))
     }
 
     /**

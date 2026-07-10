@@ -41,8 +41,15 @@ object DialogActionColors {
     private fun mid(a: IntArray, b: IntArray): IntArray =
         intArrayOf((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
 
-    /** Scale a color toward black by [t] (0 = unchanged, 1 = black). */
-    private fun deepen(c: IntArray, t: Double): IntArray = intArrayOf(
+    /**
+     * Scale a color toward black by [t] (0 = unchanged, 1 = black).
+     *
+     * `internal`, not private: [ResolveInk]'s light-backing branch deepens a severity hue with
+     * *this* primitive rather than a second copy of it (parity plan P2 — one resolver, one
+     * deepen). Visibility only; the function is unchanged and [DialogActionColors] remains the
+     * sole owner of accent-*fill* resolution (APPX-C).
+     */
+    internal fun deepen(c: IntArray, t: Double): IntArray = intArrayOf(
         (c[0] * (1 - t)).roundToInt().coerceIn(0, 255),
         (c[1] * (1 - t)).roundToInt().coerceIn(0, 255),
         (c[2] * (1 - t)).roundToInt().coerceIn(0, 255),
