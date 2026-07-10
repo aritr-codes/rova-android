@@ -46,7 +46,7 @@ If a check fails it cites the ADR clause it enforces. **Do not edit a check away
 - `testOptions.unitTests.isReturnDefaultValues = true` — Android framework calls return defaults under JVM. Anything that touches `android.opengl.Matrix.*` or `android.graphics.Matrix.*` is a no-op in tests; use a pure-Kotlin math seam (see `AspectFitMath.kt`).
 - `JSONObject` / `JSONArray` from `android.jar` throw at runtime under JVM tests. The real `org.json:json:20231013` is on `testImplementation` so `SessionManifest` / `SessionConfig` persistence tests work.
 - Pattern: extract pure-helper objects (`SegmentGateThermal`, `ThermalHysteresis`, `AspectFitMath`, `effectiveIdleTopBannerId`) so logic is unit-testable; the framework-touching wrapper class stays a thin seam.
-- Baseline: **2302 tests / 0-0-0** on master (`c46b5f8b`, measured post-merge). A new feature lands its tests in the same PR. The full suite needs `--max-workers=2` on this box.
+- Baseline: **2320 tests / 0-0-0** on master (`3ca08918`, measured post-merge). A new feature lands its tests in the same PR. The full suite needs `--max-workers=2` on this box.
 
 ## Architecture
 
