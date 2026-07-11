@@ -226,6 +226,22 @@ class RovaWarningsV3Test {
     @Test fun surfaceHiMixFraction_is_8_percent() {
         assertEquals(0.08f, RovaWarningsV3.surfaceHiMixFraction, 1e-4f)
     }
+
+    // ── Snooze chip geometry (M4) — new named tokens land with their first ──
+    // consumer (WarningSnoozeChip). Values from the frozen spec's `.snooze .pill`
+    // rule (warnings-recovery.html :326–:327): height 34px, padding 0 s4 (16px),
+    // gap s2 (8px). P4: non-primitive padding/gap/height come from named tokens.
+    @Test fun snoozeChipPillHeight_is_34dp() {
+        assertEquals(34.dp, RovaWarningsV3.snoozeChipPillHeight)
+    }
+
+    @Test fun snoozeChipPaddingH_is_16dp() {
+        assertEquals(16.dp, RovaWarningsV3.snoozeChipPaddingH)
+    }
+
+    @Test fun snoozeChipGap_is_8dp() {
+        assertEquals(8.dp, RovaWarningsV3.snoozeChipGap)
+    }
 }
 
 /** sRGB 8-bit channel accessors — the units [ContrastMath] speaks. */
