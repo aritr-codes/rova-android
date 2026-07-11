@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,15 +70,35 @@ internal fun SettingsPermissionsSection(
     }
 }
 
+/**
+ * M7 (parity plan §7) — transcribes the frozen `.setchip` (`warnings-recovery.html`
+ * §06 :346–:352). A THEMED host: r-sm 10, min-height 48, fill `color-mix(sev 8%,
+ * surface)`, border sev 25%; a leading 7dp resolved dot (the `set` mark ink) and a
+ * trailing "Fix" in resolved accent-as-text (the `set` acc ink, `MIX_ACCENT`). NOT
+ * dismissible — the chip clears only when the signal flips off. Pre-M7 the chip was a
+ * fixed sev-alpha island with a bordered severity badge; the resolved inks follow the
+ * palette (§06) and clear AA on Daylight where a fixed mix would not.
+ */
 @Composable
 private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
     val surface = warningSurfaceFor(id)
     val accent = accentFor(surface)
     val content = warningSheetContent(id)
+    val cs = MaterialTheme.colorScheme
+    val ink = ThemedHostInk.forSet(
+        severity = accent,
+        // The "Fix" hue is the RAW palette accent, resolved as text — never the deepened
+        // `colorScheme.primary` CTA fill. `inversePrimary` is `RovaPalette.accent` verbatim
+        // (PaletteColorScheme.from :65), so it is the raw-accent handle a themed composable has.
+        accent = cs.inversePrimary,
+        surface = cs.surface,
+        onSurface = cs.onSurface,
+    )
     // WCAG 2.2 AA SC 4.1.2 / 1.3.1 (ADR-0020, SET-14): one button node whose
-    // name folds the severity badge + title together, so TalkBack reads e.g.
+    // name folds the severity + title together, so TalkBack reads e.g.
     // "Soft status: Microphone access needed, button" instead of two stray
-    // fragments.
+    // fragments. The visible severity channel is the coloured dot; the severity
+    // WORD survives in this description (the frozen setchip drops the badge).
     val chipDescription = stringResource(
         R.string.warning_chip_status_cd,
         stringResource(severityLabelFor(surface)),
@@ -86,35 +107,30 @@ private fun SettingsPermissionChip(id: WarningId, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(accent.copy(alpha = 0.08f))
-            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(ink.tint)
+            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
             // SC 2.4.7 (SET-16): visible focus ring for D-pad/keyboard.
-            .focusHighlight(RoundedCornerShape(6.dp))
+            .focusHighlight(RoundedCornerShape(10.dp))
             .clickable(onClickLabel = stringResource(R.string.warning_open_details_label), role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = chipDescription }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(3.dp))
-                .border(1.dp, accent.copy(alpha = 0.50f), RoundedCornerShape(3.dp))
-                .padding(horizontal = 5.dp, vertical = 1.dp),
-        ) {
-            Text(
-                text = stringResource(severityLabelFor(surface)),
-                style = MaterialTheme.typography.labelSmall,
-                color = accent,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        Spacer(Modifier.size(8.dp))
+        Box(Modifier.size(7.dp).clip(CircleShape).background(ink.dot))
         Text(
             text = stringResource(content.title),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = cs.onSurface,
             modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(R.string.warning_settings_fix_action),
+            style = MaterialTheme.typography.labelLarge,
+            color = ink.fix,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
