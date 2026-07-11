@@ -3,8 +3,8 @@ package com.aritr.rova.ui.recovery
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,11 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -29,63 +30,63 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.annotation.StringRes
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.ProcessingGlyph
-import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.focusHighlight
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
-import com.aritr.rova.ui.theme.IconRole
-import com.aritr.rova.ui.theme.RovaIcons
+import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.warnings.ThemedHostInk
 
 /**
- * Phase 4 warning re-skin v3 (PR B / Task B1) — Library recovery card.
+ * Trust System V1 — M8 — Library recovery card, transcribed from the frozen
+ * `docs/design/warnings-recovery.html` §07 (`.recov`, DESIGN FROZEN 2026-07-09).
+ * Compose transcribes the frozen HTML and never diverges from it.
  *
- * Re-skinned to the v3 chrome canon (ADR-0013, spec
- * `docs/superpowers/specs/2026-05-23-phase-4-warning-reskin-v3-design.md` §3.9):
+ * The freeze re-architects the pre-freeze v3 card in four load-bearing ways:
  *
- *  - Top **glow bloom** (severity-tinted vertical gradient, blurred and
- *    shifted above the visible card) replaces the v2 4dp left stripe.
- *  - **Severity tag chip** with a leading dot; the dot pulses for hard
- *    severity, mirroring `WarningSnoozeChip` (pattern preserves the
- *    same `rememberInfiniteTransition`/`animateFloat` motif).
- *  - **Clip-progress strip** with a numeric "N / N" chip right-aligned
- *    when the underlying `survivingArtifacts` list is non-empty. Each
- *    artifact line is one filled cell; if no artifacts survive, the
- *    strip section is suppressed entirely.
- *  - Destructive **primary CTA** ("Discard recording") in the hard red,
- *    full width across the row. The vendor-help affordance — supplied
- *    by the wiring layer for `KILLED_BY_SYSTEM` cards only — renders
- *    as an **optional extra row** beneath the CTA.
+ *  1. **Themed, not pinned.** The card is no longer a `#0B0D14 @ .94` near-black
+ *     island; it is an elevated **`surfaceHi`** container with a themed `--edge`
+ *     border that FOLLOWS the palette (§06). Its inks resolve per-backing through
+ *     [ThemedHostInk.forRecovery] (the `recov` INK_SITE), exactly the world the
+ *     `TrustContrastSweepTest` proves AA on.
+ *  2. **TrustRow anatomy.** A single leading 7dp severity **dot** (resolved
+ *     `dot-ink`) beside the answer column — no SemanticIcon emblem, no sev-chip
+ *     (HTML :362, :1625; the frozen `.recov` trustrow carries only the dot). The
+ *     pulse rides that dot for `KILLED_BY_SYSTEM` only, and the involuntary-stop
+ *     concept survives in the eyebrow tag + dot hue + card glow.
+ *  3. **Recency eyebrow.** `TAG · recency` (uppercase), the first render consumer
+ *     of the M3 [RelativeTimeLabel] the mapper already mints.
+ *  4. **CTA re-roling.** Primary Merge/Retry = `cta-accent` (`colorScheme.primary`
+ *     fill + `onPrimary` ink, DialogActionColors-resolved), Keep = ghost, Discard =
+ *     `cta-dest` OUTLINE (never the solid red fill, never full-width, always
+ *     terminal — §01's law). The progress strip is drawn ONLY while merging and its
+ *     chip reads **filled/total** (fixing the pre-freeze `N / N`).
  *
- * Signature preserved byte-for-byte from the v2 composable so
- * `HistoryScreen.kt` call sites (and `RecoveryCardList` below) do not
- * change. `RecoveryViewModel` / `RecoveryUiState` / `RecoveryViewSource`
- * are untouched — this is a render-only re-skin.
- *
- * Deviations from the plan template (`docs/superpowers/plans/2026-05-23-phase-4-warning-reskin-v3.md`
- * Task B1) are intentional and load-bearing — the real `RecoveryCardState`
- * does not carry `tagLabel` / `timestamp` / `description` / `clipsSaved` /
- * `clipsTotal` / `primaryLabel` / `secondaryLabel`, only:
- * `sessionId, kind, title, body, discardLabel, showVendorHelpSlot,
- * survivingArtifacts: List<String>`. Severity is derived from `kind`
- * (HARD ⇐ KILLED_BY_SYSTEM; SOFT ⇐ KILLED_FORCE_STOP, USER_STOPPED).
- * The tag label is derived from `kind` too. Timestamp is omitted (no
- * source field). The clip-progress strip falls back to the artifact-
- * count, which is the closest "recovered-N-segments" signal the
- * existing state exposes.
+ * `RecoveryCardState` / `RecoveryUiState` / mapper are untouched (M3 already wired
+ * `recency`); this is a render-only transcription plus the strip numerator fix.
  */
 @Composable
 fun RecoveryCard(
@@ -100,27 +101,33 @@ fun RecoveryCard(
     val severityColor: Color = severityColorFor(state.kind)
     val isHardSeverity: Boolean = state.kind == RecoveryCardKind.KILLED_BY_SYSTEM
 
+    val cs = MaterialTheme.colorScheme
+    // No palette CompositionLocal — polarity from the surface luminance (mirrors M7's
+    // ThemedHostInk consumers). `cs.surface == RovaPalette.surfaceBase`, so the derived
+    // surfaceHi is byte-identical to the sweep's `surfaceHiOf`.
+    val isDark = cs.surface.luminance() < 0.5f
+    val surfaceHi = RovaWarningsV3.surfaceHi(cs.surface, isLight = !isDark)
+    val ink = ThemedHostInk.forRecovery(
+        severity = severityColor,
+        surfaceHi = surfaceHi,
+        onSurface = cs.onSurface,
+        onSurfaceVariant = cs.onSurfaceVariant,
+        isDark = isDark,
+    )
+    val cornerRadius = RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius))
-            .background(Color(0xFF0B0D14).copy(alpha = 0.94f))
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius),
-            ),
+            .clip(cornerRadius)
+            // Frozen `.recov{background:var(--surface-hi); border:var(--hair) solid var(--edge)}`
+            // (:355–:356). `--edge` is themed per palette (:1342); `outlineVariant` is the
+            // Material slot carrying that palette edge (PaletteColorScheme.from :61).
+            .background(surfaceHi)
+            .border(width = 1.dp, color = cs.outlineVariant, shape = cornerRadius),
     ) {
-        // Top glow bloom — replaces the v2 severity stripe. The
-        // verticalGradient paints the severity-tinted peak at y=0
-        // (top of the 60dp box) and fades to Transparent at the
-        // bottom; combined with the 28dp blur this gives the soft
-        // top-edge bloom the v3 spec calls for. (An earlier draft
-        // used Modifier.padding(top = (-20).dp) to "shift the peak
-        // above the card", but negative padding shrinks the content
-        // area downward rather than translating it, and the outer
-        // card's clip would have swallowed any real upward offset
-        // anyway — so the modifier is intentionally absent here.)
+        // Top glow bloom — frozen `.recov::before` (:357–:359): severity-tinted vertical
+        // gradient, 28dp blur, decorative (contentDescription = null). Kept from v3.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -129,119 +136,97 @@ fun RecoveryCard(
                 .background(brush = RovaWarningsV3.recoveryGlow(severityColor)),
         )
 
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+        // .trustrow — leading severity dot + the answer column. align-items:flex-start.
+        Row(
+            modifier = Modifier.padding(16.dp), // card padding s4 / s4 (was 16 / 18)
+            horizontalArrangement = Arrangement.spacedBy(12.dp), // gap s3
+            verticalAlignment = Alignment.Top,
         ) {
-            // Severity tag chip. Timestamp omitted — RecoveryCardState
-            // does not carry one; introducing a derived "moments ago"
-            // would couple the composable to a Clock seam, which is
-            // explicitly out of scope for B1.
-            // ADR-0031 P1a slice 3: a Recovery emblem leads the severity tag. Role =
-            // Secondary (textDim) so the quiet emblem does not visually outrank the
-            // severity tag. The severity colour stays on the tag dot + card glow, which
-            // use RovaWarnings (not the locked RovaSemantics status palette), so mixing
-            // the two colour systems on one mark is deliberately avoided.
-            //
-            // icon 5b-4: KILLED_BY_SYSTEM / KILLED_FORCE_STOP kinds swap in the locked
-            // Interrupted status glyph (escalating orange, IconStatus.Interrupted) so the
-            // emblem communicates the involuntary-stop concept visually. USER_STOPPED keeps
-            // the generic RovaIcons.Recovery emblem (null from RecoveryIconSpec). The
-            // locked status is passed as `status` to SemanticIcon so it wins over `role`
-            // per SemanticIconSpec — no raw tint is applied (checkSemanticIconNoRawAlpha).
-            val statusIcon = RecoveryIconSpec.statusGlyphFor(state.kind)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (statusIcon != null) {
-                    SemanticIcon(
-                        imageVector = statusIcon.glyph,
-                        contentDescription = null, // decorative — card title/body carry the meaning
-                        modifier = Modifier.size(22.dp),
-                        status = statusIcon.status,
-                    )
-                } else {
-                    SemanticIcon(
-                        glyph = RovaIcons.Recovery,
-                        contentDescription = null, // card title/body carry the meaning
-                        modifier = Modifier.size(22.dp),
-                        role = IconRole.Secondary,
+            RecoveryDot(color = ink.dot, pulsing = isHardSeverity)
+
+            Column(modifier = Modifier.weight(1f)) {
+                // A1 · what happened — TAG · recency, uppercase (frozen .t-eyebrow).
+                Eyebrow(
+                    tag = stringResource(tagLabelResFor(state.kind)),
+                    recency = recencyText(state.recency),
+                    color = ink.body,
+                )
+
+                Spacer(Modifier.height(8.dp)) // .t-title margin-top s2
+                Text(
+                    text = stringResource(state.titleRes),
+                    fontSize = 15.sp,
+                    lineHeight = 19.8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.005).em,
+                    color = cs.onSurface, // --ink-high == tHigh
+                )
+
+                // A2 · what it means. Frozen replaces the body with a failbox on the
+                // merge-failed frame; that failbox restyle is M9. M8 keeps the inline
+                // reason (assertive) beneath the body, exactly as the pre-freeze card did.
+                Spacer(Modifier.height(8.dp)) // .t-body margin-top s2
+                Text(
+                    text = stringResource(state.bodyRes),
+                    fontSize = 12.5.sp,
+                    lineHeight = 19.4.sp,
+                    color = ink.body, // --ink-body == tQuiet
+                )
+
+                // .artifacts — the clip summary lines. Always shown when present (the
+                // recovered-clip count lives here, NOT in the progress strip).
+                if (state.survivingArtifacts.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp)) // .artifacts margin-top s3
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { // gap s1
+                        state.survivingArtifacts.forEach { line ->
+                            Text(
+                                text = line.resolve(),
+                                fontSize = 11.5.sp,
+                                lineHeight = 17.3.sp,
+                                color = ink.body,
+                            )
+                        }
+                    }
+                }
+
+                // Progress strip — frozen renders it ONLY while merging (:1638). Idle it
+                // is a row of filled cells restating the clip count already on screen.
+                val progress = state.mergeInProgress
+                if (progress != null) {
+                    Spacer(Modifier.height(16.dp)) // .progress margin-top s4
+                    ProgressStrip(
+                        cellCount = state.survivingArtifacts.size,
+                        progress = progress,
+                        cellOn = cs.primary, // --accent-fill
+                        cellOff = cs.onSurface.copy(alpha = 0.05f), // --fill-1 (tHigh 5%)
+                        numChipColor = ink.body, // --ink-dim
                     )
                 }
-                SeverityTag(
-                    label = stringResource(tagLabelResFor(state.kind)),
-                    accent = severityColor,
-                    pulsing = isHardSeverity,
+
+                CtaBlock(
+                    state = state,
+                    ink = ink,
+                    accentFill = cs.primary,
+                    accentInk = cs.onPrimary,
+                    ghostFill = cs.onSurface.copy(alpha = 0.07f), // --ink-high 7%
+                    ghostBorder = cs.onSurface.copy(alpha = 0.12f), // --ink-high 12%
+                    destBacking = cs.onSurface.compositeOver(surfaceHi),
+                    onMerge = onMerge,
+                    onKeepRaw = onKeepRaw,
+                    onDiscard = onDiscard,
+                    vendorHelpSlot = vendorHelpSlot,
                 )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                text = stringResource(state.titleRes),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.92f),
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            // Description — the existing data class names this `bodyRes`.
-            Text(
-                text = stringResource(state.bodyRes),
-                style = MaterialTheme.typography.bodySmall,
-                // WCAG 2.2 AA SC 1.4.3 (ADR-0020, RECOV-05): 0.45α was ~3.3:1
-                // over the elevated card surface; 0.65α clears 4.5:1.
-                color = Color.White.copy(alpha = 0.65f),
-            )
-
-            // Clip-progress strip — only rendered when there is at
-            // least one surviving artifact line. RecoveryCardState
-            // does not expose numeric saved/total; using artifact-count
-            // as the N is the closest signal available without a state
-            // refactor (out of scope for B1).
-            if (state.survivingArtifacts.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                ProgressStrip(
-                    artifactCount = state.survivingArtifacts.size,
-                    accent = severityColor,
-                    progress = state.mergeInProgress,
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // CTA row — collapses to a single destructive button when
-            // onMerge/onKeepRaw are null (pre-Phase-4.3 back-compat),
-            // or expands to a 3-button stack when both are non-null and
-            // the state carries both labels.
-            CtaRow(
-                state = state,
-                onMerge = onMerge,
-                onKeepRaw = onKeepRaw,
-                onDiscard = onDiscard,
-            )
-
-            // Optional extra row — only rendered when the underlying
-            // state requests the vendor-help slot AND the caller
-            // supplies one. The wiring layer in HistoryScreen.kt
-            // supplies an OutlinedButton for KILLED_BY_SYSTEM only;
-            // we keep that exact contract (no chevron ExtraRow) so the
-            // caller's `OutlinedButton(...)` slot renders intact.
-            if (state.showVendorHelpSlot && vendorHelpSlot != null) {
-                Spacer(Modifier.height(10.dp))
-                vendorHelpSlot()
             }
         }
     }
 }
 
 /**
- * Severity colour for the card glow + tag accent. Hard = red for
- * `KILLED_BY_SYSTEM` (the user did not stop, the OS did, and the
- * card asks for vendor-guidance follow-up). Soft = amber for the
- * other two terminator kinds where the user took action or the
- * app was force-stopped.
+ * Severity colour for the card glow + dot ink hue. LOCKED per kind (frozen §07:
+ * `severityColorFor(kind)` "transcribed verbatim — a design freeze may not silently
+ * re-assign meaning"). Hard = red for `KILLED_BY_SYSTEM` (recurs until an OS setting
+ * changes); advisory-blue for the scheduled report; soft-amber for every other
+ * terminator (the user acted, the OS acted, or the app reported — nothing recurs).
  */
 private fun severityColorFor(kind: RecoveryCardKind): Color = when (kind) {
     RecoveryCardKind.KILLED_BY_SYSTEM -> RovaWarnings.hard
@@ -253,9 +238,9 @@ private fun severityColorFor(kind: RecoveryCardKind): Color = when (kind) {
 }
 
 /**
- * Tag-chip label id derived from `kind`. Short, uppercased in the chip
- * itself; this helper returns the mixed-case resource id so the same
- * string could be reused in other contexts without re-casing.
+ * Eyebrow tag label id derived from `kind`. Copy is transcribed verbatim from the
+ * frozen §07 `KINDS[].eyebrow` (M8 copy audit). Mixed-case in resources; uppercased
+ * at render (frozen `.t-eyebrow{text-transform:uppercase}`).
  */
 @StringRes
 private fun tagLabelResFor(kind: RecoveryCardKind): Int = when (kind) {
@@ -267,60 +252,99 @@ private fun tagLabelResFor(kind: RecoveryCardKind): Int = when (kind) {
     RecoveryCardKind.ERROR_STOPPED -> R.string.recovery_tag_interrupted
 }
 
+/**
+ * The M3 [RelativeTimeLabel] → display string (APPX-G ladder). Resource-backed and
+ * resolved here (the composable edge), never in the pure mapper. The DATE rung (>= 7d)
+ * formats the absolute instant the label carries; every other rung is a fixed string
+ * or a plural on [RelativeTimeLabel.count].
+ */
 @Composable
-private fun SeverityTag(label: String, accent: Color, pulsing: Boolean) {
-    // Mirror the WarningSnoozeChip pulse — same animation spec / label
-    // pattern, scoped to this composable so the transition is
-    // recomposition-stable. The transition + animateFloat are hoisted
-    // unconditionally above the `pulsing` branch: rememberInfiniteTransition
-    // is a @Composable call and Compose's slot-positional rule forbids
-    // calling it inside a conditional (if the same slot is reused for a
-    // card whose `pulsing` flag flips between recompositions, Compose
-    // emits a runtime warning and the lint check trips). Gating only
-    // the value selection costs a single unused Float animator when
-    // pulsing == false, which is negligible.
-    val infiniteTransition = rememberInfiniteTransition(label = "recovery-tag-pulse")
-    val pulsingAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "recovery-tag-pulse-alpha",
-    )
-    // WCAG 2.2 AA SC 2.3.3 / 2.2.2 (ADR-0020, RECOV-18): suppress the pulse
-    // when the OS reduced-motion toggle is on — hold the dot fully visible.
-    val reduceMotion = rememberReduceMotion()
-    val dotAlpha: Float = if (pulsing && !reduceMotion) pulsingAlpha else 1f
-
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(accent.copy(alpha = 0.14f))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = dotAlpha)),
+private fun recencyText(label: RelativeTimeLabel): String = when (label.kind) {
+    RelativeTimeKind.JUST_NOW -> stringResource(R.string.recency_just_now)
+    RelativeTimeKind.MINUTES ->
+        pluralStringResource(R.plurals.recency_minutes, label.count ?: 0, label.count ?: 0)
+    RelativeTimeKind.HOURS ->
+        pluralStringResource(R.plurals.recency_hours, label.count ?: 0, label.count ?: 0)
+    RelativeTimeKind.YESTERDAY -> stringResource(R.string.recency_yesterday)
+    RelativeTimeKind.DAYS ->
+        pluralStringResource(R.plurals.recency_days, label.count ?: 0, label.count ?: 0)
+    RelativeTimeKind.DATE -> {
+        val context = LocalContext.current
+        val date = android.text.format.DateUtils.formatDateTime(
+            context,
+            label.atMillis,
+            android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_NO_YEAR,
         )
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = accent.copy(alpha = 0.95f),
-        )
+        stringResource(R.string.recency_on_date, date)
     }
 }
 
 /**
- * Pure screen-reader label for the progress strip (WCAG 2.2 AA SC 4.1.2,
- * RECOV-16). The cells are decorative `Box`es with no text, so the count is
- * otherwise invisible to TalkBack. `internal` for [RecoveryProgressA11yTest].
+ * The leading 7dp severity dot (frozen `.recov>.trustrow>.dot`). It carries the
+ * resolved `dot-ink`. The pulse marks `KILLED_BY_SYSTEM` only — the one kind the user
+ * must act on OUTSIDE Rova to prevent — and is the frozen shared `@keyframes pulse`
+ * (`:363` references the SAME keyframe as the snooze chip `:336`): min opacity 0.45 at
+ * period/2, 1600ms, `RovaMotion.easeStandard`, held fully visible under reduced motion.
+ * The infinite transition is hoisted unconditionally so a slot reused across kinds
+ * (list index keys) does not trip Compose's positional-composable rule.
+ */
+@Composable
+private fun RecoveryDot(color: Color, pulsing: Boolean) {
+    val transition = rememberInfiniteTransition(label = "recovery-dot-pulse")
+    val period = RovaWarningsV3.snoozeChipPulsePeriodMs
+    val pulseAlpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = period
+                1f at 0 using RovaMotion.easeStandard
+                RovaWarningsV3.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "recovery-dot-pulse-alpha",
+    )
+    val reduceMotion = rememberReduceMotion()
+    val dotAlpha: Float = if (pulsing && !reduceMotion) pulseAlpha else 1f
+    Box(
+        modifier = Modifier
+            .padding(top = 5.dp) // frozen inline `margin-top:5px` (shape-position offset, APPX-A)
+            .size(7.dp)
+            .clip(CircleShape)
+            .background(color.copy(alpha = dotAlpha)),
+    )
+}
+
+/**
+ * `.t-eyebrow` — `TAG · recency`, uppercase, 9.5sp/600, `.13em` tracking, `--ink-dim`.
+ * One text node (the recency span carries tabular-nums + weight 500 via [SpanStyle]);
+ * the middot separates them. Rendering it as a single node keeps TalkBack from speaking
+ * a bare "·".
+ */
+@Composable
+private fun Eyebrow(tag: String, recency: String, color: Color) {
+    val text = buildAnnotatedString {
+        append(tag.uppercase())
+        append("  ·  ")
+        withStyle(SpanStyle(fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")) {
+            append(recency.uppercase())
+        }
+    }
+    Text(
+        text = text,
+        fontSize = 9.5.sp,
+        lineHeight = 12.4.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.13.em,
+        color = color,
+    )
+}
+
+/**
+ * Pure screen-reader label for the progress strip (WCAG 2.2 AA SC 4.1.2, RECOV-16).
+ * The cells are decorative `Box`es with no text, so the count is otherwise invisible
+ * to TalkBack. `internal` for [RecoveryProgressA11yTest].
  */
 internal fun recoveryProgressContentDescription(
     cellCount: Int,
@@ -333,159 +357,95 @@ internal fun recoveryProgressContentDescription(
 }
 
 /**
- * Clip-progress strip with leading header label + numeric `N / N` chip
- * + a row of cells.
- *
- * When [progress] is null (idle / post-merge), all cells are filled and
- * the header reads "CLIPS RECOVERED" (existing behaviour, back-compat).
- * When [progress] is non-null (merge in flight), the header flips to
- * "MERGING" and the filled-cell count is proportional to [progress] ∈
- * [0,1], giving a discrete progress bar effect over the segment cells.
- *
- * The data layer does not expose a saved/total split today — every
- * surviving artifact is, by definition, a recovered segment, so all
- * cells render as saved when idle. When a richer signal lands (e.g.
- * expected vs recovered segment counts), only the `clipsSaved` /
- * `clipsTotal` decomposition here needs to change.
+ * Filled-cell count for the merge progress strip — `floor(progress × total)`.
+ * The frozen strip prints **filled / total** (`:1641`, `done/c.clips`); the pre-freeze
+ * chip passed the artifact count twice and always read `N / N` (`RecoveryCard.kt:408`,
+ * the artifact-count-as-progress proxy §01 forbids). `internal` for its unit test.
+ */
+internal fun recoveryProgressFilledCells(progress: Float, cellCount: Int): Int =
+    (progress.coerceIn(0f, 1f) * cellCount).toInt()
+
+/**
+ * Frozen `.progress` (`:366`–:371) — `[ProcessingGlyph | cells (flex 1) | numchip]`,
+ * drawn only while merging. Cells: 7dp tall, 3.5dp radius, `--fill-1` off / `--accent-fill`
+ * on. Numchip: `filled/total`, min-width 36, tabular-nums, `--ink-dim`. The strip is one
+ * merged node with the spoken filled-of-total count (RECOV-16) and a polite live region so
+ * progress is announced as cells roll forward (RECOV-17). The ProcessingGlyph is the §11
+ * motion-inventory "working vs hung" cue (`:864`), placed leading here (the frozen header
+ * row it used to sit beside is removed).
  */
 @Composable
-private fun ProgressStrip(artifactCount: Int, accent: Color, progress: Float? = null) {
-    val cellCount = artifactCount.coerceAtLeast(1)
-    val filledCells = if (progress != null) {
-        (progress.coerceIn(0f, 1f) * cellCount).toInt()
-    } else {
-        cellCount
-    }
-    val headerLabel = stringResource(
-        if (progress != null) R.string.recovery_progress_header_merging
-        else R.string.recovery_progress_header_recovered,
-    )
-    val progressCd = recoveryProgressContentDescription(cellCount, filledCells, progress != null).resolve()
-    Column(
+private fun ProgressStrip(
+    cellCount: Int,
+    progress: Float,
+    cellOn: Color,
+    cellOff: Color,
+    numChipColor: Color,
+) {
+    val cells = cellCount.coerceAtLeast(1)
+    val filled = recoveryProgressFilledCells(progress, cells)
+    val progressCd = recoveryProgressContentDescription(cells, filled, merging = true).resolve()
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            // RECOV-16 (SC 4.1.2): merge the strip into one node with a spoken
-            // count — the decorative cells carry no text otherwise.
-            // RECOV-17 (SC 4.1.3): polite live region so merge progress is
-            // announced as filled cells roll forward (discrete, not per-tick).
             .semantics(mergeDescendants = true) {
                 contentDescription = progressCd
                 liveRegion = LiveRegionMode.Polite
             },
+        horizontalArrangement = Arrangement.spacedBy(12.dp), // gap s3
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Decorative branded spinner — distinguishes "working" from "hung".
+        ProcessingGlyph(size = 16.dp)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (progress != null) {
-                    // Icon P2 Track A — branded animated merge glyph beside the
-                    // "Merging" header while a recovery merge runs (ADR-0031 §6/§8).
-                    // Decorative; the strip's polite live region announces progress.
-                    ProcessingGlyph(size = 16.dp)
-                }
-                Text(
-                    text = headerLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    // WCAG 2.2 AA (ADR-0020, audit RECOV-06): 0.36α was ~3:1 over the
-                    // elevated card — below the 4.5:1 SC 1.4.3 bar. 0.70α ≈ 6.83:1.
-                    // See ContrastMathTest.
-                    color = Color.White.copy(alpha = 0.70f),
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.06f))
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(R.string.recovery_progress_chip, artifactCount, artifactCount),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.78f),
-                    modifier = Modifier.defaultMinSize(
-                        minWidth = RovaWarningsV3.recoveryNumericChipMinWidth,
-                    ),
-                )
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.recoveryProgressCellGap),
         ) {
-            repeat(cellCount) { index ->
-                val isFilled = index < filledCells
+            repeat(cells) { index ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(RovaWarningsV3.recoveryProgressCellHeight)
                         .clip(RoundedCornerShape(RovaWarningsV3.recoveryProgressCellRadius))
-                        .background(accent.copy(alpha = if (isFilled) 0.55f else 0.15f)),
+                        .background(if (index < filled) cellOn else cellOff),
                 )
             }
         }
-    }
-}
-
-/**
- * Full-width destructive primary CTA. Hard-red fill + white text.
- * Mirrors the v3 PrimaryButton chrome (40dp height, 12dp radius)
- * but uses `RovaWarnings.hard` instead of `0xFF5B7FFF` because this
- * single CTA is destructive ("Discard recording"), not advisory.
- */
-@Composable
-private fun DestructiveCta(label: String, onClick: () -> Unit, modifier: Modifier) {
-    Row(
-        modifier = modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(RovaWarnings.hard)
-            .focusHighlight(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button) { onClick() },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
+            text = stringResource(R.string.recovery_progress_chip, filled, cells),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = numChipColor,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = RovaWarningsV3.recoveryNumericChipMinWidth),
         )
     }
 }
 
 /**
- * Phase 4.3 — CTA row. Collapses to the single destructive Discard
- * button when [onMerge]/[onKeepRaw] are null (pre-Phase-4.3 back-compat).
- * Expands to a 3-button stack when all four conditions are met:
- *   1. [onMerge] != null
- *   2. [onKeepRaw] != null
- *   3. [state.mergeLabelRes] != null
- *   4. [state.keepRawLabelRes] != null
+ * The CTA stack (frozen answers A3/A4 + the destructive terminal). Order:
+ *   [merge-failed reason · assertive] · [Merge/Retry accent | Keep ghost] · [vendor] · [Discard dest].
  *
- * Discard is always LAST in the stack — permanent destructive action
- * anchored at the bottom regardless of stack height.
- *
- * Button enabled state: [state.mergeInProgress] != null means a merge
- * is in flight — Merge + Keep-as-raw are disabled (visual + click-guard);
- * Discard remains tappable.
- *
- * Retry flavour: when [state.mergeFailedReason] != null, the primary
- * CTA label flips to "Retry merge" while the target remains [onMerge].
+ * `showThreeCtaStack` (both merge callbacks + both labels present) gates the
+ * accent/ghost row; without it only Discard shows (no surviving artifacts to merge).
+ * Merge-in-flight (`mergeInProgress != null`) disables Merge + Keep; **Discard stays
+ * live** — the user is never trapped (frozen :790, unchanged). Discard is `cta-dest`:
+ * transparent, `sev-hard 30%` outline, `mix(sev-hard 62%, ink-high)` ink, wrap-content
+ * (NEVER full-width), always terminal (§01).
  */
 @Composable
-private fun CtaRow(
+private fun CtaBlock(
     state: RecoveryCardState,
+    ink: ThemedHostInk.RecoveryInk,
+    accentFill: Color,
+    accentInk: Color,
+    ghostFill: Color,
+    ghostBorder: Color,
+    destBacking: Color,
     onMerge: (() -> Unit)?,
     onKeepRaw: (() -> Unit)?,
     onDiscard: () -> Unit,
+    vendorHelpSlot: (@Composable () -> Unit)?,
 ) {
     val showThreeCtaStack = onMerge != null && onKeepRaw != null &&
         state.mergeLabelRes != null && state.keepRawLabelRes != null
@@ -493,134 +453,137 @@ private fun CtaRow(
     val discardLabel = stringResource(state.discardLabelRes)
     val discardCd = stringResource(R.string.recovery_discard_cd, discardLabel)
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // WCAG 2.2 AA SC 3.3.1 / 4.1.3 (ADR-0020, RECOV-14): the last merge
-        // failure reason was tracked in state (it flips the CTA to "Retry
-        // merge") but never shown. Render it in the error colour and announce
-        // it assertively so the user knows why the retry is being offered.
-        val failReason = state.mergeFailedReason
-        if (failReason != null && !inFlight) {
-            Text(
-                text = stringResource(R.string.recovery_merge_failed_prefix, failReason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
-            )
+    // WCAG 2.2 AA SC 3.3.1 / 4.1.3 (RECOV-14): the last merge failure reason flips the
+    // primary to "Retry" — surface it (error colour, assertive). M9 restyles into the failbox.
+    val failReason = state.mergeFailedReason
+    if (failReason != null && !inFlight) {
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.recovery_merge_failed_prefix, failReason),
+            fontSize = 12.5.sp,
+            lineHeight = 19.4.sp,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
+        )
+    }
+
+    if (showThreeCtaStack) {
+        Spacer(Modifier.height(16.dp)) // .ctas margin-top s4
+        val mergeLabel = if (state.mergeFailedReason != null) {
+            stringResource(R.string.recovery_retry_merge_label)
+        } else {
+            stringResource(state.mergeLabelRes!!)
         }
-        if (showThreeCtaStack) {
-            // 1. Merge segments (primary; ink fill). Label flips to
-            //    "Retry merge" when last merge failed.
-            val mergeLabel = if (state.mergeFailedReason != null) {
-                stringResource(R.string.recovery_retry_merge_label)
-            } else {
-                stringResource(state.mergeLabelRes!!)
-            }
-            PrimaryMergeCta(
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { // gap s2
+            AccentCta(
                 label = mergeLabel,
+                fill = accentFill,
+                ink = accentInk,
                 enabled = !inFlight,
+                modifier = Modifier.weight(1f),
                 onClick = { if (!inFlight) onMerge!!.invoke() },
             )
-            // 2. Keep as raw clips (ghost; hairline border).
             GhostCta(
                 label = stringResource(state.keepRawLabelRes!!),
+                fill = ghostFill,
+                border = ghostBorder,
+                ink = ink.body,
                 enabled = !inFlight,
+                modifier = Modifier.weight(1f),
                 onClick = { if (!inFlight) onKeepRaw!!.invoke() },
             )
         }
-        // 3. Discard recording — always present, last in stack.
+    }
+
+    // Vendor link — frozen `.vendor` sits between the accent/ghost row and Discard.
+    // The link is caller-supplied (LibraryScreen owns the OEM-intent Context); M8
+    // transcribes its POSITION. The borderless `acc-ink` text-link + external-glyph
+    // styling stays caller-owned (LibraryScreen + a new glyph are outside M8's file set).
+    if (state.showVendorHelpSlot && vendorHelpSlot != null) {
+        Spacer(Modifier.height(12.dp)) // .vendor margin-top s3
+        vendorHelpSlot()
+    }
+
+    // Destructive — terminal, never full-width. Own row (frozen `.ctas{margin-top:8px}`).
+    Spacer(Modifier.height(8.dp))
+    Row {
         DestructiveCta(
             label = discardLabel,
+            backing = destBacking,
+            modifier = Modifier.semantics { contentDescription = discardCd },
             onClick = onDiscard,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics {
-                    contentDescription = discardCd
-                },
         )
     }
 }
 
-/**
- * Phase 4.3 — primary advisory-ink filled CTA for Merge segments.
- * Uses [RovaWarnings.advisory] (`0xFF5B7FFF`) — the same token the
- * existing file already imports for the advisory severity colour.
- * Height + corner radius mirror the [DestructiveCta] chrome (40dp / 12dp).
- */
+/** Shared CTA chrome: min-height 48 (P5, 200% text can grow it), r-md 14, padding s3/s5. */
+private val CtaShape = RoundedCornerShape(14.dp)
+
 @Composable
-private fun PrimaryMergeCta(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val accent = RovaWarnings.advisory  // 0xFF5B7FFF — v3 primary ink token
+private fun AccentCta(label: String, fill: Color, ink: Color, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val alpha = if (enabled) 1f else 0.38f // frozen `.cta[disabled]{opacity:.38}`
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(accent.copy(alpha = if (enabled) 1f else 0.40f))
-            .focusHighlight(RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled, role = Role.Button) { onClick() },
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(CtaShape)
+            .background(fill.copy(alpha = alpha))
+            .focusHighlight(CtaShape)
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White.copy(alpha = if (enabled) 1f else 0.55f),
-        )
+        Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ink.copy(alpha = alpha))
     }
 }
 
-/**
- * Phase 4.3 — ghost (hairline-border) CTA for Keep as raw clips.
- * Transparent fill + 1dp white-alpha border. Height + corner radius
- * mirror [DestructiveCta] (40dp / 12dp).
- */
 @Composable
-private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun GhostCta(label: String, fill: Color, border: Color, ink: Color, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val alpha = if (enabled) 1f else 0.38f
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = if (enabled) 0.20f else 0.10f),
-                shape = RoundedCornerShape(12.dp),
-            )
-            .focusHighlight(RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled, role = Role.Button) { onClick() },
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(CtaShape)
+            .background(fill.copy(alpha = fill.alpha * alpha))
+            .border(width = 1.dp, color = border.copy(alpha = border.alpha * alpha), shape = CtaShape)
+            .focusHighlight(CtaShape)
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White.copy(alpha = if (enabled) 0.80f else 0.40f),
-        )
+        Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ink.copy(alpha = alpha))
+    }
+}
+
+@Composable
+private fun DestructiveCta(label: String, backing: Color, modifier: Modifier, onClick: () -> Unit) {
+    // Frozen `.cta-dest` (:249–:251): transparent fill, `sev-hard 30%` outline, ink
+    // `color-mix(sev-hard 62%, ink-high)`. Same fixed mix the M6 sheet tertiary uses.
+    val destInk = RovaWarnings.hard
+        .copy(alpha = com.aritr.rova.ui.theme.ResolveInk.MIX_LABEL.toFloat())
+        .compositeOver(backing)
+    Row(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(CtaShape)
+            .border(width = 1.dp, color = RovaWarnings.hard.copy(alpha = 0.30f), shape = CtaShape)
+            .focusHighlight(CtaShape)
+            .clickable(role = Role.Button) { onClick() }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = destInk)
     }
 }
 
 /**
- * Renders the (at most one) recovery card from [state] plus a small
- * footer line when [RecoveryUiState.hiddenCount] > 0 so the user
- * sees that older interrupted sessions exist without a stacking red
- * wall. Empty [RecoveryUiState.cards] renders nothing — the consumer
- * can place this composable unconditionally.
+ * Renders the (at most one) recovery card from [state] plus a small footer line when
+ * [RecoveryUiState.hiddenCount] > 0. Empty [RecoveryUiState.cards] renders nothing.
  *
- * `onDiscard` receives the visible card's `sessionId` so the wiring
- * layer can route to `RecoveryViewModel.dismiss(sessionId)`.
- *
- * `vendorHelpSlotFor` is invoked with the visible card's `sessionId`;
- * consumers without a vendor helper pass `{ _ -> null }` (or omit;
- * the default is `null`).
- *
- * Phase 4 v3 re-skin (PR B / B1): signature unchanged. Footer text
- * tone shifted from `onSurfaceVariant` to a low-alpha white so it
- * sits cleanly under the v3 dark-glass card body.
- *
- * Phase 4.3: [onMerge] and [onKeepRaw] default to null — back-compat
- * for callers not yet wired to the merge service. When non-null, each
- * invocation receives the card's `sessionId` for routing.
+ * `onDiscard` / `onMerge` / `onKeepRaw` receive the visible card's `sessionId`;
+ * `vendorHelpSlotFor` is invoked with it. Signature unchanged (M8 is render-only).
  */
 @Composable
 fun RecoveryCardList(
@@ -650,8 +613,8 @@ fun RecoveryCardList(
             Text(
                 text = stringResource(R.string.recovery_hidden_footer, state.hiddenCount),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.45f),
-                modifier = Modifier.padding(start = 4.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp),
             )
         }
     }

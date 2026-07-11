@@ -28,6 +28,18 @@
         <item quantity="one">%1$d clip recuperado.</item>
         <item quantity="other">%1$d clips recuperados.</item>
     </plurals>
+    <plurals name="recency_minutes">
+        <item quantity="one">hace %1$d minuto</item>
+        <item quantity="other">hace %1$d minutos</item>
+    </plurals>
+    <plurals name="recency_hours">
+        <item quantity="one">hace %1$d hora</item>
+        <item quantity="other">hace %1$d horas</item>
+    </plurals>
+    <plurals name="recency_days">
+        <item quantity="one">hace %1$d día</item>
+        <item quantity="other">hace %1$d días</item>
+    </plurals>
     <plurals name="notification_complete_body_dur">
         <item quantity="one">%1$d clip · %2$s en total · guardado en la Biblioteca</item>
         <item quantity="other">%1$d clips · %2$s en total · guardados en la Biblioteca</item>

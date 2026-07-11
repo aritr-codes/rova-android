@@ -40,4 +40,33 @@ class RecoveryProgressA11yTest {
             recoveryProgressContentDescription(cellCount = 1, filledCells = 1, merging = false),
         )
     }
+
+    // ── M8 progress numerator fix (`filled / total`, not `N / N`) ──────────────
+
+    @Test
+    fun `zero progress fills no cells`() {
+        assertEquals(0, recoveryProgressFilledCells(progress = 0f, cellCount = 8))
+    }
+
+    @Test
+    fun `half progress fills half the cells`() {
+        assertEquals(4, recoveryProgressFilledCells(progress = 0.5f, cellCount = 8))
+    }
+
+    @Test
+    fun `full progress fills every cell`() {
+        assertEquals(8, recoveryProgressFilledCells(progress = 1f, cellCount = 8))
+    }
+
+    @Test
+    fun `partial progress floors, never rounds up`() {
+        // 0.9 × 3 = 2.7 → 2, not 3: a cell is filled only when fully earned.
+        assertEquals(2, recoveryProgressFilledCells(progress = 0.9f, cellCount = 3))
+    }
+
+    @Test
+    fun `out-of-range progress is clamped`() {
+        assertEquals(0, recoveryProgressFilledCells(progress = -0.5f, cellCount = 5))
+        assertEquals(5, recoveryProgressFilledCells(progress = 1.5f, cellCount = 5))
+    }
 }

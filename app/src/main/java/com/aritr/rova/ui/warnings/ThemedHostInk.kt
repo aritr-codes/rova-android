@@ -38,6 +38,9 @@ internal object ThemedHostInk {
     /** Resolved inks for the Settings chip (`set` site: leading dot + trailing "Fix"). */
     data class SetInk(val tint: Color, val dot: Color, val fix: Color)
 
+    /** Resolved inks for the Library recovery card (`recov` site: leading dot + body). */
+    data class RecoveryInk(val dot: Color, val body: Color)
+
     /**
      * `stripchip` (`:1306`): the sevchip sits on `sev@20%` over the strip [tint]; its label and dot
      * resolve over THAT, lightening toward the host high ink on dark and deepening on Daylight.
@@ -66,6 +69,29 @@ internal object ThemedHostInk {
             tint = tint,
             dot = ResolveInk.of(severity, tint, ResolveInk.TARGET_MARK, top, ResolveInk.MIX_MARK).color,
             fix = ResolveInk.of(accent, tint, ResolveInk.TARGET_TEXT, top, ResolveInk.MIX_ACCENT).color,
+        )
+    }
+
+    /**
+     * `recov` (`:1312`): unlike the strip/settings chips there is NO inner sev-tint — the leading dot
+     * sits DIRECTLY on the elevated [surfaceHi] container (HTML :356, :1313 `dot backing =
+     * surfaceHiOf(p)`, `top = tHighOf(p, surfaceHi)`) and resolves the severity hue as a MARK.
+     * Body/eyebrow/artifacts all route through [themedBody] (host-themed `--ink-dim == --ink-body ==
+     * --tQuiet`, :384). The frozen `recov` site also resolves an accent-as-text `--acc-ink` for the
+     * `.vendor` link; that link's styling is caller-owned in M8, so `acc` is not computed here — it
+     * returns with the vendor-link consumer.
+     */
+    fun forRecovery(
+        severity: Color,
+        surfaceHi: Color,
+        onSurface: Color,
+        onSurfaceVariant: Color,
+        isDark: Boolean,
+    ): RecoveryInk {
+        val top = onSurface.compositeOver(surfaceHi)                  // tHighOf(p, surfaceHi)
+        return RecoveryInk(
+            dot = ResolveInk.of(severity, surfaceHi, ResolveInk.TARGET_MARK, top, ResolveInk.MIX_MARK).color,
+            body = themedBody(isDark, onSurfaceVariant),
         )
     }
 
