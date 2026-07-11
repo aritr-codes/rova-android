@@ -39,6 +39,20 @@
         <item quantity="other">%1$d clips recovered.</item>
     </plurals>
 
+    <!-- Recovery recency eyebrow (APPX-G ladder; M8). %1$d = whole minutes/hours/days elapsed -->
+    <plurals name="recency_minutes">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="recency_hours">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="recency_days">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+
     <!-- Notification MergeComplete body (B3 i18n task 9b) -->
     <!-- %1$d = clip count (passed twice: rule selection + %d fill), %2$s = total duration MM:SS -->
     <plurals name="notification_complete_body_dur">

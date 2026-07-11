@@ -51,8 +51,8 @@ class RovaWarningsV3Test {
         assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha, 1e-4f)
     }
 
-    @Test fun recoveryCardCornerRadius_is_20dp() {
-        assertEquals(20.dp, RovaWarningsV3.recoveryCardCornerRadius)
+    @Test fun recoveryCardCornerRadius_is_18dp() {
+        assertEquals(18.dp, RovaWarningsV3.recoveryCardCornerRadius)
     }
 
     @Test fun recoveryProgressCellHeight_is_7dp() {

@@ -727,6 +727,11 @@
     <string name="recovery_tag_auto_stopped">Detención automática</string>
     <string name="recovery_tag_scheduled">Programada</string>
     <string name="recovery_tag_interrupted">Interrumpida</string>
+    <!-- Recency eyebrow (APPX-G ladder; uppercased at render). M8 renders the M3 RelativeTimeLabel. -->
+    <string name="recency_just_now">ahora mismo</string>
+    <string name="recency_yesterday">ayer</string>
+    <!-- DATE rung (>= 7 días): %1$s = fecha absoluta -->
+    <string name="recency_on_date">el %1$s</string>
     <!-- Progress strip -->
     <string name="recovery_progress_header_merging">COMBINANDO</string>
     <string name="recovery_progress_header_recovered">CLIPS RECUPERADOS</string>

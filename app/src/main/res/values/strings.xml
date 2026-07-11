@@ -722,13 +722,19 @@
     <string name="recovery_artifact_duplicate_segments">Duplicate clip(s) at indices %1$s</string>
     <string name="recovery_artifact_unknown_files">%1$d unknown file(s) in session dir</string>
     <string name="recovery_artifact_malformed_records">%1$d malformed manifest record(s)</string>
-    <!-- Severity tag chip labels (mixed-case; uppercased at render) -->
-    <string name="recovery_tag_killed_by_system">System-killed</string>
-    <string name="recovery_tag_force_stopped">Force-stopped</string>
-    <string name="recovery_tag_user_stopped">User-stopped</string>
+    <!-- Recovery eyebrow labels (mixed-case; uppercased at render). Copy transcribed
+         verbatim from the frozen warnings-recovery.html §07 KINDS[].eyebrow (M8 copy audit) -->
+    <string name="recovery_tag_killed_by_system">Stopped by the system</string>
+    <string name="recovery_tag_force_stopped">Force stopped</string>
+    <string name="recovery_tag_user_stopped">Stopped by you</string>
     <string name="recovery_tag_auto_stopped">Auto-stopped</string>
     <string name="recovery_tag_scheduled">Scheduled</string>
     <string name="recovery_tag_interrupted">Interrupted</string>
+    <!-- Recency eyebrow (APPX-G ladder; uppercased at render). M8 renders the M3 RelativeTimeLabel. -->
+    <string name="recency_just_now">just now</string>
+    <string name="recency_yesterday">yesterday</string>
+    <!-- DATE rung (>= 7 days): %1$s = absolute date -->
+    <string name="recency_on_date">on %1$s</string>
     <!-- Progress strip -->
     <string name="recovery_progress_header_merging">MERGING</string>
     <string name="recovery_progress_header_recovered">CLIPS RECOVERED</string>

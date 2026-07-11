@@ -102,7 +102,10 @@ object RovaWarningsV3 {
     val secondaryCtaStrokeAlpha = 0.12f
 
     // ── Recovery card ────────────────────────────────────────────────
-    val recoveryCardCornerRadius = 20.dp
+    // Frozen spec `.recov{border-radius:var(--r-lg)}` = 18 (warnings-recovery.html
+    // :355, `--r-lg:18px` :99 — "was 20px, the app's one outlier"). M8 lifts it
+    // 20→18 with its first frozen consumer.
+    val recoveryCardCornerRadius = 18.dp
     val recoveryCardGlowHeight = 60.dp
     val recoveryCardGlowBlur = 28.dp
     val recoveryCardGlowAlpha = 0.50f
@@ -201,15 +204,22 @@ object RovaWarningsV3 {
      * `rgbToHex(mixc(...))`, so the Kotlin result is byte-identical to the
      * frozen HTML's — e.g. Aurora `#141622` → `#272934`.
      */
-    fun surfaceHi(palette: RovaPalette): Color {
-        if (palette.isLight) return Color.White
-        val base = palette.surfaceBase
+    fun surfaceHi(palette: RovaPalette): Color = surfaceHi(palette.surfaceBase, palette.isLight)
+
+    /**
+     * Overload for a themed composable that holds only the [androidx.compose.material3.MaterialTheme]
+     * `colorScheme.surface` (== [RovaPalette.surfaceBase], PaletteColorScheme.from :49) and its
+     * light/dark polarity — there is no palette CompositionLocal. Byte-identical to
+     * [surfaceHi] (RovaPalette) so M8's recovery-card backing matches the sweep's `surfaceHiOf`.
+     */
+    fun surfaceHi(surfaceBase: Color, isLight: Boolean): Color {
+        if (isLight) return Color.White
         val mixed = ContrastMath.compositeAlphaOver(
             255, 255, 255,
             surfaceHiMixFraction.toDouble(),
-            (base.red * 255f).roundToInt(),
-            (base.green * 255f).roundToInt(),
-            (base.blue * 255f).roundToInt(),
+            (surfaceBase.red * 255f).roundToInt(),
+            (surfaceBase.green * 255f).roundToInt(),
+            (surfaceBase.blue * 255f).roundToInt(),
         )
         return Color(mixed[0], mixed[1], mixed[2])
     }
