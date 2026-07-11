@@ -63,14 +63,16 @@ object RovaWarningsV3 {
     val whyRowForegroundAlpha = 0.78f
 
     // ── Banner ────────────────────────────────────────────────────────
+    // Frozen spec `.banner` (warnings-recovery.html :295–:305): r-lg 18 container,
+    // padding var(--s3) = 12 both axes (vertical was off-ladder at 11, APPX-A
+    // :897), gap var(--s3) = 12, r-sm 10 icon box. The CountdownRing tokens were
+    // deleted in M5 (Q1: it depicted a countdown the system never ran; APPX-F :1054).
     val bannerCornerRadius = 18.dp
     val bannerSidePadding = 12.dp
-    val bannerVerticalPadding = 11.dp
+    val bannerVerticalPadding = 12.dp
+    val bannerGap = 12.dp
     val bannerIconSize = 36.dp
     val bannerIconCornerRadius = 10.dp
-    val bannerCountdownRingSize = 38.dp
-    val bannerCountdownRingStroke = 3.dp
-    val bannerCountdownTrackAlpha = 0.06f
 
     // ── CTA contrasts (a11y) ─────────────────────────────────────────
     val secondaryCtaTextAlpha = 0.68f      // R2 was 0.55 — bumped for a11y
@@ -95,7 +97,13 @@ object RovaWarningsV3 {
     // unrelated test edit into the M4 surface transcription).
     val snoozeChipFillAlpha = 0.55f
     val snoozeChipBorderAlpha = 0.25f
-    val snoozeChipDotPulseAlpha = 0.6f
+    // Dot pulse motion — frozen spec `@keyframes pulse` (warnings-recovery.html
+    // :336–:337): `pulse 1.6s var(--ease-std)` with `50%{opacity:.45}`. The min
+    // opacity is .45 and the full period is 1600ms, eased with
+    // `RovaMotion.easeStandard`. M4 shipped .60 / 1.5s tween as tracked debt; M5
+    // retranscribes it exactly (parity plan M4 As-shipped ⚠️ note).
+    val snoozeChipDotPulseAlpha = 0.45f
+    val snoozeChipPulsePeriodMs = 1600
     // Geometry — frozen spec `.snooze .pill` (warnings-recovery.html :326–:327):
     // fixed 34px visual pill, padding 0 s4 (16px), gap s2 (8px). Heights are
     // min-heights (P5) so 200% text scale cannot clip; the 48dp hit target is an

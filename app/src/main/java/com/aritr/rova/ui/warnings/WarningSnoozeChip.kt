@@ -3,8 +3,8 @@ package com.aritr.rova.ui.warnings
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.rememberReduceMotion
 import com.aritr.rova.ui.theme.ResolveInk
+import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
 
@@ -84,12 +85,23 @@ internal fun WarningSnoozeChip(
     val reduceMotion = rememberReduceMotion()
     val dotAlpha: Float = if (isHardBlock && !reduceMotion) {
         val transition = rememberInfiniteTransition(label = "snooze-chip-pulse")
+        // Frozen spec `@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}`
+        // (:337) at `pulse 1.6s var(--ease-std)` (:336). CSS applies the timing
+        // function to EACH keyframe segment, so both the 1→.45 and .45→1 halves
+        // are eased with `RovaMotion.easeStandard`; RepeatMode.Restart matches the
+        // CSS default (each iteration replays 0%→100%), seamless since it opens and
+        // closes at 1f.
+        val period = RovaWarningsV3.snoozeChipPulsePeriodMs
         val alpha by transition.animateFloat(
-            initialValue = RovaWarningsV3.snoozeChipDotPulseAlpha,
+            initialValue = 1f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1500),
-                repeatMode = RepeatMode.Reverse,
+                animation = keyframes {
+                    durationMillis = period
+                    1f at 0 using RovaMotion.easeStandard
+                    RovaWarningsV3.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
+                },
+                repeatMode = RepeatMode.Restart,
             ),
             label = "snooze-chip-pulse-alpha",
         )
