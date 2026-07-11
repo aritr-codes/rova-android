@@ -674,6 +674,8 @@
     <string name="warning_settings_section_header">PERMISSIONS &amp; STATUS</string>
     <!-- %1$s = severity badge (e.g. SOFT), %2$s = warning title -->
     <string name="warning_chip_status_cd">%1$s status: %2$s</string>
+    <!-- Settings chip trailing accent-as-text CTA (frozen spec §06 .setchip .go) -->
+    <string name="warning_settings_fix_action">Fix</string>
 
     <!-- Thermal tips sheet -->
     <string name="warning_thermal_tips_title">Tips to cool down</string>

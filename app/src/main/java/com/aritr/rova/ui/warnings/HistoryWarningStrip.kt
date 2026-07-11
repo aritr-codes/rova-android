@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,15 @@ internal fun HistoryWarningStrip(
     }
 }
 
+/**
+ * M7 (parity plan §7) — transcribes the frozen `.strip` (`warnings-recovery.html`
+ * §06 :340–:343). A THEMED host: r-md 14 card, fill `color-mix(sev 8%, surface)`,
+ * border sev 25%; the severity chip (`.sevchip.on-tint`) carries the resolved
+ * `stripchip` dot + label ink; the body routes through `quietTextColor` (solid on a
+ * light scheme). Pre-M7 the card was a fixed sev-alpha island with a bordered label
+ * badge and no body — palette-blind on Daylight. Inks come from [ThemedHostInk] so
+ * the surface paints exactly what `TrustContrastSweepTest` proves.
+ */
 @Composable
 private fun HistoryWarningCard(
     id: WarningId,
@@ -76,43 +86,63 @@ private fun HistoryWarningCard(
     val surface = warningSurfaceFor(id)
     val accent = accentFor(surface)
     val content = warningSheetContent(id)
+    val cs = MaterialTheme.colorScheme
+    val ink = ThemedHostInk.forStrip(
+        severity = accent,
+        surface = cs.surface,
+        onSurface = cs.onSurface,
+        onSurfaceVariant = cs.onSurfaceVariant,
+        isDark = cs.surface.luminance() < 0.5f,
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(accent.copy(alpha = 0.10f))
-            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
-            .focusHighlight(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(ink.tint)
+            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .focusHighlight(RoundedCornerShape(14.dp))
             .clickable(onClickLabel = stringResource(R.string.warning_view_action_label), role = Role.Button, onClick = onClick)
-            .padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Box(
+        // `.sevchip.on-tint` (:203–:209) — filled chip (sev@20%), r-sm 10, resolved
+        // dot (5dp) + label. Replaces the pre-M7 bordered label badge.
+        Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(3.dp))
-                .border(1.dp, accent.copy(alpha = 0.50f), RoundedCornerShape(3.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
+                .clip(RoundedCornerShape(10.dp))
+                .background(accent.copy(alpha = ThemedHostInk.SEV_CHIP_FILL_ALPHA))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            Box(Modifier.size(5.dp).clip(CircleShape).background(ink.chipDot))
             Text(
                 text = stringResource(severityLabelFor(surface)),
                 style = MaterialTheme.typography.labelSmall,
-                color = accent,
+                color = ink.chipLabel,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        Spacer(Modifier.size(10.dp))
-        Text(
-            text = stringResource(content.title),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f).padding(end = 8.dp),
-        )
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                text = stringResource(content.title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = cs.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = stringResource(content.body),
+                style = MaterialTheme.typography.bodySmall,
+                color = ink.body,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         IconButton(onClick = onDismiss) {
             Icon(
                 Icons.Default.Close,
                 contentDescription = stringResource(R.string.warning_dismiss_cd),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = cs.onSurfaceVariant,
             )
         }
     }
