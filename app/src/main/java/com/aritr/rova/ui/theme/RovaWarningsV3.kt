@@ -89,9 +89,20 @@ object RovaWarningsV3 {
 
     // ── Snooze chip ──────────────────────────────────────────────────
     val snoozeChipRadius = 999.dp
+    // Pre-freeze fill alpha (Color.Black @ .55, 3.61:1 — failed AA). Its last
+    // consumer migrated to pinSurface @ pinContainerAlpha in M4; the dead token
+    // is retired in M11's final dead-token audit (kept here to avoid mixing an
+    // unrelated test edit into the M4 surface transcription).
     val snoozeChipFillAlpha = 0.55f
     val snoozeChipBorderAlpha = 0.25f
     val snoozeChipDotPulseAlpha = 0.6f
+    // Geometry — frozen spec `.snooze .pill` (warnings-recovery.html :326–:327):
+    // fixed 34px visual pill, padding 0 s4 (16px), gap s2 (8px). Heights are
+    // min-heights (P5) so 200% text scale cannot clip; the 48dp hit target is an
+    // invisible expansion (`minimumInteractiveComponentSize`), never a taller pill.
+    val snoozeChipPillHeight = 34.dp
+    val snoozeChipPaddingH = 16.dp
+    val snoozeChipGap = 8.dp
 
     // ══════════════════════════════════════════════════════════════════
     // Trust System V1 token foundation (ADR-0013 amendment 2026-07-10).
