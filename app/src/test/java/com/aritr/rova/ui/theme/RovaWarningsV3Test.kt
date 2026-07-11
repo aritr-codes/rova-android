@@ -40,14 +40,6 @@ class RovaWarningsV3Test {
         assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha, 1e-4f)
     }
 
-    @Test fun bannerCountdownRingSize_is_38dp() {
-        assertEquals(38.dp, RovaWarningsV3.bannerCountdownRingSize)
-    }
-
-    @Test fun bannerCountdownRingStroke_is_3dp() {
-        assertEquals(3.dp, RovaWarningsV3.bannerCountdownRingStroke)
-    }
-
     @Test fun recoveryCardCornerRadius_is_20dp() {
         assertEquals(20.dp, RovaWarningsV3.recoveryCardCornerRadius)
     }
@@ -241,6 +233,18 @@ class RovaWarningsV3Test {
 
     @Test fun snoozeChipGap_is_8dp() {
         assertEquals(8.dp, RovaWarningsV3.snoozeChipGap)
+    }
+
+    // ── Snooze dot pulse motion (M5) — retranscribed to the frozen spec's
+    // `@keyframes pulse` (warnings-recovery.html :336–:337): `pulse 1.6s
+    // var(--ease-std)` with `50%{opacity:.45}`. M4 shipped .60 / 1.5s tween as
+    // tracked debt; M5 closes it. Easing is `RovaMotion.easeStandard`.
+    @Test fun snoozeChipDotPulseAlpha_is_0_45() {
+        assertEquals(0.45f, RovaWarningsV3.snoozeChipDotPulseAlpha, 1e-4f)
+    }
+
+    @Test fun snoozeChipPulsePeriodMs_is_1600() {
+        assertEquals(1600, RovaWarningsV3.snoozeChipPulsePeriodMs)
     }
 }
 

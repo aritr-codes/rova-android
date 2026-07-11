@@ -221,12 +221,6 @@ internal data class TopBannerContent(
     @StringRes val sub: Int,
     @StringRes val cta: Int,
     /**
-     * Optional auto-action countdown — when non-null, the banner renders a
-     * countdown ring instead of the trailing CTA pill. Phase 4.4 will wire a
-     * real seconds-source; this slice ships a static placeholder.
-     */
-    val autoAction: AutoAction? = null,
-    /**
      * Phase 4 Slice 2 — overflow ⋯ menu items (top-right of banner). Empty
      * list = no overflow icon rendered. Each action targets either an Intent
      * (`launchActionTarget`) or a VM-only target like
@@ -234,13 +228,6 @@ internal data class TopBannerContent(
      */
     val overflow: List<WarningAction> = emptyList(),
 )
-
-/**
- * Placeholder countdown payload for the top-banner ring. [secondsRemaining]
- * is static in Phase 4 — a real ticking source lands in Phase 4.4 alongside
- * thermal hysteresis.
- */
-internal data class AutoAction(val secondsRemaining: Int, @StringRes val description: Int)
 
 /**
  * R2 — copy for the mid-recording top banner (ADR 0007 amendment 2026-05-13). One arm
@@ -251,18 +238,10 @@ internal fun midRecBannerContent(id: WarningId): TopBannerContent = when (id) {
     WarningId.THERMAL_SHUTDOWN -> TopBannerContent(
         WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_shutdown_title,
         R.string.warning_banner_thermal_shutdown_sub, R.string.warning_banner_cta_stop,
-        autoAction = AutoAction(
-            secondsRemaining = 30,
-            description = R.string.warning_banner_auto_stop_protect,
-        ),
     )
     WarningId.THERMAL_EMERGENCY -> TopBannerContent(
         WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_emergency_title,
         R.string.warning_banner_thermal_emergency_sub, R.string.warning_banner_cta_stop,
-        autoAction = AutoAction(
-            secondsRemaining = 30,
-            description = R.string.warning_banner_auto_stop_protect,
-        ),
     )
     WarningId.THERMAL_CRITICAL -> TopBannerContent(
         WarningIconSpec.glyphFor(id), R.string.warning_banner_thermal_critical_title,
