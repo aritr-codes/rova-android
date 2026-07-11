@@ -234,6 +234,17 @@ Every milestone additionally inherits: suite green (baseline + new tests, `--max
 **DoD:** pixel-parity vs §06 specimens on Aurora and Daylight; device checklist passed.
 
 ### M8 — RecoveryCard parity + recency + progress-chip fix
+
+> **✅ MERGED (PR #186 → `4683d695`, 2026-07-11). As-shipped:**
+> - **Themed, not pinned:** container `#0B0D14@.94` → elevated **`surfaceHi`** token + themed `--edge` border (`colorScheme.outlineVariant`), follows the palette (§06). r-lg 20→18, padding 16/18→16/16, glow kept. A `surfaceHi(surfaceBase, isLight)` overload lets the composable derive the backing from `colorScheme.surface` byte-identically (no palette CompositionLocal).
+> - **TrustRow:** single leading 7dp resolved dot; the ADR-0031 SemanticIcon emblem **and** the sev-chip are removed (frozen `.recov` has only a dot, `:362`/`:1625`). **The parity-plan prose below ("eyebrow = severity chip") is STALE vs the frozen HTML — the code correctly followed the HTML authority.** Pulse (KILLED_BY_SYSTEM only) retranscribed to the shared `@keyframes pulse`.
+> - **Recency eyebrow** `TAG · recency` (one AnnotatedString, tabular-nums recency span); first RENDER consumer of the M3 `RelativeTimeLabel`; `recencyText()` resolves all 6 rungs incl. DATE.
+> - **CTAs:** accent primary (`colorScheme.primary`/`onPrimary`), ghost Keep, **`cta-dest` outline** Discard (wrap-content, never full-width, terminal — replacing the pre-freeze solid-red fill). Progress strip drawn **only while merging**, header removed, chip = **filled/total** via pure `recoveryProgressFilledCells` (fixes `:408` N/N); ProcessingGlyph retained (§11 `:864`) leading the strip. Artifacts list now rendered.
+> - **Ink:** new `ThemedHostInk.forRecovery` (`recov` INK_SITE — dot MARK on `surfaceHi`, `top=onSurface∘surfaceHi`) == the swept backings; **shipped == swept**, no sweep edit.
+> - **Copy:** 3 EN eyebrow tags → frozen `KINDS` verbatim; new `recency_*` strings + plurals in `values/` **and** `values-es/` (SpanishCatalogParityTest + plural parity green).
+> - `RecoveryUiState`/mapper/ViewModel/schema **untouched**. `+5` fill tests (RED-proven). Gate count **48**, suite **2365/0-0-0**. Two independent GO reviews; reconciled one Recommended (dropped a computed-but-dead `RecoveryInk.vendor`).
+> - **Deferred (tracked):** frozen `.vendor` borderless `acc-ink` link styling (LibraryScreen + a glyph are outside M8's file set — only its POSITION transcribed) → BACKLOG; §07 merged a11y node → device pass; ProcessingGlyph placement → pixel-parity. **Device verification is the separate mandatory pre-release gate.**
+
 **Purpose:** The largest transcription: themed elevated card, TrustRow ordering, CTA re-roling, recency eyebrow, and the `:408` N/N fix.
 **Files:** `ui/recovery/RecoveryCard.kt`; `ui/recovery/RecoveryUiState.kt` (consume M3 recency); `strings.xml` (copy audit vs §07 `KINDS` verbatim); extend `RecoveryProgressA11yTest` + mapper tests.
 **Visual outcome:** container `surfaceHi` + 1px `edge` border, r-lg 18, padding 16/16, 28dp top-edge glow kept; eyebrow = severity chip (0.14→**0.20** fill, resolved inks) + " · " + relative recency (tabular-nums); title 15sp, body `quietTextColor`; artifacts line 11.5sp; primary Merge/Retry = `cta-accent` (accent-fill / house #0E1116 ink via `DialogActionColors`), Keep = ghost, Discard = `cta-dest` outline **replacing today's solid red fill**, own row, never full-width; vendor link `acc-ink` + external glyph, min-height 48; progress strip cells track 5%/filled accent-fill, numchip.
