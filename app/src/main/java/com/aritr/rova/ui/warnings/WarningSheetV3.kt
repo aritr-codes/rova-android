@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -42,16 +44,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.theme.IconRole
+import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaGlyph
 import com.aritr.rova.ui.theme.RovaWarnings
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -104,16 +108,25 @@ internal fun WarningSheetV3(
         },
     )
 
+    val isHardBlock = surface == WarningSurface.HardBlockSheet
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        // Frozen `.sheet{background:var(--pin-surface)}` (:268): the modal is opaque and
+        // covers the viewfinder, so it composites against nothing — the pinned host maps
+        // `--ink-high → --media-ink` (:383), which is why title/body/ghost read as media inks.
+        containerColor = RovaWarningsV3.pinSurface,
         shape = RoundedCornerShape(
             topStart = RovaWarningsV3.sheetCornerRadius,
             topEnd = RovaWarningsV3.sheetCornerRadius,
             bottomStart = 0.dp,
             bottomEnd = 0.dp,
         ),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        // Frozen spec transcription note (:1143): a hard-block sheet renders NO drag handle —
+        // nothing drags it (`confirmValueChange` blocks Hidden), so "the drag handle nothing
+        // dragged" was removed. A dismissible sheet keeps the honest stock handle.
+        dragHandle = if (isHardBlock) null else { { BottomSheetDefaults.DragHandle() } },
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
 
@@ -150,24 +163,27 @@ internal fun WarningSheetV3(
 
                 Spacer(Modifier.height(8.dp))
 
+                // Frozen `.t-title{font:600 15px;color:var(--ink-high)}` — ink-high == mediaInk
+                // in the pinned host. Size overrides the Material role to the spec scale (the
+                // dead `sheetTitleSize`/`sheetBodySize` tokens were removed in M6).
                 Text(
                     text = stringResource(content.title),
                     style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.94f),
+                    color = RovaWarningsV3.mediaInk,
                     textAlign = TextAlign.Center,
                 )
 
                 if (content.body != 0) {
                     Spacer(Modifier.height(8.dp))
+                    // Frozen `.t-body{font:400 12.5px;color:var(--ink-body)}` — ink-body == mediaInkBody
+                    // (.55). The sweep pins "Sheet body" ≥ 4.5:1 on the near-black pin surface.
                     Text(
                         text = stringResource(content.body),
                         style = MaterialTheme.typography.bodySmall,
-                        // WCAG 2.2 AA (ADR-0020, audit WARN-01): 0.45α was ~4.10:1
-                        // over the elevated sheet surface — below the 4.5:1 SC 1.4.3
-                        // bar on a gating warning surface. 0.55α ≈ 5.34:1. See
-                        // ContrastMathTest.
-                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 12.5.sp,
+                        color = RovaWarningsV3.mediaInkBody,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -202,18 +218,36 @@ internal fun WarningSheetV3(
                     when (ter.style) {
                         WarningActionStyle.Link -> {
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = terLabel,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = RovaWarnings.hard,
-                                textDecoration = TextDecoration.Underline,
-                                textAlign = TextAlign.Center,
+                            // Frozen `.cta-dest` (:247–:252): transparent fill, 1px
+                            // `color-mix(sev-hard 30%)` border, label `color-mix(sev-hard 62%,
+                            // ink-high)`, `flex:0 0 auto` (NEVER full-width) and always terminal —
+                            // "an irreversible action must not read as the obvious one" (§01). It is
+                            // a deliberate fixed mix (APPX-D exempt). CANT_MERGE's "Discard session"
+                            // is the only tertiary, and it IS destructive.
+                            val destBacking = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface)
+                            val destInk = RovaWarnings.hard
+                                .copy(alpha = ResolveInk.MIX_LABEL.toFloat())
+                                .compositeOver(destBacking)
+                            Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                                    .clickable(role = Role.Button) { onTertiary() },
-                            )
+                                    .heightIn(min = RovaWarningsV3.sheetCtaHeight)
+                                    .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
+                                    .border(
+                                        width = 1.dp,
+                                        color = RovaWarnings.hard.copy(alpha = 0.30f),
+                                        shape = RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius),
+                                    )
+                                    .clickable(role = Role.Button) { onTertiary() }
+                                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = terLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = destInk,
+                                )
+                            }
                         }
                         WarningActionStyle.Secondary -> {
                             Spacer(Modifier.height(8.dp))
@@ -263,12 +297,23 @@ private fun IconWithGlow(
                 .blur(RovaWarningsV3.sheetIconGlowBlur)
                 .background(brush = RovaWarningsV3.iconGlow(accent, glowRadiusPx), shape = CircleShape),
         )
-        // Icon container
+        // Icon container — the frozen `sheeticon` INK_SITE. Fill `color-mix(sev 16%)`
+        // over the opaque pin surface (:283); glyph = the resolved `--dot-ink` MARK over
+        // that fill (:284). Near-black backing ⇒ ResolveInk LIGHTEN, and MIX_MARK is a raw
+        // passthrough, so the mark is byte-identical to the pre-freeze `accent` glyph.
+        val iconFill = accent.copy(alpha = 0.16f)
+        val glyphInk: Color = ResolveInk.of(
+            hue = accent,
+            backing = iconFill.compositeOver(RovaWarningsV3.pinSurface),
+            target = ResolveInk.TARGET_MARK,
+            top = RovaWarningsV3.mediaInk,
+            mix = ResolveInk.MIX_MARK,
+        ).color
         Box(
             modifier = Modifier
                 .size(RovaWarningsV3.sheetIconSize)
                 .clip(RoundedCornerShape(RovaWarningsV3.sheetIconCornerRadius))
-                .background(accent.copy(alpha = 0.14f))
+                .background(iconFill)
                 .border(
                     width = 1.dp,
                     color = accent.copy(alpha = RovaWarningsV3.sheetIconInnerStrokeAlpha),
@@ -276,12 +321,12 @@ private fun IconWithGlow(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            // ADR-0031 §4 severity-tint exception: both glyph layers take `accent` (the warning
-            // severity color), not palette.accent — so this renders manually instead of via SemanticIcon.
+            // ADR-0031 §4 severity-tint exception: both glyph layers take the resolved
+            // `sheeticon` mark ink, not palette.accent — so this renders manually, not via SemanticIcon.
             Box(modifier = Modifier.size(24.dp)) {
-                Icon(glyph.outline, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = accent)
+                Icon(glyph.outline, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = glyphInk)
                 glyph.accent?.let { acc ->
-                    Icon(acc, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = accent)
+                    Icon(acc, contentDescription = null, modifier = Modifier.fillMaxSize(), tint = glyphInk)
                 }
             }
         }
@@ -291,10 +336,34 @@ private fun IconWithGlow(
 @Composable
 private fun SeverityChip(label: String, accent: Color) {
     if (label.isBlank()) return
+    // The frozen `pinchip` INK_SITE (:1292). Fill `color-mix(sev 20%)` over the opaque pin
+    // surface; dot = resolved `--dot-ink` MARK (raw hue passthrough, byte-identical to the
+    // pre-freeze dot), label = resolved `--lbl-ink` LABEL (lightens toward mediaInk). Both
+    // over the near-black backing ⇒ ResolveInk LIGHTEN. Radius r-sm 10, not the old pill.
+    val chipFill = accent.copy(alpha = RovaWarningsV3.sevChipFillAlpha)
+    val chipBacking = chipFill.compositeOver(RovaWarningsV3.pinSurface)
+    val dotInk: Color = ResolveInk.of(
+        hue = accent,
+        backing = chipBacking,
+        target = ResolveInk.TARGET_MARK,
+        top = RovaWarningsV3.mediaInk,
+        mix = ResolveInk.MIX_MARK,
+    ).color
+    val labelInk: Color = ResolveInk.of(
+        hue = accent,
+        backing = chipBacking,
+        target = ResolveInk.TARGET_TEXT,
+        // ResolveInk ignores `top`'s alpha and reads its RGB only, so the LABEL top must be
+        // the OPAQUE composite of mediaInk over pinSurface — the frozen `--lbl-ink` mix top
+        // (matches TrustInkSites `top = over(WHITE, .94, pin)`). Raw `mediaInk` (white@.94)
+        // would feed pure white and drift ~5/255 lighter than the frozen authority.
+        top = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface),
+        mix = ResolveInk.MIX_LABEL,
+    ).color
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(RovaWarningsV3.snoozeChipRadius))
-            .background(accent.copy(alpha = RovaWarningsV3.sevChipFillAlpha))
+            .clip(RoundedCornerShape(RovaWarningsV3.sevChipRadius))
+            .background(chipFill)
             .padding(
                 horizontal = RovaWarningsV3.sevChipPaddingH,
                 vertical = RovaWarningsV3.sevChipPaddingV,
@@ -306,13 +375,13 @@ private fun SeverityChip(label: String, accent: Color) {
             modifier = Modifier
                 .size(RovaWarningsV3.sevChipDotSize)
                 .clip(CircleShape)
-                .background(accent),
+                .background(dotInk),
         )
         Text(
             text = label.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            color = accent.copy(alpha = RovaWarningsV3.sevChipForegroundAlpha),
+            color = labelInk,
         )
     }
 }
@@ -323,6 +392,15 @@ private fun WhyExpander(
     whyBody: String,
     onToggle: () -> Unit,
 ) {
+    // Frozen `.whyrow` (:285–:287): `--ink-high`-based, NEUTRAL (not severity-tinted) in the
+    // pinned host. Foreground `color-mix(ink-high 78%)`, border `color-mix(ink-high 20%)` —
+    // ink-high == mediaInk (white @ .94), so scale its alpha rather than paint pure white.
+    val whyForeground = RovaWarningsV3.mediaInk.copy(
+        alpha = RovaWarningsV3.mediaInk.alpha * RovaWarningsV3.whyRowForegroundAlpha,
+    )
+    val whyBorder = RovaWarningsV3.mediaInk.copy(
+        alpha = RovaWarningsV3.mediaInk.alpha * RovaWarningsV3.whyRowBorderAlpha,
+    )
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -331,7 +409,7 @@ private fun WhyExpander(
                 .clip(RoundedCornerShape(RovaWarningsV3.whyRowCornerRadius))
                 .border(
                     width = 1.dp,
-                    color = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowBorderAlpha),
+                    color = whyBorder,
                     shape = RoundedCornerShape(RovaWarningsV3.whyRowCornerRadius),
                 )
                 .clickable(role = Role.Button) { onToggle() }
@@ -342,28 +420,29 @@ private fun WhyExpander(
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = null,
-                tint = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowForegroundAlpha),
+                tint = whyForeground,
                 modifier = Modifier.size(14.dp),
             )
             Text(
                 text = stringResource(R.string.warning_why_this_matters),
                 style = MaterialTheme.typography.labelMedium,
-                color = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowForegroundAlpha),
+                color = whyForeground,
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = RovaWarnings.advisory.copy(alpha = RovaWarningsV3.whyRowForegroundAlpha),
+                tint = whyForeground,
                 modifier = Modifier.size(14.dp),
             )
         }
         if (expanded) {
             Spacer(Modifier.height(8.dp))
+            // `.whybody{color:var(--ink-dim)}` (:288) — mediaInkDim in the pinned host.
             Text(
                 text = whyBody,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.55f),
+                color = RovaWarningsV3.mediaInkDim,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -375,14 +454,19 @@ private fun WhyExpander(
 
 @Composable
 private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
+    // Frozen `.cta-sev{background:var(--sev);color:var(--sev-cta-ink)}` (:239–:242). The sheet
+    // primary always resolves the severity condition (§01 fill table: "Open settings", "Allow
+    // microphone"), so it is the LOCKED severity fill + near-black `severityCtaInk` — never routed
+    // through DialogActionColors (APPX-C). The fill was already the severity colour; M6 graduates
+    // the near-black label literal onto the `severityCtaInk` token (byte-identical #1A1A1A).
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RovaWarningsV3.sheetCtaHeight)
+            .heightIn(min = RovaWarningsV3.sheetCtaHeight)
             .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
             .background(accent)
             .clickable(role = Role.Button) { onClick() }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -390,21 +474,21 @@ private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            // WCAG 2.2 AA SC 1.4.3 (ADR-0020, WARN-02): white-on-accent was
-            // 1.67–3.76:1 across the severity fills. Near-black text clears
-            // 4.5:1 on every accent (hard/soft/advisory/escalating are all
-            // bright enough that dark text is the AA-safe foreground).
-            color = Color(0xFF1A1A1A),
+            color = RovaWarningsV3.severityCtaInk,
         )
     }
 }
 
 @Composable
 private fun SecondaryCta(label: String, onClick: () -> Unit) {
+    // Frozen ghost `.cta-ghost` (:244–:246): fill `color-mix(ink-high 7%)`, 1px border
+    // `color-mix(ink-high 12%)`, label `--ink-body` (mediaInkBody). ink-high == white in the
+    // pinned host; the near-black backing clears AA at ink-body .55 ("Ghost CTA label · sheet"
+    // in TrustContrastSweepTest), which is why M6 moves the label off the older .68 a11y bump.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RovaWarningsV3.sheetCtaHeight)
+            .heightIn(min = RovaWarningsV3.sheetCtaHeight)
             .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
             .background(Color.White.copy(alpha = RovaWarningsV3.secondaryCtaFillAlpha))
             .border(
@@ -413,7 +497,7 @@ private fun SecondaryCta(label: String, onClick: () -> Unit) {
                 shape = RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius),
             )
             .clickable(role = Role.Button) { onClick() }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -421,7 +505,7 @@ private fun SecondaryCta(label: String, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White.copy(alpha = RovaWarningsV3.secondaryCtaTextAlpha),
+            color = RovaWarningsV3.mediaInkBody,
         )
     }
 }
@@ -434,14 +518,19 @@ private fun OverflowMenu(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
+        // Frozen `.ovf{28} + .hit::after{48}` (:262, :279): visual 28dp glyph, 48dp touch. The
+        // overflow is absolutely positioned in the sheet's TopEnd corner (a standalone control
+        // with no sibling row), so `minimumInteractiveComponentSize` is the safe expander here —
+        // unlike the banner Stop pill (which shares the banner Row and needs the invisible seam).
         IconButton(
             onClick = { menuOpen = true },
-            modifier = Modifier.size(RovaWarningsV3.overflowButtonSize),
+            modifier = Modifier.minimumInteractiveComponentSize(),
         ) {
             SemanticIcon(
                 imageVector = Icons.Default.MoreHoriz,
                 contentDescription = stringResource(R.string.warning_more_actions_cd),
                 role = IconRole.Disabled,
+                modifier = Modifier.size(RovaWarningsV3.overflowButtonSize),
             )
         }
         DropdownMenu(

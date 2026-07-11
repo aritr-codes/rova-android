@@ -3,7 +3,6 @@ package com.aritr.rova.ui.theme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 /**
@@ -23,24 +22,32 @@ import kotlin.math.roundToInt
 object RovaWarningsV3 {
 
     // ── Sheet ─────────────────────────────────────────────────────────
+    // Frozen spec `.sheet` (warnings-recovery.html :268–:293). The drag-handle
+    // tokens (M5-era) were deleted in M6: the frozen sheet renders NO handle on a
+    // hard-block sheet (nothing drags it — `confirmValueChange` blocks Hidden) and
+    // the stock `BottomSheetDefaults.DragHandle()` on a dismissible one. The
+    // `sheetTitleSize`/`sheetBodySize` tokens were deleted in M6 too — the sheet
+    // title/body carry the spec type scale (`.t-title` 15sp/600, `.t-body` 12.5sp)
+    // as inline overrides on the Material roles, per parity plan §5.
     val sheetCornerRadius = 26.dp
-    val sheetHandleWidth = 32.dp
-    val sheetHandleHeight = 3.dp
-    val sheetHandleAlpha = 0.18f
     val sheetIconSize = 56.dp
     val sheetIconCornerRadius = 18.dp
     val sheetIconInnerStrokeAlpha = 0.22f
     val sheetIconGlowInset = (-22).dp
     val sheetIconGlowBlur = 22.dp
     val sheetIconGlowAlpha = 0.70f
-    val sheetTitleSize = 15.sp
-    val sheetBodySize = 11.sp
-    val sheetCtaHeight = 46.dp
+    // Frozen spec `.cta{min-height:var(--target)}` = 48 (P5 min-height, not fixed —
+    // 200% text can grow it). M6 lifted it 46→48.
+    val sheetCtaHeight = 48.dp
     val sheetCtaCornerRadius = 14.dp
     val sheetSidePadding = 20.dp
     val sheetBottomPadding = 24.dp
 
     // ── Severity chip (inline, above title) ──────────────────────────
+    // Frozen spec `.sevchip{border-radius:var(--r-sm)}` = 10 (warnings-recovery.html
+    // :203, `--r-sm:10px` :97). The eyebrow chip was a full pill (snoozeChipRadius)
+    // pre-M6; M6 pins it to the r-sm ladder with its first consumer.
+    val sevChipRadius = 10.dp
     val sevChipPaddingH = 10.dp
     val sevChipPaddingV = 4.dp
     val sevChipDotSize = 5.dp
@@ -49,6 +56,9 @@ object RovaWarningsV3 {
     // boundary. Foreground label/dot already carry severity (no 1.4.1 reliance
     // on colour alone).
     val sevChipFillAlpha = 0.20f
+    // Pre-freeze sheet-chip label alpha (severityColor @ .95). Its last consumer migrated to the
+    // resolved `pinchip` label ink in M6 (`ResolveInk` LABEL); left for M11's dead-token audit to
+    // avoid an unrelated test edit here, exactly as `snoozeChipFillAlpha` was in M4.
     val sevChipForegroundAlpha = 0.95f
 
     // ── Overflow ⋯ menu ──────────────────────────────────────────────
@@ -57,8 +67,13 @@ object RovaWarningsV3 {
     val overflowRightInset = 18.dp
 
     // ── "Why this matters" expander ──────────────────────────────────
+    // Frozen spec `.whyrow` (warnings-recovery.html :285–:287): r-sm 10 (M6 lifted
+    // 11→10), min-height 36, border `color-mix(ink-high 20%)`, foreground
+    // `color-mix(ink-high 78%)`. In the pinned host `--ink-high == --media-ink`
+    // (:383), so the row is NEUTRAL (white-based `mediaInk`), not severity-tinted —
+    // M6 retranscribed it off `RovaWarnings.advisory`.
     val whyRowHeight = 36.dp
-    val whyRowCornerRadius = 11.dp
+    val whyRowCornerRadius = 10.dp
     val whyRowBorderAlpha = 0.20f
     val whyRowForegroundAlpha = 0.78f
 
@@ -75,9 +90,16 @@ object RovaWarningsV3 {
     val bannerIconCornerRadius = 10.dp
 
     // ── CTA contrasts (a11y) ─────────────────────────────────────────
-    val secondaryCtaTextAlpha = 0.68f      // R2 was 0.55 — bumped for a11y
+    // Frozen ghost CTA `.cta-ghost` (warnings-recovery.html :244–:246): fill
+    // `color-mix(ink-high 7%)`, border `color-mix(ink-high 12%)`, label `--ink-body`
+    // (= `mediaInkBody` in the pinned host). M6 lifted the border .05→.12 and moved
+    // the ghost label onto `mediaInkBody`; `secondaryCtaTextAlpha` (.68, an older
+    // a11y bump for a lighter backing) is thereby superseded and left for M11's
+    // dead-token audit — the near-black pin backing clears AA at ink-body .55, proven
+    // by `TrustContrastSweepTest` ("Ghost CTA label · sheet").
+    val secondaryCtaTextAlpha = 0.68f
     val secondaryCtaFillAlpha = 0.07f
-    val secondaryCtaStrokeAlpha = 0.05f
+    val secondaryCtaStrokeAlpha = 0.12f
 
     // ── Recovery card ────────────────────────────────────────────────
     val recoveryCardCornerRadius = 20.dp

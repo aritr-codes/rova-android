@@ -2,7 +2,6 @@ package com.aritr.rova.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -23,20 +22,32 @@ class RovaWarningsV3Test {
         assertEquals(18.dp, RovaWarningsV3.sheetIconCornerRadius)
     }
 
-    @Test fun sheetTitleSize_is_15sp() {
-        assertEquals(15.sp, RovaWarningsV3.sheetTitleSize)
+    // M6 deleted the dead `sheetTitleSize`/`sheetBodySize` tokens — the sheet title/body
+    // now carry the spec type scale (15sp/12.5sp) inline. The old pins are retired here.
+
+    @Test fun sheetCtaHeight_is_48dp() {
+        // Frozen `.cta{min-height:var(--target)}` = 48 (M6 lifted 46→48; used as a min-height).
+        assertEquals(48.dp, RovaWarningsV3.sheetCtaHeight)
     }
 
-    @Test fun sheetBodySize_is_11sp() {
-        assertEquals(11.sp, RovaWarningsV3.sheetBodySize)
+    @Test fun sevChipRadius_is_10dp() {
+        // Frozen `.sevchip{border-radius:var(--r-sm)}` = 10 (M6; was a full pill pre-freeze).
+        assertEquals(10.dp, RovaWarningsV3.sevChipRadius)
     }
 
-    @Test fun sheetCtaHeight_is_46dp() {
-        assertEquals(46.dp, RovaWarningsV3.sheetCtaHeight)
+    @Test fun whyRowCornerRadius_is_10dp() {
+        // Frozen `.whyrow{border-radius:var(--r-sm)}` = 10 (M6 lifted 11→10).
+        assertEquals(10.dp, RovaWarningsV3.whyRowCornerRadius)
+    }
+
+    @Test fun secondaryCtaStrokeAlpha_is_0_12() {
+        // Frozen ghost border `color-mix(ink-high 12%)` (M6 lifted .05→.12).
+        assertEquals(0.12f, RovaWarningsV3.secondaryCtaStrokeAlpha, 1e-4f)
     }
 
     @Test fun secondaryCtaTextAlpha_is_0_68() {
-        // a11y bump from R2's 0.55 — pinned to catch regressions
+        // Value unchanged; M6 superseded it (ghost label → mediaInkBody), so it is now a
+        // dead token slated for M11's audit. Still pinned until its declaration is removed.
         assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha, 1e-4f)
     }
 
