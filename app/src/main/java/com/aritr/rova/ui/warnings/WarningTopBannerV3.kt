@@ -90,7 +90,11 @@ internal fun WarningTopBannerV3(
         hue = severityColor,
         backing = stopPillFill.compositeOver(RovaWarningsV3.pinSurface),
         target = ResolveInk.TARGET_TEXT,
-        top = RovaWarningsV3.mediaInk,
+        // ResolveInk ignores `top`'s alpha and reads its RGB only, so the LABEL top must be
+        // the OPAQUE composite of mediaInk over pinSurface — the frozen `--lbl-ink` mix top
+        // (matches TrustInkSites `top = over(WHITE, .94, pin)`). Raw `mediaInk` (white@.94)
+        // would feed pure white and drift ~5/255 lighter than the frozen authority.
+        top = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface),
         mix = ResolveInk.MIX_LABEL,
     ).color
 
