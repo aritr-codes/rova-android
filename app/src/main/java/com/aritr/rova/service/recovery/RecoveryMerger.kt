@@ -1,6 +1,7 @@
 package com.aritr.rova.service.recovery
 
 import com.aritr.rova.service.export.ExportResult
+import com.aritr.rova.ui.recovery.MergeFailureReason
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal
 import com.aritr.rova.ui.signals.RecoveryMergeOutcomeSignal.RecoveryMergeOutcome
 import kotlinx.coroutines.delay
@@ -131,20 +132,24 @@ class RecoveryMerger(
         return false
     }
 
+    // M9 — the failure branches classify the TYPED ExportResult into the owner-locked
+    // MergeFailureReason (frozen §08) HERE, the last seam where the variant is still known,
+    // and carry it on MuxFailed.reason. Downstream (RecoveryViewModel → failbox) reads the
+    // reason's @StringRes, never `cause.message`. `cause` is retained for logs/diagnostics.
     private fun ExportResult.toRecoveryOutcome(): RecoveryMergeOutcome = when (this) {
         is ExportResult.Success -> RecoveryMergeOutcome.Succeeded
         is ExportResult.InsufficientStorage ->
             RecoveryMergeOutcome.InsufficientStorage(requiredBytes, availableBytes)
-        is ExportResult.MuxFailed -> RecoveryMergeOutcome.MuxFailed(cause)
+        is ExportResult.MuxFailed -> RecoveryMergeOutcome.MuxFailed(cause, MergeFailureReason.classify(this))
         is ExportResult.UnknownSession -> RecoveryMergeOutcome.UnknownSession
-        is ExportResult.CopyFailed -> RecoveryMergeOutcome.MuxFailed(cause)
-        is ExportResult.RenameFailed -> RecoveryMergeOutcome.MuxFailed(IllegalStateException("rename failed"))
-        is ExportResult.PendingInsertFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("pending insert failed"))
-        is ExportResult.FinalizeFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("finalize failed"))
-        is ExportResult.ManifestWriteFailed -> RecoveryMergeOutcome.MuxFailed(cause)
+        is ExportResult.CopyFailed -> RecoveryMergeOutcome.MuxFailed(cause, MergeFailureReason.classify(this))
+        is ExportResult.RenameFailed -> RecoveryMergeOutcome.MuxFailed(IllegalStateException("rename failed"), MergeFailureReason.classify(this))
+        is ExportResult.PendingInsertFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("pending insert failed"), MergeFailureReason.classify(this))
+        is ExportResult.FinalizeFailed -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("finalize failed"), MergeFailureReason.classify(this))
+        is ExportResult.ManifestWriteFailed -> RecoveryMergeOutcome.MuxFailed(cause, MergeFailureReason.classify(this))
         // ADR-0024 — terminal export failure surfaced to the user; mirrors
         // the other permanent export failures, all of which map to MuxFailed
         // (the outcome's "failed, show me" bucket). cause is nullable.
-        is ExportResult.SafFolderUnavailable -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("save folder unavailable"))
+        is ExportResult.SafFolderUnavailable -> RecoveryMergeOutcome.MuxFailed(cause ?: IllegalStateException("save folder unavailable"), MergeFailureReason.classify(this))
     }
 }

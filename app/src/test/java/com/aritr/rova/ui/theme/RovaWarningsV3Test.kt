@@ -55,6 +55,11 @@ class RovaWarningsV3Test {
         assertEquals(18.dp, RovaWarningsV3.recoveryCardCornerRadius)
     }
 
+    @Test fun failBoxCornerRadius_is_10dp() {
+        // Frozen `.failbox{border-radius:var(--r-sm)}` = 10 (M9).
+        assertEquals(10.dp, RovaWarningsV3.failBoxCornerRadius)
+    }
+
     @Test fun recoveryProgressCellHeight_is_7dp() {
         assertEquals(7.dp, RovaWarningsV3.recoveryProgressCellHeight)
     }

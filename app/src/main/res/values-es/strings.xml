@@ -711,6 +711,14 @@
     <string name="recovery_discard_cd">%1$s. Esta acción es permanente.</string>
     <!-- Merge-failed inline error. %1$s = runtime failure reason -->
     <string name="recovery_merge_failed_prefix">Falló la combinación: %1$s</string>
+    <!-- M9 (frozen §08) — merge-failure closed reason set (Q6). -->
+    <string name="recovery_merge_failed_eyebrow">Falló la combinación</string>
+    <string name="recovery_merge_failed_title">No se pudieron combinar tus clips</string>
+    <string name="recovery_clips_are_safe">Tus clips están a salvo.</string>
+    <string name="recovery_fail_reason_storage">El almacenamiento dejó de estar disponible.</string>
+    <string name="recovery_fail_reason_unreadable">No se pudo leer uno de los archivos de grabación.</string>
+    <string name="recovery_fail_reason_incomplete">No se pudo completar la grabación.</string>
+    <string name="recovery_fail_reason_unknown">No se pudo terminar de crear la grabación.</string>
     <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
     <string name="recovery_artifact_recovered_segments">Se recuperaron %1$d clip(s) del disco</string>
     <string name="recovery_artifact_missing_segments">Falta(n) clip(s) en los índices %1$s</string>

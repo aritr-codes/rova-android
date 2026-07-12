@@ -61,9 +61,17 @@ import com.aritr.rova.ui.theme.RovaWarningsV3
 import com.aritr.rova.ui.warnings.ThemedHostInk
 
 /**
- * Trust System V1 — M8 — Library recovery card, transcribed from the frozen
- * `docs/design/warnings-recovery.html` §07 (`.recov`, DESIGN FROZEN 2026-07-09).
- * Compose transcribes the frozen HTML and never diverges from it.
+ * Trust System V1 — M8 + M9 — Library recovery card, transcribed from the frozen
+ * `docs/design/warnings-recovery.html` §07 (`.recov`) + §08 (merge-failure frame),
+ * DESIGN FROZEN 2026-07-09. Compose transcribes the frozen HTML and never diverges from it.
+ *
+ * M9 lands the merge-failed frame (frozen §08, HTML :1629–:1636): on a failure the eyebrow
+ * tag → "Merge failed", the title → "Couldn't combine your clips", and the body → the
+ * [FailBox] (owner-locked, localized reason + bolded "Your clips are safe."). The reason is
+ * the closed-set [MergeFailureReason] `@StringRes` classified from the TYPED `ExportResult`
+ * in `RecoveryMerger`; no raw exception text is reachable in the UI. Retry replaces the
+ * primary label. `RecoveryUiState` gains `mergeFailedReasonRes` (raw `mergeFailedReason`
+ * kept for logs only).
  *
  * The freeze re-architects the pre-freeze v3 card in four load-bearing ways:
  *
@@ -85,8 +93,7 @@ import com.aritr.rova.ui.warnings.ThemedHostInk
  *     terminal — §01's law). The progress strip is drawn ONLY while merging and its
  *     chip reads **filled/total** (fixing the pre-freeze `N / N`).
  *
- * `RecoveryCardState` / `RecoveryUiState` / mapper are untouched (M3 already wired
- * `recency`); this is a render-only transcription plus the strip numerator fix.
+ * The mapper is untouched; M9's only state delta is the additive `mergeFailedReasonRes`.
  */
 @Composable
 fun RecoveryCard(
@@ -100,6 +107,12 @@ fun RecoveryCard(
 ) {
     val severityColor: Color = severityColorFor(state.kind)
     val isHardSeverity: Boolean = state.kind == RecoveryCardKind.KILLED_BY_SYSTEM
+
+    // M9 — the frozen merge-failed frame (§08, HTML :1629–:1636): when the last merge
+    // failed and no retry is in flight, the eyebrow tag → "Merge failed", the title →
+    // "Couldn't combine your clips", and the body → the failbox. `mergeFailedReasonRes`
+    // is the owner-locked, localized reason; it and `mergeInProgress` are never both set.
+    val failed: Boolean = state.mergeFailedReasonRes != null && state.mergeInProgress == null
 
     val cs = MaterialTheme.colorScheme
     // No palette CompositionLocal — polarity from the surface luminance (mirrors M7's
@@ -147,14 +160,16 @@ fun RecoveryCard(
             Column(modifier = Modifier.weight(1f)) {
                 // A1 · what happened — TAG · recency, uppercase (frozen .t-eyebrow).
                 Eyebrow(
-                    tag = stringResource(tagLabelResFor(state.kind)),
+                    tag = if (failed) stringResource(R.string.recovery_merge_failed_eyebrow)
+                          else stringResource(tagLabelResFor(state.kind)),
                     recency = recencyText(state.recency),
                     color = ink.body,
                 )
 
                 Spacer(Modifier.height(8.dp)) // .t-title margin-top s2
                 Text(
-                    text = stringResource(state.titleRes),
+                    text = if (failed) stringResource(R.string.recovery_merge_failed_title)
+                           else stringResource(state.titleRes),
                     fontSize = 15.sp,
                     lineHeight = 19.8.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -162,16 +177,24 @@ fun RecoveryCard(
                     color = cs.onSurface, // --ink-high == tHigh
                 )
 
-                // A2 · what it means. Frozen replaces the body with a failbox on the
-                // merge-failed frame; that failbox restyle is M9. M8 keeps the inline
-                // reason (assertive) beneath the body, exactly as the pre-freeze card did.
-                Spacer(Modifier.height(8.dp)) // .t-body margin-top s2
-                Text(
-                    text = stringResource(state.bodyRes),
-                    fontSize = 12.5.sp,
-                    lineHeight = 19.4.sp,
-                    color = ink.body, // --ink-body == tQuiet
-                )
+                // A2 · what it means. Frozen swaps `.t-body` for the `.failbox` on the
+                // merge-failed frame (§08): the owner-locked reason + the bolded standing
+                // reassurance. Otherwise the plain body line.
+                if (failed) {
+                    FailBox(
+                        reasonRes = state.mergeFailedReasonRes!!,
+                        reasonInk = ink.body,
+                        reassuranceInk = cs.onSurface, // frozen `<b style="color:var(--tHigh)">`
+                    )
+                } else {
+                    Spacer(Modifier.height(8.dp)) // .t-body margin-top s2
+                    Text(
+                        text = stringResource(state.bodyRes),
+                        fontSize = 12.5.sp,
+                        lineHeight = 19.4.sp,
+                        color = ink.body, // --ink-body == tQuiet
+                    )
+                }
 
                 // .artifacts — the clip summary lines. Always shown when present (the
                 // recovered-clip count lives here, NOT in the progress strip).
@@ -205,6 +228,7 @@ fun RecoveryCard(
 
                 CtaBlock(
                     state = state,
+                    failed = failed,
                     ink = ink,
                     accentFill = cs.primary,
                     accentInk = cs.onPrimary,
@@ -314,6 +338,37 @@ private fun RecoveryDot(color: Color, pulsing: Boolean) {
             .clip(CircleShape)
             .background(color.copy(alpha = dotAlpha)),
     )
+}
+
+/**
+ * `.failbox` (frozen §08 :375–:377) — the merge-failure body frame. Owner-locked reason
+ * copy + the bolded standing reassurance "Your clips are safe." (frozen `<b color:tHigh>`),
+ * on a `sev-hard 8%` fill with a `sev-hard 22%` hairline, r-sm 10, padding s3, margin-top s3.
+ * One merged node with an **assertive** live region (frozen `:745` "assertive (failure)",
+ * RECOV-14) so a merge failure interrupts the screen reader; the raw exception never appears.
+ */
+@Composable
+private fun FailBox(reasonRes: Int, reasonInk: Color, reassuranceInk: Color) {
+    val text = buildAnnotatedString {
+        append(stringResource(reasonRes))
+        append(" ")
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = reassuranceInk)) {
+            append(stringResource(R.string.recovery_clips_are_safe))
+        }
+    }
+    val shape = RoundedCornerShape(RovaWarningsV3.failBoxCornerRadius)
+    Box(
+        modifier = Modifier
+            .padding(top = 12.dp) // frozen `.failbox{margin-top:var(--s3)}`
+            .fillMaxWidth()
+            .clip(shape)
+            .background(RovaWarnings.hard.copy(alpha = 0.08f)) // color-mix(sev-hard 8%)
+            .border(width = 1.dp, color = RovaWarnings.hard.copy(alpha = 0.22f), shape = shape) // hair · sev-hard 22%
+            .padding(12.dp) // frozen `.failbox{padding:var(--s3)}`
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Assertive },
+    ) {
+        Text(text = text, fontSize = 12.5.sp, lineHeight = 19.4.sp, color = reasonInk)
+    }
 }
 
 /**
@@ -436,6 +491,7 @@ private fun ProgressStrip(
 @Composable
 private fun CtaBlock(
     state: RecoveryCardState,
+    failed: Boolean,
     ink: ThemedHostInk.RecoveryInk,
     accentFill: Color,
     accentInk: Color,
@@ -453,23 +509,14 @@ private fun CtaBlock(
     val discardLabel = stringResource(state.discardLabelRes)
     val discardCd = stringResource(R.string.recovery_discard_cd, discardLabel)
 
-    // WCAG 2.2 AA SC 3.3.1 / 4.1.3 (RECOV-14): the last merge failure reason flips the
-    // primary to "Retry" — surface it (error colour, assertive). M9 restyles into the failbox.
-    val failReason = state.mergeFailedReason
-    if (failReason != null && !inFlight) {
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = stringResource(R.string.recovery_merge_failed_prefix, failReason),
-            fontSize = 12.5.sp,
-            lineHeight = 19.4.sp,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
-        )
-    }
+    // M9 — the merge-failure surface is the failbox (rendered in the answer column, §08).
+    // The inline `recovery_merge_failed_prefix` reason Text (which showed the raw exception
+    // message) is gone: no raw exception text is reachable in the UI anymore. The failure
+    // still flips the primary to "Retry" (frozen `failed?'Retry':c.primary`, :1644).
 
     if (showThreeCtaStack) {
         Spacer(Modifier.height(16.dp)) // .ctas margin-top s4
-        val mergeLabel = if (state.mergeFailedReason != null) {
+        val mergeLabel = if (failed) {
             stringResource(R.string.recovery_retry_merge_label)
         } else {
             stringResource(state.mergeLabelRes!!)

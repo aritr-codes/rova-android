@@ -113,6 +113,11 @@ object RovaWarningsV3 {
     val recoveryProgressCellGap = 4.dp
     val recoveryProgressCellRadius = 3.5.dp
     val recoveryNumericChipMinWidth = 36.dp
+    // Merge-failure failbox (frozen `.failbox` :375–:377): r-sm 10 (`--r-sm:10px` :97),
+    // fill `color-mix(sev-hard 8%)`, border `hair (1dp) color-mix(sev-hard 22%)`. M9's
+    // first consumer. The two alphas are inlined at the RecoveryCard call site (severity-
+    // derived, like the `cta-dest` .30 border), leaving only the geometry pinned here.
+    val failBoxCornerRadius = 10.dp
 
     // ── Snooze chip ──────────────────────────────────────────────────
     val snoozeChipRadius = 999.dp
