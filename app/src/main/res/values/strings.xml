@@ -713,6 +713,15 @@
     <string name="recovery_discard_cd">%1$s. This action is permanent.</string>
     <!-- Merge-failed inline error. %1$s = runtime failure reason -->
     <string name="recovery_merge_failed_prefix">Merge failed: %1$s</string>
+    <!-- M9 (frozen §08) — merge-failure closed reason set (Q6). The failbox eyebrow + title
+         morph on failure, then one of four owner-locked causes, then the standing reassurance. -->
+    <string name="recovery_merge_failed_eyebrow">Merge failed</string>
+    <string name="recovery_merge_failed_title">Couldn\'t combine your clips</string>
+    <string name="recovery_clips_are_safe">Your clips are safe.</string>
+    <string name="recovery_fail_reason_storage">Storage became unavailable.</string>
+    <string name="recovery_fail_reason_unreadable">One of the recording files couldn\'t be read.</string>
+    <string name="recovery_fail_reason_incomplete">The recording couldn\'t be completed.</string>
+    <string name="recovery_fail_reason_unknown">Couldn\'t finish creating the recording.</string>
     <!-- Surviving artifact summary lines. %1$d = count, %1$s = index list (verbatim "(s)" pseudo-plural) -->
     <string name="recovery_artifact_recovered_segments">Recovered %1$d clip(s) from disk</string>
     <string name="recovery_artifact_missing_segments">Missing clip(s) at indices %1$s</string>

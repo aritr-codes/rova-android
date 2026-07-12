@@ -90,18 +90,27 @@ class RecoveryViewModel(
                 if (c.sessionId != merge.sessionId) c
                 else when (val o = merge.outcome) {
                     is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed ->
-                        // i18n-opt-out: nonlocalized diagnostic sentinel. mergeFailedReason is a
-                        // raw runtime exception message passed through verbatim (the "Merge failed: "
-                        // wrapper is the externalized copy, at RecoveryCard). This VM is deliberately
-                        // Context-free (plain ViewModel, JVM-testable) so it cannot resolve a string
-                        // resource here; the fallback only shows when cause.message is itself null.
-                        c.copy(mergeInProgress = null, mergeFailedReason = o.cause.message ?: "merge failed")
+                        // M9 — the failbox renders o.reason's @StringRes (owner-locked, localized,
+                        // classified from the TYPED ExportResult in RecoveryMerger). mergeFailedReason
+                        // stays the raw exception message, retained ONLY for logs/diagnostics — it is
+                        // no longer user-visible. This VM stays Context-free (plain ViewModel, JVM-
+                        // testable), so the resource is carried as an @StringRes, not resolved here.
+                        // i18n-opt-out: "merge failed" is the nonlocalized diagnostic sentinel (log
+                        // fallback when cause.message is null), never shown to the user.
+                        c.copy(
+                            mergeInProgress = null,
+                            mergeFailedReason = o.cause.message ?: "merge failed",
+                            mergeFailedReasonRes = o.reason.messageRes,
+                        )
                     is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage ->
-                        c.copy(mergeInProgress = null)   // CANT_MERGE sheet handles the user surface
+                        // CANT_MERGE sheet handles the user surface. Clear any stale failure state
+                        // (co-set/co-cleared invariant): a prior MuxFailed then a retry that hit
+                        // InsufficientStorage must not leave the failbox rendering under the sheet.
+                        c.copy(mergeInProgress = null, mergeFailedReason = null, mergeFailedReasonRes = null)
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.Succeeded,
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.ServiceBusy,
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.UnknownSession ->
-                        c.copy(mergeInProgress = null, mergeFailedReason = null)
+                        c.copy(mergeInProgress = null, mergeFailedReason = null, mergeFailedReasonRes = null)
                 }
             },
         )

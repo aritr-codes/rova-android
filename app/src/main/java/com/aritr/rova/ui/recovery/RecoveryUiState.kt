@@ -108,6 +108,14 @@ data class RecoveryCardState(
      */
     val mergeFailedReason: String? = null,
     /**
+     * M9 (Q6, frozen §08) — the owner-locked, localized merge-failure copy id, classified
+     * from the TYPED [com.aritr.rova.service.export.ExportResult] chain (never the raw
+     * [mergeFailedReason] message). The failbox renders this `@StringRes`; [mergeFailedReason]
+     * is retained only for logs/diagnostics. Co-set with [mergeFailedReason] on a merge failure
+     * and cleared with it (see [com.aritr.rova.ui.recovery.MergeFailureReason]).
+     */
+    @StringRes val mergeFailedReasonRes: Int? = null,
+    /**
      * M3 (APPX-G) — how long ago this session ended, minted ONCE at map time from the mapper's
      * [RecoveryClock] and immutable thereafter. The primary UI shows only this relative label
      * ("Interrupted · 2 hours ago"); the absolute instant it carries is confined to the

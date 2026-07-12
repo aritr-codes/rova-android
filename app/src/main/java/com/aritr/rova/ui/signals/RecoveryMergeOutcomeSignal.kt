@@ -35,7 +35,20 @@ open class RecoveryMergeOutcomeSignal {
             val requiredBytes: Long,
             val availableBytes: Long,
         ) : RecoveryMergeOutcome()
-        data class MuxFailed(val cause: Throwable) : RecoveryMergeOutcome()
+        /**
+         * M9 — [cause] stays the raw Throwable for logs/diagnostics; [reason] is the
+         * owner-locked [com.aritr.rova.ui.recovery.MergeFailureReason] classified from the
+         * TYPED [com.aritr.rova.service.export.ExportResult] before it was collapsed to this
+         * Throwable. The failbox renders [reason]'s `@StringRes`, never [cause]'s message.
+         *
+         * [reason] has **no default** on purpose (closed-set spirit, §08): every construction
+         * site must classify explicitly, so a future `MuxFailed(cause)` that forgot to bucket
+         * its failure is a compile error, not a silent [MergeFailureReason.UNKNOWN].
+         */
+        data class MuxFailed(
+            val cause: Throwable,
+            val reason: com.aritr.rova.ui.recovery.MergeFailureReason,
+        ) : RecoveryMergeOutcome()
         object ServiceBusy : RecoveryMergeOutcome()
         object UnknownSession : RecoveryMergeOutcome()
     }

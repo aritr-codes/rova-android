@@ -1,5 +1,6 @@
 package com.aritr.rova.ui.recovery
 
+import com.aritr.rova.R
 import com.aritr.rova.data.ExportTier
 import com.aritr.rova.data.SessionConfig
 import com.aritr.rova.data.SessionManifest
@@ -316,7 +317,9 @@ class RecoveryViewModelTest {
         val signal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
             RecoveryMergeOutcomeSignal.State.Outcome(
                 sessionId = sid,
-                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed(RuntimeException("encoder")),
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed(
+                    RuntimeException("encoder"), MergeFailureReason.INCOMPLETE,
+                ),
             )
         )
         val vm = RecoveryViewModel(
@@ -331,5 +334,34 @@ class RecoveryViewModelTest {
         )
         val card = vm.uiState.value.cards.single()
         assertNotNull(card.mergeFailedReason)
+    }
+
+    @Test
+    fun `MuxFailed outcome carries the classified reason res onto the card`() = runBlocking {
+        // M9 — the outcome's owner-locked MergeFailureReason maps to the failbox @StringRes;
+        // the raw message stays only for logs.
+        val sid = "sess-fail-res"
+        val recoveryReport = report(classification(sid))
+        val signal = MutableStateFlow<RecoveryMergeOutcomeSignal.State>(
+            RecoveryMergeOutcomeSignal.State.Outcome(
+                sessionId = sid,
+                outcome = RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.MuxFailed(
+                    RuntimeException("java.io.IOException: raw text that must never reach the UI"),
+                    MergeFailureReason.UNREADABLE,
+                ),
+            )
+        )
+        val vm = RecoveryViewModel(
+            recoveryReport = MutableStateFlow(recoveryReport),
+            loadManifest = { id ->
+                if (id == sid) manifest(sid, Terminated.USER_STOPPED, terminatedAt = 100L) else null
+            },
+            markKeptRaw = { },
+            startRecoveryMergeFn = { },
+            mergeOutcome = signal,
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        val card = vm.uiState.value.cards.single()
+        assertEquals(R.string.recovery_fail_reason_unreadable, card.mergeFailedReasonRes)
     }
 }
