@@ -164,6 +164,20 @@ object RovaWarningsV3 {
      */
     const val pinContainerAlpha = 0.94f
 
+    /**
+     * M10 (frozen spec §11 `reduceTransparency` :853): a pinned container floating
+     * over the live viewfinder renders at [pinContainerAlpha] (.94) normally, but
+     * **fully opaque** (1f) when the OS reduce-transparency signal is active —
+     * "over-media substrates render fully opaque." Reads the existing
+     * [com.aritr.rova.ui.components.ReducedTransparency] seam at the call sites
+     * ([com.aritr.rova.ui.warnings.WarningTopBannerV3] + `WarningSnoozeChip`); this
+     * is the pure pick so it is unit-testable without a Compose UI test. The modal
+     * sheet is already opaque and does not read this. Default (signal off) is
+     * byte-identical to the pre-M10 [pinContainerAlpha] render.
+     */
+    fun pinContainerAlphaFor(reduceTransparency: Boolean): Float =
+        if (reduceTransparency) 1f else pinContainerAlpha
+
     /** Over-media title ink. HTML :85 — the banner title was .88; disclosed bump. */
     val mediaInk = Color.White.copy(alpha = 0.94f)
 

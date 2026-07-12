@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.SemanticIcon
+import com.aritr.rova.ui.components.rememberReduceTransparency
 import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaWarningsV3
@@ -98,11 +99,16 @@ internal fun WarningTopBannerV3(
         mix = ResolveInk.MIX_LABEL,
     ).color
 
+    // M10 (§11 :853): over-media substrate goes fully opaque under reduce-transparency.
+    // The ink backings above stay proxied on the OPAQUE pinSurface regardless — the
+    // sweep already models them opaque — so only the container fill alpha moves.
+    val pinAlpha = RovaWarningsV3.pinContainerAlphaFor(rememberReduceTransparency())
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(RovaWarningsV3.bannerCornerRadius))
-            .background(RovaWarningsV3.pinSurface.copy(alpha = RovaWarningsV3.pinContainerAlpha))
+            .background(RovaWarningsV3.pinSurface.copy(alpha = pinAlpha))
             .border(
                 width = 1.dp,
                 color = severityColor.copy(alpha = 0.30f),
