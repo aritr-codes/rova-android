@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.components.rememberReduceTransparency
 import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaWarnings
@@ -108,6 +109,9 @@ internal fun WarningSnoozeChip(
         alpha
     } else 1f
 
+    // M10 (§11 :853): over-media substrate goes fully opaque under reduce-transparency.
+    val pinAlpha = RovaWarningsV3.pinContainerAlphaFor(rememberReduceTransparency())
+
     // Outer: the 48dp min-height IS the hit box (invisible expansion, Q5 / P5).
     // The visual capsule is the inner 34dp pill — zero extra viewfinder occlusion.
     Box(
@@ -123,7 +127,7 @@ internal fun WarningSnoozeChip(
             modifier = Modifier
                 .heightIn(min = RovaWarningsV3.snoozeChipPillHeight)
                 .clip(RoundedCornerShape(RovaWarningsV3.snoozeChipRadius))
-                .background(RovaWarningsV3.pinSurface.copy(alpha = RovaWarningsV3.pinContainerAlpha))
+                .background(RovaWarningsV3.pinSurface.copy(alpha = pinAlpha))
                 .border(
                     width = 1.dp,
                     color = severityColor.copy(alpha = RovaWarningsV3.snoozeChipBorderAlpha),

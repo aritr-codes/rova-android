@@ -106,6 +106,18 @@ class RovaWarningsV3Test {
         assertEquals(0.94f, RovaWarningsV3.pinContainerAlpha, 1e-4f)
     }
 
+    @Test fun pinContainerAlphaFor_is_opaque_under_reduceTransparency_else_default() {
+        // M10 (frozen spec §11 :853): over-media substrates render fully opaque under
+        // the reduce-transparency signal; the default (signal off) is byte-identical to
+        // the pre-M10 pinContainerAlpha (.94).
+        assertEquals(1f, RovaWarningsV3.pinContainerAlphaFor(true), 1e-4f)
+        assertEquals(
+            RovaWarningsV3.pinContainerAlpha,
+            RovaWarningsV3.pinContainerAlphaFor(false),
+            1e-4f,
+        )
+    }
+
     @Test fun mediaInk_trio_are_white_at_94_48_and_55_percent() {
         // HTML :85–:87.
         assertEquals(Color.White.copy(alpha = 0.94f), RovaWarningsV3.mediaInk)
