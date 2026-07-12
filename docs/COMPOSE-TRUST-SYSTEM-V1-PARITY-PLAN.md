@@ -275,7 +275,8 @@ Every milestone additionally inherits: suite green (baseline + new tests, `--max
 **Device verification:** forced merge failure (storage-revoke path) shows the STORAGE string + Retry; retry succeeds after restore.
 **DoD:** no raw exception text reachable in UI; all four strings localized.
 
-### M10 — Reduce-transparency wiring
+### M10 — Reduce-transparency wiring ✅ MERGED (#188 → `7e0f39c4`, 2026-07-12)
+**As-shipped:** exactly the two files below; pure `RovaWarningsV3.pinContainerAlphaFor(reduceTransparency)` is the "small pure policy" referenced under **Files** (added to the existing token object, not a new class); both surfaces read `rememberReduceTransparency()` (seam unchanged). Signal on → `1f`, off → `.94` (byte-identical). `+1` test (`pinContainerAlphaFor_is_opaque_under_reduceTransparency_else_default`, mutation-proven RED→GREEN). No new gate (48), no ADR (38). One independent GO review. Suite 2381/0-0-0. Device verification (high-contrast-text toggle → opaque banner + chip) remains the separate pre-release gate.
 **Purpose:** §11: "over-media substrates fully opaque — currently unread by these surfaces; the freeze wires it."
 **Files:** `WarningTopBannerV3.kt`, `WarningSnoozeChip.kt` (the two over-media translucent containers); a small pure policy if a seam doesn't already exist.
 **Contents:** when the reduce-transparency signal is active, `pinContainerAlpha` renders as 1.0. **The seam already exists — use it:** `ui/components/ReducedTransparency.kt` (pure `reduceTransparency(highContrastText, reduceMotion)` + `rememberReduceTransparency()`, tested by `ReducedTransparencyTest`, consumed app-wide via `GlassEnvironment.reduceTransparency`, `Theme.kt:66`). The HTML (§11) names exactly this signal. Do not invent a new signal class.
