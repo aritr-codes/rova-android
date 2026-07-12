@@ -103,7 +103,10 @@ class RecoveryViewModel(
                             mergeFailedReasonRes = o.reason.messageRes,
                         )
                     is RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.InsufficientStorage ->
-                        c.copy(mergeInProgress = null)   // CANT_MERGE sheet handles the user surface
+                        // CANT_MERGE sheet handles the user surface. Clear any stale failure state
+                        // (co-set/co-cleared invariant): a prior MuxFailed then a retry that hit
+                        // InsufficientStorage must not leave the failbox rendering under the sheet.
+                        c.copy(mergeInProgress = null, mergeFailedReason = null, mergeFailedReasonRes = null)
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.Succeeded,
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.ServiceBusy,
                     RecoveryMergeOutcomeSignal.RecoveryMergeOutcome.UnknownSession ->
