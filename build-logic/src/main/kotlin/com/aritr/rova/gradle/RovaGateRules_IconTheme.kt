@@ -101,7 +101,7 @@ internal fun ruleRecordSurfaceNoBlur(files: List<SourceFile>): String? {
  */
 internal fun ruleGlassSurfaceRoleUsage(files: List<SourceFile>): String? {
     val allowlist = setOf(
-        "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheetV3.kt", "RecoveryCard.kt",
+        "GlassSurface.kt", "DualPreviewZone.kt", "WarningSheet.kt", "RecoveryCard.kt",
     )
     val blurPattern = Regex("""\.blur\s*\(|Modifier\s*\.\s*blur\b|RenderEffect|createBlurEffect""")
     val offenders = files

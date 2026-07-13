@@ -40,7 +40,7 @@ import com.aritr.rova.ui.theme.RovaWarnings
  * Phase 4.2 — top warning strip rendered on the History screen above
  * the existing RecoveryCardList. Each item uses the shipped v3 chrome's
  * severity tokens (via [warningSurfaceFor]). Tapping the body opens
- * the standard [WarningSheetV3] for that id; tapping X calls [onDismiss]
+ * the standard [WarningSheet] for that id; tapping X calls [onDismiss]
  * which the VM resolves via [WarningCenterViewModel.dismissOnHistoryStrip].
  *
  * Empty list → composable returns immediately (no spacer, no header).
@@ -150,7 +150,7 @@ private fun HistoryWarningCard(
 
 /**
  * Phase 4.2 — severity → accent color. Mirrors the per-surface mapping
- * in [WarningSheetV3] and [WarningSnoozeChip] so the strip card chrome
+ * in [WarningSheet] and [WarningSnoozeChip] so the strip card chrome
  * is visually identical to the rest of the v3 surface.
  */
 internal fun accentFor(surface: WarningSurface): Color = when (surface) {
@@ -170,7 +170,7 @@ internal fun severityLabelFor(surface: WarningSurface): Int = when (surface) {
 }
 
 /**
- * Phase 4.2 — sheet host for History strip taps. Reuses [WarningSheetV3]
+ * Phase 4.2 — sheet host for History strip taps. Reuses [WarningSheet]
  * with callbacks wired so CANT_MERGE's KEEP_SEGMENTS_ONLY (secondary) and
  * DISCARD_RECOVERY_SESSION (tertiary) route to the host-provided
  * recovery handlers. All other targets route through [launchActionTarget].
@@ -189,7 +189,7 @@ internal fun HistoryWarningSheetHost(
     val expandedSet by vm.expandedWhy.collectAsStateWithLifecycle()
     val expanded = id in expandedSet
 
-    WarningSheetV3(
+    WarningSheet(
         id = id,
         surface = surface,
         expanded = expanded,

@@ -3,7 +3,7 @@ package com.aritr.rova.ui.warnings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import com.aritr.rova.ui.theme.ResolveInk
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 import com.aritr.rova.ui.theme.quietTextColor
 
 /**
@@ -26,7 +26,7 @@ internal object ThemedHostInk {
     const val TINT_FILL_ALPHA: Float = 0.08f
 
     /** The severity chip's decorative fill over the tint. HTML `--sev-chip-fill-pct` (`:76`, .20). */
-    val SEV_CHIP_FILL_ALPHA: Float = RovaWarningsV3.sevChipFillAlpha
+    val SEV_CHIP_FILL_ALPHA: Float = RovaTrustTokens.sevChipFillAlpha
 
     /** The strip / settings-chip fill AND the resolver's tinted backing. */
     fun tint(severity: Color, surface: Color): Color =

@@ -58,7 +58,7 @@ import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaGlyph
 import com.aritr.rova.ui.theme.RovaWarnings
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 
 /**
  * v3 — Modal bottom sheet for all idle-reachable warnings. Routes by
@@ -75,7 +75,7 @@ import com.aritr.rova.ui.theme.RovaWarningsV3
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WarningSheetV3(
+internal fun WarningSheet(
     id: WarningId,
     surface: WarningSurface,
     expanded: Boolean,
@@ -116,10 +116,10 @@ internal fun WarningSheetV3(
         // Frozen `.sheet{background:var(--pin-surface)}` (:268): the modal is opaque and
         // covers the viewfinder, so it composites against nothing — the pinned host maps
         // `--ink-high → --media-ink` (:383), which is why title/body/ghost read as media inks.
-        containerColor = RovaWarningsV3.pinSurface,
+        containerColor = RovaTrustTokens.pinSurface,
         shape = RoundedCornerShape(
-            topStart = RovaWarningsV3.sheetCornerRadius,
-            topEnd = RovaWarningsV3.sheetCornerRadius,
+            topStart = RovaTrustTokens.sheetCornerRadius,
+            topEnd = RovaTrustTokens.sheetCornerRadius,
             bottomStart = 0.dp,
             bottomEnd = 0.dp,
         ),
@@ -137,8 +137,8 @@ internal fun WarningSheetV3(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(
-                            top = RovaWarningsV3.overflowTopInset,
-                            end = RovaWarningsV3.overflowRightInset,
+                            top = RovaTrustTokens.overflowTopInset,
+                            end = RovaTrustTokens.overflowRightInset,
                         ),
                 )
             }
@@ -147,9 +147,9 @@ internal fun WarningSheetV3(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = RovaWarningsV3.sheetSidePadding,
-                        end = RovaWarningsV3.sheetSidePadding,
-                        bottom = RovaWarningsV3.sheetBottomPadding,
+                        start = RovaTrustTokens.sheetSidePadding,
+                        end = RovaTrustTokens.sheetSidePadding,
+                        bottom = RovaTrustTokens.sheetBottomPadding,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -171,7 +171,7 @@ internal fun WarningSheetV3(
                     style = MaterialTheme.typography.titleMedium,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = RovaWarningsV3.mediaInk,
+                    color = RovaTrustTokens.mediaInk,
                     textAlign = TextAlign.Center,
                 )
 
@@ -183,7 +183,7 @@ internal fun WarningSheetV3(
                         text = stringResource(content.body),
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.5.sp,
-                        color = RovaWarningsV3.mediaInkBody,
+                        color = RovaTrustTokens.mediaInkBody,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -224,18 +224,18 @@ internal fun WarningSheetV3(
                             // "an irreversible action must not read as the obvious one" (§01). It is
                             // a deliberate fixed mix (APPX-D exempt). CANT_MERGE's "Discard session"
                             // is the only tertiary, and it IS destructive.
-                            val destBacking = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface)
+                            val destBacking = RovaTrustTokens.mediaInk.compositeOver(RovaTrustTokens.pinSurface)
                             val destInk = RovaWarnings.hard
                                 .copy(alpha = ResolveInk.MIX_LABEL.toFloat())
                                 .compositeOver(destBacking)
                             Row(
                                 modifier = Modifier
-                                    .heightIn(min = RovaWarningsV3.sheetCtaHeight)
-                                    .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
+                                    .heightIn(min = RovaTrustTokens.sheetCtaHeight)
+                                    .clip(RoundedCornerShape(RovaTrustTokens.sheetCtaCornerRadius))
                                     .border(
                                         width = 1.dp,
                                         color = RovaWarnings.hard.copy(alpha = 0.30f),
-                                        shape = RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius),
+                                        shape = RoundedCornerShape(RovaTrustTokens.sheetCtaCornerRadius),
                                     )
                                     .clickable(role = Role.Button) { onTertiary() }
                                     .padding(horizontal = 20.dp, vertical = 8.dp),
@@ -275,11 +275,11 @@ private fun IconWithGlow(
     // exactly across the bloom box.
     val density = LocalDensity.current
     val glowRadiusPx = with(density) {
-        (RovaWarningsV3.sheetIconSize - (RovaWarningsV3.sheetIconGlowInset * 2)).toPx() * 0.5f
+        (RovaTrustTokens.sheetIconSize - (RovaTrustTokens.sheetIconGlowInset * 2)).toPx() * 0.5f
     }
 
     Box(
-        modifier = Modifier.size(RovaWarningsV3.sheetIconSize),
+        modifier = Modifier.size(RovaTrustTokens.sheetIconSize),
         contentAlignment = Alignment.Center,
     ) {
         // Glow bloom (offset + blurred)
@@ -287,15 +287,15 @@ private fun IconWithGlow(
             modifier = Modifier
                 .matchParentSize()
                 .offset(
-                    x = RovaWarningsV3.sheetIconGlowInset,
-                    y = RovaWarningsV3.sheetIconGlowInset,
+                    x = RovaTrustTokens.sheetIconGlowInset,
+                    y = RovaTrustTokens.sheetIconGlowInset,
                 )
                 .size(
-                    width = RovaWarningsV3.sheetIconSize - (RovaWarningsV3.sheetIconGlowInset * 2),
-                    height = RovaWarningsV3.sheetIconSize - (RovaWarningsV3.sheetIconGlowInset * 2),
+                    width = RovaTrustTokens.sheetIconSize - (RovaTrustTokens.sheetIconGlowInset * 2),
+                    height = RovaTrustTokens.sheetIconSize - (RovaTrustTokens.sheetIconGlowInset * 2),
                 )
-                .blur(RovaWarningsV3.sheetIconGlowBlur)
-                .background(brush = RovaWarningsV3.iconGlow(accent, glowRadiusPx), shape = CircleShape),
+                .blur(RovaTrustTokens.sheetIconGlowBlur)
+                .background(brush = RovaTrustTokens.iconGlow(accent, glowRadiusPx), shape = CircleShape),
         )
         // Icon container — the frozen `sheeticon` INK_SITE. Fill `color-mix(sev 16%)`
         // over the opaque pin surface (:283); glyph = the resolved `--dot-ink` MARK over
@@ -304,20 +304,20 @@ private fun IconWithGlow(
         val iconFill = accent.copy(alpha = 0.16f)
         val glyphInk: Color = ResolveInk.of(
             hue = accent,
-            backing = iconFill.compositeOver(RovaWarningsV3.pinSurface),
+            backing = iconFill.compositeOver(RovaTrustTokens.pinSurface),
             target = ResolveInk.TARGET_MARK,
-            top = RovaWarningsV3.mediaInk,
+            top = RovaTrustTokens.mediaInk,
             mix = ResolveInk.MIX_MARK,
         ).color
         Box(
             modifier = Modifier
-                .size(RovaWarningsV3.sheetIconSize)
-                .clip(RoundedCornerShape(RovaWarningsV3.sheetIconCornerRadius))
+                .size(RovaTrustTokens.sheetIconSize)
+                .clip(RoundedCornerShape(RovaTrustTokens.sheetIconCornerRadius))
                 .background(iconFill)
                 .border(
                     width = 1.dp,
-                    color = accent.copy(alpha = RovaWarningsV3.sheetIconInnerStrokeAlpha),
-                    shape = RoundedCornerShape(RovaWarningsV3.sheetIconCornerRadius),
+                    color = accent.copy(alpha = RovaTrustTokens.sheetIconInnerStrokeAlpha),
+                    shape = RoundedCornerShape(RovaTrustTokens.sheetIconCornerRadius),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -340,13 +340,13 @@ private fun SeverityChip(label: String, accent: Color) {
     // surface; dot = resolved `--dot-ink` MARK (raw hue passthrough, byte-identical to the
     // pre-freeze dot), label = resolved `--lbl-ink` LABEL (lightens toward mediaInk). Both
     // over the near-black backing ⇒ ResolveInk LIGHTEN. Radius r-sm 10, not the old pill.
-    val chipFill = accent.copy(alpha = RovaWarningsV3.sevChipFillAlpha)
-    val chipBacking = chipFill.compositeOver(RovaWarningsV3.pinSurface)
+    val chipFill = accent.copy(alpha = RovaTrustTokens.sevChipFillAlpha)
+    val chipBacking = chipFill.compositeOver(RovaTrustTokens.pinSurface)
     val dotInk: Color = ResolveInk.of(
         hue = accent,
         backing = chipBacking,
         target = ResolveInk.TARGET_MARK,
-        top = RovaWarningsV3.mediaInk,
+        top = RovaTrustTokens.mediaInk,
         mix = ResolveInk.MIX_MARK,
     ).color
     val labelInk: Color = ResolveInk.of(
@@ -357,23 +357,23 @@ private fun SeverityChip(label: String, accent: Color) {
         // the OPAQUE composite of mediaInk over pinSurface — the frozen `--lbl-ink` mix top
         // (matches TrustInkSites `top = over(WHITE, .94, pin)`). Raw `mediaInk` (white@.94)
         // would feed pure white and drift ~5/255 lighter than the frozen authority.
-        top = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface),
+        top = RovaTrustTokens.mediaInk.compositeOver(RovaTrustTokens.pinSurface),
         mix = ResolveInk.MIX_LABEL,
     ).color
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(RovaWarningsV3.sevChipRadius))
+            .clip(RoundedCornerShape(RovaTrustTokens.sevChipRadius))
             .background(chipFill)
             .padding(
-                horizontal = RovaWarningsV3.sevChipPaddingH,
-                vertical = RovaWarningsV3.sevChipPaddingV,
+                horizontal = RovaTrustTokens.sevChipPaddingH,
+                vertical = RovaTrustTokens.sevChipPaddingV,
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(RovaWarningsV3.sevChipDotSize)
+                .size(RovaTrustTokens.sevChipDotSize)
                 .clip(CircleShape)
                 .background(dotInk),
         )
@@ -395,22 +395,22 @@ private fun WhyExpander(
     // Frozen `.whyrow` (:285–:287): `--ink-high`-based, NEUTRAL (not severity-tinted) in the
     // pinned host. Foreground `color-mix(ink-high 78%)`, border `color-mix(ink-high 20%)` —
     // ink-high == mediaInk (white @ .94), so scale its alpha rather than paint pure white.
-    val whyForeground = RovaWarningsV3.mediaInk.copy(
-        alpha = RovaWarningsV3.mediaInk.alpha * RovaWarningsV3.whyRowForegroundAlpha,
+    val whyForeground = RovaTrustTokens.mediaInk.copy(
+        alpha = RovaTrustTokens.mediaInk.alpha * RovaTrustTokens.whyRowForegroundAlpha,
     )
-    val whyBorder = RovaWarningsV3.mediaInk.copy(
-        alpha = RovaWarningsV3.mediaInk.alpha * RovaWarningsV3.whyRowBorderAlpha,
+    val whyBorder = RovaTrustTokens.mediaInk.copy(
+        alpha = RovaTrustTokens.mediaInk.alpha * RovaTrustTokens.whyRowBorderAlpha,
     )
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(RovaWarningsV3.whyRowHeight)
-                .clip(RoundedCornerShape(RovaWarningsV3.whyRowCornerRadius))
+                .height(RovaTrustTokens.whyRowHeight)
+                .clip(RoundedCornerShape(RovaTrustTokens.whyRowCornerRadius))
                 .border(
                     width = 1.dp,
                     color = whyBorder,
-                    shape = RoundedCornerShape(RovaWarningsV3.whyRowCornerRadius),
+                    shape = RoundedCornerShape(RovaTrustTokens.whyRowCornerRadius),
                 )
                 .clickable(role = Role.Button) { onToggle() }
                 .padding(horizontal = 12.dp),
@@ -442,7 +442,7 @@ private fun WhyExpander(
             Text(
                 text = whyBody,
                 style = MaterialTheme.typography.bodySmall,
-                color = RovaWarningsV3.mediaInkDim,
+                color = RovaTrustTokens.mediaInkDim,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -462,8 +462,8 @@ private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = RovaWarningsV3.sheetCtaHeight)
-            .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
+            .heightIn(min = RovaTrustTokens.sheetCtaHeight)
+            .clip(RoundedCornerShape(RovaTrustTokens.sheetCtaCornerRadius))
             .background(accent)
             .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -474,7 +474,7 @@ private fun PrimaryCta(label: String, accent: Color, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = RovaWarningsV3.severityCtaInk,
+            color = RovaTrustTokens.severityCtaInk,
         )
     }
 }
@@ -488,13 +488,13 @@ private fun SecondaryCta(label: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = RovaWarningsV3.sheetCtaHeight)
-            .clip(RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius))
-            .background(Color.White.copy(alpha = RovaWarningsV3.secondaryCtaFillAlpha))
+            .heightIn(min = RovaTrustTokens.sheetCtaHeight)
+            .clip(RoundedCornerShape(RovaTrustTokens.sheetCtaCornerRadius))
+            .background(Color.White.copy(alpha = RovaTrustTokens.secondaryCtaFillAlpha))
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = RovaWarningsV3.secondaryCtaStrokeAlpha),
-                shape = RoundedCornerShape(RovaWarningsV3.sheetCtaCornerRadius),
+                color = Color.White.copy(alpha = RovaTrustTokens.secondaryCtaStrokeAlpha),
+                shape = RoundedCornerShape(RovaTrustTokens.sheetCtaCornerRadius),
             )
             .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -505,7 +505,7 @@ private fun SecondaryCta(label: String, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = RovaWarningsV3.mediaInkBody,
+            color = RovaTrustTokens.mediaInkBody,
         )
     }
 }
@@ -530,7 +530,7 @@ private fun OverflowMenu(
                 imageVector = Icons.Default.MoreHoriz,
                 contentDescription = stringResource(R.string.warning_more_actions_cd),
                 role = IconRole.Disabled,
-                modifier = Modifier.size(RovaWarningsV3.overflowButtonSize),
+                modifier = Modifier.size(RovaTrustTokens.overflowButtonSize),
             )
         }
         DropdownMenu(

@@ -9,11 +9,11 @@ import androidx.compose.ui.graphics.Color
  * `PALETTES` / `SEV` / `FRAMES` / `INK_SITES` / `contrastRows()` (`:1176`–`:1536`).
  *
  * Every value below is **read from the app's own token objects** ([RovaPalette],
- * [RovaWarnings], [RovaWarningsV3]) and never from the spec's CSS `:root` registry.
+ * [RovaWarnings], [RovaTrustTokens]) and never from the spec's CSS `:root` registry.
  * The HTML is the *shape* of the sweep; the app is its *substrate*. That distinction is
  * load-bearing: the spec writes idealized decimals (`rgba(255,255,255,.94)`) while Compose
  * quantizes every sRGB [Color] to 8 bits (`(c * 255f + 0.5f).toInt()`), so
- * `RovaWarningsV3.mediaInk.alpha` reads back as `240/255 = 0.941176`, not `0.94`. Asserting
+ * `RovaTrustTokens.mediaInk.alpha` reads back as `240/255 = 0.941176`, not `0.94`. Asserting
  * the CSS decimals would prove the spec self-consistent while leaving the shipped tokens
  * unverified.
  *
@@ -79,21 +79,21 @@ internal const val SEV_TINT_FILL_ALPHA: Double = 0.08
 
 // ── Backings, derived from the shipped tokens ────────────────────────────────────────
 
-internal fun pinRgb(): Rgb = RovaWarningsV3.pinSurface.rgb()
+internal fun pinRgb(): Rgb = RovaTrustTokens.pinSurface.rgb()
 
 /** The pinned capsule composited over the live media frame. HTML `capOf()` (`:1280`). */
 internal fun capsuleRgb(frame: Rgb): Rgb =
-    overRgb(pinRgb(), RovaWarningsV3.pinContainerAlpha.toDouble(), frame)
+    overRgb(pinRgb(), RovaTrustTokens.pinContainerAlpha.toDouble(), frame)
 
 internal fun surfaceOf(palette: RovaPalette): Rgb = palette.surfaceBase.rgb()
 
 /**
  * The elevated themed container. Unlike every other backing this is a **materialized token**
- * ([RovaWarningsV3.surfaceHi] returns a [Color]), so it is 8-bit — Aurora `#272934`. The spec's
+ * ([RovaTrustTokens.surfaceHi] returns a [Color]), so it is 8-bit — Aurora `#272934`. The spec's
  * inspector reads the unrounded mix; production paints the rounded one, and the sweep asserts
  * what production paints.
  */
-internal fun surfaceHiOf(palette: RovaPalette): Rgb = RovaWarningsV3.surfaceHi(palette).rgb()
+internal fun surfaceHiOf(palette: RovaPalette): Rgb = RovaTrustTokens.surfaceHi(palette).rgb()
 
 /** HTML `tintOf()` (`:1281`) — the strip / settings-chip fill. */
 internal fun tintOf(palette: RovaPalette, severity: Color): Rgb =
@@ -140,8 +140,8 @@ internal class InkSite(
     val acc: ((RovaPalette, Color, Rgb) -> Rgb)? = null,
 )
 
-private fun mediaInkAlpha(): Double = RovaWarningsV3.mediaInk.alpha.toDouble()
-private fun sevChipFill(): Double = RovaWarningsV3.sevChipFillAlpha.toDouble()
+private fun mediaInkAlpha(): Double = RovaTrustTokens.mediaInk.alpha.toDouble()
+private fun sevChipFill(): Double = RovaTrustTokens.sevChipFillAlpha.toDouble()
 
 internal val INK_SITES: List<InkSite> = listOf(
     InkSite(

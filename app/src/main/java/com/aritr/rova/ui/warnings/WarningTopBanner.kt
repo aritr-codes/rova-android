@@ -43,7 +43,7 @@ import com.aritr.rova.ui.components.SemanticIcon
 import com.aritr.rova.ui.components.rememberReduceTransparency
 import com.aritr.rova.ui.theme.IconRole
 import com.aritr.rova.ui.theme.ResolveInk
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 
 /**
  * Trust System V1 — mid-recording top banner (frozen spec `docs/design/warnings-recovery.html`
@@ -62,7 +62,7 @@ import com.aritr.rova.ui.theme.RovaWarningsV3
  * overflow list, :151) SURVIVE verbatim.
  */
 @Composable
-internal fun WarningTopBannerV3(
+internal fun WarningTopBanner(
     content: TopBannerContent,
     severityColor: Color,
     onAction: () -> Unit,
@@ -82,49 +82,49 @@ internal fun WarningTopBannerV3(
     val stopPillFill = severityColor.copy(alpha = 0.20f)
     val glyphInk: Color = ResolveInk.of(
         hue = severityColor,
-        backing = iconBoxFill.compositeOver(RovaWarningsV3.pinSurface),
+        backing = iconBoxFill.compositeOver(RovaTrustTokens.pinSurface),
         target = ResolveInk.TARGET_MARK,
-        top = RovaWarningsV3.mediaInk,
+        top = RovaTrustTokens.mediaInk,
         mix = ResolveInk.MIX_MARK,
     ).color
     val stopLabelInk: Color = ResolveInk.of(
         hue = severityColor,
-        backing = stopPillFill.compositeOver(RovaWarningsV3.pinSurface),
+        backing = stopPillFill.compositeOver(RovaTrustTokens.pinSurface),
         target = ResolveInk.TARGET_TEXT,
         // ResolveInk ignores `top`'s alpha and reads its RGB only, so the LABEL top must be
         // the OPAQUE composite of mediaInk over pinSurface — the frozen `--lbl-ink` mix top
         // (matches TrustInkSites `top = over(WHITE, .94, pin)`). Raw `mediaInk` (white@.94)
         // would feed pure white and drift ~5/255 lighter than the frozen authority.
-        top = RovaWarningsV3.mediaInk.compositeOver(RovaWarningsV3.pinSurface),
+        top = RovaTrustTokens.mediaInk.compositeOver(RovaTrustTokens.pinSurface),
         mix = ResolveInk.MIX_LABEL,
     ).color
 
     // M10 (§11 :853): over-media substrate goes fully opaque under reduce-transparency.
     // The ink backings above stay proxied on the OPAQUE pinSurface regardless — the
     // sweep already models them opaque — so only the container fill alpha moves.
-    val pinAlpha = RovaWarningsV3.pinContainerAlphaFor(rememberReduceTransparency())
+    val pinAlpha = RovaTrustTokens.pinContainerAlphaFor(rememberReduceTransparency())
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(RovaWarningsV3.bannerCornerRadius))
-            .background(RovaWarningsV3.pinSurface.copy(alpha = pinAlpha))
+            .clip(RoundedCornerShape(RovaTrustTokens.bannerCornerRadius))
+            .background(RovaTrustTokens.pinSurface.copy(alpha = pinAlpha))
             .border(
                 width = 1.dp,
                 color = severityColor.copy(alpha = 0.30f),
-                shape = RoundedCornerShape(RovaWarningsV3.bannerCornerRadius),
+                shape = RoundedCornerShape(RovaTrustTokens.bannerCornerRadius),
             )
             .padding(
-                horizontal = RovaWarningsV3.bannerSidePadding,
-                vertical = RovaWarningsV3.bannerVerticalPadding,
+                horizontal = RovaTrustTokens.bannerSidePadding,
+                vertical = RovaTrustTokens.bannerVerticalPadding,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.bannerGap),
+        horizontalArrangement = Arrangement.spacedBy(RovaTrustTokens.bannerGap),
     ) {
         Box(
             modifier = Modifier
-                .size(RovaWarningsV3.bannerIconSize)
-                .clip(RoundedCornerShape(RovaWarningsV3.bannerIconCornerRadius))
+                .size(RovaTrustTokens.bannerIconSize)
+                .clip(RoundedCornerShape(RovaTrustTokens.bannerIconCornerRadius))
                 .background(iconBoxFill),
             contentAlignment = Alignment.Center,
         ) {
@@ -148,14 +148,14 @@ internal fun WarningTopBannerV3(
                 text = stringResource(content.title),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = RovaWarningsV3.mediaInk,
+                color = RovaTrustTokens.mediaInk,
                 maxLines = 1,
             )
             Spacer(Modifier.size(2.dp))
             Text(
                 text = stringResource(content.sub),
                 style = MaterialTheme.typography.bodySmall,
-                color = RovaWarningsV3.mediaInkDim,
+                color = RovaTrustTokens.mediaInkDim,
                 maxLines = 2,
             )
         }
@@ -178,7 +178,7 @@ internal fun WarningTopBannerV3(
         ) {
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(RovaWarningsV3.bannerIconCornerRadius))
+                    .clip(RoundedCornerShape(RovaTrustTokens.bannerIconCornerRadius))
                     .background(stopPillFill)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

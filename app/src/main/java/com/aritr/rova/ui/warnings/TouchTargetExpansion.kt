@@ -18,7 +18,7 @@ package com.aritr.rova.ui.warnings
  * centered and invisible.
  *
  * Pure so the geometry is JVM-provable under `isReturnDefaultValues = true` (house pure-helper
- * seam); the `Modifier.invisibleTouchTarget` in `WarningTopBannerV3.kt` is the thin Compose wrapper.
+ * seam); the `Modifier.invisibleTouchTarget` in `WarningTopBanner.kt` is the thin Compose wrapper.
  */
 internal object TouchTargetExpansion {
 

@@ -8,18 +8,18 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class RovaWarningsV3Test {
+class RovaTrustTokensTest {
 
     @Test fun sheetCornerRadius_is_26dp() {
-        assertEquals(26.dp, RovaWarningsV3.sheetCornerRadius)
+        assertEquals(26.dp, RovaTrustTokens.sheetCornerRadius)
     }
 
     @Test fun sheetIconSize_is_56dp() {
-        assertEquals(56.dp, RovaWarningsV3.sheetIconSize)
+        assertEquals(56.dp, RovaTrustTokens.sheetIconSize)
     }
 
     @Test fun sheetIconCornerRadius_is_18dp() {
-        assertEquals(18.dp, RovaWarningsV3.sheetIconCornerRadius)
+        assertEquals(18.dp, RovaTrustTokens.sheetIconCornerRadius)
     }
 
     // M6 deleted the dead `sheetTitleSize`/`sheetBodySize` tokens — the sheet title/body
@@ -27,61 +27,55 @@ class RovaWarningsV3Test {
 
     @Test fun sheetCtaHeight_is_48dp() {
         // Frozen `.cta{min-height:var(--target)}` = 48 (M6 lifted 46→48; used as a min-height).
-        assertEquals(48.dp, RovaWarningsV3.sheetCtaHeight)
+        assertEquals(48.dp, RovaTrustTokens.sheetCtaHeight)
     }
 
     @Test fun sevChipRadius_is_10dp() {
         // Frozen `.sevchip{border-radius:var(--r-sm)}` = 10 (M6; was a full pill pre-freeze).
-        assertEquals(10.dp, RovaWarningsV3.sevChipRadius)
+        assertEquals(10.dp, RovaTrustTokens.sevChipRadius)
     }
 
     @Test fun whyRowCornerRadius_is_10dp() {
         // Frozen `.whyrow{border-radius:var(--r-sm)}` = 10 (M6 lifted 11→10).
-        assertEquals(10.dp, RovaWarningsV3.whyRowCornerRadius)
+        assertEquals(10.dp, RovaTrustTokens.whyRowCornerRadius)
     }
 
     @Test fun secondaryCtaStrokeAlpha_is_0_12() {
         // Frozen ghost border `color-mix(ink-high 12%)` (M6 lifted .05→.12).
-        assertEquals(0.12f, RovaWarningsV3.secondaryCtaStrokeAlpha, 1e-4f)
-    }
-
-    @Test fun secondaryCtaTextAlpha_is_0_68() {
-        // Value unchanged; M6 superseded it (ghost label → mediaInkBody), so it is now a
-        // dead token slated for M11's audit. Still pinned until its declaration is removed.
-        assertEquals(0.68f, RovaWarningsV3.secondaryCtaTextAlpha, 1e-4f)
+        assertEquals(0.12f, RovaTrustTokens.secondaryCtaStrokeAlpha, 1e-4f)
     }
 
     @Test fun recoveryCardCornerRadius_is_18dp() {
-        assertEquals(18.dp, RovaWarningsV3.recoveryCardCornerRadius)
+        assertEquals(18.dp, RovaTrustTokens.recoveryCardCornerRadius)
     }
 
     @Test fun failBoxCornerRadius_is_10dp() {
         // Frozen `.failbox{border-radius:var(--r-sm)}` = 10 (M9).
-        assertEquals(10.dp, RovaWarningsV3.failBoxCornerRadius)
+        assertEquals(10.dp, RovaTrustTokens.failBoxCornerRadius)
     }
 
     @Test fun recoveryProgressCellHeight_is_7dp() {
-        assertEquals(7.dp, RovaWarningsV3.recoveryProgressCellHeight)
+        assertEquals(7.dp, RovaTrustTokens.recoveryProgressCellHeight)
     }
 
     @Test fun iconGlow_returns_nonNull_brush_for_each_severity() {
         val r = 100f
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.hard, r))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.soft, r))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.advisory, r))
-        assertNotNull(RovaWarningsV3.iconGlow(RovaWarnings.escalating, r))
+        assertNotNull(RovaTrustTokens.iconGlow(RovaWarnings.hard, r))
+        assertNotNull(RovaTrustTokens.iconGlow(RovaWarnings.soft, r))
+        assertNotNull(RovaTrustTokens.iconGlow(RovaWarnings.advisory, r))
+        assertNotNull(RovaTrustTokens.iconGlow(RovaWarnings.escalating, r))
     }
 
     @Test fun recoveryGlow_returns_nonNull_brush_for_each_severity() {
-        assertNotNull(RovaWarningsV3.recoveryGlow(RovaWarnings.hard))
-        assertNotNull(RovaWarningsV3.recoveryGlow(RovaWarnings.soft))
+        assertNotNull(RovaTrustTokens.recoveryGlow(RovaWarnings.hard))
+        assertNotNull(RovaTrustTokens.recoveryGlow(RovaWarnings.soft))
     }
 
     @Test fun iconGlow_and_recoveryGlow_are_distinct_brush_types() {
         // iconGlow is radial; recoveryGlow is vertical. Same severity ≠ same Brush.
         assertTrue(
             "iconGlow and recoveryGlow must produce different Brush instances",
-            RovaWarningsV3.iconGlow(RovaWarnings.hard, 100f) !== RovaWarningsV3.recoveryGlow(RovaWarnings.hard)
+            RovaTrustTokens.iconGlow(RovaWarnings.hard, 100f) !== RovaTrustTokens.recoveryGlow(RovaWarnings.hard)
         )
     }
 
@@ -98,36 +92,36 @@ class RovaWarningsV3Test {
     @Test fun pinSurface_is_0B0D14() {
         // HTML :79 `--pin-surface:#0B0D14` — unified the banner's and the
         // recovery card's two divergent raw hexes.
-        assertEquals(Color(0xFF0B0D14), RovaWarningsV3.pinSurface)
+        assertEquals(Color(0xFF0B0D14), RovaTrustTokens.pinSurface)
     }
 
     @Test fun pinContainerAlpha_is_0_94() {
         // HTML :84. One alpha for every pinned container floating OVER MEDIA.
-        assertEquals(0.94f, RovaWarningsV3.pinContainerAlpha, 1e-4f)
+        assertEquals(0.94f, RovaTrustTokens.pinContainerAlpha, 1e-4f)
     }
 
     @Test fun pinContainerAlphaFor_is_opaque_under_reduceTransparency_else_default() {
         // M10 (frozen spec §11 :853): over-media substrates render fully opaque under
         // the reduce-transparency signal; the default (signal off) is byte-identical to
         // the pre-M10 pinContainerAlpha (.94).
-        assertEquals(1f, RovaWarningsV3.pinContainerAlphaFor(true), 1e-4f)
+        assertEquals(1f, RovaTrustTokens.pinContainerAlphaFor(true), 1e-4f)
         assertEquals(
-            RovaWarningsV3.pinContainerAlpha,
-            RovaWarningsV3.pinContainerAlphaFor(false),
+            RovaTrustTokens.pinContainerAlpha,
+            RovaTrustTokens.pinContainerAlphaFor(false),
             1e-4f,
         )
     }
 
     @Test fun mediaInk_trio_are_white_at_94_48_and_55_percent() {
         // HTML :85–:87.
-        assertEquals(Color.White.copy(alpha = 0.94f), RovaWarningsV3.mediaInk)
-        assertEquals(Color.White.copy(alpha = 0.48f), RovaWarningsV3.mediaInkDim)
-        assertEquals(Color.White.copy(alpha = 0.55f), RovaWarningsV3.mediaInkBody)
+        assertEquals(Color.White.copy(alpha = 0.94f), RovaTrustTokens.mediaInk)
+        assertEquals(Color.White.copy(alpha = 0.48f), RovaTrustTokens.mediaInkDim)
+        assertEquals(Color.White.copy(alpha = 0.55f), RovaTrustTokens.mediaInkBody)
     }
 
     @Test fun mediaEdgeTop_is_white_at_12_percent() {
         // HTML :89 `--media-edge-top:rgba(255,255,255,.12)`.
-        assertEquals(Color.White.copy(alpha = 0.12f), RovaWarningsV3.mediaEdgeTop)
+        assertEquals(Color.White.copy(alpha = 0.12f), RovaTrustTokens.mediaEdgeTop)
     }
 
     // ── Family 2 · locked severity ────────────────────────────────────
@@ -135,14 +129,14 @@ class RovaWarningsV3Test {
     @Test fun severityCtaInk_is_1A1A1A() {
         // HTML :74. Graduated from a call-site literal to a named locked
         // token. Zero visual delta — the literal it names is unchanged.
-        assertEquals(Color(0xFF1A1A1A), RovaWarningsV3.severityCtaInk)
+        assertEquals(Color(0xFF1A1A1A), RovaTrustTokens.severityCtaInk)
     }
 
     @Test fun severityCtaInk_clears_AA_on_all_four_severity_fills() {
         // HTML :70–:73 — "WARN-02: white-on-severity reads 1.67–3.76:1 and
         // fails; this ink clears 4.5:1 on all four fills." This is the whole
         // reason the token exists, so it is pinned as a contract, not a value.
-        val ink = RovaWarningsV3.severityCtaInk
+        val ink = RovaTrustTokens.severityCtaInk
         listOf(
             "hard" to RovaWarnings.hard,
             "soft" to RovaWarnings.soft,
@@ -166,16 +160,16 @@ class RovaWarningsV3Test {
         // (255,255,255) is the worst case for a dark capsule. Every over-media
         // ink must still clear 4.5:1 against the capsule it sits on.
         val frame = intArrayOf(255, 255, 255)
-        val pin = RovaWarningsV3.pinSurface
+        val pin = RovaTrustTokens.pinSurface
         val capsule = ContrastMath.compositeAlphaOver(
             pin.r8(), pin.g8(), pin.b8(),
-            RovaWarningsV3.pinContainerAlpha.toDouble(),
+            RovaTrustTokens.pinContainerAlpha.toDouble(),
             frame[0], frame[1], frame[2],
         )
         listOf(
-            "mediaInk" to RovaWarningsV3.mediaInk,
-            "mediaInkDim" to RovaWarningsV3.mediaInkDim,
-            "mediaInkBody" to RovaWarningsV3.mediaInkBody,
+            "mediaInk" to RovaTrustTokens.mediaInk,
+            "mediaInkDim" to RovaTrustTokens.mediaInkDim,
+            "mediaInkBody" to RovaTrustTokens.mediaInkBody,
         ).forEach { (name, ink) ->
             val ratio = ContrastMath.contrastRatioForAlpha(
                 255, 255, 255, ink.alpha.toDouble(),
@@ -213,7 +207,7 @@ class RovaWarningsV3Test {
             assertEquals(
                 "surfaceHi mismatch for $sel",
                 want,
-                RovaWarningsV3.surfaceHi(rovaPalettes.getValue(sel)),
+                RovaTrustTokens.surfaceHi(rovaPalettes.getValue(sel)),
             )
         }
     }
@@ -223,7 +217,7 @@ class RovaWarningsV3Test {
         // only palette carrying an explicit member, and it is NOT the 8% mix.
         val daylight = rovaPalettes.getValue(ThemeSelection.DAYLIGHT)
         assertTrue("Daylight must remain the light palette", daylight.isLight)
-        assertEquals(Color.White, RovaWarningsV3.surfaceHi(daylight))
+        assertEquals(Color.White, RovaTrustTokens.surfaceHi(daylight))
     }
 
     @Test fun surfaceHi_is_strictly_elevated_above_surfaceBase_for_every_palette() {
@@ -232,7 +226,7 @@ class RovaWarningsV3Test {
         // recovery card, and every per-palette pin above would still pass if
         // the palette's bgBottom were black. This catches that class of bug.
         rovaPalettes.values.forEach { p ->
-            val hi = RovaWarningsV3.surfaceHi(p)
+            val hi = RovaTrustTokens.surfaceHi(p)
             if (!p.isLight) {
                 val hiLum = ContrastMath.relativeLuminance(hi.r8(), hi.g8(), hi.b8())
                 val baseLum = ContrastMath.relativeLuminance(
@@ -244,7 +238,7 @@ class RovaWarningsV3Test {
     }
 
     @Test fun surfaceHiMixFraction_is_8_percent() {
-        assertEquals(0.08f, RovaWarningsV3.surfaceHiMixFraction, 1e-4f)
+        assertEquals(0.08f, RovaTrustTokens.surfaceHiMixFraction, 1e-4f)
     }
 
     // ── Snooze chip geometry (M4) — new named tokens land with their first ──
@@ -252,15 +246,15 @@ class RovaWarningsV3Test {
     // rule (warnings-recovery.html :326–:327): height 34px, padding 0 s4 (16px),
     // gap s2 (8px). P4: non-primitive padding/gap/height come from named tokens.
     @Test fun snoozeChipPillHeight_is_34dp() {
-        assertEquals(34.dp, RovaWarningsV3.snoozeChipPillHeight)
+        assertEquals(34.dp, RovaTrustTokens.snoozeChipPillHeight)
     }
 
     @Test fun snoozeChipPaddingH_is_16dp() {
-        assertEquals(16.dp, RovaWarningsV3.snoozeChipPaddingH)
+        assertEquals(16.dp, RovaTrustTokens.snoozeChipPaddingH)
     }
 
     @Test fun snoozeChipGap_is_8dp() {
-        assertEquals(8.dp, RovaWarningsV3.snoozeChipGap)
+        assertEquals(8.dp, RovaTrustTokens.snoozeChipGap)
     }
 
     // ── Snooze dot pulse motion (M5) — retranscribed to the frozen spec's
@@ -268,11 +262,11 @@ class RovaWarningsV3Test {
     // var(--ease-std)` with `50%{opacity:.45}`. M4 shipped .60 / 1.5s tween as
     // tracked debt; M5 closes it. Easing is `RovaMotion.easeStandard`.
     @Test fun snoozeChipDotPulseAlpha_is_0_45() {
-        assertEquals(0.45f, RovaWarningsV3.snoozeChipDotPulseAlpha, 1e-4f)
+        assertEquals(0.45f, RovaTrustTokens.snoozeChipDotPulseAlpha, 1e-4f)
     }
 
     @Test fun snoozeChipPulsePeriodMs_is_1600() {
-        assertEquals(1600, RovaWarningsV3.snoozeChipPulsePeriodMs)
+        assertEquals(1600, RovaTrustTokens.snoozeChipPulsePeriodMs)
     }
 }
 

@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.aritr.rova.ui.theme.ContrastMath
 import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaWarnings
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,9 +36,9 @@ class WarningSnoozeChipInkTest {
         severities.forEach { (name, sev) ->
             val ink = ResolveInk.of(
                 hue = sev,
-                backing = RovaWarningsV3.pinSurface,
+                backing = RovaTrustTokens.pinSurface,
                 target = ResolveInk.TARGET_MARK,
-                top = RovaWarningsV3.mediaInk,
+                top = RovaTrustTokens.mediaInk,
                 mix = ResolveInk.MIX_MARK,
             )
             assertEquals(
@@ -53,18 +53,18 @@ class WarningSnoozeChipInkTest {
     @Test
     fun dotInk_clears_the_mark_bar_over_the_capsule_over_the_worst_media_frame() {
         // white (255,255,255) is the worst media frame for a dark capsule.
-        val pin = RovaWarningsV3.pinSurface
+        val pin = RovaTrustTokens.pinSurface
         val capsule = ContrastMath.compositeAlphaOver(
             (pin.red * 255f).roundToInt(), (pin.green * 255f).roundToInt(), (pin.blue * 255f).roundToInt(),
-            RovaWarningsV3.pinContainerAlpha.toDouble(),
+            RovaTrustTokens.pinContainerAlpha.toDouble(),
             255, 255, 255,
         )
         severities.forEach { (name, sev) ->
             val dot = ResolveInk.of(
                 hue = sev,
-                backing = RovaWarningsV3.pinSurface,
+                backing = RovaTrustTokens.pinSurface,
                 target = ResolveInk.TARGET_MARK,
-                top = RovaWarningsV3.mediaInk,
+                top = RovaTrustTokens.mediaInk,
                 mix = ResolveInk.MIX_MARK,
             ).color
             val ratio = ContrastMath.contrastRatio(
