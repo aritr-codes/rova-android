@@ -17,11 +17,11 @@ class ResolveInkTest {
 
     private val hard = RovaWarnings.hard
     private val soft = RovaWarnings.soft
-    private val pin = RovaWarningsV3.pinSurface
+    private val pin = RovaTrustTokens.pinSurface
 
     /** `top` for the pinned sites: media-ink over the opaque pin surface. */
     private fun pinnedTop(): Color =
-        overRgb(WHITE_RGB, RovaWarningsV3.mediaInk.alpha.toDouble(), pinRgb()).toColor()
+        overRgb(WHITE_RGB, RovaTrustTokens.mediaInk.alpha.toDouble(), pinRgb()).toColor()
 
     // ── constants are the spec's, verbatim ───────────────────────────────────
 
@@ -96,7 +96,7 @@ class ResolveInkTest {
     @Test fun lightBacking_selectsMinimumTClearingTarget() {
         val daylight = rovaPalettes.getValue(ThemeSelection.DAYLIGHT)
         val tint = tintOf(daylight, hard)
-        val backing = overRgb(hard.rgb(), RovaWarningsV3.sevChipFillAlpha.toDouble(), tint)
+        val backing = overRgb(hard.rgb(), RovaTrustTokens.sevChipFillAlpha.toDouble(), tint)
         val top = tHighOver(daylight, tint).toColor()
 
         val ink = ResolveInk.of(hard, backing.toColor(), ResolveInk.TARGET_MARK, top, ResolveInk.MIX_MARK)

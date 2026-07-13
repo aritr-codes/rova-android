@@ -17,7 +17,7 @@ import org.junit.Test
  * ## What this test is not
  *
  * It is **not CSS-derived**. Every colour is read from [RovaPalette], [RovaWarnings] and the M1
- * [RovaWarningsV3] tokens (see `TrustInkSites.kt`). The HTML supplies the *shape* of the matrix —
+ * [RovaTrustTokens] tokens (see `TrustInkSites.kt`). The HTML supplies the *shape* of the matrix —
  * which pairs exist, which backing each ink sits on, which target each must clear — never the
  * numbers. A sweep fed the spec's `:root` decimals would prove the spec self-consistent and leave
  * the shipped tokens unverified.
@@ -54,11 +54,11 @@ class TrustContrastSweepTest {
         val tHi = palette.textHigh.rgb()
         val aHi = palette.textHigh.alpha.toDouble()
 
-        val mediaInk = RovaWarningsV3.mediaInk.alpha.toDouble()
-        val mediaInkDim = RovaWarningsV3.mediaInkDim.alpha.toDouble()
-        val mediaInkBody = RovaWarningsV3.mediaInkBody.alpha.toDouble()
-        val ghostFill = RovaWarningsV3.secondaryCtaFillAlpha.toDouble()
-        val whyFg = RovaWarningsV3.whyRowForegroundAlpha.toDouble()
+        val mediaInk = RovaTrustTokens.mediaInk.alpha.toDouble()
+        val mediaInkDim = RovaTrustTokens.mediaInkDim.alpha.toDouble()
+        val mediaInkBody = RovaTrustTokens.mediaInkBody.alpha.toDouble()
+        val ghostFill = RovaTrustTokens.secondaryCtaFillAlpha.toDouble()
+        val whyFg = RovaTrustTokens.whyRowForegroundAlpha.toDouble()
 
         // ── pinned host (sheet opaque · banner & chip over the frame) ── 7 rows
         add("Banner title", overRgb(WHITE_RGB, mediaInk, capsule), capsule, 4.5)
@@ -107,7 +107,7 @@ class TrustContrastSweepTest {
 
         // ── locked severity fills ── 4 rows
         for (severity in Severity.entries) {
-            add("Severity CTA · $severity", RovaWarningsV3.severityCtaInk.rgb(), severity.color.rgb(), 4.5)
+            add("Severity CTA · $severity", RovaTrustTokens.severityCtaInk.rgb(), severity.color.rgb(), 4.5)
         }
 
         // ── every resolved mark / label site (8 sites × 4 severities) ── 32 + 16 rows
@@ -217,7 +217,7 @@ class TrustContrastSweepTest {
     @Test fun frozen_snoozeChipLabel_clearsAAOnEveryFrame() {
         for (frame in MediaFrame.entries) {
             val capsule = capsuleRgb(frame.rgb)
-            val ratio = ratioRgb(overRgb(WHITE_RGB, RovaWarningsV3.mediaInk.alpha.toDouble(), capsule), capsule)
+            val ratio = ratioRgb(overRgb(WHITE_RGB, RovaTrustTokens.mediaInk.alpha.toDouble(), capsule), capsule)
             assertTrue("snooze label on $frame = $ratio", ratio >= 4.5)
         }
     }
@@ -231,7 +231,7 @@ class TrustContrastSweepTest {
     @Test fun preFreeze_fixedSeverityMix_failsAAOnDaylightStripChip() {
         val daylight = rovaPalettes.getValue(ThemeSelection.DAYLIGHT)
         val tint = tintOf(daylight, hard)
-        val backing = overRgb(hard.rgb(), RovaWarningsV3.sevChipFillAlpha.toDouble(), tint)
+        val backing = overRgb(hard.rgb(), RovaTrustTokens.sevChipFillAlpha.toDouble(), tint)
 
         val fixedMix = overRgb(hard.rgb(), ResolveInk.MIX_LABEL, tHighOver(daylight, tint))
         val resolved = ResolveInk.of(hard, backing.toColor(), ResolveInk.TARGET_TEXT, tHighOver(daylight, tint).toColor(), ResolveInk.MIX_LABEL)
@@ -273,7 +273,7 @@ class TrustContrastSweepTest {
      */
     @Test fun surfaceHi_isDerived_notTheBootstrapLiteral() {
         val aurora = rovaPalettes.getValue(ThemeSelection.AURORA)
-        assertEquals(Color(0xFF272934), RovaWarningsV3.surfaceHi(aurora))
-        assertEquals(Color.White, RovaWarningsV3.surfaceHi(rovaPalettes.getValue(ThemeSelection.DAYLIGHT)))
+        assertEquals(Color(0xFF272934), RovaTrustTokens.surfaceHi(aurora))
+        assertEquals(Color.White, RovaTrustTokens.surfaceHi(rovaPalettes.getValue(ThemeSelection.DAYLIGHT)))
     }
 }

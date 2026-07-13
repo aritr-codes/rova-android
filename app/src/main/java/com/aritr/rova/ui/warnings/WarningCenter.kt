@@ -25,7 +25,7 @@ import com.aritr.rova.ui.theme.RovaWarnings
 
 /**
  * Phase 4 v3 — Warning surface entry point. Routing only; rendering happens
- * in [WarningSheetV3] / [WarningTopBannerV3] / [WarningSnoozeChip].
+ * in [WarningSheet] / [WarningTopBanner] / [WarningSnoozeChip].
  *
  * - [RecordHudState.Idle] + non-TopBanner id → sheet (or snooze-chip if dismissed)
  * - active (Recording/Waiting/Merging) + TopBanner id → top banner
@@ -101,7 +101,7 @@ fun WarningCenter(
             val effectiveId = effectiveIdleTopBannerId(id, autoStopEcho)
             when (effectiveId) {
                 WarningId.STORAGE_FULL_AUTOSTOPPED -> {
-                    WarningTopBannerV3(
+                    WarningTopBanner(
                         content = midRecBannerContent(effectiveId),
                         severityColor = RovaWarnings.advisory,
                         onAction = { launchActionTarget(context, ActionTarget.STORAGE_SETTINGS) },
@@ -112,7 +112,7 @@ fun WarningCenter(
                     )
                 }
                 WarningId.THERMAL_AUTOSTOPPED -> {
-                    WarningTopBannerV3(
+                    WarningTopBanner(
                         content = midRecBannerContent(effectiveId),
                         severityColor = RovaWarnings.advisory,
                         onAction = { onOpenThermalTips?.invoke() },
@@ -138,7 +138,7 @@ fun WarningCenter(
         }
 
         val expandedWhy by resolvedVm.expandedWhy.collectAsStateWithLifecycle()
-        WarningSheetV3(
+        WarningSheet(
             id = id,
             surface = surface,
             expanded = id in expandedWhy,
@@ -194,7 +194,7 @@ fun WarningCenter(
     } else {
         // Active branch — TopBanner only.
         if (surface != WarningSurface.TopBanner) return
-        WarningTopBannerV3(
+        WarningTopBanner(
             content = midRecBannerContent(id),
             severityColor = RovaWarnings.escalating,
             onAction = onStopRecording,

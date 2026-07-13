@@ -35,7 +35,7 @@ import com.aritr.rova.ui.components.rememberReduceTransparency
 import com.aritr.rova.ui.theme.ResolveInk
 import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaWarnings
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 
 /**
  * Trust System V1 — post-dismiss chip (frozen spec `docs/design/warnings-recovery.html`
@@ -74,9 +74,9 @@ internal fun WarningSnoozeChip(
     // pre-freeze dot; proven by TrustContrastSweepTest + WarningSnoozeChipInkTest.
     val dotInk: Color = ResolveInk.of(
         hue = severityColor,
-        backing = RovaWarningsV3.pinSurface,
+        backing = RovaTrustTokens.pinSurface,
         target = ResolveInk.TARGET_MARK,
-        top = RovaWarningsV3.mediaInk,
+        top = RovaTrustTokens.mediaInk,
         mix = ResolveInk.MIX_MARK,
     ).color
 
@@ -92,7 +92,7 @@ internal fun WarningSnoozeChip(
         // are eased with `RovaMotion.easeStandard`; RepeatMode.Restart matches the
         // CSS default (each iteration replays 0%→100%), seamless since it opens and
         // closes at 1f.
-        val period = RovaWarningsV3.snoozeChipPulsePeriodMs
+        val period = RovaTrustTokens.snoozeChipPulsePeriodMs
         val alpha by transition.animateFloat(
             initialValue = 1f,
             targetValue = 1f,
@@ -100,7 +100,7 @@ internal fun WarningSnoozeChip(
                 animation = keyframes {
                     durationMillis = period
                     1f at 0 using RovaMotion.easeStandard
-                    RovaWarningsV3.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
+                    RovaTrustTokens.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
                 },
                 repeatMode = RepeatMode.Restart,
             ),
@@ -110,7 +110,7 @@ internal fun WarningSnoozeChip(
     } else 1f
 
     // M10 (§11 :853): over-media substrate goes fully opaque under reduce-transparency.
-    val pinAlpha = RovaWarningsV3.pinContainerAlphaFor(rememberReduceTransparency())
+    val pinAlpha = RovaTrustTokens.pinContainerAlphaFor(rememberReduceTransparency())
 
     // Outer: the 48dp min-height IS the hit box (invisible expansion, Q5 / P5).
     // The visual capsule is the inner 34dp pill — zero extra viewfinder occlusion.
@@ -125,17 +125,17 @@ internal fun WarningSnoozeChip(
     ) {
         Row(
             modifier = Modifier
-                .heightIn(min = RovaWarningsV3.snoozeChipPillHeight)
-                .clip(RoundedCornerShape(RovaWarningsV3.snoozeChipRadius))
-                .background(RovaWarningsV3.pinSurface.copy(alpha = pinAlpha))
+                .heightIn(min = RovaTrustTokens.snoozeChipPillHeight)
+                .clip(RoundedCornerShape(RovaTrustTokens.snoozeChipRadius))
+                .background(RovaTrustTokens.pinSurface.copy(alpha = pinAlpha))
                 .border(
                     width = 1.dp,
-                    color = severityColor.copy(alpha = RovaWarningsV3.snoozeChipBorderAlpha),
-                    shape = RoundedCornerShape(RovaWarningsV3.snoozeChipRadius),
+                    color = severityColor.copy(alpha = RovaTrustTokens.snoozeChipBorderAlpha),
+                    shape = RoundedCornerShape(RovaTrustTokens.snoozeChipRadius),
                 )
-                .padding(horizontal = RovaWarningsV3.snoozeChipPaddingH),
+                .padding(horizontal = RovaTrustTokens.snoozeChipPaddingH),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.snoozeChipGap),
+            horizontalArrangement = Arrangement.spacedBy(RovaTrustTokens.snoozeChipGap),
         ) {
             // Dot — 7dp APPX-A shape primitive (inline dp allowed). resolved dot-ink.
             Box(
@@ -151,12 +151,12 @@ internal fun WarningSnoozeChip(
                 imageVector = content.glyph.outline,
                 contentDescription = null,
                 modifier = Modifier.size(12.dp),
-                tint = RovaWarningsV3.mediaInkDim, // semanticicon-opt-out: pinned over-media dim ink (Trust §02), never palette-themed
+                tint = RovaTrustTokens.mediaInkDim, // semanticicon-opt-out: pinned over-media dim ink (Trust §02), never palette-themed
             )
             Text(
                 text = stringResource(content.title),
                 style = MaterialTheme.typography.labelMedium,
-                color = RovaWarningsV3.mediaInk,
+                color = RovaTrustTokens.mediaInk,
                 maxLines = 1,
             )
         }

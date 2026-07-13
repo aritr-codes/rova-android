@@ -238,10 +238,10 @@ class IconThemeRulesTest {
     }
 
     @Test
-    fun glassSurfaceRoleUsage_passesInAllowlistedWarningSheetV3() {
+    fun glassSurfaceRoleUsage_passesInAllowlistedWarningSheet() {
         val body = "    createBlurEffect(4f, 4f, Shader.TileMode.CLAMP)"
         val files = listOf(
-            src("app/src/main/java/com/aritr/rova/ui/warnings/WarningSheetV3.kt", body)
+            src("app/src/main/java/com/aritr/rova/ui/warnings/WarningSheet.kt", body)
         )
         assertNull(RovaGateRules.run("checkGlassSurfaceRoleUsage", files))
     }

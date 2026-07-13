@@ -635,9 +635,6 @@
     <string name="warning_camera_in_use_body">Close the other camera app.</string>
     <string name="warning_camera_disabled_title">Camera disabled by device policy</string>
 
-    <!-- Mid-rec top banner: auto-action description -->
-    <string name="warning_banner_auto_stop_protect">Will auto-stop to protect device</string>
-
     <!-- Mid-rec top banner copy -->
     <string name="warning_banner_thermal_shutdown_title">Device overheating — stopping</string>
     <string name="warning_banner_thermal_shutdown_sub">Recording will stop automatically.</string>
@@ -711,8 +708,6 @@
     <string name="recovery_retry_merge_label">Retry merge</string>
     <!-- Discard CTA content description. %1$s = discard label -->
     <string name="recovery_discard_cd">%1$s. This action is permanent.</string>
-    <!-- Merge-failed inline error. %1$s = runtime failure reason -->
-    <string name="recovery_merge_failed_prefix">Merge failed: %1$s</string>
     <!-- M9 (frozen §08) — merge-failure closed reason set (Q6). The failbox eyebrow + title
          morph on failure, then one of four owner-locked causes, then the standing reassurance. -->
     <string name="recovery_merge_failed_eyebrow">Merge failed</string>

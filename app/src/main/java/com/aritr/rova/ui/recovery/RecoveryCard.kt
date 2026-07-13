@@ -57,7 +57,7 @@ import com.aritr.rova.ui.text.UiText
 import com.aritr.rova.ui.text.resolve
 import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaWarnings
-import com.aritr.rova.ui.theme.RovaWarningsV3
+import com.aritr.rova.ui.theme.RovaTrustTokens
 import com.aritr.rova.ui.warnings.ThemedHostInk
 
 /**
@@ -119,7 +119,7 @@ fun RecoveryCard(
     // ThemedHostInk consumers). `cs.surface == RovaPalette.surfaceBase`, so the derived
     // surfaceHi is byte-identical to the sweep's `surfaceHiOf`.
     val isDark = cs.surface.luminance() < 0.5f
-    val surfaceHi = RovaWarningsV3.surfaceHi(cs.surface, isLight = !isDark)
+    val surfaceHi = RovaTrustTokens.surfaceHi(cs.surface, isLight = !isDark)
     val ink = ThemedHostInk.forRecovery(
         severity = severityColor,
         surfaceHi = surfaceHi,
@@ -127,7 +127,7 @@ fun RecoveryCard(
         onSurfaceVariant = cs.onSurfaceVariant,
         isDark = isDark,
     )
-    val cornerRadius = RoundedCornerShape(RovaWarningsV3.recoveryCardCornerRadius)
+    val cornerRadius = RoundedCornerShape(RovaTrustTokens.recoveryCardCornerRadius)
 
     Box(
         modifier = modifier
@@ -144,9 +144,9 @@ fun RecoveryCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(RovaWarningsV3.recoveryCardGlowHeight)
-                .blur(RovaWarningsV3.recoveryCardGlowBlur)
-                .background(brush = RovaWarningsV3.recoveryGlow(severityColor)),
+                .height(RovaTrustTokens.recoveryCardGlowHeight)
+                .blur(RovaTrustTokens.recoveryCardGlowBlur)
+                .background(brush = RovaTrustTokens.recoveryGlow(severityColor)),
         )
 
         // .trustrow — leading severity dot + the answer column. align-items:flex-start.
@@ -315,7 +315,7 @@ private fun recencyText(label: RelativeTimeLabel): String = when (label.kind) {
 @Composable
 private fun RecoveryDot(color: Color, pulsing: Boolean) {
     val transition = rememberInfiniteTransition(label = "recovery-dot-pulse")
-    val period = RovaWarningsV3.snoozeChipPulsePeriodMs
+    val period = RovaTrustTokens.snoozeChipPulsePeriodMs
     val pulseAlpha by transition.animateFloat(
         initialValue = 1f,
         targetValue = 1f,
@@ -323,7 +323,7 @@ private fun RecoveryDot(color: Color, pulsing: Boolean) {
             animation = keyframes {
                 durationMillis = period
                 1f at 0 using RovaMotion.easeStandard
-                RovaWarningsV3.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
+                RovaTrustTokens.snoozeChipDotPulseAlpha at period / 2 using RovaMotion.easeStandard
             },
             repeatMode = RepeatMode.Restart,
         ),
@@ -356,7 +356,7 @@ private fun FailBox(reasonRes: Int, reasonInk: Color, reassuranceInk: Color) {
             append(stringResource(R.string.recovery_clips_are_safe))
         }
     }
-    val shape = RoundedCornerShape(RovaWarningsV3.failBoxCornerRadius)
+    val shape = RoundedCornerShape(RovaTrustTokens.failBoxCornerRadius)
     Box(
         modifier = Modifier
             .padding(top = 12.dp) // frozen `.failbox{margin-top:var(--s3)}`
@@ -454,14 +454,14 @@ private fun ProgressStrip(
         ProcessingGlyph(size = 16.dp)
         Row(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(RovaWarningsV3.recoveryProgressCellGap),
+            horizontalArrangement = Arrangement.spacedBy(RovaTrustTokens.recoveryProgressCellGap),
         ) {
             repeat(cells) { index ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(RovaWarningsV3.recoveryProgressCellHeight)
-                        .clip(RoundedCornerShape(RovaWarningsV3.recoveryProgressCellRadius))
+                        .height(RovaTrustTokens.recoveryProgressCellHeight)
+                        .clip(RoundedCornerShape(RovaTrustTokens.recoveryProgressCellRadius))
                         .background(if (index < filled) cellOn else cellOff),
                 )
             }
@@ -472,7 +472,7 @@ private fun ProgressStrip(
             fontWeight = FontWeight.Medium,
             color = numChipColor,
             textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(min = RovaWarningsV3.recoveryNumericChipMinWidth),
+            modifier = Modifier.widthIn(min = RovaTrustTokens.recoveryNumericChipMinWidth),
         )
     }
 }
@@ -510,7 +510,7 @@ private fun CtaBlock(
     val discardCd = stringResource(R.string.recovery_discard_cd, discardLabel)
 
     // M9 — the merge-failure surface is the failbox (rendered in the answer column, §08).
-    // The inline `recovery_merge_failed_prefix` reason Text (which showed the raw exception
+    // The inline raw-exception reason Text (which showed the raw exception
     // message) is gone: no raw exception text is reachable in the UI anymore. The failure
     // still flips the primary to "Retry" (frozen `failed?'Retry':c.primary`, :1644).
 

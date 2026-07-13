@@ -19,7 +19,7 @@ import org.junit.Test
  */
 class ContrastMathTest {
 
-    /** Effective WarningSheetV3 body background (M3 elevated sheet ≈ #2C2C2C). */
+    /** Effective WarningSheet body background (M3 elevated sheet ≈ #2C2C2C). */
     private val sheetBg = intArrayOf(0x2C, 0x2C, 0x2C)
 
     /** Effective RecoveryCard header background (M3 elevated card ≈ gray 54). */
@@ -72,7 +72,7 @@ class ContrastMathTest {
         assertTrue("higher alpha must give higher contrast on dark bg", high > low)
     }
 
-    // --- Regression: WARN-01 (Blocker) — WarningSheetV3 body text ---
+    // --- Regression: WARN-01 (Blocker) — WarningSheet body text ---
 
     @Test
     fun `WARN-01 old 0_45 alpha body text fails AA on the elevated sheet`() {

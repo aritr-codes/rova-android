@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
  *
  * Historical: `docs/superpowers/specs/2026-05-23-phase-4-warning-reskin-v3-design.md`.
  */
-object RovaWarningsV3 {
+object RovaTrustTokens {
 
     // ── Sheet ─────────────────────────────────────────────────────────
     // Frozen spec `.sheet` (warnings-recovery.html :268–:293). The drag-handle
@@ -56,10 +56,6 @@ object RovaWarningsV3 {
     // boundary. Foreground label/dot already carry severity (no 1.4.1 reliance
     // on colour alone).
     val sevChipFillAlpha = 0.20f
-    // Pre-freeze sheet-chip label alpha (severityColor @ .95). Its last consumer migrated to the
-    // resolved `pinchip` label ink in M6 (`ResolveInk` LABEL); left for M11's dead-token audit to
-    // avoid an unrelated test edit here, exactly as `snoozeChipFillAlpha` was in M4.
-    val sevChipForegroundAlpha = 0.95f
 
     // ── Overflow ⋯ menu ──────────────────────────────────────────────
     val overflowButtonSize = 28.dp
@@ -93,11 +89,7 @@ object RovaWarningsV3 {
     // Frozen ghost CTA `.cta-ghost` (warnings-recovery.html :244–:246): fill
     // `color-mix(ink-high 7%)`, border `color-mix(ink-high 12%)`, label `--ink-body`
     // (= `mediaInkBody` in the pinned host). M6 lifted the border .05→.12 and moved
-    // the ghost label onto `mediaInkBody`; `secondaryCtaTextAlpha` (.68, an older
-    // a11y bump for a lighter backing) is thereby superseded and left for M11's
-    // dead-token audit — the near-black pin backing clears AA at ink-body .55, proven
-    // by `TrustContrastSweepTest` ("Ghost CTA label · sheet").
-    val secondaryCtaTextAlpha = 0.68f
+    // the ghost label onto `mediaInkBody`.
     val secondaryCtaFillAlpha = 0.07f
     val secondaryCtaStrokeAlpha = 0.12f
 
@@ -121,11 +113,6 @@ object RovaWarningsV3 {
 
     // ── Snooze chip ──────────────────────────────────────────────────
     val snoozeChipRadius = 999.dp
-    // Pre-freeze fill alpha (Color.Black @ .55, 3.61:1 — failed AA). Its last
-    // consumer migrated to pinSurface @ pinContainerAlpha in M4; the dead token
-    // is retired in M11's final dead-token audit (kept here to avoid mixing an
-    // unrelated test edit into the M4 surface transcription).
-    val snoozeChipFillAlpha = 0.55f
     val snoozeChipBorderAlpha = 0.25f
     // Dot pulse motion — frozen spec `@keyframes pulse` (warnings-recovery.html
     // :336–:337): `pulse 1.6s var(--ease-std)` with `50%{opacity:.45}`. The min
@@ -147,7 +134,7 @@ object RovaWarningsV3 {
     // Transcribed from the frozen spec `docs/design/warnings-recovery.html`
     // §02 token registry. ADDITIVE: nothing below has a production consumer
     // yet — M4–M8 migrate the call sites. Values are pinned by
-    // `RovaWarningsV3Test`; do not "tidy" them.
+    // `RovaTrustTokensTest`; do not "tidy" them.
     // ══════════════════════════════════════════════════════════════════
 
     // ── Family 3 · locked pinned / over-media (never themed) ─────────
@@ -170,7 +157,7 @@ object RovaWarningsV3 {
      * **fully opaque** (1f) when the OS reduce-transparency signal is active —
      * "over-media substrates render fully opaque." Reads the existing
      * [com.aritr.rova.ui.components.ReducedTransparency] seam at the call sites
-     * ([com.aritr.rova.ui.warnings.WarningTopBannerV3] + `WarningSnoozeChip`); this
+     * ([com.aritr.rova.ui.warnings.WarningTopBanner] + `WarningSnoozeChip`); this
      * is the pure pick so it is unit-testable without a Compose UI test. The modal
      * sheet is already opaque and does not read this. Default (signal off) is
      * byte-identical to the pre-M10 [pinContainerAlpha] render.
@@ -195,7 +182,7 @@ object RovaWarningsV3 {
     /**
      * The near-black label on a solid severity fill. NOT debt: white-on-severity
      * reads 1.67–3.76:1 and fails AA, while this ink clears 4.5:1 on all four
-     * fills (pinned as a contract in `RovaWarningsV3Test`). HTML :70–:74 —
+     * fills (pinned as a contract in `RovaTrustTokensTest`). HTML :70–:74 —
      * graduated from a call-site literal to a named locked token, zero visual
      * delta. Never routed through `DialogActionColors` (APPX-C: that resolver
      * owns accent fills only, never the locked severity fills).
@@ -247,7 +234,7 @@ object RovaWarningsV3 {
      * Radial glow brush behind the sheet icon. Severity-tinted, ~0.46 effective alpha
      * at center fading to transparent at [radiusPx]. The radius is taken in pixels —
      * callers in a `@Composable` scope compute it via
-     * `with(LocalDensity.current) { RovaWarningsV3.sheetIconSize.toPx() * 0.9f }`
+     * `with(LocalDensity.current) { RovaTrustTokens.sheetIconSize.toPx() * 0.9f }`
      * (or similar). Defaulting `radius` to `Float.POSITIVE_INFINITY` would collapse
      * the gradient to a flat fill, defeating the bloom.
      */

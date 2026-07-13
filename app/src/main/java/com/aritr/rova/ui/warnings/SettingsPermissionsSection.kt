@@ -151,7 +151,7 @@ internal fun SettingsPermissionsSheetHost(
     val expandedSet by vm.expandedWhy.collectAsStateWithLifecycle()
     val expanded = id in expandedSet
 
-    WarningSheetV3(
+    WarningSheet(
         id = id,
         surface = surface,
         expanded = expanded,
