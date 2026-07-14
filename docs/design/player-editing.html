@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Editing</title>
+<style>
+  /* ==================================================================
+     PLAYER-EDITING — the canonical EDITING specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE) + player-gestures.html (FROZEN) + player-actions.html
+     (FROZEN) + player-sharing.html (FROZEN CANDIDATE) + player-info.html
+     (FROZEN CANDIDATE).
+
+     This spec owns everything that happens AFTER an editing action is
+     chosen from the player: trim · clip extraction · save-as-copy vs
+     replace · destructive-vs-non-destructive · progress · failure ·
+     recovery · DualShot editing · kept-raw editing · accessibility ·
+     motion · architecture ownership.
+
+     It DOES NOT redesign the player, transport, layout, gestures,
+     states, sharing, or info. Only the editing experience.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (resolver sole minter; transported not
+         reconstructed; fails closed)
+       ADR-0038 lifecycle (fresh player per lease; nav-pop unchanged)
+       ADR-0032 wall-clock playhead
+       ADR-0025 vault (app-private, no public copy, FLAG_SECURE)
+       ADR-0036 deletion transactionality (delete-then-discard; no
+         replace-in-place anywhere)
+       NO autoplay · Media3 1.4.1.
+
+     GROUND TRUTH (verified in source via a repo fact-sweep, NOT memory):
+       *** THERE IS ZERO FRAME-LEVEL EDIT / TRANSCODE / TRANSFORM
+       CAPABILITY IN THIS REPO. The entire app is copy/remux only. ***
+       - Media3 pinned 1.4.1, ONLY media3-exoplayer + media3-ui on the
+         classpath (gradle/libs.versions.toml:13,39-40;
+         app/build.gradle.kts:1255-1256). transformer/effect/muxer/
+         session are DELIBERATELY excluded — app/build.gradle.kts:
+         1251-1254 "the editor / transformer pipeline is NO-GO for v1.0."
+       - No Transformer, no FFmpeg, no mp4parser anywhere in app/src/main.
+       - The ONLY existing-file byte machinery is sample-level remux:
+         VideoMerger.mergeSegments / mergeSegmentsToFd (VideoMerger.kt:
+         53,83) = MediaExtractor.readSampleData -> muxer.writeSampleData
+         with a timelineOffsetUs (:240-296). No decoder, no encoder on
+         any existing-file path. MediaCodec encoders exist ONLY in the
+         live recording pipeline (service/dualrecord/internal/*).
+       - Export (Tier1/2/3, service/export/) = that same remux-concat +
+         a filesystem/MediaStore PUBLISH (copy + rename / IS_PENDING
+         flip). No transform stage. (ExportPipeline.kt:68,
+         Tier1Exporter.kt:185-236, Tier2Exporter.kt:50-55)
+       - All writes in the app are NEW-FILE + atomic rename/publish.
+         REPLACE-IN-PLACE SEMANTICS DO NOT EXIST ANYWHERE. Deletes are
+         whole-artifact + dir removal (ADR-0036 HistoryDeleter.kt:34,
+         SessionStore.discardSession :877). SessionStore.
+         writeManifestAtomic = temp + ATOMIC_MOVE (:263-303).
+       - SessionManifest (SCHEMA_VERSION 13) has NO field that records an
+         edit, trim, or derived clip. SegmentRecord = filename,durationMs,
+         sizeBytes,sha1,side,effectiveTargetRotation,startedAtWallClock.
+         A derived-clip feature would need a NEW schema field.
+       - Player is read-only playback (ExoPlayer; PlayerViewModel /
+         PlayerUiState carry no writable media fields; PlayerEngine
+         lifecycle ADR-0038). Its only writes are the resume POSITION +
+         sidecar (favorite/title). No trim/cut/save exists.
+       - DualShot = two finalized files (portrait+landscape) per session,
+         one sessionId, interleaved segments by SegmentRecord.side, sides
+         settle independently (DualVideoRecorder.kt:90-93).
+       - EDITING IS EXPLICITLY PARKED NO-GO FOR v1.0: docs/BACKLOG.md:177,
+         322 ("In-app video editor (17 tools) stays Parked NO-GO…needs
+         media3.transformer/OpenGL/MediaCodec…the player's fake Edit/Trim
+         buttons were removed in PR-5"). player-actions did NOT make edit
+         a permanent action; docs/UI_NAV_GRAPH.md:154,169,228 trim/edit
+         resolve to a TODO snackbar.
+     Sources above + competitive editing research (Google Photos · Apple
+     Photos · DJI Mimo · Blackmagic Camera · CapCut — principles only,
+     no visual copying).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── NO NEW editing tokens are introduced. ──
+       There is no editing UI in the app today. This spec designs a
+       FUTURE capability and, when built, it reuses the inherited pinned
+       surface, the over-media ink trio, the 48dp target, the container/
+       exit timings, and the same sheet idiom the sharing/info specs use.
+       Anything that would need a NEW token is a design change routed
+       through player-core first, gated behind the editing ADR. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     EDITING SPECIMEN — an over-media frame with the PROPOSED trim
+     sheet drawn onto the inherited three-zone layout. Illustrative,
+     token-driven, explicitly labelled PROPOSED / future capability.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-a="single"] .a-single,
+  .phone[data-a="dual"]   .a-dual,
+  .phone[data-a="kept"]   .a-kept{display:block}
+
+  .ctop{position:absolute;left:0;right:0;top:0;height:80px;background:var(--scrim-top)}
+
+  .toprow{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;gap:10px}
+  .idtext{flex:1;min-width:0}
+  .idtext .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idtext .t2{font:500 10px/1.2 inherit;color:var(--media-ink-body)}
+  .propflag{font:600 8.5px/1.1 inherit;letter-spacing:.08em;color:var(--note);
+        background:color-mix(in srgb,var(--note) 14%,transparent);border:1px solid color-mix(in srgb,var(--note) 40%,transparent);
+        border-radius:6px;padding:3px 6px;white-space:nowrap;text-transform:uppercase}
+
+  /* Rova-owned PROPOSED trim sheet — pinned surface, over-media ink */
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--pin-surface);
+        border-top:1px solid var(--media-edge-top);border-radius:16px 16px 0 0;padding:12px 16px 18px;
+        max-height:82%;overflow:hidden}
+  .handle{width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);margin:0 auto 12px}
+  .sh-title{font:600 13px/1.3 inherit;color:var(--media-ink);margin-bottom:1px}
+  .sh-sub{font:500 10px/1.3 inherit;color:var(--media-ink-body);margin-bottom:12px}
+
+  /* trim rail — a range with two handles over a filmstrip proxy */
+  .rail{position:relative;height:44px;border-radius:8px;overflow:hidden;margin:2px 0 4px;
+        background:repeating-linear-gradient(90deg,#2a3646 0 14px,#222c3a 14px 28px)}
+  .rail .sel{position:absolute;top:0;bottom:0;left:22%;right:18%;
+        background:color-mix(in srgb,var(--stage-accent) 22%,transparent);
+        border-left:3px solid var(--stage-accent);border-right:3px solid var(--stage-accent)}
+  .rail .dim{position:absolute;top:0;bottom:0;background:rgba(0,0,0,.5)}
+  .rail .dim.l{left:0;width:22%} .rail .dim.r{right:0;width:18%}
+  .rail .hnd{position:absolute;top:50%;transform:translateY(-50%);width:12px;height:26px;border-radius:4px;
+        background:var(--stage-accent)}
+  .rail .hnd.a{left:calc(22% - 6px)} .rail .hnd.b{right:calc(18% - 6px)}
+  .railmeta{display:flex;justify-content:space-between;font:500 9.5px/1.3 inherit;color:var(--media-ink-body);margin-bottom:12px}
+  .railmeta b{color:var(--media-ink);font-weight:600}
+
+  .grp{margin-bottom:12px}
+  .grp-h{font:600 8.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;color:var(--media-ink-dim);margin-bottom:6px}
+  .irow{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)}
+  .irow .ik{font:500 10.5px/1.3 inherit;color:var(--media-ink-body);flex:none}
+  .irow .iv{font:600 10.5px/1.3 inherit;color:var(--media-ink);text-align:right}
+  .irow .iv.muted{color:var(--media-ink-dim);font-weight:500;font-style:italic}
+
+  /* the save decision — copy is primary, replace is absent */
+  .cta{display:flex;gap:8px;margin-top:6px}
+  .btn{flex:1;text-align:center;border-radius:10px;padding:10px 8px;font:600 11px/1.1 inherit}
+  .btn.primary{background:var(--stage-accent);color:var(--stage-ink)}
+  .btn.ghost{background:rgba(255,255,255,.07);color:var(--media-ink);border:1px solid rgba(255,255,255,.12)}
+  .savenote{font:500 9px/1.3 inherit;color:var(--media-ink-body);margin-top:8px;text-align:center}
+
+  .flabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Editing — the editing contract (a FUTURE capability)</h1>
+  <p class="stagenote">
+    Everything that happens <b>after an editing action is chosen</b>. Unlike Info, <b>editing does not exist in Rova
+    today</b> and <b>player-actions did not reserve an affordance for it</b> — the fake Edit/Trim buttons were removed in
+    PR-5 and the full editor is <b>Parked NO-GO for v1.0</b>. The whole app is <b>copy/remux only</b>: there is <b>no
+    frame-level transcode anywhere</b>, and <b>no replace-in-place semantics anywhere</b>. So this spec designs the
+    <b>future</b> editing experience honestly — every capability classified <b>Existing (none) · Future · Rejected</b>,
+    nothing designed-around a gap. Its load-bearing decision: editing is <b>non-destructive, save-as-a-new-copy only</b>,
+    which is exactly the grain of the codebase (all writes are new-file + atomic publish). It layers on the frozen
+    <code>player-core/states/gestures/actions/sharing/info</code>, preserves ADR-0037/0038/0032/0025/0036, and is
+    <b>PROPOSED, gated behind a dedicated editing ADR</b> — not implementable from this document alone.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Edit layer</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('single',this)">Trim · single</button>
+        <button class="tog" aria-pressed="false" onclick="setA('dual',this)">DualShot side</button>
+        <button class="tog" aria-pressed="false" onclick="setA('kept',this)">Kept-raw segment</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Model &amp; boundary — what editing is, and the wall it stands behind</h2>
+    <div class="subtle">The one-line model, the hard fact that no backend exists, the backbone it preserves, and the lines it may not cross.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The model in one line</div>
+      <p style="margin:0 0 8px">Editing = <b>a single, non-destructive trim that saves the kept range as a new video</b>, leaving the original recording untouched. It is the smallest useful edit for a background recorder — "keep this stretch as a clip I can share" — <b>not</b> a timeline editor.</p>
+      <p style="margin:0">It is <b>a copy, never a mutation</b>: the source recording, its manifest, and its identity are read-only inputs; the output is a brand-new file published through the app's existing export path. <b>No original is ever overwritten or deleted by editing.</b></p>
+    </div>
+    <div class="panel">
+      <div class="caption">The hard fact — nothing to build on today</div>
+      <div class="rejbox" style="margin:0 0 8px">
+        <div class="caption">Zero editing backend exists</div>
+        <p style="margin:0">No <code>Transformer</code>, no FFmpeg, no re-encode path. The only existing-file machinery is <code>VideoMerger</code>'s <b>sample-level remux</b>. Replace-in-place semantics <b>do not exist anywhere</b>. The 17-tool editor is <b>Parked NO-GO for v1.0</b>.</p>
+      </div>
+      <p style="margin:0">This spec therefore designs a <b>future</b> feature and says so on every page: each capability is <b>Existing / Future / Rejected</b>, and the whole thing is gated behind a <b>new editing ADR</b> plus owner sign-off. It is not "ready to implement."</p>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · what editing may NOT touch</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Never mutate the archive.</b> The source session's files, <code>SessionManifest</code>, segments, identity (ADR-0037), and vault state are read-only. Editing adds no schema field and rewrites nothing.</li>
+      <li><b>Never redesign</b> the player, transport, timeline, layout, tokens, states, gestures, the action framework, sharing, or info — those are the six frozen specs. Editing only adds an output flow.</li>
+      <li><b>Never invent backend.</b> No transcode, no new dependency, no MediaSession is assumed present; anything that needs one is classified Future/Rejected, not designed-around.</li>
+      <li><b>Never replace-in-place.</b> "Save over the original" is rejected outright — the app has no such write and the original is provenance.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — the PROPOSED trim sheet, three recording kinds</h2>
+    <div class="subtle">Toggle the layers above. Every layer is labelled PROPOSED. The sheet is Rova-owned (pinned surface, inherited ink, swipe-down-dismiss); one range selection, one primary "Save copy".</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="single" id="phone">
+      <div class="footage"></div>
+      <div class="ctop"></div>
+
+      <!-- TRIM · SINGLE -->
+      <div class="layer a-single">
+        <div class="toprow">
+          <div class="idtext"><div class="t1">Today, 2:14 PM</div><div class="t2">Trim · Single · 1m 20s</div></div>
+          <div class="propflag">Proposed</div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Trim &amp; save a copy</div>
+          <div class="sh-sub">Drag the handles to choose the stretch to keep</div>
+          <div class="rail">
+            <div class="dim l"></div><div class="dim r"></div>
+            <div class="sel"></div>
+            <div class="hnd a"></div><div class="hnd b"></div>
+          </div>
+          <div class="railmeta"><span>Start <b>0:18</b></span><span>Keep <b>0:44</b></span><span>End <b>1:02</b></span></div>
+          <div class="grp">
+            <div class="grp-h">Result</div>
+            <div class="irow"><div class="ik">New clip length</div><div class="iv">44s</div></div>
+            <div class="irow"><div class="ik">Saves as</div><div class="iv">A new video (copy)</div></div>
+            <div class="irow"><div class="ik">Original</div><div class="iv">Kept, untouched</div></div>
+          </div>
+          <div class="cta">
+            <button class="btn ghost">Cancel</button>
+            <button class="btn primary">Save copy</button>
+          </div>
+          <div class="savenote">Your original recording is never changed.</div>
+        </div>
+        <div class="flabel" style="top:104px;right:14px">Rova-owned · inherited ink</div>
+      </div>
+
+      <!-- DUALSHOT SIDE -->
+      <div class="layer a-dual">
+        <div class="toprow">
+          <div class="idtext"><div class="t1">Today, 2:14 PM · P+L</div><div class="t2">Trim · Portrait angle</div></div>
+          <div class="propflag">Proposed</div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Trim this angle &amp; save a copy</div>
+          <div class="sh-sub">Editing the <b>Portrait</b> angle you're reviewing · the Landscape angle is untouched</div>
+          <div class="rail">
+            <div class="dim l"></div><div class="dim r"></div>
+            <div class="sel"></div>
+            <div class="hnd a"></div><div class="hnd b"></div>
+          </div>
+          <div class="railmeta"><span>Start <b>0:18</b></span><span>Keep <b>0:44</b></span><span>End <b>1:02</b></span></div>
+          <div class="grp">
+            <div class="grp-h">Result</div>
+            <div class="irow"><div class="ik">Angle</div><div class="iv">Portrait (the open side)</div></div>
+            <div class="irow"><div class="ik">Saves as</div><div class="iv">A new video (copy)</div></div>
+            <div class="irow"><div class="ik">Other angle</div><div class="iv muted">not affected</div></div>
+          </div>
+          <div class="cta">
+            <button class="btn ghost">Cancel</button>
+            <button class="btn primary">Save copy</button>
+          </div>
+          <div class="savenote">One angle at a time · no combining · originals kept.</div>
+        </div>
+      </div>
+
+      <!-- KEPT-RAW SEGMENT -->
+      <div class="layer a-kept">
+        <div class="toprow">
+          <div class="idtext"><div class="t1">Yesterday, 9:03 AM</div><div class="t2">Trim · kept clip 2 of 2</div></div>
+          <div class="propflag">Proposed</div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Trim this clip &amp; save a copy</div>
+          <div class="sh-sub">This recording was interrupted · you're trimming <b>the clip you're viewing</b></div>
+          <div class="rail">
+            <div class="dim l"></div><div class="dim r"></div>
+            <div class="sel"></div>
+            <div class="hnd a"></div><div class="hnd b"></div>
+          </div>
+          <div class="railmeta"><span>Start <b>0:04</b></span><span>Keep <b>0:16</b></span><span>End <b>0:20</b></span></div>
+          <div class="grp">
+            <div class="grp-h">Result</div>
+            <div class="irow"><div class="ik">Editing</div><div class="iv">Kept clip 2 (one segment)</div></div>
+            <div class="irow"><div class="ik">Saves as</div><div class="iv">A new video (copy)</div></div>
+            <div class="irow"><div class="ik">Other kept clips</div><div class="iv muted">not affected</div></div>
+          </div>
+          <div class="cta">
+            <button class="btn ghost">Cancel</button>
+            <button class="btn primary">Save copy</button>
+          </div>
+          <div class="savenote">Trims one clip · the kept recording stays as it is.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Status</div><div class="v"><span class="tag t-note">Proposed</span> <b>No edit action exists today.</b> This is a future affordance; its presence is <code>player-actions</code>' to grant, gated behind the editing ADR.</div></div>
+      <div class="row"><div class="k">Scope</div><div class="v"><b>One trim</b> = pick a sub-range, save it as a new video. No filters, transitions, speed, text, or multi-clip stitching — those are Rejected (§03).</div></div>
+      <div class="row"><div class="k">Surface</div><div class="v"><b>One pinned sheet</b>, inherited ink + swipe-down-dismiss (the sharing/info sheet idiom). One range control, one primary <b>Save copy</b>.</div></div>
+      <div class="row"><div class="k">Save</div><div class="v"><b>Copy only.</b> There is no "Replace" button — the original is never overwritten (§04). "Save copy" is the sole commit.</div></div>
+      <div class="row"><div class="k">Target</div><div class="v">Editing operates on <b>the one artifact/side/clip on screen</b> — never composites DualShot angles, never re-merges (§06, §07).</div></div>
+      <div class="row"><div class="k">Backend</div><div class="v"><span class="tag t-fail">Future</span> the trim <i>engine</i> does not exist; §05 classifies the two honest routes and rejects the third.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Editing philosophy — the archive is sacred, the copy is cheap</h2>
+    <div class="subtle">First principles for a background recorder that must never damage its own evidence, filtered through "no backend / non-destructive / calm."</div>
+  </div></div>
+  <p>Rova records <b>unattended footage the user did not frame</b>. That footage is often the point of keeping the app — a record of what happened while they were away. So the governing instinct is <b>preservation</b>: an edit must never put the original at risk. The competitive field splits cleanly on exactly this axis:</p>
+  <table>
+    <thead><tr><th>Source</th><th>What they do</th><th>Principle Rova takes</th></tr></thead>
+    <tbody>
+      <tr><td>Google Photos</td><td>Non-destructive trim; "Save copy" keeps the original, edits live in a copy.</td><td><span class="tag t-pass">Adopt</span> non-destructive, <b>save-as-copy</b> — the exact grain of Rova's new-file-only storage.</td></tr>
+      <tr><td>Apple Photos</td><td>Trim with <b>revert-to-original</b> — edits stored as a reversible sidecar over the original.</td><td><span class="tag t-fail">Reject the mechanism</span> revert-in-place needs an edit-history sidecar + in-place rewrite Rova has neither of; <b>adopt only the non-destructive spirit</b>, delivered as a copy.</td></tr>
+      <tr><td>DJI Mimo · Blackmagic</td><td>Multi-track timelines, LUTs, speed ramps, export render.</td><td><span class="tag t-fail">Reject</span> a production editor is a different app; a background clip has no such craft intent.</td></tr>
+      <tr><td>CapCut</td><td>Full effects/keyframe editor, heavy transcode.</td><td><span class="tag t-fail">Reject</span> far outside a hands-free recorder's scope; would demand the whole absent transcode stack.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen philosophy</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>The original is never touched.</b> Every edit produces a new file; the source recording, manifest, and identity are read-only. This is non-negotiable and matches the codebase (no in-place write exists).</li>
+      <li><b>One edit, done well: trim.</b> Choose a stretch to keep, save it. Clip extraction is the same operation (a trim <i>is</i> extracting a sub-range). Everything heavier is Rejected (§03), not hidden in a menu.</li>
+      <li><b>The copy leaves the session graph.</b> A trimmed clip is an ordinary saved video, not a new session — it carries no <code>sessionId</code> and needs no schema change (§04).</li>
+      <li><b>Honest about not existing yet.</b> No page pretends the engine is present. The experience is designed so that when the ADR is approved, it drops onto real machinery — but it is Proposed until then.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Editing capabilities — what's in, what's out, each one classified</h2>
+    <div class="subtle">Every candidate edit tagged Existing · Future · Rejected against the repo fact-sweep. Exactly one is in scope; it is Future.</div>
+  </div></div>
+  <div class="warnbox">
+    <div class="caption">Critical · the starting point is empty</div>
+    <p style="margin:0">There is <b>no editing capability in the app at all</b> today — no trim, no cut, no extraction, no transcode. So nothing below is "Existing." The design question is not "which existing edits do we surface" but "which <b>single</b> new edit is worth building, and which do we reject before they metastasise into an editor." The answer: <b>trim (save-as-copy)</b>, and nothing else.</p>
+  </div>
+  <table>
+    <thead><tr><th>Candidate</th><th>Belongs in the player?</th><th>Status</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td><b>Trim to a sub-range → save copy</b></td><td>Yes — the one in-player edit</td><td><span class="tag t-note">Future</span></td><td>The smallest useful, non-destructive edit; matches save-as-copy grain. Engine is Future (§05).</td></tr>
+      <tr><td><b>Clip extraction</b> (save a chosen stretch)</td><td>Yes — same control as trim</td><td><span class="tag t-note">Future</span></td><td><b>Not a separate feature</b> — extraction is trim by another name; one range selection covers both.</td></tr>
+      <tr><td>Replace the original with the trim</td><td>No</td><td><span class="tag t-fail">Rejected</span></td><td>No in-place write exists (ADR-0036 grain); the original is provenance. Copy only (§04).</td></tr>
+      <tr><td>Merge / stitch multiple recordings</td><td>No — belongs to export/library, not the player</td><td><span class="tag t-fail">Rejected</span></td><td>Multi-source render; not a single-artifact player action. The recovery merge is an internal repair, not a user editor.</td></tr>
+      <tr><td>Composite / side-by-side DualShot angles</td><td>No</td><td><span class="tag t-fail">Rejected</span></td><td>A new render of two sources — needs the absent transcode + a compositor. Editing touches one side (§07).</td></tr>
+      <tr><td>Speed / slow-mo · filters · text · transitions · crop</td><td>No</td><td><span class="tag t-fail">Rejected</span></td><td>The "17-tool editor," Parked NO-GO for v1.0; each needs frame re-encode / OpenGL the app doesn't have.</td></tr>
+      <tr><td>Frame-accurate trim (cut mid-GOP)</td><td>Only if the engine is the heavy route</td><td><span class="tag t-fail">Future (heavy)</span></td><td>Requires decode+re-encode via <code>media3-transformer</code>; a separate, costlier ADR than keyframe trim (§05).</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · scope is one edit</div>
+    <p style="margin:0">The player's editing surface is <b>trim-to-copy, and only that</b>. Clip extraction is the same operation. Replace, merge, composite, and the effects suite are <b>Rejected</b> — each is either a new render Rova can't do or a mutation Rova must never do. Adding any of them is a new spec + new ADR, never an "in-code quick add." This keeps editing a single, safe, buildable increment rather than the door to an editor.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Artifact ownership — where the copy lives, and why nothing is rewritten</h2>
+    <div class="subtle">Save-as-copy vs replace, resolved by the codebase's own grain. The trimmed clip leaves the session model entirely.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Save as copy — required, and the only option</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The output is a new standalone video</b>, published through the export tiers' <b>session-agnostic publish primitives</b> — the MediaStore pending-insert + <code>IS_PENDING</code> flip on API 29+, the scoped-file + <code>MediaScannerConnection</code> scan on API 24–28 — the same low-level machinery the app already uses to put a file in the gallery. It does <b>not</b> route through the <code>ExportPipeline</code>/<code>Tier1Exporter</code> <i>orchestrators</i>, which are keyed on <code>sessionId</code> and whose commit points are manifest writes (see the frozen note below).</li>
+        <li><b>It is not a new session.</b> It carries no <code>sessionId</code>, gets no <code>SessionManifest</code>, and is not in the recovery/session graph — so <b>no schema field is added</b> and no session invariant is touched.</li>
+        <li><b>The source is a read-only input.</b> Editing opens the resolved artifact (ADR-0037 identity, transported) purely to read frames; it writes nowhere near the session directory.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Replace — rejected on the codebase's own terms</div>
+      <div class="rejbox" style="margin:0">
+        <div class="caption">No in-place mutation</div>
+        <ul class="tight" style="margin-bottom:0">
+          <li>The app has <b>no replace-in-place write anywhere</b> — every write is new-file + atomic rename/publish; every delete is whole-artifact (ADR-0036).</li>
+          <li>The original is <b>provenance</b> — its manifest records what actually happened; overwriting it would falsify the record and could orphan identity/resume state.</li>
+          <li>A "replace" button would be a genuinely new, riskier mutation pattern for <b>zero</b> user benefit over "copy" — rejected.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · manifests are not updated by editing</div>
+    <p style="margin:0"><b>Editing writes exactly one thing: a new published video, via a session-free publish that reuses the export tiers' publish primitives (pending-insert/flip · scoped-file + scan) — not the manifest-writing <code>ExportPipeline</code> orchestrators.</b> The <code>SessionManifest</code> is <b>never</b> updated, extended, or rewritten by an edit — the trimmed clip is disowned from the session model on purpose, so editing needs <b>no new schema field and no new persistence</b>. (The export <i>orchestrators</i> commit through <code>setExportPending</code>/<code>setExportFinalized</code> = manifest writes, so editing bypasses them and calls the underlying publish directly — a small new session-free write path, expected since editing is new code behind its own ADR.) If a future product ever wants trimmed clips tracked inside the library/session graph (thumbnails, re-open, provenance link), that is a <b>separate ADR adding a derived-artifact field</b> — explicitly out of scope here, and not designed-around.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Editing execution — the engine that does not exist yet, classified honestly</h2>
+    <div class="subtle">How a trim is actually produced. Two real routes (both Future), one rejected. The UI above is engine-agnostic; the ADR picks the route.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Route</th><th>What it does</th><th>Cost / dependency</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><b>A · Keyframe-aligned remux</b></td><td>Snap the trim to the nearest keyframes and <b>sample-copy</b> the kept range with <code>MediaExtractor</code> → <code>MediaMuxer</code> — an extension of the existing <code>VideoMerger</code> path. No decode, no re-encode.</td><td>Cheapest — reuses machinery on the classpath. Trim points snap to GOP boundaries (not frame-exact). Still needs a <b>new write path + UI</b> that don't exist.</td><td><span class="tag t-note">Future (light)</span></td></tr>
+      <tr><td><b>B · Frame-accurate transcode</b></td><td>Decode + re-encode the boundary GOPs so the cut lands on the exact chosen frame, via <code>media3-transformer</code>.</td><td>Adds the <b>deliberately-excluded</b> <code>media3-transformer</code> dependency + a real transcode (time, heat, battery on a background-recorder device).</td><td><span class="tag t-fail">Future (heavy)</span></td></tr>
+      <tr><td>C · In-place edit of the source file</td><td>Rewrite the original in place.</td><td>—</td><td><span class="tag t-fail">Rejected</span> no in-place write exists; violates §04.</td></tr>
+    </tbody>
+  </table>
+  <div class="warnbox">
+    <div class="caption">Recommended route for the ADR (not decided here)</div>
+    <p style="margin:0"><b>Route A</b> is the honest first increment: it reuses <code>VideoMerger</code>'s sample-copy, adds no dependency, and is safe. Its one visible compromise — trim points snap to keyframes, so the cut can be off by up to a GOP — is <b>disclosed in the UI</b> ("the start/end may shift slightly to the nearest full frame") rather than hidden. Route B (frame-exact) is a later, separate ADR only if users demand precision. The specimen above is drawn to be <b>true under either route</b>; the sheet doesn't change, only the engine behind "Save copy" does.</p>
+  </div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="panel">
+      <div class="caption">Execution flow (when built)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Preflight</b> storage exactly like export (enough free space for the copy) before starting — reuse the export storage check.</li>
+        <li><b>Run off the main thread</b>; the player is paused, the sheet shows determinate <b>progress</b> (the app already has a merge/export progress idiom).</li>
+        <li><b>Publish atomically</b> — write to a temp/pending target, then rename/flip-pending exactly as the export tiers do; the copy only becomes visible when whole.</li>
+        <li><b>Confirm + offer share</b> on success (hand off to <code>player-sharing</code>), leaving the player exactly where it was.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Playback while editing</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Choosing edit <b>pauses playback</b>; the trim sheet is a modal over the paused frame. No autoplay.</li>
+        <li><b>ADR-0038 lifecycle is unchanged</b> — same leased player, no new lifecycle owner; editing does not touch <code>PlayerEngine</code>.</li>
+        <li>Scrubbing the trim handles uses the <b>existing seek</b> (player-gestures) to preview boundaries — no new transport.</li>
+        <li>Cancel or dismiss returns to normal playback with the playhead intact.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Failure handling — the original is the safety net</h2>
+    <div class="subtle">Because editing only ever writes a new file, every failure mode is non-destructive by construction. Reuse the export failure vocabulary.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Failure</th><th>What the user sees</th><th>What is true of the original</th></tr></thead>
+    <tbody>
+      <tr><td><b>Not enough storage</b></td><td>Caught at preflight before work starts: "Not enough space to save the copy." No partial output.</td><td><span class="tag t-pass">Untouched</span> — same as export's storage guard.</td></tr>
+      <tr><td><b>Trim engine error</b> (mux/transcode fails mid-run)</td><td>"Couldn't save the trimmed copy." Retry offered. The pending/temp target is cleaned up.</td><td><span class="tag t-pass">Untouched</span> — the source was only read.</td></tr>
+      <tr><td><b>Process killed mid-edit</b></td><td>Nothing to recover — the edit was never committed; the pending file (if any) is orphaned temp, swept like export temp.</td><td><span class="tag t-pass">Untouched</span> — no session state was written, so recovery has nothing to reconcile.</td></tr>
+      <tr><td><b>Publish (rename/flip-pending) fails</b></td><td>Treated as a failed save; the incomplete public row/temp is removed, same as a failed export publish.</td><td><span class="tag t-pass">Untouched</span></td></tr>
+      <tr><td><b>Empty / invalid range</b></td><td>Save is disabled until the range is valid (min length enforced). No failure to handle.</td><td><span class="tag t-pass">Untouched</span></td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · failure is always safe</div>
+    <p style="margin:0">Because editing <b>never mutates the source and only ever publishes a new file</b>, the worst case is "the copy didn't get made" — the original is always intact and the session graph is never in a half-edited state. There is <b>no edit-specific recovery pipeline</b>: an interrupted edit leaves at most an orphan temp/pending file, swept by the <b>same cleanup the export pipeline already runs</b>. Editing adds no new terminal state, no new manifest field, and nothing for the cold-launch recovery scan to classify.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>DualShot editing — one angle, the one on screen, never composited</h2>
+    <div class="subtle">Two independent files, one sessionId. Editing operates on the reviewed side only, reads existing per-side data, reconstructs no identity.</div>
+  </div></div>
+  <p>A DualShot session is <b>two finalized files</b> (portrait + landscape) sharing one <code>sessionId</code>, settling independently. The player is reviewing <b>one</b> side (its transported <code>PlaybackIdentity.side</code>, ADR-0037). Editing follows the same rule as everything else in the player: <b>it acts on the artifact currently on screen.</b></p>
+  <table>
+    <thead><tr><th>Question</th><th>Answer</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Which side does trim edit?</td><td><b>The reviewed side only</b> (the open <code>PlaybackIdentity.side</code>).</td><td><span class="tag t-pass">Show</span> no ambiguity, no identity minted — edits what's on screen.</td></tr>
+      <tr><td>Can you trim both at once?</td><td>No — one angle at a time; the other side is untouched.</td><td><span class="tag t-pass">Simple</span> each side is a separate file; switch angle (player-dualshot) then trim the other.</td></tr>
+      <tr><td>Composite / side-by-side / picture-in-picture output?</td><td>No.</td><td><span class="tag t-fail">Reject</span> a two-source render — needs the absent transcode + compositor (§03).</td></tr>
+      <tr><td>Does trimming one side change the other, or the session?</td><td>No — the output is a disowned copy; both source files + the manifest are untouched.</td><td><span class="tag t-pass">Safe</span> §04 holds identically for DualShot.</td></tr>
+      <tr><td>What if the reviewed side isn't finalized?</td><td>Edit is unavailable for that side; the sheet explains "this angle isn't ready to edit."</td><td><span class="tag t-pass">Honest</span> sides settle independently; no fabricated source.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">DualShot editing is <b>single-side, on the reviewed angle</b>, producing a disowned copy of that one file — exactly like the single case. It <b>never composites, swaps, or combines</b> the two angles (that would be a new render, Rejected §03) and it <b>reconstructs no identity</b> (ADR-0037: transported, not reconstructed). To trim the other angle, the user switches to it (a <code>player-dualshot</code> concern) and trims it there. The session's two files and manifest are read-only throughout.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Accessibility — the range control is the hard part</h2>
+    <div class="subtle">Trim handles, the save decision, progress. TalkBack · keyboard · switch · target size · focus · a non-gesture path to set the range.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Element</th><th>TalkBack</th><th>Keyboard / Switch</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Trim sheet</b></td><td>Focus-trapped dialog "Trim and save a copy"; reading order = instruction → range → result → save.</td><td>Tab cycles; Esc/back cancels and returns focus to the edit trigger.</td><td>Modal over paused playback; nothing behind it is reachable.</td></tr>
+      <tr><td><b>Start / End handles</b></td><td>Each is a labelled slider ("Trim start, 0:18 of 1:20") reporting its time; changes announce the new time and the resulting length.</td><td><b>Adjustable via arrow keys / switch stepping</b>, not drag-only — the critical a11y requirement. 48dp targets.</td><td>Min-length enforced so the range can't collapse; steps are coarse enough to reach every point.</td></tr>
+      <tr><td><b>Result rows</b></td><td>"New clip length, 44 seconds", "Saves as, a new video", "Original, kept untouched" — one node each.</td><td>n/a (static).</td><td>The "original is safe" fact is spoken, not just shown.</td></tr>
+      <tr><td><b>Save copy</b> / <b>Cancel</b></td><td>Buttons, 48dp; Save disabled state announced when the range is invalid.</td><td>Tab + Enter.</td><td>Save is the single primary commit; no hidden "replace."</td></tr>
+      <tr><td><b>Progress</b> (saving)</td><td>Determinate progress announced; completion and failure both spoken (polite; failure assertive).</td><td>n/a.</td><td>Reuses the export/merge progress a11y idiom.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen accessibility floor</div>
+    <p style="margin:0">The trim range <b>must be settable without dragging</b> — start/end are keyboard/switch-adjustable sliders with spoken time + resulting length, 48dp targets, and an enforced minimum so they never collapse. The sheet is a focus-trapped dialog returning focus to the trigger on close; every row is a single labelled node; the "original is untouched" reassurance is spoken. Progress and both outcomes are announced. A control that can only be operated by gesture is not shipped — it is reworked until it isn't.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Motion — reuse the sheet and progress vocabulary, add nothing</h2>
+    <div class="subtle">Editing introduces no new motion language; it is the same pinned sheet + the same progress idiom the app already moves.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Motion (inherited only)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Sheet enter/exit</b> on inherited timings (<code>--t-container</code> / <code>--t-exit</code>, <code>--ease-std</code>) + swipe-down-dismiss — identical to sharing/info.</li>
+        <li><b>Handle drag</b> is direct manipulation (no animation); the dimmed out-of-range mask updates live with the handle.</li>
+        <li><b>Saving</b> uses the existing determinate merge/export progress motion — nothing bespoke.</li>
+        <li><b>No new motion token.</b> Anything that seems to need one is a <code>player-core</code> change first, gated behind the editing ADR.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Why so little</div>
+      <p style="margin:0">The only genuinely new interaction is dragging a range, which should feel like <b>direct manipulation</b>, not choreography. Everything around it (sheet, progress, confirm) is already defined elsewhere; editing reuses it so the flow feels like one continuous player, not a separate editor.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Reduced motion — animation disappears, the edit does not</h2>
+    <div class="subtle">The inherited invariant, extended to editing.</div>
+  </div></div>
+  <div class="panel">
+    <ul class="tight" style="margin-bottom:0">
+      <li>Under <code>rememberReduceMotion()</code>, the sheet appears <b>without its slide</b>; dismiss is instant.</li>
+      <li>The trim range, both handles, result rows, and Save/Cancel remain in the same place, reachable by the same tap, drag, arrow-step, and a11y path.</li>
+      <li><b>Progress becomes a static determinate indicator</b> (no animated sweep) — the percentage/step still updates and is still announced.</li>
+      <li><b>No part of editing is discoverable only through motion</b> — the range and its outcome are legible from static state alone. Same rule as gestures/actions/sharing/info: animation changes, behavior and content do not.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Frozen boundary — what this spec owns, what stays elsewhere, what needs an ADR</h2>
+    <div class="subtle">Editing owns the trim-to-copy experience. Everything structural is Future capability behind a dedicated ADR.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-editing.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>trim-to-copy experience</b>: the range-selection sheet, its grouping and order, the single <b>Save copy</b> commit.</li>
+        <li>The <b>scope decision</b> (§03) — trim/extraction in; replace/merge/composite/effects out.</li>
+        <li>The <b>artifact model</b> (§04) — non-destructive, disowned copy via the existing export publish, no manifest change.</li>
+        <li>The <b>execution classification</b> (§05) — Route A/B Future, in-place Rejected — and the paused-playback, ADR-0038-preserving flow.</li>
+        <li>The <b>failure model</b> (§06, safe-by-construction), <b>DualShot single-side rule</b> (§07), and the editing <b>a11y + motion</b> contract.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">NOT owned here (do not design)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The edit affordance itself</b> — whether/where an edit action appears — is <code>player-actions.html</code>. It does not exist today; this spec only defines what it would open.</li>
+        <li><b>The trim engine</b> (keyframe-remux vs transformer) — a <b>new implementation ADR</b>, not chosen in this HTML.</li>
+        <li><b>Any tracked/derived-clip schema</b> — if trimmed clips are ever put back into the session/library graph, that is a <b>separate schema ADR</b>.</li>
+        <li><code>player-sharing</code> (the post-save share), <code>player-info</code>, <code>player-dualshot</code> (angle switching), transport, gestures, states.</li>
+        <li>The <b>full editor</b> (speed/filters/text/transitions/merge) — Parked NO-GO; a different product, not this spec.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">This spec defines the <b>experience</b> of a non-destructive trim so that, <i>if approved</i>, it drops cleanly onto Rova's real grain (new-file publish, no in-place mutation, no schema change). It <b>consumes</b> the resolved artifact (ADR-0037), the leased player (ADR-0038), and the export tiers' session-free publish primitives (not the manifest-writing orchestrators) — and <b>redefines none of them</b>. The editing contract — <b>trim-to-copy only · original never mutated · disowned output via export · single-side DualShot · engine classified Future · replace Rejected</b> — is frozen here; a change routes back through this HTML and is re-approved first. <b>Editing remains PROPOSED and is not buildable from this document alone: it requires a dedicated editing ADR (engine + affordance) and owner sign-off before any Compose work.</b></p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

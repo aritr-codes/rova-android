@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Core (Playback Foundation)</title>
+<style>
+  /* ==================================================================
+     PLAYER-CORE — the token-governed dark over-media SHELL.
+
+     Scope: layout · information hierarchy · chrome · over-media substrate ·
+     token model · typography · spacing · motion · control placement ·
+     timeline placement · top overlay · bottom controls · immersive behavior ·
+     pinned-over-media surfaces · interaction philosophy.
+
+     EXPLICITLY NOT in this document (each gets its own spec):
+       loading · unavailable · retry · gestures · share · keep/discard ·
+       DualShot · angle-swap · fit/fill · overflow actions.
+
+     TOKEN REGISTRY — THREE STRICT FAMILIES (mirrors warnings-recovery.html).
+     The player is legitimately a DARK-ONLY, OVER-MEDIA surface. It does NOT
+     follow the 12-palette like themed hosts. It models on the Trust
+     over-media PINNED precedent: white inks on a near-black substrate,
+     contrast-proven, never per-call-alpha-tuned. This kills the player's
+     current 11 hand-rolled `Color.White.copy(alpha=…)` literals.
+
+       1. OVER-MEDIA INK  — LOCKED. White constants on media. == RovaTrustTokens.
+                            The player never adopts palette surface colors;
+                            that is the pinned contract, not palette-blindness.
+       2. SCRIM + GEOMETRY— player-specific. The two gradient bands that make
+                            chrome legible over ARBITRARY video, plus the
+                            radius/target ladder.
+       3. MOTION + SPACING— shared app vocabulary. == RovaMotion / 4dp grid.
+
+     Registry-complete: tokens with no consumer on this shell are declared
+     and marked, exactly as the sibling specs do for --glass.
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── FAMILY 1 · OVER-MEDIA INK — LOCKED (== RovaTrustTokens.kt) ──
+       These are the SAME white constants the Trust banner + snooze chip use
+       over the viewfinder. The player reuses them verbatim: one contrast
+       contract, one sweep discipline, zero new per-literal alpha tuning. */
+    --media-ink:rgba(255,255,255,.94);      /* RovaTrustTokens.mediaInk — titles, primary glyphs */
+    --media-ink-dim:rgba(255,255,255,.48);  /* mediaInkDim — de-emphasised nav metadata */
+    --media-ink-body:rgba(255,255,255,.55); /* mediaInkBody — the gap chip, tertiary */
+    --media-edge-top:rgba(255,255,255,.12); /* mediaEdgeTop — hairline on pinned glyph fills */
+    /* the pinned-container substrate — reused for any SOLID over-media chip
+       on this surface (the control glyph backing). Gradients (F2) are the
+       band treatment; pinSurface is for discrete pinned pills. */
+    --pin-surface:#0B0D14;                  /* RovaTrustTokens.pinSurface */
+    --pin-container-alpha:.94;              /* pinContainerAlpha → 1.0 under reduce-transparency */
+
+    /* control-glyph fill — the play/pause + speed pinned pill backing.
+       TODAY: literal Color.White.copy(alpha=.10) (PlayerScreen.kt:676,704).
+       This spec REPLACES that literal with a named over-media token. */
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── FAMILY 2 · SCRIM + GEOMETRY (player-specific) ──
+       Two localized gradient BANDS — never a full-frame wash (competitive
+       REJECT: heavy full-frame scrim occludes the hero). The middle of the
+       frame carries NO scrim; the video is the hero there. */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));    /* PlayerScreen.kt:412 */
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));    /* PlayerScreen.kt:490 */
+    --scrim-top-h:96px;      /* top band height (dp) — PlayerScreen.kt:408 */
+    --scrim-bottom-h:auto;   /* bottom band hugs its content, no fixed height */
+
+    /* radius ladder — adopted from library-bento / warnings (one ladder app-wide) */
+    --r-sm:10px;    /* speed chip inner (pill uses --r-pill) */
+    --r-md:14px;    /* n/a on this shell — registry-complete */
+    --r-pill:999px; /* control glyph pills, RovaTokens.pill */
+    --r-bar:2px;    /* timeline bar corner — SegmentedTimeline.kt:207 */
+
+    /* timeline geometry — SegmentedTimeline.kt verbatim */
+    --bar-h:3px;                              /* :206 */
+    --bar-track:rgba(255,255,255,.18);        /* :209 */
+    --bar-fill:rgba(255,255,255,.90);         /* :216 (1.0 while scrubbing) */
+    --bar-fill-scrub:rgba(255,255,255,1);
+    --bar-tick:rgba(255,255,255,.40);         /* boundary tick, 1px :228/:263 */
+
+    /* accent — themed, dark-safe; RovaPalette per-route (default Aurora).
+       The player is deliberately near-MONOCHROME: accent is reserved, not a
+       chrome colour. Declared registry-complete; the only V1 consumer is the
+       focus ring. NO transport control is tinted (competitive: one primary,
+       neutral; colour would fight arbitrary footage). */
+    --accent:#5B9DFF;                         /* RovaPalette.accent (Aurora dark-safe) */
+    --focus-ring:rgba(255,255,255,.90);       /* over-media focus is WHITE, not accent — legible on any frame */
+
+    /* ── FAMILY 3 · MOTION + SPACING (shared, == RovaMotion.kt / 4dp grid) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);      /* RovaMotion.easeStandard */
+    --t-micro:120ms;   /* chipToggleMs */
+    --t-small:200ms;   /* dockShrinkMs — chrome fade */
+    --t-container:300ms; /* containerMs */
+    --t-exit:220ms;    /* exitMs */
+    /* timeline fill is a SPRING, not a duration: RovaMotion.containerSpring()
+       = spring(DampingRatioNoBouncy, stiffness 380). snap() while scrubbing
+       or reduce-motion. Documented here, expressed in Compose, not CSS. */
+
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;  /* RovaTokens 4dp grid */
+    --edge-margin:16px;   /* RovaTokens.screenEdgeMargin */
+    --hair:1px; --focus:2px;
+    --target:48px;        /* RovaTokens.minHitTarget — ADR-0020 §Decision-1 */
+    --glyph:48px;         /* transport pill diameter — PlayerScreen.kt:676 */
+    --glyph-gap:24px;     /* ControlsRow spacedBy — PlayerScreen.kt:664 */
+    --auto-hide:3000ms;   /* AutoHideChromePolicy.DEFAULT_TIMEOUT_MS */
+    --poster-ceiling:1500ms; /* PLAYER_ENTRY_POSTER_MAX_MS */
+  }
+  /* Reduced motion: the ONLY gate. Nothing carries meaning by motion. */
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  /* ── stage controls ── */
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:8px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  /* ── panels ── */
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);
+         border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-adopt{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
+  .swatchbox{display:flex;align-items:center;gap:8px;margin:4px 0}
+  .sw{width:22px;height:22px;border-radius:6px;border:1px solid var(--stage-edge);flex:none}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+
+  /* ============================================================
+     THE SPECIMEN — a real over-media player frame, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;
+         box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  /* faux footage — a muted still so chrome legibility is honestly tested over
+     a MID-tone frame (worst case is bright content; we show a mid grey-blue). */
+  .footage{position:absolute;inset:0;
+    background:
+      radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%);
+  }
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .p-top{position:absolute;left:0;right:0;top:0;height:var(--scrim-top-h);
+         background:var(--scrim-top);display:flex;align-items:flex-end;
+         padding:0 14px 12px;transition:opacity var(--t-small) var(--ease-std)}
+  .p-topbar{display:flex;align-items:center;gap:4px;width:100%}
+  .p-back{width:40px;height:40px;border-radius:var(--r-pill);display:flex;align-items:center;
+          justify-content:center;color:var(--media-ink);flex:none}
+  .p-back svg{width:22px;height:22px}
+  .p-titles{display:flex;flex-direction:column;min-width:0}
+  .p-title{font:600 13px/1.25 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .p-sub{font:400 11px/1.3 inherit;color:var(--media-ink-dim)}
+
+  .p-bottom{position:absolute;left:0;right:0;bottom:0;background:var(--scrim-bottom);
+            padding:16px;display:flex;flex-direction:column;gap:12px;
+            transition:opacity var(--t-small) var(--ease-std)}
+  /* InfoRow */
+  .p-inforow{display:flex;flex-direction:column;gap:4px}
+  .p-info-line1{display:flex;justify-content:space-between;align-items:baseline}
+  .p-info-pos{font:400 11px/1.3 inherit;color:var(--media-ink-dim);font-variant-numeric:tabular-nums}
+  .p-info-clip{font:400 11px/1.3 inherit;color:var(--media-ink);font-variant-numeric:tabular-nums}
+  .p-info-line2{display:flex;justify-content:space-between;align-items:baseline}
+  .p-info-wc{font:400 11px/1.3 inherit;color:var(--media-ink);font-variant-numeric:tabular-nums}
+  .p-info-gap{font:400 10.5px/1.3 inherit;color:var(--media-ink-body);font-variant-numeric:tabular-nums}
+  /* SegmentedTimeline */
+  .p-timeline{height:var(--bar-h);border-radius:var(--r-bar);background:var(--bar-track);
+              position:relative;margin:6px 0 2px}
+  .p-timeline .fill{position:absolute;left:0;top:0;bottom:0;width:42%;border-radius:var(--r-bar);background:var(--bar-fill)}
+  .p-timeline .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--bar-tick)}
+  /* ControlsRow */
+  .p-controls{position:relative;height:48px;display:flex;align-items:center;justify-content:center;gap:var(--glyph-gap)}
+  .p-ib{width:48px;height:48px;border-radius:var(--r-pill);display:flex;align-items:center;
+        justify-content:center;color:var(--media-ink);flex:none}
+  .p-ib svg{width:26px;height:26px}
+  .p-glyph{width:var(--glyph);height:var(--glyph);border-radius:var(--r-pill);
+           background:var(--glyph-fill);display:flex;align-items:center;justify-content:center;color:var(--media-ink)}
+  .p-glyph svg{width:24px;height:24px}
+  .p-speed{position:absolute;right:0;width:48px;height:48px;border-radius:var(--r-pill);
+           background:var(--glyph-fill);display:flex;align-items:center;justify-content:center;
+           font:600 13px/1 inherit;color:var(--media-ink)}
+
+  /* immersive toggle on the specimen */
+  .phone[data-chrome="hidden"] .p-top,
+  .phone[data-chrome="hidden"] .p-bottom{opacity:0;pointer-events:none}
+
+  /* annotation callouts column */
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:104px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Core — the playback foundation</h1>
+  <p class="stagenote">
+    The <b>token-governed, dark, over-media shell</b> every later player spec inherits: layout,
+    information hierarchy, chrome, glass/over-media substrate, typography, spacing, motion, control
+    and timeline placement, immersive behavior, and interaction philosophy. Grounded in
+    <code>rova-player-discovery.md</code> and the current source — <b>not memory</b>. Preserves the
+    ADR-0037 identity backbone, ADR-0038 lifecycle ownership, ADR-0032 wall-clock playhead, the
+    segmented timeline, the NO-autoplay trust rule, and WCAG 2.2 AA by default.
+    This document <b>intentionally excludes</b> loading/unavailable/retry, gestures, share,
+    keep/discard, DualShot, angle-swap, and fit/fill — each is its own spec.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Specimen</span>
+      <button class="tog" id="tChrome" aria-pressed="true" onclick="toggleChrome()">Chrome shown</button>
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <span class="ctllbl" style="color:var(--stage-dim)">Dark-only, over-media · single surface</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 0 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Design principles</h2>
+    <div class="subtle">The foundation. Every later player spec obeys these.</div>
+  </div></div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The ten</div>
+      <ul class="tight">
+        <li><b>Review, not consumption.</b> Deliberate inspection of the user's own footage. Press-to-play, never autoplay. No feed grammar.</li>
+        <li><b>The session timeline is the spine.</b> Continuous scrub + segment ticks + clip-jump is Rova's pro-review edge — the PRIMARY navigation, not the ±seek. Session boundaries are deliberate walls.</li>
+        <li><b>On the token system, honestly dark.</b> The player joins <code>RovaTrustTokens</code>/<code>RovaMotion</code>/4dp-grid. It is a legitimately dark-only, over-media surface — modelled on the Trust pinned precedent, not a second hand-rolled theme. <b>Zero new <code>Color.White.copy(alpha)</code>.</b></li>
+        <li><b>Metadata is navigational and quiet.</b> "Clip N of M · time-of-day" is wayfinding → legible in a quiet overlay; everything else is on demand.</li>
+        <li><b>Immersive by default.</b> The video is the hero; chrome is a guest that arrives on tap and leaves on a timer. Two localized gradient bands, never a full-frame wash.</li>
+        <li><b>Every gesture has a visible control.</b> Onboarding-free. Tap/double-tap are accelerators, never the only path. Seekbar semantics preserved.</li>
+        <li><b>One primary, neutral.</b> Exactly one obvious transport control; no button row of coloured equals. Colour would fight arbitrary footage.</li>
+        <li><b>Respect the physics.</b> No autoplay, no MediaSession, no frame-step, no editor in V1 (Media3 1.4.1 / trust / scope).</li>
+        <li><b>Accessibility is the floor.</b> WCAG 2.2 AA by default, reduced-motion gated, 48dp targets, over-media focus in WHITE.</li>
+        <li><b>Chrome is policy, not hardcode.</b> Visibility runs through <code>AutoHideChromePolicy</code> — TalkBack-suppressed, reduce-motion-gated. The shell renders within it; it never overrides it.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">What this shell fixes</div>
+      <p class="stagenote">The player is the one major screen that <b>opts out</b> of the token system — 3 token
+      references in the whole <code>screens/player/*</code> tree, all in <code>SegmentedTimeline.kt</code>. Chrome is
+      built from <b>11 hand-tuned <code>Color.White.copy(alpha=…)</code></b> literals and <code>Color.Black</code>
+      gradients. Contrast correctness is per-literal, not centrally enforceable.</p>
+      <p class="stagenote">This spec re-expresses the identical visual result on the <b>Trust over-media token family</b> —
+      same white-on-near-black contract already swept by <code>TrustContrastSweepTest</code>. The redesign is a
+      <b>transcription</b>, not a re-plumbing: the ADR-0037/0038/0032 backbone is untouched.</p>
+      <div class="frozen">
+        <div class="caption">Non-negotiable</div>
+        <span class="stagenote">NO autoplay · identity minted by Library and transported whole (ADR-0037) ·
+        resolver fails closed · fresh player per lease + ownership-gated mutation (ADR-0038) · Media3 1.4.1 envelope ·
+        dark-only over-media token model.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 1 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>The specimen — annotated foundation frame</h2>
+    <div class="subtle">Chrome revealed over a mid-tone frame (worst-case legibility short of pure white). Toggle chrome above.</div>
+  </div></div>
+
+  <div class="stageframe">
+    <div class="phone" id="phone" data-chrome="shown">
+      <div class="footage"></div>
+
+      <!-- TOP OVERLAY -->
+      <div class="p-top">
+        <div class="p-topbar">
+          <div class="p-back" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+          </div>
+          <div class="p-titles">
+            <div class="p-title">Tue 7:41 PM</div>
+            <div class="p-sub">12 clips · 6:04 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM PANEL -->
+      <div class="p-bottom">
+        <div class="p-inforow">
+          <div class="p-info-line1">
+            <span class="p-info-pos">2:31 / 0:30 per clip</span>
+            <span class="p-info-clip">Clip 6 of 12</span>
+          </div>
+          <div class="p-info-line2">
+            <span class="p-info-wc">~7:43:12 PM</span>
+            <span class="p-info-gap">+2 min gap</span>
+          </div>
+        </div>
+
+        <div class="p-timeline" aria-hidden="true">
+          <div class="fill"></div>
+          <span class="tick" style="left:8%"></span><span class="tick" style="left:16%"></span>
+          <span class="tick" style="left:25%"></span><span class="tick" style="left:33%"></span>
+          <span class="tick" style="left:42%"></span><span class="tick" style="left:50%"></span>
+          <span class="tick" style="left:58%"></span><span class="tick" style="left:66%"></span>
+          <span class="tick" style="left:75%"></span><span class="tick" style="left:83%"></span>
+          <span class="tick" style="left:91%"></span>
+        </div>
+
+        <div class="p-controls">
+          <div class="p-ib" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/><text x="12" y="15.5" font-size="7" fill="currentColor" stroke="none" text-anchor="middle">10</text></svg>
+          </div>
+          <div class="p-glyph" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <div class="p-ib" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg>
+          </div>
+          <div class="p-speed" aria-hidden="true">1×</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="caption">Anatomy · top → bottom</div>
+      <div class="row"><div class="k">Video surface</div><div class="v">Full-bleed <b>PlayerView (TextureView)</b> on <code>Color.Black</code>. Entry poster (<code>ContentScale.Fit</code>) painted over black until first frame or the <b>1500ms</b> ceiling. Middle of frame carries <b>no scrim</b> — the hero zone.</div></div>
+      <div class="row"><div class="k">Top overlay</div><div class="v"><b>96dp</b> band, <code>--scrim-top</code> (black .82→0). Back (40dp glyph, 48dp target) + two stacked titles: primary <b>date/time</b> (<code>--media-ink</code>) · sub <b>"N clips · total"</b> (<code>--media-ink-dim</code>). Quiet, navigational, nothing more.</div></div>
+      <div class="row"><div class="k">InfoRow</div><div class="v">Two lines, 4dp gap. L1: position <code>--media-ink-dim</code> · <b>Clip N of M</b> <code>--media-ink</code>. L2: <b>wall-clock</b> time-of-day <code>--media-ink</code> · gap chip <code>--media-ink-body</code>. Tabular-nums.</div></div>
+      <div class="row"><div class="k">Timeline</div><div class="v"><b>The spine.</b> 3dp bar, 2dp radius, track .18 / fill .90 (1.0 scrubbing), 1px boundary ticks at .40. Fill animates on <code>containerSpring()</code>; <code>snap()</code> while scrubbing or reduce-motion.</div></div>
+      <div class="row"><div class="k">Controls</div><div class="v"><b>Bottom-anchored cluster</b>, 24dp gaps. −10s · <b>play/pause</b> (48dp pinned pill, <code>--glyph-fill</code>) · +10s. Speed chip pinned to <code>CenterEnd</code> (48dp, cycles 0.5×→2×). One neutral primary; no colour.</div></div>
+      <div class="row"><div class="k">Scrims</div><div class="v">Two localized bands only (<code>--scrim-top</code> / <code>--scrim-bottom</code>). Never a full-frame wash — the video stays the hero (competitive REJECT).</div></div>
+    </div>
+  </div>
+
+  <div class="frozen">
+    <div class="caption">Frozen rationale — bottom cluster, not center-frame transport</div>
+    <span class="stagenote">Apple Photos moved play/pause to <b>center-frame</b>. Rova deliberately keeps the transport
+    <b>bottom-anchored, clustered with the timeline</b> (closer to Google Photos / Blackmagic). Reason: the
+    <b>segmented timeline is the spine</b>, and controls belong beside their scrubber; the <b>center frame is reserved</b>
+    for the tap-toggle target and the double-tap seek zones (defined in <code>player-gestures.html</code>), which must stay
+    unobstructed. A persistent center button would collide with those zones and occlude the hero. One primary,
+    near-monochrome, beside the spine.</span>
+  </div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Token registry — three locked families</h2>
+    <div class="subtle">The split IS the contract. Compose mirrors it. Values verbatim from <code>RovaTrustTokens.kt</code> / <code>RovaMotion.kt</code> / <code>SegmentedTimeline.kt</code>.</div>
+  </div></div>
+
+  <div class="grid3">
+    <div class="panel">
+      <div class="caption">1 · Over-media ink — LOCKED</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.94)"></span><code>--media-ink</code> · white .94</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.48)"></span><code>--media-ink-dim</code> · white .48</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.55)"></span><code>--media-ink-body</code> · white .55</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.12)"></span><code>--media-edge-top</code> · white .12</div>
+      <div class="swatchbox"><span class="sw" style="background:#0B0D14"></span><code>--pin-surface</code> · #0B0D14</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.10)"></span><code>--glyph-fill</code> · white .10</div>
+      <p class="subtle" style="margin-top:8px">Reused verbatim from the Trust banner + snooze chip. One contrast contract, already swept.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">2 · Scrim + geometry</div>
+      <div class="swatchbox"><span class="sw" style="background:linear-gradient(180deg,rgba(0,0,0,.82),transparent)"></span><code>--scrim-top</code> · 96dp band</div>
+      <div class="swatchbox"><span class="sw" style="background:linear-gradient(0deg,rgba(0,0,0,.90),transparent)"></span><code>--scrim-bottom</code> · content-hug</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.18)"></span><code>--bar-track</code> · .18</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.90)"></span><code>--bar-fill</code> · .90 (1.0 scrub)</div>
+      <div class="swatchbox"><span class="sw" style="background:rgba(255,255,255,.40)"></span><code>--bar-tick</code> · .40</div>
+      <p class="subtle" style="margin-top:8px">Radii: <code>--r-pill</code> 999 · <code>--r-bar</code> 2 · <code>--r-sm</code> 10.
+      Bar 3dp. Two bands, never a wash.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">3 · Motion + spacing</div>
+      <div class="swatchbox"><code>--ease-std</code> · cubic-bezier(.2,.8,.2,1)</div>
+      <div class="swatchbox"><code>--t-micro</code> 120 · <code>--t-small</code> 200</div>
+      <div class="swatchbox"><code>--t-container</code> 300 · <code>--t-exit</code> 220</div>
+      <div class="swatchbox">timeline fill = <code>containerSpring()</code> (NoBouncy, 380)</div>
+      <div class="swatchbox">grid <code>--s1..--s6</code> = 4·8·12·16·20·24</div>
+      <div class="swatchbox"><code>--target</code> / <code>--glyph</code> · 48 · <code>--glyph-gap</code> 24</div>
+      <div class="swatchbox"><code>--auto-hide</code> 3000 · poster ceiling 1500</div>
+      <p class="subtle" style="margin-top:8px"><code>--accent</code> reserved (only V1 consumer = focus ring, which over-media is <b>white</b>, not accent).</p>
+    </div>
+  </div>
+
+  <div class="warnbox">
+    <div class="caption">Migration note — literal → token</div>
+    <span class="stagenote">Each current <code>Color.White.copy(alpha=…)</code> maps to the <b>nearest locked over-media ink</b>,
+    a transcription with negligible visual delta. The current literals and their targets:</span>
+    <table style="margin-top:10px">
+      <thead><tr><th>Current literal</th><th>Site</th><th>Token target</th><th>Δ</th></tr></thead>
+      <tbody>
+        <tr><td>white .88</td><td>top-bar title (:436)</td><td><code>--media-ink</code> (.94)</td><td>+.06 (AA-raise, like the Trust banner)</td></tr>
+        <tr><td>white .72</td><td>sub-title (:460, already AA-lifted from .45)</td><td><code>--media-ink</code> family</td><td>rides locked ink; no per-literal tuning</td></tr>
+        <tr><td>white .45</td><td>InfoRow position (:551)</td><td><code>--media-ink-dim</code> (.48)</td><td>+.03 (imperceptible)</td></tr>
+        <tr><td>white .55</td><td>gap chip (:637)</td><td><code>--media-ink-body</code> (.55)</td><td>0 (verbatim)</td></tr>
+        <tr><td>white .10</td><td>glyph fills (:676,:704)</td><td><code>--glyph-fill</code> (.10)</td><td>0 (verbatim)</td></tr>
+        <tr><td>track .18 / fill .90 / tick .40</td><td>timeline</td><td><code>--bar-*</code></td><td>0 (verbatim)</td></tr>
+      </tbody>
+    </table>
+    <span class="stagenote" style="display:block;margin-top:8px">After migration, contrast is verified <b>centrally</b> against a
+    scrim-composite pin (§07) instead of hand-tuned per literal — <b>one</b> place enforces it, not eleven.</span>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Layout &amp; information hierarchy</h2>
+    <div class="subtle">Three zones. The middle is sacred.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Zone</th><th>Carries</th><th>Ink</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><b>Top overlay</b> (96dp)</td><td>Back · primary date/time · "N clips · total"</td><td>ink / ink-dim</td><td>Quiet wayfinding only. No actions beyond Back in <i>core</i> (share/overflow arrive in <code>player-actions</code>).</td></tr>
+      <tr><td><b>Hero</b> (middle)</td><td>The video</td><td>—</td><td><b>No scrim, no persistent chrome.</b> Tap target + double-tap zones live here (gestures spec). Never occlude.</td></tr>
+      <tr><td><b>Bottom panel</b></td><td>InfoRow → SegmentedTimeline → ControlsRow</td><td>ink / ink-dim / ink-body</td><td>Order fixed. Timeline is the spine, sandwiched by its readout (above) and its transport (below).</td></tr>
+    </tbody>
+  </table>
+  <p class="stagenote" style="margin-top:12px"><b>Information priority (loudest → quietest):</b>
+  Clip N of M &amp; timeline position (navigational, <code>--media-ink</code>) → date/time &amp; wall-clock (context, ink) →
+  per-clip length &amp; gap chip (detail, ink-dim/body). Nothing floats mid-frame; everything competes for the edges only
+  (Blackmagic/Kino principle). Load-bearing metadata is <b>navigational</b> — where am I in the session — so it earns the
+  brightest ink; decorative detail recedes.</p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Chrome &amp; immersive behavior</h2>
+    <div class="subtle">Rendered <i>within</i> <code>AutoHideChromePolicy</code>. This shell never overrides the policy.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Visibility rules</div>
+      <ul class="tight">
+        <li><b>Immersive by default.</b> Chrome present on entry, then auto-hides <b>3000ms</b> after playback starts.</li>
+        <li><b>Tap toggles</b> both bands together (fade <code>--t-small</code> 200ms, <code>--ease-std</code>). Reduce-motion → instant, no fade.</li>
+        <li><b>Chrome persists while paused</b> — a stopped frame is a decision point, not immersive playback.</li>
+        <li><b>Scrubber is last to hide / first to show</b> — the spine outlives the transport glyphs (competitive ADOPT).</li>
+        <li><b>TalkBack suppresses auto-hide entirely</b> — removing a focused control traps focus (existing policy, preserved).</li>
+        <li>Both bands are one visibility unit; they never desync.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Substrate — how chrome stays legible over ANY frame</div>
+      <ul class="tight">
+        <li>Two <b>localized gradient bands</b> (top .82→0 · bottom .90→0), never a full-frame wash.</li>
+        <li>Over-media text uses the <b>locked white ink family</b>, modelled on the Trust over-media <b>sweep discipline</b>. Caveat: the shipped <code>TrustContrastSweepTest</code> proves these inks against <i>opaque</i> pinned surfaces — it does <b>not</b> cover a translucent scrim over arbitrary (worst-case bright) video, nor the faded gradient edges. So this shell requires a <b>new scrim-composite worst-case pin</b> (§07), mirroring how <code>TokenContrastTest</code> already proves <code>mediaProgress</code> against the bento scrim composite. Contrast is <i>modelled on</i> the sweep, then <i>proven</i> by that pin — not assumed.</li>
+        <li>Discrete pinned pills (the transport glyph backing) use <code>--glyph-fill</code> over the band, mirroring the Trust snooze-chip pinned model.</li>
+        <li>Under OS <b>reduce-transparency</b>, pinned pill alpha → 1.0 (RovaTrustTokens.pinContainerAlphaFor), same as the Trust surfaces.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Controls &amp; timeline placement</h2>
+    <div class="subtle">Exact geometry — transcribed from the current build, re-tokenised.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Element</th><th>Size / target</th><th>Backing</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>−10s / +10s</td><td>48dp target, 26dp glyph</td><td>none (ghost)</td><td><code>Replay10</code>/<code>Forward10</code>. ±10s (<code>SEEK_DELTA_MS</code>). Increment reconciliation vs double-tap deferred to <code>player-gestures</code>.</td></tr>
+      <tr><td><b>Play / Pause</b> (primary)</td><td>48dp pinned pill</td><td><code>--glyph-fill</code></td><td>The one primary. Center of the <i>cluster</i> (not center of frame). <code>PlayerIconSpec.transportGlyph</code>.</td></tr>
+      <tr><td>Speed chip</td><td>48dp pill, <code>CenterEnd</code></td><td><code>--glyph-fill</code></td><td>Cycles 0.5×→1×→1.5×→2×. Session-only, resets on open. Label "%d×"/"%.1f×" locale-aware.</td></tr>
+      <tr><td><b>Segmented timeline</b></td><td>3dp bar · 48dp hit target</td><td>track .18</td><td>Above the controls. Ticks at every segment boundary. Drag-scrub + clip-jump defined in <code>player-gestures</code>; <i>placement</i> frozen here.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen — one primary, neutral, beside the spine</div>
+    <span class="stagenote">The transport row is <b>near-monochrome</b>: no severity/accent colour on any control. Colour on a
+    transport glyph would fight arbitrary footage and imply a state the control doesn't carry. The single filled pill
+    (<code>--glyph-fill</code>) is the only visual weight; ±10s stay ghosts; the speed chip is a demoted peer pinned to the
+    end. This is the "one primary + demoted secondaries" rule (competitive ADOPT).</span>
+  </div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Motion</h2>
+    <div class="subtle">One vocabulary, app-wide (<code>RovaMotion.kt</code>). Reduce-motion is the only gate.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Motion</th><th>Spec</th><th>Reduce-motion</th></tr></thead>
+    <tbody>
+      <tr><td>Chrome fade (both bands)</td><td><code>--t-small</code> 200ms · <code>--ease-std</code></td><td>instant toggle, no fade</td></tr>
+      <tr><td>Timeline fill advance</td><td><code>containerSpring()</code> — spring(NoBouncy, 380)</td><td><code>snap()</code> (also while scrubbing)</td></tr>
+      <tr><td>Entry poster → first frame</td><td>cross to live frame on <code>onRenderedFirstFrame</code> or 1500ms ceiling</td><td>no fade, hard cut at first frame</td></tr>
+      <tr><td>Control press</td><td><code>--glyph-fill</code> → <code>--glyph-fill-press</code>, <code>--t-micro</code> 120ms</td><td>instant state</td></tr>
+    </tbody>
+  </table>
+  <p class="stagenote" style="margin-top:12px"><b>Nothing on this shell carries meaning by motion.</b> Every animated affordance
+  has a static equivalent; disabling motion never removes information. No motion that competes with the footage
+  (quiet background recordings — chrome motion IS the distraction).</p>
+</section>
+
+<!-- ============================================================ 7 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Accessibility</h2>
+    <div class="subtle">The floor, not a pass. WCAG 2.2 AA by default (ADR-0020).</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Preserved (already strong)</div>
+      <ul class="tight">
+        <li>Play/pause + speed = <code>Role.Button</code>, 48dp, dynamic content descriptions.</li>
+        <li>Seekbar fully instrumented: <code>progressBarRangeInfo</code>, <code>stateDescription</code>, <code>setProgress</code>, prev/next <code>customActions</code>, throttled polite live-region, decorative ticks cleared.</li>
+        <li>Auto-hide suppressed under TalkBack.</li>
+        <li>Over-media focus indicator is <b>white</b> (<code>--focus-ring</code>), legible on any frame — not the accent.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Required by this shell</div>
+      <ul class="tight">
+        <li>Every gesture has a visible on-screen control (gestures are accelerators).</li>
+        <li>Top title + sub-title <b>grouped</b> into one semantic node (currently ungrouped).</li>
+        <li>All over-media ink pairs must clear AA against the <b>worst-case band composite over bright footage</b> — proven by a <b>new scrim-composite contrast pin</b> (the <code>TokenContrastTest</code>/<code>mediaProgress</code> precedent: a token asserted against a scrim composite, ×palettes), not by per-literal tuning and not by borrowing the opaque-surface Trust sweep. The dimmed inks (<code>--media-ink-dim</code> .48, <code>--media-ink-body</code> .55) are the ones to pin, since they sit where the gradient has faded.</li>
+        <li>48dp minimum targets on every interactive glyph (<code>--target</code>).</li>
+        <li><i>(Loading/Unavailable live-region announcements &amp; reactive touch-exploration are owned by <code>player-states.html</code> — out of core scope, flagged here for continuity.)</i></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 8 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Responsive behavior</h2>
+    <div class="subtle">Phone-first, portrait. Landscape/fullscreen is rejected in V1 (backlog §5.4).</div>
+  </div></div>
+  <ul class="tight">
+    <li><b>Video</b>: full-bleed, <code>ContentScale.Fit</code> for the poster; the surface letterboxes the footage's own aspect (4:3 DualShot / merged 9:16). Fit/fill toggle is a <b>separate spec</b> — core assumes Fit.</li>
+    <li><b>Chrome bands</b>: full-width; padding on the 16dp edge margin (<code>--edge-margin</code>). Top band fixed 96dp; bottom band hugs content height.</li>
+    <li><b>Insets</b>: bands extend under the status/nav bars (edge-to-edge, bottom nav hidden); interactive content stays inside safe insets.</li>
+    <li><b>Small heights</b>: the three bottom children never wrap or overlap the hero; on very short screens the InfoRow's second line (wall-clock) is the first to be de-prioritised — but core assumes a standard phone.</li>
+    <li><b>No landscape layout</b> in V1; orientation stays portrait-locked for the player route (rejected-set, evaluated 2026-06-20).</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 9 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Implementation notes (for the later Compose transcription)</h2>
+    <div class="subtle">Non-binding until freeze; captures the transcription intent.</div>
+  </div></div>
+  <ul class="tight">
+    <li><b>Token migration is the deliverable.</b> Replace the 11 <code>Color.White.copy(alpha)</code> literals + <code>Color.Black</code> gradients in <code>PlayerScreen.kt</code> with the F1/F2 tokens (mapping table §02). Same rendered pixels.</li>
+    <li><b>Add the scrim-composite contrast pin</b> (§07): a pure JVM test asserting <code>--media-ink-dim</code>/<code>--media-ink-body</code> clear AA over the worst-case band-over-bright-video composite — modelled on <code>TokenContrastTest.mediaProgress</code>. This is the shell's contrast guarantee; do NOT reuse the opaque-surface Trust sweep as the proof.</li>
+    <li><b>Backbone untouched.</b> <code>PlayerViewModel</code>, <code>PlayerEngine</code>/<code>Ledger</code> (ADR-0038), <code>PlayerUriResolver</code> (ADR-0037), <code>WallClockTimeline</code>/<code>SegmentedTimelineMath</code> (ADR-0032) — read-only. This is chrome only.</li>
+    <li><b>Delete the dead docstrings</b> — the phantom "5-button row (Trim, −10s, Play, +10s, Edit)" at <code>PlayerScreen.kt:90-98</code> / <code>PlayerViewModel.kt:57-60</code> describes a UI that does not exist. Remove during transcription so the next designer isn't misled.</li>
+    <li>The route already wraps in <code>RovaDarkSurface</code> + pinned <code>LocalGlassEnvironment</code> but <code>PlayerScreen</code> never consumes it — wire the shell to actually read the pinned environment instead of re-deriving black.</li>
+    <li>Chrome show/hide stays behind <code>AutoHideChromePolicy</code>; do not hardcode timing in the composable.</li>
+    <li>Over-media contrast pins go into the existing sweep test family (no new gate — protection = pure token/contrast JVM tests, per the ADR-0036/0038 precedent).</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Frozen boundary — what core does NOT decide</h2>
+    <div class="subtle">These inherit this shell; they do not reopen it.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Later spec</th><th>Inherits from core</th><th>Decides</th></tr></thead>
+    <tbody>
+      <tr><td><code>player-states</code></td><td>ink family, band substrate, a11y floor</td><td>Loading (real motion) · Unavailable per-cause + Retry · resume affordance · live-region announcements · runtime Ready→Unavailable flip.</td></tr>
+      <tr><td><code>player-gestures</code></td><td>hero zone, timeline placement, tap-toggle</td><td>double-tap ±seek (increment reconciliation) · drag-scrub detail · simple swipe-down dismiss · visible fallbacks.</td></tr>
+      <tr><td><code>player-actions</code></td><td>top overlay slot, control grammar</td><td>share-from-player (vault-suppressed) · inline keep/mark-for-discard → recovery/trust pipeline · overflow.</td></tr>
+      <tr><td><code>player-dualshot</code></td><td>identity display, top overlay</td><td>angle-swap at same timestamp — <b>gated on the RK3 minter-contract decision (settled in discovery, not here)</b>. Control behavior for single/kept-raw.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="frozen">
+    <div class="caption">This document is the canonical foundation for all player work.</div>
+    <span class="stagenote">Once frozen: no visual or interaction redesign of the shell except via HTML-first re-approval. Later
+    specs layer on top; they never redraw the token model, the three-zone layout, the immersive policy, or the
+    control/timeline placement established here. Any change routes back through this HTML first.</span>
+  </div>
+
+  <p class="subtle" style="margin-top:18px">Authored from <code>rova-player-discovery.md</code> + current source (read-only) + a
+  focused 2024–2026 playback-interaction study (Google Photos · Apple Photos · Samsung Gallery · Blackmagic Camera · Kino).
+  Repository unchanged apart from this file. Next in the pipeline — critique → freeze → <code>player-states.html</code> — pending owner go-ahead.</p>
+</section>
+
+</div>
+
+<script>
+  function toggleChrome(){
+    var p=document.getElementById('phone'), b=document.getElementById('tChrome');
+    var shown=p.getAttribute('data-chrome')==='shown';
+    p.setAttribute('data-chrome', shown?'hidden':'shown');
+    b.setAttribute('aria-pressed', String(!shown));
+    b.textContent = shown ? 'Chrome hidden' : 'Chrome shown';
+  }
+  function toggleRm(){
+    var b=document.getElementById('tRm');
+    var on=document.documentElement.getAttribute('data-rm')==='1';
+    document.documentElement.setAttribute('data-rm', on?'0':'1');
+    b.setAttribute('aria-pressed', String(!on));
+  }
+</script>
+</body>
+</html>

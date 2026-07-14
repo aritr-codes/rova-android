@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Accessibility</title>
+<style>
+  /* ==================================================================
+     PLAYER-ACCESSIBILITY — the canonical ACCESSIBILITY CONTRACT.
+     The FINAL Player specification. It UNIFIES the eight frozen Player
+     specs into ONE accessibility system, so every Player surface behaves
+     as one coherent whole instead of eight independent a11y sections.
+
+     LAYERS ON (all FROZEN / FROZEN-CANDIDATE, read-only, not reopened):
+       player-core · player-states · player-gestures · player-actions ·
+       player-sharing · player-info · player-editing · player-dualshot.
+
+     It DOES NOT add accessibility FEATURES and it DOES NOT redesign
+     layout, playback, gestures, actions, sharing, info, editing,
+     DualShot, transport, or states. Each of those specs already carries
+     its own a11y section; THIS document is the invariant those sections
+     are instances of — the floor, the tree, the focus model, the
+     live-region ownership rule, the large-text/scaling/contrast/caption
+     policy — stated once, grounded in real source.
+
+     Backbone PRESERVED, read-only (accessibility requires NONE of them to
+     change): ADR-0037 identity · ADR-0038 lifecycle · ADR-0032 wall-clock
+     · ADR-0025 vault. NO backend work · NO schema change · NO MediaSession
+     · NO Media3 change (Media3 pinned 1.4.1). ADR-0020 "WCAG 2.2 AA by
+     default" is the standing requirement this contract expresses.
+
+     GROUND TRUTH (verified by a repo fact-sweep + an independent source
+     audit — file:line, NOT memory):
+
+     A. THE PLAYER'S TWO a11y-BEARING COMPOSABLES.
+        Only PlayerScreen.kt and SegmentedTimeline.kt carry UI semantics
+        (ui/screens/player/). Everything else in that package is pure/
+        policy/state (PlayerUiState, PlayerViewModel, PlayerEngine[Ledger],
+        PlayerUriResolver, *Math, *Policy…). No ui/player/ exists.
+
+     B. SHIPPED SEMANTICS (what is already strong).
+        - Video surface: contentDescription=showControlsCd + role=Role.Button
+          + onClick (PlayerScreen.kt:353-357).
+        - Back / −10s / +10s: Material IconButton (Role.Button + 48dp default)
+          with SemanticIcon CDs player_back_cd / player_rewind_cd /
+          player_forward_cd (PlayerScreen.kt:424-430, 667-673, 690-696).
+        - Play/Pause: Surface(onClick) (supplies Role.Button), .size(48.dp),
+          .semantics{contentDescription=playPauseCd} where playPauseCd swaps
+          player_play_cd / player_pause_cd (PlayerScreen.kt:674-689, 652-656).
+          Inner glyph CD = null (decorative; parent Surface carries it, :685).
+        - Speed chip: Surface(onClick), .size(48.dp),
+          .semantics{contentDescription=speedCd} (announces current speed)
+          (PlayerScreen.kt:702-719, 659).
+        - Wall-clock readout: display-only Text, .semantics{cd=cdText}, no
+          role by intent (PlayerScreen.kt:623-628, note :575).
+        - Scrub bar (SegmentedTimeline.kt:165-181): contentDescription=
+          player_timeline_cd, stateDescription="Segment i of n, mm:ss"
+          (player_timeline_state), progressBarRangeInfo(current=pos, 0f..total),
+          setProgress{→onSeek}, customActions = prev/next segment. Role
+          implied by progressBarRangeInfo. heightIn(min=RovaTokens.minHitTarget)
+          (:126). Decorative ticks/fill removed via clearAndSetSemantics{}
+          (:208).
+        - Auto-hide is SUPPRESSED while TalkBack touch-exploration is active
+          (PlayerScreen.kt:272-294, reads isTouchExplorationEnabled) — a
+          focused control is never removed out from under the reader.
+
+     C. THE ONE LIVE REGION.
+        Exactly ONE liveRegion in the whole Player: SegmentedTimeline.kt:
+        250-253, LiveRegionMode.Polite, announcing SEGMENT-INDEX changes only
+        (player_timeline_segment_playing, throttled to index changes :239-254).
+        There is NO live region for scrub position, elapsed time, playback
+        playing/paused/buffering, Loading, Ready, or Unavailable. (states §08
+        REQUIRES adding Loading/Ready polite + Unavailable ASSERTIVE — those
+        are its instances of THIS contract's §05.)
+
+     D. WHAT IS ABSENT (grounded absence findings — the contract's targets).
+        - NO mergeDescendants / isTraversalGroup / traversalIndex / heading()
+          / disabled() / selected / toggleableState ANYWHERE in Player.
+          → focus order is implicit composition order; the top title+sub-title
+          are two ungrouped nodes (core §07 flagged this).
+        - NO FocusRequester / .focusable / focusRestorer / dismiss in Player.
+          → sheets (info/sharing/editing) are PROPOSED; their focus-trap +
+          return-focus is a contract obligation, not shipped code.
+        - NO playing/paused/buffering stateDescription anywhere (state rides
+          the swapped play/pause CD, not a stateDescription).
+        - Prev/Next segment exist ONLY as customActions on the bar — there are
+          no dedicated on-screen segment buttons.
+        - Double-tap ±10s is TalkBack-INVISIBLE by design (PlayerScreen.kt:
+          337-339) but is MIRRORED by the visible ±10s IconButtons (the
+          non-gesture path — gestures §10).
+
+     E. THE SEAMS (already in the codebase — reused verbatim, not invented).
+        - Reduced MOTION: ui/components/ReducedMotion.kt, rememberReduceMotion()
+          (:47-49). Consumed by Player: PlayerScreen.kt:264 (gates chrome
+          AnimatedVisibility :402-403,:480-481) + SegmentedTimeline.kt:191
+          (gates playhead glide → snap :197). This is the single motion gate.
+        - Reduced TRANSPARENCY: ui/components/ReducedTransparency.kt,
+          rememberReduceTransparency() (:58) + RovaTrustTokens.pinContainerAlphaFor.
+          Player does NOT consume it today — its scrims are hard-coded
+          Color.Black.copy(alpha) (PlayerScreen.kt:412-413,:489-490). Gap named
+          in §09 (the Trust banner/snooze chip DO consume it — WarningTopBanner.kt
+          :105, WarningSnoozeChip.kt:113).
+
+     F. THE GATES (build-logic/…/RovaGateRules_A11yI18n.kt).
+        - ruleA11yAnimationGated (:154): any infinite animation
+          (rememberInfiniteTransition/infiniteRepeatable) MUST co-locate
+          rememberReduceMotion()/ReducedMotion.isReduced (SC 2.3.3/2.2.2).
+        - ruleA11yClickableHasRole (:211): .clickable/.combinedClickable
+          requires role=Role. in a −15..+20 window; GlassRole doesn't satisfy;
+          Button/IconButton exempt (SC 4.1.2).
+        - ruleA11yTargetSizeToken (:274): a curated set of size tokens must be
+          >= minTargetDp = 24.0 (SC 2.5.8). NOTE: NO Player token is in the set;
+          Player targets are inline .size(48.dp) + IconButton default +
+          RovaTokens.minHitTarget = 48.dp (RovaTokens.kt:31). Contract §06/§07
+          notes the gate does not currently guard the Player's inline targets.
+
+     G. CONTRAST TESTS.
+        THREE exist. TokenContrastTest.kt (RecordChrome + SettingsSheet, SC
+        1.4.3) and TrustContrastSweepTest.kt (Trust, 2808 assertions) do NOT
+        cover the Player. OverlayContrastTest.kt DOES partially cover it:
+        :57-70 asserts the "player subtitle (0.72)" white alpha clears 4.5:1
+        and :72-81 the "play-button fill" (0.35) clears 3:1 — but ONLY over a
+        FIXED dark-scene reference #0E1216 (:24), and its own KDoc (:13-20)
+        states "alpha alone can't guarantee AA over arbitrarily bright
+        footage." So the residual gap is NOT "untested" — it is "no
+        WORST-CASE-BRIGHT / scrim-composite pin." The other inline white alphas
+        (.45/.55/.88, PlayerScreen.kt:436,460,561,626,637,715) are untested.
+        core §07 already REQUIRES a new scrim-composite pin; §09 makes it the
+        single remaining Player contrast obligation, extending
+        OverlayContrastTest's dark-ref model to the band-over-bright-video
+        composite.
+
+     H. CAPTIONS / TRANSCRIPT.
+        ZERO caption/subtitle machinery in the app: no SubtitleView, no
+        SubtitleConfiguration, no Media3 text track, no closed-caption path
+        (only media3-exoplayer + media3-ui on the classpath). Recordings carry
+        an AUDIO track (live-capture AudioRecord) but NO authored caption/
+        subtitle track and no ASR. §10 states the honest policy; it is not
+        designed-around.
+
+     Sources above + accessibility-principle research (Android TalkBack /
+     Switch Access / Voice Access docs, WCAG 2.2, Material a11y — principles
+     only, no visual copying).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --focus-ring:rgba(255,255,255,.90);   /* over-media focus is WHITE (player-core), legible on any frame */
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;   /* RovaTokens.minHitTarget — ADR-0020 */
+
+    /* ── NO NEW accessibility tokens are introduced. ──
+       This is a CONTRACT, not new UI. It reuses the inherited over-media
+       ink, the white focus ring, the 48dp target, and the two existing
+       seams (rememberReduceMotion / rememberReduceTransparency). Anything
+       that would need a NEW token or NEW backend is routed through the
+       owning surface spec first, gated behind that surface's ADR. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     ACCESSIBILITY SPECIMEN — NOT a new-UI mockup. It renders the
+     EXISTING player chrome (the shipped controls) and overlays the
+     three cross-surface a11y models this contract owns:
+       focus  — the linear TalkBack/D-pad traversal order (numbered)
+       live   — the live-region ownership map (who speaks, how loud)
+       scale  — the frame at fontScale 2.0 (text grows, targets don't)
+     Everything shown is grounded in source; nothing invents an
+     affordance. Toggle the layers above.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+  .ctop{position:absolute;left:0;right:0;top:0;height:80px;background:var(--scrim-top)}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:170px;background:var(--scrim-bottom)}
+
+  /* shipped chrome, drawn to scale */
+  .topbar{position:absolute;left:12px;right:12px;top:14px;display:flex;align-items:center;gap:10px}
+  .gbtn{width:34px;height:34px;border-radius:var(--r-pill);background:var(--glyph-fill);
+        border:1px solid var(--media-edge-top);flex:none;position:relative}
+  .titles{flex:1;min-width:0}
+  .titles .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .titles .t2{font:500 10px/1.2 inherit;color:var(--media-ink-dim)}
+  .bar{position:absolute;left:16px;right:16px;bottom:96px;height:3px;border-radius:var(--r-bar);
+       background:rgba(255,255,255,.18)}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;width:46%;background:rgba(255,255,255,.90);border-radius:var(--r-bar)}
+  .bar .tick{position:absolute;top:-1px;width:1px;height:5px;background:rgba(255,255,255,.40)}
+  .transport{position:absolute;left:0;right:0;bottom:40px;display:flex;justify-content:center;align-items:center;gap:22px}
+  .tg{width:40px;height:40px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:center;
+      color:var(--media-ink);font:600 12px/1 inherit;position:relative}
+  .tg.prim{background:var(--glyph-fill);border:1px solid var(--media-edge-top)}
+  .tg.ghost{color:var(--media-ink-body)}
+  .speed{position:absolute;right:16px;bottom:44px;width:34px;height:34px;border-radius:var(--r-pill);
+         background:var(--glyph-fill);border:1px solid var(--media-edge-top);display:flex;align-items:center;justify-content:center;
+         font:600 10px/1 inherit;color:var(--media-ink);position:absolute}
+
+  /* focus badges (data-a=focus) */
+  .fbadge{position:absolute;z-index:5;min-width:17px;height:17px;padding:0 3px;border-radius:9px;
+          background:var(--stage-accent);color:var(--stage-ink);font:700 10px/17px inherit;text-align:center;
+          box-shadow:0 0 0 2px rgba(11,13,20,.7);display:none}
+  .phone[data-a="focus"] .fbadge{display:block}
+  .phone[data-a="focus"] .focusring{display:block}
+  .focusring{display:none;position:absolute;border:2px solid var(--focus-ring);border-radius:var(--r-pill);
+             pointer-events:none;z-index:4}
+
+  /* live-region callouts (data-a=live) */
+  .live{display:none}
+  .phone[data-a="live"] .live{display:block}
+  .lchip{position:absolute;z-index:6;font:600 8.5px/1.2 inherit;padding:3px 6px;border-radius:6px;white-space:nowrap;
+         border:1px solid}
+  .lchip.polite{background:color-mix(in srgb,var(--stage-accent) 16%,rgba(11,13,20,.85));
+        border-color:color-mix(in srgb,var(--stage-accent) 45%,transparent);color:#bcd8ff}
+  .lchip.assert{background:color-mix(in srgb,var(--fail) 16%,rgba(11,13,20,.85));
+        border-color:color-mix(in srgb,var(--fail) 45%,transparent);color:#ffb0b0}
+  .lchip.none{background:rgba(11,13,20,.85);border-color:var(--media-edge-top);color:var(--media-ink-dim)}
+
+  /* large-text layer (data-a=scale) — text grows, dp targets do not */
+  .phone[data-a="scale"] .titles .t1{font-size:20px;white-space:normal;line-height:1.15}
+  .phone[data-a="scale"] .titles .t2{font-size:17px;line-height:1.15}
+  .phone[data-a="scale"] .tg{font-size:19px}
+  .phone[data-a="scale"] .speed{font-size:16px}
+  .scaleflag{display:none}
+  .phone[data-a="scale"] .scaleflag{display:block;position:absolute;left:12px;right:12px;bottom:150px;
+        font:600 9px/1.3 inherit;color:var(--note);background:rgba(11,13,20,.8);
+        border:1px solid color-mix(in srgb,var(--note) 40%,transparent);border-radius:8px;padding:6px 8px}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Accessibility — the contract that makes eight specs one system</h1>
+  <p class="stagenote">
+    This is the <b>final</b> Player specification and it is a <b>contract, not a feature set</b>. Every earlier Player
+    spec already carries its own accessibility section; left alone, that is <b>eight independent a11y sections</b> that
+    can drift, double-speak, or disagree. This document states the <b>one</b> accessibility system they are all instances
+    of — the semantic <b>tree</b>, the single <b>focus order</b>, the <b>live-region ownership</b> rule that stops two
+    nodes talking over each other, and the <b>large-text · scaling · contrast · caption · motion · transparency</b>
+    policy — grounded in the real composables (<code>PlayerScreen.kt</code>, <code>SegmentedTimeline.kt</code>) and the
+    two real seams (<code>rememberReduceMotion</code>, <code>rememberReduceTransparency</code>). It <b>adds no
+    accessibility feature and redesigns no surface</b>: it names what is shipped, what is a grounded gap, and what each
+    later spec must satisfy. It preserves ADR-0037/0038/0032/0025 and requires <b>no backend, no schema change, no
+    MediaSession, no Media3 change</b>. WCAG 2.2 AA (ADR-0020) is the floor, not a pass.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">A11y model</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('focus',this)">Focus order</button>
+        <button class="tog" aria-pressed="false" onclick="setA('live',this)">Live regions</button>
+        <button class="tog" aria-pressed="false" onclick="setA('scale',this)">Large text ×2</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Model &amp; boundary — one system, stated once</h2>
+    <div class="subtle">What this contract is, what it is emphatically not, and the backbone it may not touch.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The model in one line</div>
+      <p style="margin:0 0 8px">Player accessibility = <b>every Player surface exposes the same semantic contract</b>:
+      a single labelled control per affordance, one predictable focus order, one live-region owner per concern, and one
+      motion/transparency/contrast/scaling policy — so a TalkBack, keyboard, D-pad, or Switch-Access user experiences
+      <b>one player</b>, not eight screens that each did accessibility their own way.</p>
+      <p style="margin:0">It is the <b>invariant</b>; each surface spec's a11y section is an <b>instance</b> of it.
+      Where they already agree (they do — all eight require non-gesture parity, 48dp, reduce-motion, assertive failures),
+      this document is their <b>union</b>, not a change.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">What this document is NOT</div>
+      <div class="rejbox" style="margin:0 0 8px">
+        <div class="caption">Not a feature spec</div>
+        <p style="margin:0">It adds <b>no</b> accessibility feature, redesigns <b>no</b> layout, playback, gesture,
+        action, sharing, info, editing, DualShot, transport, or state. Those are authoritative and frozen. This spec
+        only <b>unifies and grounds</b> their accessibility.</p>
+      </div>
+      <p style="margin:0">Every requirement here is either <b>Shipped</b> (cited in source), a <b>grounded gap</b>
+      (an absence finding the owning spec must close in its transcription), or a <b>Future</b> obligation attached to a
+      surface that is itself Proposed (sheets, DualShot switch). Nothing is invented.</p>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · the walls this contract stands behind</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>No backend, no schema, no MediaSession, no Media3 change.</b> Accessibility here is semantics, focus, and
+      announcements over the <i>existing</i> composables. Media3 stays 1.4.1; there is no media-key / lock-screen
+      transport and this contract does not assume one (that would be a separate backend ADR — <code>player-actions</code> §13).</li>
+      <li><b>Backbone read-only.</b> ADR-0037 (identity resolver), ADR-0038 (leased player), ADR-0032 (wall-clock),
+      ADR-0025 (vault, <code>FLAG_SECURE</code>) are untouched. A screen reader never changes what identity is resolved
+      or how the lease behaves.</li>
+      <li><b>The owning spec owns its surface.</b> If satisfying this contract needs a <i>visual or interaction</i>
+      change to a surface, that change is made in <b>that surface's HTML first</b> and re-approved — never invented here.
+      This document sets the semantic floor; it does not move a pixel.</li>
+      <li><b>WCAG 2.2 AA is the floor (ADR-0020).</b> Not a target to reach later — the baseline every Player surface
+      is measured against.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Accessibility philosophy — the player is small on purpose, and that is the asset</h2>
+    <div class="subtle">First principles for making an over-media, near-monochrome, gesture-light player fully operable by everyone.</div>
+  </div></div>
+  <p>Rova's player is deliberately <b>minimal</b>: one primary control, a few demoted peers, a spine, no hero CTA, no
+  clutter. For accessibility that minimalism is not a risk to paper over — it is the <b>strongest asset</b>. Fewer
+  controls means fewer things to label, fewer focus stops, fewer states to announce, and no maze to traverse. The whole
+  philosophy is: <b>keep the surface small, make every element on it a real, labelled, non-gesture control, and let the
+  reader hear the same simple structure the sighted user sees.</b></p>
+  <table>
+    <thead><tr><th>Principle</th><th>What it means here</th><th>Grounded in</th></tr></thead>
+    <tbody>
+      <tr><td><b>Every gesture is an accelerator, never the only path</b></td><td>Tap/double-tap/scrub are shortcuts over visible controls. The visible controls <i>are</i> the a11y layer. Deleting a visible control to look cleaner strands every non-gesture input — forbidden.</td><td><span class="tag t-pass">Shipped</span> gestures §10; ±10s buttons mirror double-tap seek (<code>PlayerScreen.kt:667-696</code>).</td></tr>
+      <tr><td><b>State is spoken, not only shown</b></td><td>Play/pause is a swapped label; timeline position is a <code>stateDescription</code>; failures are announced assertively. A reader never has to guess playback state.</td><td><span class="tag t-pass">Shipped</span>+<span class="tag t-note">gap</span> play/pause CD (<code>:652-656</code>); Loading/Ready/Unavailable announcements owed by states §08.</td></tr>
+      <tr><td><b>Contrast is over arbitrary footage, so it must be proven, not tuned</b></td><td>Over-media ink can't be eyeballed against unknown video. One worst-case composite pin proves it; per-literal alpha tuning is banned.</td><td><span class="tag t-note">Owed</span> core §07 scrim-composite pin; <code>OverlayContrastTest</code> proves the .72/.35 alphas over a <i>fixed dark ref</i> only — no <b>bright</b>-footage proof yet (§09).</td></tr>
+      <tr><td><b>Motion is decoration; nothing means anything by moving</b></td><td>Every animated affordance has a static equivalent. One gate (<code>rememberReduceMotion</code>) strips all of it without losing information.</td><td><span class="tag t-pass">Shipped</span> <code>ReducedMotion.kt:47</code>; Player consumes it twice.</td></tr>
+      <tr><td><b>Calm, never blaming</b></td><td>No raw exception text ever reaches the reader; failures are specific and reassuring. Announcements are terse.</td><td><span class="tag t-pass">Shipped</span> states §09 copy rules; the player shows a resolved <code>UiText</code> reason (<code>PlayerScreen.kt:229</code>), never a raw exception.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen philosophy</div>
+    <p style="margin:0">Accessibility is designed <b>into the smallness</b>, not bolted onto it. The player earns its
+    reachability by having few, honest, labelled controls — so the contract's job is mostly to <b>guarantee that
+    smallness stays fully operable</b> across TalkBack, keyboard, D-pad, Switch Access, large text, and reduced
+    motion/transparency, and that the eight surfaces never diverge in how they do it.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 01·specimen -->
+<section>
+  <div class="sechead"><div class="secnum">·</div><div>
+    <h2>The three cross-surface models, on the shipped chrome</h2>
+    <div class="subtle">Toggle above. Nothing here is a new control — it is the existing player, annotated with the focus order, the live-region map, and the ×2 large-text reflow.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="focus" id="phone">
+      <div class="footage"></div>
+      <div class="ctop"></div><div class="cbot"></div>
+
+      <!-- shipped chrome -->
+      <div class="topbar">
+        <div class="gbtn"><span class="fbadge" style="top:-8px;left:-8px">1</span></div>
+        <div class="titles"><div class="t1">Today, 2:14 PM</div><div class="t2">3 clips · 4m 12s</div></div>
+      </div>
+
+      <div class="bar">
+        <div class="fill"></div>
+        <div class="tick" style="left:33%"></div><div class="tick" style="left:66%"></div>
+        <span class="fbadge" style="top:-9px;left:44%">2</span>
+      </div>
+
+      <div class="transport">
+        <div class="tg ghost">−10<span class="fbadge" style="top:-8px;right:-6px">3</span></div>
+        <div class="tg prim">▐▐<span class="fbadge" style="top:-8px;right:-6px">4</span></div>
+        <div class="tg ghost">+10<span class="fbadge" style="top:-8px;right:-6px">5</span></div>
+      </div>
+      <div class="speed">1×<span class="fbadge" style="top:-8px;right:-6px">6</span></div>
+
+      <!-- focus ring on the primary (illustrative) -->
+      <div class="focusring" style="left:calc(50% - 24px);bottom:36px;width:48px;height:48px"></div>
+
+      <!-- live-region map -->
+      <div class="live">
+        <div class="lchip polite" style="top:52px;left:60px">poster / title — Polite</div>
+        <div class="lchip polite" style="bottom:112px;left:16px">timeline segment — Polite · the ONE shipped live region (<span class="mono">:250</span>)</div>
+        <div class="lchip assert" style="top:120px;left:40px">Unavailable → Assertive (owed · states §08)</div>
+        <div class="lchip none" style="bottom:70px;right:14px">scrub position — silent by design</div>
+      </div>
+
+      <div class="scaleflag">fontScale 2.0 · text reflows &amp; wraps · the 48dp targets do NOT scale with font (dp, not sp) · no clipping</div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Focus order</div><div class="v"><b>Back → timeline → −10 → Play/Pause → +10 → speed</b> (§03). Reading order = the visual order; the numbers are the one linear traversal every non-touch input follows.</div></div>
+      <div class="row"><div class="k">Live regions</div><div class="v"><b>One owner per concern</b> (§05). Today only the <b>timeline segment</b> node speaks (Polite, <code>:250</code>). States adds Loading/Ready (Polite) + Unavailable (<b>Assertive</b>). Scrub position stays <b>silent</b> — the reader drives it, so echoing it back is chatter.</div></div>
+      <div class="row"><div class="k">Large text</div><div class="v"><b>Text in sp grows; targets in dp don't</b> (§07). The two-line title wraps instead of clipping; controls stay 48dp. Correct — hit size shouldn't balloon with font scale.</div></div>
+      <div class="row"><div class="k">Focus ring</div><div class="v"><b>White</b> (<code>--focus-ring</code>), not accent — legible over any frame (player-core).</div></div>
+      <div class="row"><div class="k">Nothing new</div><div class="v">Every element shown is <b>already in the build</b>. This spec annotates; it doesn't add.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Accessibility tree — what the reader sees, flattened</h2>
+    <div class="subtle">The semantic node set for the whole Player, deduplicated across surfaces. Decorations are pruned; each affordance is exactly one node.</div>
+  </div></div>
+  <p>The tree is intentionally shallow. The rule: <b>one semantic node per affordance, decorations pruned, no
+  accidental duplicates.</b> The player already prunes its decorative layers (ticks and the visual fill are
+  <code>clearAndSetSemantics{}</code>) and merges the play/pause glyph into its parent Surface — this contract makes
+  that the standard for every surface.</p>
+  <table>
+    <thead><tr><th>Node</th><th>Kind</th><th>Exposed as</th><th>Source / owner</th></tr></thead>
+    <tbody>
+      <tr><td>Video surface</td><td>Button</td><td><code>role=Role.Button</code> + <code>showControlsCd</code> ("show controls"); reveals chrome</td><td><span class="tag t-pass">Shipped</span> <code>PlayerScreen.kt:353-357</code></td></tr>
+      <tr><td>Entry poster</td><td>Decorative / image</td><td><code>contentDescription=null</code> (title conveys it); states may give it a description on the Loading/Unavailable frame</td><td><span class="tag t-pass">Shipped</span> <code>:393</code> · states §08</td></tr>
+      <tr><td>Top title + sub-title</td><td>Text (heading)</td><td>Date/time + "N clips · total" — <b>should be ONE grouped node</b> (today two ungrouped Texts)</td><td><span class="tag t-note">Gap</span> core §07; no <code>mergeDescendants</code> in Player</td></tr>
+      <tr><td>Back</td><td>Button</td><td>IconButton (Role.Button, 48dp) + <code>player_back_cd</code></td><td><span class="tag t-pass">Shipped</span> <code>:424-430</code></td></tr>
+      <tr><td>Timeline / scrub</td><td>Adjustable (slider)</td><td><code>progressBarRangeInfo</code> + <code>stateDescription</code> ("Segment i of n, mm:ss") + <code>setProgress</code> + prev/next <code>customActions</code></td><td><span class="tag t-pass">Shipped</span> <code>SegmentedTimeline.kt:165-181</code></td></tr>
+      <tr><td>Timeline ticks / fill</td><td>Decorative</td><td>removed from tree (<code>clearAndSetSemantics{}</code>)</td><td><span class="tag t-pass">Shipped</span> <code>:208</code></td></tr>
+      <tr><td>−10s / +10s</td><td>Button</td><td>IconButtons + <code>player_rewind_cd</code>/<code>player_forward_cd</code></td><td><span class="tag t-pass">Shipped</span> <code>:667-696</code></td></tr>
+      <tr><td>Play / Pause</td><td>Button</td><td>Surface(onClick)=Role.Button + swapped <code>playPauseCd</code>; inner glyph pruned (<code>cd=null</code>)</td><td><span class="tag t-pass">Shipped</span> <code>:674-689</code></td></tr>
+      <tr><td>Speed</td><td>Button</td><td>Surface(onClick)=Role.Button + <code>speedCd</code> (announces current speed)</td><td><span class="tag t-pass">Shipped</span> <code>:702-719</code></td></tr>
+      <tr><td>Wall-clock readout</td><td>Text (no role)</td><td>display-only <code>cd=cdText</code>; intentionally not clickable</td><td><span class="tag t-pass">Shipped</span> <code>:623-628</code></td></tr>
+      <tr><td>Segment-change announcer</td><td>Live region (Polite)</td><td>separate node, speaks segment-index changes only</td><td><span class="tag t-pass">Shipped</span> <code>:250-253</code></td></tr>
+      <tr><td>State announcer (Loading/Ready/Unavailable)</td><td>Live region</td><td>Ready/Loading Polite · Unavailable <b>Assertive</b> — <b>one node</b>, owned by states</td><td><span class="tag t-note">Owed</span> states §08 (§05 here sets the rule)</td></tr>
+      <tr><td>Info / Share / Angle / Trim controls + sheets</td><td>Button + focus-trapped dialog</td><td>each a labelled 48dp button opening a trapped sheet that returns focus</td><td><span class="tag t-note">Future</span> actions/sharing/info/editing/dualshot (Proposed)</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · tree hygiene</div>
+    <p style="margin:0"><b>One node per affordance; prune every decoration; never duplicate.</b> A control's label lives on
+    exactly one node (the interactive parent), and its inner glyphs are <code>cd=null</code> or
+    <code>clearAndSetSemantics{}</code>. The one grounded correction the transcription owes is <b>grouping the top
+    title + sub-title into a single node</b> (core §07). Any new surface (sheet, angle control) enters the tree as a
+    single labelled button plus, if it opens a panel, a focus-trapped dialog — never a spray of loose nodes.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Focus order — one linear path, sheets trap and return</h2>
+    <div class="subtle">The traversal order for TalkBack swipe, D-pad, keyboard Tab, and Switch scan. It is the reading order; an open sheet is a modal that traps focus and hands it back.</div>
+  </div></div>
+  <p>Today there is <b>no explicit traversal ordering</b> in the Player — no <code>traversalIndex</code>,
+  <code>isTraversalGroup</code>, or <code>FocusRequester</code> anywhere — so order is implicit composition order, which
+  happens to read correctly. This contract makes that order <b>explicit and normative</b> so no future edit reshuffles
+  it, and defines how modals interrupt it.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The base order (chrome visible)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>1 · Back</b> — top-left, first stop (escape is always one swipe away).</li>
+        <li><b>· Read-only text stops</b> — the InfoRow position + clip-counter (<code>PlayerScreen.kt:544,553</code>) and the wall-clock readout (<code>:623</code>, the §02 node) are non-interactive Text stops that fall <b>in reading order between Back and the timeline</b> — swiped over, not activated. They are stops, not focusable controls, so they carry no number.</li>
+        <li><b>2 · Timeline</b> — the spine; adjustable, before the transport (matches actions §10).</li>
+        <li><b>3 · −10s → 4 · Play/Pause → 5 · +10s</b> — the transport cluster, left-to-right.</li>
+        <li><b>6 · Speed</b> — the demoted trailing peer.</li>
+        <li><b>(7·8 · Info / Share)</b> — appended in the trailing slot <i>only when those Proposed actions exist</i> (actions §10 order: … → speed → Info → Share).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Modals (sheets) — trap &amp; return</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Opening a sheet (Info / Share side-picker / Trim / any Proposed panel) <b>traps focus inside it</b>; nothing behind is reachable.</li>
+        <li>Reading order inside the sheet is <b>top-to-bottom, primary action last</b>; a labelled close/handle is reachable.</li>
+        <li>Back/Esc/dismiss <b>closes the sheet and returns focus to the control that opened it</b> — never dumps focus to the top of the screen.</li>
+        <li>This is owed as <code>FocusRequester</code> wiring (none exists in Player today) and is a per-sheet obligation on the owning Proposed spec.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="warnbox">
+    <div class="caption">Angle switch (DualShot) — a focus subtlety</div>
+    <p style="margin:0">On a same-moment angle switch (<code>player-dualshot</code> §07), <b>focus stays on the switch
+    control across the re-lease</b> so the user can immediately reverse — it does not reset to the top. An unavailable
+    side is a <b>state node, skipped in focus order</b>, not a dead button. Both are that spec's obligations; this
+    contract only fixes that a re-lease must not lose focus.</p>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · the order is normative</div>
+    <p style="margin:0"><b>Back → Timeline → −10 → Play/Pause → +10 → Speed → (Info → Share when present).</b> It is the
+    reading order and it is fixed here — a transcription may not reorder it, and a new control claims a defined slot
+    (trailing, after speed) rather than wedging into the transport. Sheets trap focus and return it to their trigger.
+    Focus survives a DualShot re-lease. No control is ever unreachable by swipe, Tab, D-pad, or scan.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Screen reader semantics — the label contract</h2>
+    <div class="subtle">Role, contentDescription, and stateDescription conventions, unified. State that changes is a swapped label or a stateDescription — never silent.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Pattern</th><th>Convention</th><th>Where it applies</th></tr></thead>
+    <tbody>
+      <tr><td><b>Every interactive node has a Role</b></td><td><code>IconButton</code>/<code>Surface(onClick)</code> supply <code>Role.Button</code>; the timeline's role is implied by <code>progressBarRangeInfo</code>. Bare <code>.clickable</code> must add <code>role=Role.</code> (gate <code>ruleA11yClickableHasRole</code>).</td><td>All controls. <span class="tag t-pass">Shipped</span> — note <code>IconRole.Default</code> is a <i>tint</i> role (<code>SemanticIconSpec</code>), NOT an a11y Role; the a11y Role comes from the button wrapper.</td></tr>
+      <tr><td><b>Label carries current state</b></td><td>Play/Pause is a <b>swapped <code>contentDescription</code></b> (<code>player_play_cd</code>↔<code>player_pause_cd</code>), speed announces the current multiplier. Reading the label tells you the state.</td><td>Play/Pause (<code>:652-656</code>), Speed (<code>:659</code>). <span class="tag t-pass">Shipped</span></td></tr>
+      <tr><td><b>Adjustable state via <code>stateDescription</code></b></td><td>The timeline's position is a <code>stateDescription</code> ("Segment i of n, mm:ss"), distinct from its static <code>contentDescription</code> ("Recording timeline").</td><td>Timeline (<code>:166-167</code>). <span class="tag t-pass">Shipped</span></td></tr>
+      <tr><td><b>Decorative glyphs are cleared</b></td><td>Inner icons carry <code>cd=null</code> when a parent labels them; decorative bars use <code>clearAndSetSemantics{}</code>.</td><td>Play/pause glyph (<code>:685</code>), ticks/fill (<code>:208</code>). <span class="tag t-pass">Shipped</span></td></tr>
+      <tr><td><b>No <code>stateDescription</code> for playing/paused</b></td><td>Playback state rides the swapped label, not a <code>stateDescription</code> — a deliberate, sufficient choice; do NOT add a second competing announcement of the same fact.</td><td>Play/Pause. <span class="tag t-note">Noted</span> (avoids double-speak — §05)</td></tr>
+      <tr><td><b>Sheets are dialogs</b></td><td>A Proposed sheet is a focus-trapped dialog with a title and a labelled close; its rows are one labelled node each.</td><td>Info/Share/Trim (Proposed). <span class="tag t-note">Future</span></td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · one fact, one voice</div>
+    <p style="margin:0">Each state is announced <b>exactly once, by exactly one mechanism</b>: play/pause by its swapped
+    label, position by the timeline's <code>stateDescription</code>, segment changes by the one live region, failures by
+    the state announcer. A transcription must not add a second node that re-announces a fact already carried — the most
+    common a11y regression on a rich player is <b>double-speak</b>, and this contract forbids it structurally (§05).</p>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Live regions &amp; announcements — one owner per concern, one loud voice at most</h2>
+    <div class="subtle">The systemic rule no single surface spec could make: which node speaks, how loudly, and what must stay silent.</div>
+  </div></div>
+  <p>Multiple specs add announcements — the timeline speaks segment changes (shipped), <code>player-states</code> adds
+  Loading/Ready/Unavailable, resume speaks a cue. Uncoordinated, they collide: a segment jump during a load could fire
+  two polite regions at once, or an assertive failure could be buried under a polite tick. This contract assigns a
+  <b>single owner per concern</b> and one politeness ladder.</p>
+  <table>
+    <thead><tr><th>Concern</th><th>Owner node</th><th>Politeness</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td>Segment index change</td><td>Timeline live region (<code>SegmentedTimeline.kt:250</code>)</td><td>Polite</td><td><span class="tag t-pass">Shipped</span> throttled to index changes only — never per-frame.</td></tr>
+      <tr><td>Loading (escalated)</td><td>State announcer (states §08)</td><td>Polite</td><td><span class="tag t-note">Owed</span> only after the grace delay, so a fast load stays silent.</td></tr>
+      <tr><td>Ready</td><td>State announcer</td><td>Polite</td><td><span class="tag t-note">Owed</span> the clip title / "Ready"; no interruption.</td></tr>
+      <tr><td><b>Unavailable (failure)</b></td><td>State announcer</td><td><b>Assertive</b></td><td><span class="tag t-note">Owed</span> a failure must never be silent — the ONE place assertive is used.</td></tr>
+      <tr><td>Resume cue</td><td>Play control label ("Resuming at m:ss")</td><td>Polite (on the label)</td><td><span class="tag t-note">Owed</span> spoken via the control, not a separate region.</td></tr>
+      <tr><td>Angle switched (DualShot)</td><td>The switch control (announced on change)</td><td>Polite</td><td><span class="tag t-note">Future</span> "Switched to Landscape, same moment" (dualshot §07).</td></tr>
+      <tr><td>Scrub position / elapsed time</td><td><b>— none —</b></td><td><b>Silent</b></td><td><span class="tag t-pass">By design</span> the reader is driving the seek; echoing every position is chatter. The <code>stateDescription</code> is read on focus, not announced live.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · the announcement ladder</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Assertive is reserved for failure</b> (Unavailable) and nothing else. At most one assertive announcement is
+      live at a time.</li>
+      <li><b>One owner per concern.</b> Segment changes belong to the timeline node; stream state belongs to the single
+      state announcer; playback state belongs to the play/pause label. No concern is announced by two nodes.</li>
+      <li><b>Silence is a valid choice.</b> Scrub position, elapsed time, and per-frame progress are <b>not</b> live —
+      they are readable on focus. A player that narrates every second is unusable.</li>
+      <li><b>Throttle.</b> Any live region fires on a <i>meaningful change</i> (segment index, state transition), never
+      on a continuous value.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Keyboard · D-pad · Switch Access — the non-gesture guarantee</h2>
+    <div class="subtle">Every player function is reachable and operable without a touch gesture. This is the hard promise every surface spec already makes; here it is the system law.</div>
+  </div></div>
+  <p>The player is gesture-light, and every gesture is an accelerator over a visible control — so the non-gesture story
+  is mostly "operate the visible controls." This contract makes explicit that <b>the same linear focus order (§03) is
+  the keyboard Tab order, the D-pad traversal, and the Switch-Access scan order</b>, and that the one genuinely
+  gesture-only accelerator (double-tap ±10s) has a visible equivalent.</p>
+  <table>
+    <thead><tr><th>Function</th><th>TalkBack</th><th>Keyboard</th><th>D-pad</th><th>Switch Access</th></tr></thead>
+    <tbody>
+      <tr><td>Reveal chrome</td><td>Double-tap the video (Role.Button, <code>showControlsCd</code>)</td><td>Focus surface → Enter</td><td>Select surface</td><td>Scan → select</td></tr>
+      <tr><td>Play / Pause</td><td>Focus button → activate</td><td>Tab → Enter/Space</td><td>Center → select</td><td>Scan → select</td></tr>
+      <tr><td>Seek ±10s</td><td>The ±10s <b>buttons</b> (double-tap seek is a TalkBack-invisible accelerator, <code>:337-339</code>)</td><td>Tab → Enter</td><td>Focus → select</td><td>Scan → select</td></tr>
+      <tr><td>Scrub</td><td>Focus slider → swipe up/down (<code>setProgress</code>)</td><td>Focus slider → arrow keys</td><td>Focus slider → D-pad left/right</td><td>Scan → adjust</td></tr>
+      <tr><td>Jump segment</td><td>Slider <b>custom actions</b> (prev/next)</td><td>via custom actions</td><td>via custom actions</td><td>via custom actions</td></tr>
+      <tr><td>Speed</td><td>Focus chip → activate (cycles)</td><td>Tab → Enter</td><td>Focus → select</td><td>Scan → select</td></tr>
+      <tr><td>Back / dismiss</td><td>Back button + system Back</td><td>Esc / Back</td><td>Back</td><td>Scan → Back</td></tr>
+    </tbody>
+  </table>
+  <div class="warnbox">
+    <div class="caption">Grounded note · targets &amp; the gate's blind spot</div>
+    <p style="margin:0">Every control is ≥48dp: <code>RovaTokens.minHitTarget = 48.dp</code> on the timeline row
+    (<code>SegmentedTimeline.kt:126</code>), inline <code>.size(48.dp)</code> on play/pause + speed
+    (<code>:679,:708</code>), and the Material <code>IconButton</code> 48dp default on Back/±10s. The static gate
+    <code>ruleA11yTargetSizeToken</code> checks a <b>curated token set at a 24dp floor</b> and <b>no Player size is in
+    that set</b> — so the Player's 48dp targets are correct but <b>not gate-guarded</b>. The contract's floor is 48dp
+    (above the 24dp SC 2.5.8 minimum); protecting it is a transcription concern (a pure test or adding the tokens to the
+    gate set), not a new gate demanded here.</p>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · no gesture-only function</div>
+    <p style="margin:0"><b>Every player function has a focusable, labelled, ≥48dp control operable by keyboard, D-pad,
+    and Switch Access, in the §03 order.</b> Gestures are shortcuts layered on top; the single gesture-only accelerator
+    (double-tap seek) is mirrored by the ±10s buttons. A control that could only be driven by a gesture is not shipped —
+    it is reworked until it isn't (the rule gestures/actions/sharing/dualshot all state; unified here). Media-key /
+    lock-screen transport is explicitly <b>out</b> (no MediaSession, Media3 1.4.1) — the guarantee is over the in-app
+    controls.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Large text &amp; display scaling — text grows, targets don't, nothing clips</h2>
+    <div class="subtle">A dimension no earlier spec covered in depth. Font scale and display size must not truncate chrome or shrink a control below 48dp.</div>
+  </div></div>
+  <p>Android users can raise <b>font scale</b> (up to 2.0×) and <b>display size</b> independently. The over-media chrome
+  is dense — a two-line title, small metadata, a speed multiplier — so it is exactly where large text can clip or
+  overlap. The contract: <b>text is in <code>sp</code> and reflows; interactive targets are in <code>dp</code> and do
+  not scale with font; no fixed-height text container clips its content.</b></p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The rules</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>All text in <code>sp</code></b> — it honours the user's font scale (Player text already uses <code>.sp</code>).</li>
+        <li><b>Targets in <code>dp</code></b> — the 48dp hit areas are independent of font scale; a bigger label must not inflate (or shrink) the touch target.</li>
+        <li><b>No clipping.</b> The two-line title <b>wraps or ellipsizes gracefully</b> rather than being cut by a fixed height; the timeline row's <code>heightIn(min=48dp)</code> is a <i>minimum</i>, free to grow.</li>
+        <li><b>Chrome bands must not clip.</b> The bottom band already hugs its content height (core §08). The top band is a <b>fixed <code>.height(96.dp)</code></b> today (<code>PlayerScreen.kt:408</code>) — exactly where a wrapped two-line title can clip under large text; converting it to a min-height floor is <b>owed</b> large-text work (see gap panel), not current behavior.</li>
+        <li><b>Display size (density) scaling</b> is honoured by using dp/sp throughout — no <code>px</code>, no hard-coded pixel geometry.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Grounded gaps &amp; test obligation</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Player text sizes are inline <code>.sp</code> literals (<code>PlayerScreen.kt</code>, <code>SegmentedTimeline.kt</code>) — correct unit, but there is <b>no test</b> asserting the chrome survives fontScale 2.0.</li>
+        <li>The two-line title is <b>ungrouped and single-line-ellipsized today</b>; grouping it (§02) and confirming it wraps under large text is the transcription obligation.</li>
+        <li>The top band's fixed <code>.height(96.dp)</code> (<code>:408</code>) should become a <b>min-height</b> so a wrapped title grows the band instead of clipping — owed large-text work.</li>
+        <li><b>Verify on device at fontScale 2.0 + display "largest"</b> — part of the standing device-verification gate, not a claim provable in HTML.</li>
+        <li>No <code>nonScaledSp</code> / fixed-dp text anywhere — the player must never opt text out of scaling.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · scaling is a first-class state</div>
+    <p style="margin:0"><b>The player is legible and fully operable at the maximum font scale and display size.</b> Text
+    scales and reflows (sp, wrap, no fixed-height clip); touch targets stay a constant 48dp (dp); no control drops below
+    the floor and no label is truncated into meaninglessness. This is verified on device at max scale as part of the
+    release gate — it is not a "best effort," it is the floor.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Motion / reduced motion — one gate, nothing means anything by moving</h2>
+    <div class="subtle">The single motion seam, unified across every surface. Reduced motion strips animation and removes zero information.</div>
+  </div></div>
+  <p>There is exactly <b>one</b> motion gate in the app — <code>rememberReduceMotion()</code>
+  (<code>ReducedMotion.kt:47</code>) — and the Player consumes it in both its animated places. Every surface spec
+  reduces motion the same way; this contract states the invariant once.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">What animates (inherited only)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Chrome fade</b> (both bands) — <code>AnimatedVisibility</code> gated at <code>PlayerScreen.kt:402-403,480-481</code>.</li>
+        <li><b>Timeline playhead glide</b> — <code>RovaMotion.containerSpring()</code>, gated at <code>SegmentedTimeline.kt:197</code>.</li>
+        <li><b>Control press</b>, poster→first-frame cross, and any future sheet slide — all on the inherited ladder (<code>--t-micro/-small/-container/-exit</code>, <code>--ease-std</code>).</li>
+        <li><b>No new motion token</b> is introduced by accessibility.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Under reduced motion</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Chrome appears/disappears <b>instantly</b> (<code>EnterTransition.None</code>) — the reveal still happens.</li>
+        <li>Timeline fill <b>snaps</b> (also while scrubbing) — the seek still lands.</li>
+        <li>Poster→frame is a <b>hard cut</b>; spinner (states) becomes a static ring; any sheet appears without its slide.</li>
+        <li><b>Behavior and content are identical</b> — only animation is removed. Every affordance in §02–§07 stays exactly where it is.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="warnbox">
+    <div class="caption">Gate · infinite animations must self-gate</div>
+    <p style="margin:0">Any looping animation (a spinner, a pulse) is caught by <code>ruleA11yAnimationGated</code> — it
+    must co-locate <code>rememberReduceMotion()</code>/<code>ReducedMotion.isReduced</code> or it fails the build
+    (SC 2.3.3/2.2.2). So a future Player spinner (states' escalated Loading) cannot ship un-gated. Haptics are not motion
+    and are gated separately by system haptics settings.</p>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0"><b>One gate, one rule: nothing on the player carries meaning by motion.</b> Disabling animation
+    never removes information, never hides a control, never changes behavior — it only removes the animation. This holds
+    for every current and future Player surface; a surface that needed motion to convey meaning would be a design defect
+    routed back through its own HTML.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Transparency &amp; contrast — proven over footage, opaque when asked</h2>
+    <div class="subtle">Reduced transparency reuses the shipped seam; contrast is proven by one worst-case composite pin, never eyeballed.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Reduced transparency</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The seam exists: <code>rememberReduceTransparency()</code> (<code>ReducedTransparency.kt:58</code>) + <code>RovaTrustTokens.pinContainerAlphaFor</code> — the Trust banner/snooze chip already consume it (<code>WarningTopBanner.kt:105</code>, <code>WarningSnoozeChip.kt:113</code>).</li>
+        <li><b>Grounded gap:</b> the Player does <b>not</b> consume it — its scrims are hard-coded <code>Color.Black.copy(alpha)</code> (<code>PlayerScreen.kt:412-413,489-490</code>), and its pinned glyph pills use a fixed <code>--glyph-fill</code>.</li>
+        <li><b>Contract:</b> under OS reduce-transparency, the Player's <b>pinned pills</b> (the transport-glyph backing) go opaque via the same <code>pinContainerAlphaFor</code> path the Trust surfaces use — the transcription obligation core §04 already implies. The gradient <b>bands</b> are a legibility scrim, not a decorative blur; they stay (their job is contrast, and removing them would <i>hurt</i> a low-vision user).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Contrast guarantee</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Over-media ink sits over <b>arbitrary, worst-case-bright footage</b> — it can't be tuned per-literal.</li>
+        <li><b>The one obligation (core §07):</b> a <b>scrim-composite worst-case contrast pin</b> — a pure JVM test asserting <code>--media-ink-dim</code> (.48) and <code>--media-ink-body</code> (.55) clear AA over the band-over-bright-video composite, ×palettes, modelled on <code>TokenContrastTest.mediaProgress</code> and <b>extending <code>OverlayContrastTest</code>'s dark-ref model to bright footage</b>.</li>
+        <li><b>Grounded gap (narrowed):</b> <code>OverlayContrastTest.kt</code> already proves the player subtitle (.72, <code>:57-70</code>) and play-button fill (.35, <code>:72-81</code>) — but <b>only over a fixed dark-scene ref</b> (<code>#0E1216</code>), never worst-case-bright video; the remaining <code>.45/.55/.88</code> alphas are untested. So the gap is <b>no bright-footage / scrim-composite proof</b>, not "no test." Neither <code>TokenContrastTest</code> nor <code>TrustContrastSweepTest</code> covers the Player. <b>Do not</b> reuse the opaque-surface Trust sweep as the proof (it models opaque backings, not a translucent scrim over video).</li>
+        <li>The focus ring is <b>white</b> (<code>--focus-ring</code>), legible on any frame — not the accent.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0"><b>Contrast is proven, transparency is honoured, both via existing machinery.</b> One scrim-composite
+    pin is the Player's contrast guarantee (no per-literal tuning, no borrowing the opaque Trust sweep). Reduce-transparency
+    routes the Player's pinned pills through the <b>same</b> <code>pinContainerAlphaFor</code> seam the Trust surfaces
+    already use; the legibility bands stay because they serve contrast, not decoration. No new token, no new test family —
+    the pin joins the existing sweep family (no new gate, per the ADR-0036/0038 precedent).</p>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Captions / transcript — none exist, and that is stated, not designed-around</h2>
+    <div class="subtle">The honest policy for a background recorder whose footage carries ambient audio but no authored caption track.</div>
+  </div></div>
+  <div class="warnbox">
+    <div class="caption">The grounded fact</div>
+    <p style="margin:0">Rova has <b>zero caption/subtitle machinery</b>: no <code>SubtitleView</code>, no
+    <code>SubtitleConfiguration</code>, no Media3 text track, no closed-caption path (only <code>media3-exoplayer</code>
+    + <code>media3-ui</code> on the classpath). Recordings carry an <b>ambient audio track</b> (the live-capture
+    <code>AudioRecord</code>) but <b>no authored captions</b> and there is <b>no speech-recognition/transcript
+    backend</b>. Nobody wrote a caption track, so the player has none to render.</p>
+  </div>
+  <table>
+    <thead><tr><th>Question</th><th>Answer</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Does the player render captions?</td><td>No — there is no caption track to render.</td><td><span class="tag t-pass">Honest</span> unattended footage has no authored subtitles; inventing an empty CC toggle would be a dead control.</td></tr>
+      <tr><td>Auto-generate a transcript (ASR)?</td><td>No.</td><td><span class="tag t-fail">Future</span> needs an ASR backend the app doesn't have and this contract can't assume — a separate ADR + feature, not designed-around here.</td></tr>
+      <tr><td>Is audio-conveyed info lost to a deaf user?</td><td>Recordings are ambient/hands-free video — their <b>meaning is visual</b>, not narration. The important state (playback, position, failures) is all conveyed <b>visually and via TalkBack</b>, not through audio.</td><td><span class="tag t-pass">Adequate</span> no information is audio-only; the app's own cues (beeps) are recording-time, not playback content.</td></tr>
+      <tr><td>Burned-in captions on export?</td><td>No.</td><td><span class="tag t-fail">Reject</span> a render/transcode the copy/remux pipeline can't do (player-editing §00) and a product decision, not an accessibility default.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · caption policy</div>
+    <p style="margin:0"><b>The Player renders no captions because Rova's recordings contain no caption track, and it
+    exposes no CC control rather than a dead one.</b> No transcript/ASR is assumed or designed-around. Because playback
+    state and failures are conveyed visually + via TalkBack (never audio-only), a deaf or hard-of-hearing user loses no
+    <i>player</i> information. If captions or transcripts are ever wanted, that is a <b>new feature behind its own
+    ADR</b> (a caption/ASR backend), explicitly out of scope here — stated plainly, not worked around.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Frozen boundary — the contract this document owns, the surfaces it does not touch</h2>
+    <div class="subtle">This is the accessibility invariant. Each surface spec's a11y section is an instance of it; none is reopened here.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-accessibility.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>accessibility floor</b> (§00–§01): WCAG 2.2 AA by default, the non-gesture guarantee, the "one fact, one voice" rule.</li>
+        <li>The unified <b>accessibility tree</b> (§02) and the normative <b>focus order</b> + sheet trap/return (§03).</li>
+        <li>The <b>screen-reader label contract</b> (§04) and the <b>live-region ownership + politeness ladder</b> (§05).</li>
+        <li>The <b>keyboard/D-pad/Switch</b> parity law (§06), <b>large-text/scaling</b> policy (§07), <b>motion</b> unification (§08), <b>transparency/contrast</b> guarantee (§09), and <b>caption/transcript</b> policy (§10).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">NOT owned here (do not redesign)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Any surface's layout, controls, or interaction</b> — <code>player-core/states/gestures/actions/sharing/info/editing/dualshot</code>. Each owns its own a11y section as an <i>instance</i> of this contract; this document never moves their pixels.</li>
+        <li><b>The specific announcements for Loading/Ready/Unavailable/resume</b> — authored by <code>player-states</code> §08 (this contract only sets the ownership + politeness rule they follow).</li>
+        <li><b>The DualShot angle-switch semantics</b> — <code>player-dualshot</code> §07 (this contract only fixes focus-survives-re-lease and one-owner announcing).</li>
+        <li><b>Sheet contents</b> (Info/Share/Trim) — their owning Proposed specs (this contract only requires focus-trap + return + one-node-per-row).</li>
+        <li><b>MediaSession / media-key / ASR / caption backend</b> — future backend ADRs, out of scope everywhere.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">This document freezes the <b>one accessibility system</b> the whole Player conforms to —
+    <b>AA floor · one node per affordance · normative focus order · one live-region owner per concern · assertive only
+    for failure · non-gesture parity across TalkBack/keyboard/D-pad/Switch · text scales while 48dp targets don't · one
+    motion gate · contrast proven by a scrim-composite pin · reduce-transparency via the shipped seam · no captions
+    because none exist</b>. It <b>consumes</b> the resolved identity (ADR-0037), the leased player (ADR-0038), the
+    wall-clock playhead (ADR-0032), the vault (ADR-0025), and the two existing seams — and <b>redefines none of them</b>.
+    It requires <b>no backend, no schema change, no MediaSession, no Media3 change</b>. Everything Shipped is cited in
+    source; every gap is grounded; every Future obligation rides a surface that is itself Proposed. A change to this
+    contract routes back through this HTML and is re-approved first. The <b>Shipped</b> guarantees hold today; the
+    <b>owed</b> items (title grouping, state announcer, focus-trap wiring, the scrim-composite contrast pin, the
+    reduce-transparency wiring, the large-text device check) land with their owning surface's transcription — this
+    contract names them; it does not implement them.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

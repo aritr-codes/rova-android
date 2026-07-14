@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · States (Before / During / After Playback)</title>
+<style>
+  /* ==================================================================
+     PLAYER-STATES — every state that exists before, during, and after
+     playback. LAYERS ON player-core.html (frozen). Inherits the token
+     model, the three-zone layout, the band substrate, the immersive
+     policy, and the a11y floor. Does NOT redraw any of them.
+
+     Scope: loading · first-frame handoff · resume affordance ·
+     start-over · every Unavailable cause · retry · runtime
+     Ready→Unavailable flip · empty/error messaging · a11y
+     announcements · reduced-motion · motion sequencing · visual
+     hierarchy · token usage · state transitions.
+
+     Backbone PRESERVED, read-only: ADR-0037 identity (resolver fails
+     closed), ADR-0038 lifecycle (fresh player per lease, ownedPlayer()),
+     ADR-0032 wall-clock. NO autoplay. No new backend capability —
+     Retry re-runs the EXISTING resolve / attach / prepare path.
+
+     TOKENS: this spec adds NO new colour family. It reuses player-core's
+     three locked families verbatim and adds only a few STATE-timing +
+     STATE-geometry tokens (grace delay, spinner period, error card),
+     declared and justified below.
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);      /* titles, primary glyphs */
+    --media-ink-dim:rgba(255,255,255,.48);  /* de-emphasised metadata */
+    --media-ink-body:rgba(255,255,255,.55); /* tertiary / supporting copy */
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;                  /* RovaTrustTokens.pinSurface — the opaque pinned card substrate */
+    --pin-container-alpha:.94;              /* → 1.0 under reduce-transparency */
+    --glyph-fill:rgba(255,255,255,.10);     /* neutral pinned pill backing */
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px;
+    --target:48px;
+    --auto-hide:3000ms;
+    --poster-ceiling:1500ms;   /* PLAYER_ENTRY_POSTER_MAX_MS — PlayerScreen.kt:753 */
+
+    /* ── NEW · state timing + geometry (this spec introduces these) ──
+       All are UI-timing / presentation constants, NOT backend capability —
+       the same class of constant as --auto-hide (AutoHideChromePolicy) and
+       --poster-ceiling. They gate WHEN a state cue appears, never WHAT the
+       resolver decides. */
+    --loading-grace:400ms;     /* suppress ANY loading cue under this; a fast
+                                  resolve must not flash a spinner. (research:
+                                  ~300–500ms grace before escalating). */
+    --spinner-period:900ms;    /* loading indicator rotation. reduce-motion → none. */
+    --resume-cue-dwell:4000ms; /* the "Resuming · Start over" cue self-dismiss. */
+    --err-card-w:280px;        /* Unavailable card max width over the frame. */
+    --err-card-pad:22px;
+    --err-glyph:44px;          /* neutral state glyph diameter. */
+  }
+  /* Reduced motion: the ONLY gate. No state carries meaning by motion. */
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:8px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);
+         border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-trans{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+  .t-perm{background:rgba(255,255,255,.08);color:var(--stage-dim)}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+
+  /* ============================================================
+     STATE SPECIMENS — real over-media frames, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;
+         box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+  /* a poster still (slightly different tone so poster-vs-live reads) */
+  .poster{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 35% 32%, #46586f 0%, #2b3746 55%, #19212b 100%)}
+  /* pure black entry (no poster: vault / legacy / deep-link) */
+  .blackbed{position:absolute;inset:0;background:#000}
+
+  /* centered stack for loading + error */
+  .center{position:absolute;inset:0;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;padding:24px;text-align:center;gap:14px}
+
+  /* loading spinner (reduce-motion → static ring) */
+  .spinner{width:34px;height:34px;border-radius:50%;
+           border:2.5px solid rgba(255,255,255,.16);border-top-color:var(--media-ink);
+           animation:spin var(--spinner-period) linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  :root[data-rm="1"] .spinner{border-top-color:rgba(255,255,255,.55)} /* static: even ring, no motion */
+  .loadlbl{font:500 12px/1.3 inherit;color:var(--media-ink-body)}
+
+  /* neutral state glyph (NOT severity red — unavailable is neutral, not a trust hard-block) */
+  .errglyph{width:var(--err-glyph);height:var(--err-glyph);border-radius:50%;
+            border:1.5px solid var(--media-edge-top);display:flex;align-items:center;justify-content:center;
+            color:var(--media-ink-dim)}
+  .errglyph svg{width:24px;height:24px}
+
+  /* Unavailable card — opaque pinned substrate over the (possibly frozen) frame */
+  .errcard{position:relative;max-width:var(--err-card-w);width:calc(100% - 40px);
+           background:var(--pin-surface);border:1px solid var(--media-edge-top);
+           border-radius:var(--r-md);padding:var(--err-card-pad);
+           display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;
+           box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .err-title{font:600 15px/1.25 inherit;color:var(--media-ink)}
+  .err-sub{font:400 12px/1.45 inherit;color:var(--media-ink-body)}
+  .err-actions{display:flex;gap:10px;margin-top:4px}
+  .btn{min-height:44px;padding:0 18px;border-radius:var(--r-pill);display:flex;align-items:center;
+       justify-content:center;font:600 13px/1 inherit;cursor:default}
+  .btn-primary{background:var(--glyph-fill);color:var(--media-ink)}      /* neutral, no accent */
+  .btn-ghost{background:transparent;color:var(--media-ink-dim);border:1px solid var(--media-edge-top)}
+
+  /* runtime flip: dim the frozen frame slightly so the card reads, but DON'T black it out */
+  .frozeUp{position:absolute;inset:0;background:rgba(0,0,0,.34)}
+
+  /* resume cue — a quiet non-modal pill, bottom-ish, over the bottom scrim area */
+  .resumecue{position:absolute;left:0;right:0;bottom:150px;display:flex;justify-content:center}
+  .resumepill{display:flex;align-items:center;gap:10px;background:var(--pin-surface);
+              border:1px solid var(--media-edge-top);border-radius:var(--r-pill);
+              padding:8px 8px 8px 14px;box-shadow:0 8px 26px rgba(0,0,0,.45)}
+  .resumepill .lbl{font:500 12px/1 inherit;color:var(--media-ink)}
+  .resumepill .startover{min-height:36px;padding:0 12px;border-radius:var(--r-pill);
+              background:var(--glyph-fill);color:var(--media-ink);font:600 12px/1 inherit;
+              display:flex;align-items:center}
+
+  /* first-frame poster (dim as it hands off) */
+  .p-topmini{position:absolute;left:0;right:0;top:0;height:70px;background:var(--scrim-top);
+             display:flex;align-items:flex-end;padding:0 14px 10px;gap:8px}
+  .p-topmini .bk{width:22px;height:22px;color:var(--media-ink);flex:none}
+  .p-topmini .tt{font:600 12px/1.2 inherit;color:var(--media-ink)}
+
+  /* state switch specimen visibility */
+  .layer{position:absolute;inset:0}
+  .phone .layer{display:none}
+  .phone[data-state="load-warm"] .l-load-warm,
+  .phone[data-state="load-cold"] .l-load-cold,
+  .phone[data-state="err-perm"] .l-err-perm,
+  .phone[data-state="err-trans"] .l-err-trans,
+  .phone[data-state="err-midplay"] .l-err-midplay,
+  .phone[data-state="resume"] .l-resume{display:block}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:110px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .seg .tog{border-radius:7px}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player States — before, during &amp; after playback</h1>
+  <p class="stagenote">
+    Every state the player passes through: <b>Loading</b>, first-frame handoff, the <b>resume / start-over</b>
+    affordance, every <b>Unavailable</b> cause, <b>Retry</b>, and the runtime <b>Ready→Unavailable</b> flip —
+    each with accessibility announcements, reduced-motion behavior, and motion sequencing. These are
+    <b>primary journeys, not edge cases</b>: the resolver fails closed (ADR-0037), so Unavailable and Loading
+    are <i>common</i>. This spec <b>layers on the frozen <code>player-core.html</code></b> — it inherits the token
+    model, three-zone layout, band substrate, immersive policy and a11y floor, and <b>never redraws them</b>.
+    Grounded in <code>rova-player-discovery.md</code> + current source (<code>PlayerUiState</code> /
+    <code>PlayerUriResolver</code> / <code>ResumePolicy</code>) — <b>not memory</b>. Preserves ADR-0037/0038/0032,
+    the fail-closed resolver, and the NO-autoplay trust rule. <b>No new backend capability</b> — Retry re-runs
+    the existing resolve / attach / prepare path.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Specimen state</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setState('load-warm',this)">Loading · warm poster</button>
+        <button class="tog" aria-pressed="false" onclick="setState('load-cold',this)">Loading · cold</button>
+        <button class="tog" aria-pressed="false" onclick="setState('resume',this)">Resume cue</button>
+        <button class="tog" aria-pressed="false" onclick="setState('err-trans',this)">Unavailable · transient</button>
+        <button class="tog" aria-pressed="false" onclick="setState('err-perm',this)">Unavailable · permanent</button>
+        <button class="tog" aria-pressed="false" onclick="setState('err-midplay',this)">Mid-play flip</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 0 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>State model — the honest map</h2>
+    <div class="subtle">Three UI states in code today; this spec designs all their faces + transitions.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">What the code actually exposes</div>
+      <p class="stagenote"><code>PlayerUiState</code> (<code>PlayerUiState.kt:25</code>) is a sealed interface with exactly
+      three cases: <code>Loading</code> (:26, the construction default), <code>Ready</code> (:28), and
+      <code>Unavailable(reason: UiText)</code> (:60). <b>There is no cause enum</b> — every distinct failure is encoded
+      only by <i>which string resource</i> the resolver passes into that one <code>UiText</code>.</p>
+      <p class="stagenote">So the design job is: (1) give <b>Loading</b> a real, poster-first face; (2) give each of the
+      <b>six Unavailable causes</b> (8 resolver returns + 2 runtime failures) a designed frame that reads its cause and offers the <i>right</i> action; (3) design the
+      three <b>transitions</b> — entry→Loading→Ready, Loading→Unavailable, and the mid-session Ready→Unavailable flip.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">Design principles for states (inherited + specific)</div>
+      <ul class="tight">
+        <li><b>Every state is designed.</b> Loading and Unavailable are common (fail-closed resolver) — never a footnote.</li>
+        <li><b>Poster-first, never black.</b> Show the warm entry poster immediately; escalate to a loading cue only after a grace delay.</li>
+        <li><b>Transient offers Retry; permanent does not.</b> A "still exporting" clip gets a way forward; a deleted file does not pretend to.</li>
+        <li><b>Calm, non-blaming copy.</b> Plain language + reassurance, never a raw exception or code.</li>
+        <li><b>Failure is reachable mid-playback.</b> A codec error freezes the frame and fades an overlay in — it never hard-cuts to black (RK7).</li>
+        <li><b>Announce state changes.</b> Loading/Ready polite, failure assertive — a screen-reader user is never left in silence.</li>
+        <li><b>Nothing means anything by motion.</b> The spinner, the poster cross, the overlay fade all have static equivalents.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary with core — this spec does NOT reopen the shell</div>
+    <span class="stagenote">Token families, the three-zone layout, immersive chrome policy, and control/timeline placement are
+    <b>frozen in <code>player-core.html</code></b>. States reuses them verbatim and adds only the state <i>faces</i>
+    (loading cue, error card, resume pill) and the state <i>machine</i>. It introduces <b>no new colour family</b> — only a
+    handful of state-timing/geometry tokens (§02).</span>
+  </div>
+</section>
+
+<!-- ============================================================ 1 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>The specimen — switch between states</h2>
+    <div class="subtle">Use the state switch in the sticky bar. Toggle reduce-motion to see the static substitutes.</div>
+  </div></div>
+
+  <div class="stageframe">
+    <div class="phone" id="phone" data-state="load-warm">
+
+      <!-- LOADING · WARM (poster from Library handoff; resolve underway; NO spinner within grace) -->
+      <div class="layer l-load-warm">
+        <div class="poster"></div>
+        <div class="p-topmini">
+          <div class="bk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></div>
+          <div class="tt">Tue 7:41 PM</div>
+        </div>
+      </div>
+
+      <!-- LOADING · COLD (no poster: vault / legacy / deep-link; grace elapsed → cue) -->
+      <div class="layer l-load-cold">
+        <div class="blackbed"></div>
+        <div class="center">
+          <div class="spinner" aria-hidden="true"></div>
+          <div class="loadlbl">Loading…</div>
+        </div>
+      </div>
+
+      <!-- RESUME CUE (silent resume + non-modal Start over) -->
+      <div class="layer l-resume">
+        <div class="footage"></div>
+        <div class="resumecue">
+          <div class="resumepill">
+            <span class="lbl">Resuming · 2:31</span>
+            <span class="startover">Start over</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- UNAVAILABLE · TRANSIENT (Retry + Back) -->
+      <div class="layer l-err-trans">
+        <div class="blackbed"></div>
+        <div class="center">
+          <div class="errcard">
+            <div class="errglyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></div>
+            <div class="err-title">Recording not finished</div>
+            <div class="err-sub">Still finishing up. Try again in a moment.</div>
+            <div class="err-actions">
+              <div class="btn btn-primary">Retry</div>
+              <div class="btn btn-ghost">Back</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UNAVAILABLE · PERMANENT (Back only) -->
+      <div class="layer l-err-perm">
+        <div class="blackbed"></div>
+        <div class="center">
+          <div class="errcard">
+            <div class="errglyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/><path d="M21 15V7a2 2 0 0 0-2-2H9"/><path d="M3 7v10a2 2 0 0 0 2 2h11"/></svg></div>
+            <div class="err-title">Recording file not found</div>
+            <div class="err-sub">The file may have been moved or deleted.</div>
+            <div class="err-actions">
+              <div class="btn btn-primary">Back</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RUNTIME FLIP (frozen last frame + dim + card, NOT black) -->
+      <div class="layer l-err-midplay">
+        <div class="footage"></div>
+        <div class="frozeUp"></div>
+        <div class="center">
+          <div class="errcard">
+            <div class="errglyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+            <div class="err-title">Playback failed</div>
+            <div class="err-sub">Something interrupted playback.</div>
+            <div class="err-actions">
+              <div class="btn btn-primary">Retry</div>
+              <div class="btn btn-ghost">Back</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="annot">
+      <div class="caption">Reading the specimen</div>
+      <div class="row"><div class="k">Loading warm</div><div class="v"><b>Poster paints at 0ms</b> (Library handoff). Resolve runs underneath. <b>No spinner</b> while under the <code>--loading-grace</code> 400ms window — a fast open shows only the still.</div></div>
+      <div class="row"><div class="k">Loading cold</div><div class="v">No poster (vault/legacy/deep-link, <b>R6 gap</b>). Grace elapses → token spinner + "Loading…" (<code>--media-ink-body</code>). Reduce-motion → static ring.</div></div>
+      <div class="row"><div class="k">Resume cue</div><div class="v">Silent resume (no modal). A quiet non-modal pill names the restored point + a <b>Start over</b> peer; self-dismisses at <code>--resume-cue-dwell</code>.</div></div>
+      <div class="row"><div class="k">Unavailable</div><div class="v"><b>Triad:</b> neutral glyph (never severity red) + one plain line + <b>the right action</b>. Card is the opaque <code>--pin-surface</code> substrate, <code>--media-ink</code> title, <code>--media-ink-body</code> sub.</div></div>
+      <div class="row"><div class="k">Mid-play flip</div><div class="v">Frozen last frame + a light <b>.34 dim</b> (never black) + the same card faded in over it. Retry resumes <b>from the failed position</b>.</div></div>
+      <div class="row"><div class="k">Actions</div><div class="v">One neutral primary (<code>--glyph-fill</code>, no accent — core rule), Back demoted to ghost. 44dp min height, 48dp target.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Tokens — inherited + the few this spec adds</h2>
+    <div class="subtle">Zero new colour family. Only state-timing / state-geometry, same class as <code>--auto-hide</code>.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Reused verbatim from player-core</div>
+      <ul class="tight">
+        <li><b>Ink:</b> <code>--media-ink</code> .94 (titles) · <code>--media-ink-body</code> .55 (sub/loading label) · <code>--media-ink-dim</code> .48 (glyph) · <code>--media-edge-top</code> .12 (hairlines).</li>
+        <li><b>Substrate:</b> <code>--pin-surface</code> #0B0D14 @ <code>--pin-container-alpha</code> .94 — the error card &amp; resume pill (→ 1.0 under reduce-transparency).</li>
+        <li><b>Action fill:</b> <code>--glyph-fill</code> .10 — the neutral primary, exactly as the transport pill. <b>No accent on any state action.</b></li>
+        <li><b>Motion:</b> <code>--ease-std</code> · <code>--t-small</code> 200 (poster/overlay fade) · <code>--t-exit</code> 220 · radii <code>--r-md</code>/<code>--r-pill</code>.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">New — state timing &amp; geometry only</div>
+      <table>
+        <thead><tr><th>Token</th><th>Value</th><th>Governs</th></tr></thead>
+        <tbody>
+          <tr><td><code>--loading-grace</code></td><td>400ms</td><td>Suppress ANY loading cue under this. A fast resolve never flashes a spinner.</td></tr>
+          <tr><td><code>--spinner-period</code></td><td>900ms</td><td>Loading indicator rotation. Reduce-motion → none (static ring).</td></tr>
+          <tr><td><code>--resume-cue-dwell</code></td><td>4000ms</td><td>The "Resuming" pill self-dismiss window.</td></tr>
+          <tr><td><code>--err-card-*</code></td><td>280 / 22</td><td>Unavailable card max-width &amp; padding.</td></tr>
+          <tr><td><code>--err-glyph</code></td><td>44dp</td><td>Neutral state-glyph diameter.</td></tr>
+        </tbody>
+      </table>
+      <p class="subtle" style="margin-top:8px">These are UI-timing constants (like <code>--auto-hide</code> 3000 / <code>--poster-ceiling</code> 1500), not backend. They gate <i>when</i> a cue shows, never <i>what</i> the resolver decides.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Loading &amp; first-frame handoff</h2>
+    <div class="subtle">Poster-first. Grace-gated cue. Cross to live on the real callback, ceiling at 1500ms.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Entry path</th><th>0ms</th><th>&lt; grace (400ms)</th><th>&gt; grace, still resolving</th><th>First frame / ceiling</th></tr></thead>
+    <tbody>
+      <tr><td><b>Warm</b> (Library tile → poster handoff)</td><td>Poster paints over black</td><td>Poster only — no cue</td><td>Poster + quiet cue over it (not a black spinner)</td><td>Cross-fade poster→live on <code>onRenderedFirstFrame</code>, else hard-swap at <code>--poster-ceiling</code> 1500ms</td></tr>
+      <tr><td><b>Cold</b> (Vault / legacy / deep-link — <b>R6 gap today</b>)</td><td>Black</td><td>Black — no cue</td><td>Token spinner + "Loading…"</td><td>Hard cut to live on first frame (no poster to cross from)</td></tr>
+    </tbody>
+  </table>
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <div class="caption">Rules</div>
+      <ul class="tight">
+        <li><b>Never open on a bare spinner.</b> If a poster exists, it IS the loading backdrop; the cue (if any) sits over it.</li>
+        <li><b>Grace before any cue</b> (<code>--loading-grace</code>): sub-400ms resolves show no spinner at all — no flash-of-loading.</li>
+        <li><b>Swap on the callback, not a timer</b> — the 1500ms <code>--poster-ceiling</code> is a <i>safety cap</i> for a slow/absent first-frame, not the normal path.</li>
+        <li><b>R6 — extend the poster handoff to all entries</b> (or a graceful non-poster fallback = the grace-delayed cue). Vault/legacy/deep-link should not flash a blacker entry than the identical Library open.</li>
+        <li>Loading is a <b>Box over the video surface</b>; the surface (TextureView) is already inflated so the poster composites over the shutter (no HW-overlay flash).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Today → target</div>
+      <p class="stagenote"><b>Today:</b> Loading = a single centered <code>Text("Loading…")</code> at white .7, <b>no spinner, no poster on the cold path</b> (<code>PlayerScreen.kt:209</code>). A slow resolve looks frozen.</p>
+      <p class="stagenote"><b>Target:</b> poster-first on warm; grace-gated token spinner on cold; both announce politely. The warm path is silent and instant; the cold path degrades gracefully instead of looking hung.</p>
+      <div class="warnbox">
+        <div class="caption">No autoplay is untouched</div>
+        <span class="stagenote">First-frame handoff renders the <i>first frame</i>; it does not start playback across items. Press-to-play and the resume policy (below) own whether/where the playhead sits. The loading design never introduces autoplay.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Resume &amp; start-over</h2>
+    <div class="subtle">Silent resume + a quiet, non-modal cue. Exact-slot semantics preserved (<code>ResumePolicy</code>).</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Behavior (grounded in ResumePolicy.kt)</div>
+      <ul class="tight">
+        <li><b>Silent resume is the default</b> — no interstitial dialog. Rova's clips are short, self-recorded; a modal "Resume / Start over" gate is streaming-grammar, wrong here (competitive: gallery apps resume silently).</li>
+        <li><b>Near-end auto-resets to 0 already:</b> <code>resolveOpenPosition</code> returns <code>0</code> when the saved point is within <code>nearEndThresholdMs</code> = <code>min(3000, max(1000, dur×0.02))</code>. So the cue only appears when the playhead is <b>genuinely mid-clip</b>.</li>
+        <li><b>The cue</b>: a non-modal pill — "Resuming · <span class="mono">m:ss</span>" + a <b>Start over</b> peer — self-dismisses at <code>--resume-cue-dwell</code> (4s) or on first interaction. It makes the silent restore <i>visible</i> (R5), nothing more.</li>
+        <li><b>Start over</b> seeks to <code>0</code> and rewrites the same exact resume slot (<code>#seg&lt;N&gt;</code> / named side) — no bleed across segments/sides (ADR-0037 slot semantics).</li>
+        <li><b>At/after end</b> parks at <code>durationMs</code> (existing behavior) — the cue reads "Start over" as the sole path.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">What this spec does NOT change</div>
+      <ul class="tight">
+        <li>The <b>resume math</b> (<code>ResumePolicy</code>/<code>PlayerResumeMath</code>) is read-only backbone — the cue only <i>reads</i> the resolved start position.</li>
+        <li>Whether entry <b>auto-plays or waits</b> for press is the core/gesture play policy — states only adds the visible cue + Start-over. It never adds cross-item autoplay.</li>
+        <li>The slot key is minted/threaded by the Library + resume seam; the cue does not re-mint identity.</li>
+      </ul>
+      <div class="frozen">
+        <div class="caption">Frozen — no modal resume gate</div>
+        <span class="stagenote">Resume stays <b>silent + visible</b>, never a blocking choice dialog. Any future change to a modal gate must route back through this HTML.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Unavailable — every cause, the right action</h2>
+    <div class="subtle">8 resolver returns (4 strings) + 2 runtime failures (2 strings) = six strings over ten trigger sites → two action classes. Verbatim from <code>PlayerUriResolver.kt</code> + the two runtime paths (<code>PlayerViewModel.onPlayerError</code>, <code>PlayerStateEmitter</code>).</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Cause / trigger</th><th>String (verbatim)</th><th>Class</th><th>Action</th><th>Proposed supporting line</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Still exporting — <code>exportState != FINALIZED</code> (:146)</td>
+        <td><code>player_unavailable_not_finished</code><br>"Recording not finished"</td>
+        <td><span class="tag t-trans">Transient</span></td>
+        <td><b>Retry</b> + Back</td>
+        <td>"Still finishing up. Try again in a moment."</td>
+      </tr>
+      <tr>
+        <td>Runtime codec/container error — <code>onPlayerError</code> flip (:149–161, PlayerViewModel)</td>
+        <td><code>player_unavailable_playback_failed</code><br>"Playback failed"</td>
+        <td><span class="tag t-trans">Transient</span></td>
+        <td><b>Retry</b> (from position) + Back</td>
+        <td>"Something interrupted playback."</td>
+      </tr>
+      <tr>
+        <td>Attach threw — <code>PlayerStateEmitter</code> (:42)</td>
+        <td><code>player_unavailable_init_failed</code><br>"Playback initialization failed"</td>
+        <td><span class="tag t-trans">Transient</span></td>
+        <td><b>Retry</b> + Back</td>
+        <td>"Couldn't start the player."</td>
+      </tr>
+      <tr>
+        <td>Manifest null (V1) · both coords (V4b) · non-KEPT reject (V4)</td>
+        <td><code>player_unavailable_not_available</code><br>"Recording not available"</td>
+        <td><span class="tag t-perm">Permanent</span></td>
+        <td>Back</td>
+        <td>"This recording can't be opened."</td>
+      </tr>
+      <tr>
+        <td>File gone — kept-raw out of range (V5) · <code>side==null</code> · resolved URI null (:214)</td>
+        <td><code>player_unavailable_file_not_found</code><br>"Recording file not found"</td>
+        <td><span class="tag t-perm">Permanent</span></td>
+        <td>Back</td>
+        <td>"The file may have been moved or deleted."</td>
+      </tr>
+      <tr>
+        <td>Zero segments after side-filter (:244)</td>
+        <td><code>player_unavailable_incomplete</code><br>"Recording incomplete"</td>
+        <td><span class="tag t-perm">Permanent</span></td>
+        <td>Back</td>
+        <td>"This recording didn't finish saving."</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <div class="caption">Transient vs permanent — how the UI decides (no resolver change)</div>
+      <p class="stagenote">The resolver carries only a <code>UiText</code> reason — <b>no severity</b>. So the action is chosen by a
+      <b>pure presentation classifier</b> keyed on the string-resource id:
+      <code>PlayerUnavailableAction.of(@StringRes reason) → {RETRY, DISMISS}</code>, exhaustive over the six known ids,
+      <b>unknown → DISMISS</b> (fail-safe: never offer a retry we can't honor). This mirrors the M9
+      <code>MergeFailureReason</code> precedent (closed set, message-free) and touches <b>no backend</b> — the resolver /
+      ADR-0037 matrix stays read-only.</p>
+      <p class="subtle">Cleaner long-term: a typed <code>reason</code> on <code>Unavailable</code> classified at the resolver
+      seam — but that amends ADR-0037's contract, so it's <b>deferred</b>; V1 uses the string-keyed classifier.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">What Retry actually does (existing paths only)</div>
+      <table>
+        <thead><tr><th>Cause</th><th>Retry =</th></tr></thead>
+        <tbody>
+          <tr><td>not_finished</td><td>Re-load manifest off IO → re-resolve (export may have finalized since). Existing <code>init</code> path, re-entered.</td></tr>
+          <tr><td>init_failed</td><td>Re-acquire lease + re-attach (existing <code>acquire</code>/attach path).</td></tr>
+          <tr><td>playback_failed</td><td><code>ownedPlayer()?.prepare()</code> at the last position (Media3 re-prepare after error) — <b>from the failed point, not 0</b>.</td></tr>
+        </tbody>
+      </table>
+      <p class="subtle" style="margin-top:8px">All three re-enter code that already exists, under <code>ownedPlayer()</code> (ADR-0038). No new capability, no new lease semantics.</p>
+    </div>
+  </div>
+
+  <div class="frozen">
+    <div class="caption">Frozen — the triad &amp; the neutral glyph</div>
+    <span class="stagenote">Every Unavailable frame is <b>neutral glyph + one plain line + the right action(s)</b> — no raw exception, no error
+    code. The glyph is <b>neutral</b> (<code>--media-ink-dim</code> on a hairline ring), <b>never the trust severity red</b>:
+    an unopenable recording is an absence, not a hard-block warning. Copy is calm and specific per cause. This frame is the
+    single face for <b>both</b> entry-time and mid-session failure (§06).</span>
+  </div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Runtime Ready→Unavailable flip (RK7)</h2>
+    <div class="subtle">An already-playing clip can fail. It must degrade gracefully, not hard-cut to black.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Sequence</div>
+      <ul class="tight">
+        <li>Codec/container error fires <code>onPlayerError</code> → VM writes <code>Unavailable(playback_failed)</code> (:160) while the surface still shows the <b>last decoded frame</b>.</li>
+        <li><b>Freeze on that last frame</b> — do not clear the surface to black. Apply a light <code>.34</code> dim so the card reads.</li>
+        <li><b>Fade the error card in</b> over the frozen frame (<code>--t-small</code> 200ms, <code>--ease-std</code>). Reduce-motion → appears instantly, no fade.</li>
+        <li><b>Retry resumes from the failed position</b> (re-prepare), not from 0 — the user keeps their place.</li>
+        <li>The frame reached mid-session is the <b>same card</b> as entry-time failure — one design, two reach-points.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Why not black</div>
+      <p class="stagenote">A hard cut to a black error screen mid-playback reads as a crash and discards the visual context of
+      <i>where</i> the failure happened. Freezing the frame + dimming keeps continuity; the overlay says "this specific moment
+      hit a problem, here's your way back." (Competitive: freeze-last-good-frame, overlay, retry-from-position.)</p>
+      <div class="warnbox">
+        <div class="caption">Design the flip as a first-class path</div>
+        <span class="stagenote">A frame that only anticipates <i>entry</i> failure will still jar mid-session. This spec makes the
+        Unavailable frame reachable <b>from a live frame</b>, transitioning in — not just from Loading.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>State machine &amp; transitions</h2>
+    <div class="subtle">Three code states, the transitions between them, and the motion on each edge.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>From</th><th>Event</th><th>To</th><th>Motion</th><th>Reduce-motion</th></tr></thead>
+    <tbody>
+      <tr><td>entry</td><td>construct</td><td><b>Loading</b></td><td>poster paints (warm) / black (cold)</td><td>same (no motion)</td></tr>
+      <tr><td>Loading</td><td>resolve &gt; grace, still pending</td><td>Loading + cue</td><td>spinner in, <code>--t-small</code></td><td>static ring, label only</td></tr>
+      <tr><td>Loading</td><td>resolve Ready + first frame</td><td><b>Ready</b></td><td>poster→live cross-fade (warm) / hard cut (cold), ceiling 1500ms</td><td>hard cut at first frame</td></tr>
+      <tr><td>Loading</td><td>resolve fails closed</td><td><b>Unavailable</b>(cause)</td><td>card fade in over black, <code>--t-small</code></td><td>instant card</td></tr>
+      <tr><td>Ready</td><td><code>onPlayerError</code></td><td><b>Unavailable</b>(playback_failed)</td><td><b>freeze frame + dim + card fade</b> (§06)</td><td>instant card over frozen frame</td></tr>
+      <tr><td>Unavailable</td><td>Retry (transient only)</td><td><b>Loading</b></td><td>card fades out → loading</td><td>instant</td></tr>
+      <tr><td>Unavailable</td><td>Back</td><td>(pops route)</td><td>standard nav pop</td><td>standard</td></tr>
+      <tr><td>Ready</td><td>open with saved mid-clip position</td><td>Ready + resume cue</td><td>pill in, self-dismiss 4s</td><td>instant, no auto-dismiss animation</td></tr>
+    </tbody>
+  </table>
+  <p class="stagenote" style="margin-top:12px"><b>Loading and Unavailable are on the hot path</b>, not the cold one — the
+  fail-closed resolver (ADR-0037) yields Unavailable for every malformed / not-finalized / missing shape, and manifest load
+  runs off IO on every open. Both deserve the same care as Ready.</p>
+</section>
+
+<!-- ============================================================ 8 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Accessibility — announce every state change</h2>
+    <div class="subtle">Absent today (only the timeline has a live region). This is a required addition.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Required live-region announcements</div>
+      <table>
+        <thead><tr><th>State</th><th>Politeness</th><th>Spoken</th></tr></thead>
+        <tbody>
+          <tr><td>Loading (escalated)</td><td>Polite</td><td>"Loading"</td></tr>
+          <tr><td>Ready</td><td>Polite</td><td>(the clip title / "Ready") — no interruption</td></tr>
+          <tr><td>Unavailable</td><td><b>Assertive</b></td><td>The reason line — a failure must not be silent</td></tr>
+          <tr><td>Resume cue</td><td>Polite</td><td>"Resuming at m:ss" — spoken on the Play control label, not only visual</td></tr>
+        </tbody>
+      </table>
+      <p class="subtle" style="margin-top:8px">Today: <b>no</b> state-change announcement exists (<code>PlayerLoading</code>/<code>PlayerUnavailable</code> are plain <code>Text</code>). The only <code>liveRegion</code> is on the clip timeline (<code>SegmentedTimeline.kt:251</code>). A screen-reader user currently gets no cue that playback loaded or failed.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">Focus, targets, motion</div>
+      <ul class="tight">
+        <li><b>Retry / Back are focusable, labeled, ≥48dp</b> targets. On an Unavailable frame, focus lands on the primary action.</li>
+        <li><b>The poster carries a content description</b> (or is marked decorative if the title already conveys it).</li>
+        <li><b>Reduce-motion:</b> spinner → static ring; poster cross-fade → hard cut; card fade → instant. No state cue is motion-only.</li>
+        <li><b>Touch-exploration state re-arms</b> on toggle (today it's read once at composition — a discovery gap to fix in the states transcription).</li>
+        <li>Auto-hide stays TalkBack-suppressed (inherited from core) — an Unavailable card never auto-hides while focused.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 9 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Copy — proposed strings</h2>
+    <div class="subtle">Existing titles kept verbatim; supporting lines + action labels are new (land with their consumer).</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">New strings this spec introduces</div>
+      <table>
+        <thead><tr><th>Key</th><th>English</th></tr></thead>
+        <tbody>
+          <tr><td><code>player_retry</code></td><td>"Retry"</td></tr>
+          <tr><td><code>player_start_over</code></td><td>"Start over"</td></tr>
+          <tr><td><code>player_resuming</code></td><td>"Resuming"</td></tr>
+          <tr><td><code>player_unavailable_not_finished_detail</code></td><td>"Still finishing up. Try again in a moment."</td></tr>
+          <tr><td><code>player_unavailable_playback_failed_detail</code></td><td>"Something interrupted playback."</td></tr>
+          <tr><td><code>player_unavailable_init_failed_detail</code></td><td>"Couldn't start the player."</td></tr>
+          <tr><td><code>player_unavailable_not_available_detail</code></td><td>"This recording can't be opened."</td></tr>
+          <tr><td><code>player_unavailable_file_not_found_detail</code></td><td>"The file may have been moved or deleted."</td></tr>
+          <tr><td><code>player_unavailable_incomplete_detail</code></td><td>"This recording didn't finish saving."</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="caption">Rules</div>
+      <ul class="tight">
+        <li><b>Titles stay verbatim</b> — the six existing <code>player_unavailable_*</code> strings are unchanged; only <i>detail</i> lines + action labels are new.</li>
+        <li><b>Both locales</b> — every new string lands in <code>values/</code> and <code>values-es/</code> together (<code>SpanishCatalogParityTest</code>; the M7 parity regression is not repeated).</li>
+        <li><b>No format args / plurals</b> on the detail lines (parity-safe). The resume cue's "m:ss" is composed, not a plural.</li>
+        <li><b>Calm, specific, non-blaming.</b> No exception text reaches the UI (the phantom raw-exception path was already removed in M9's recovery work — the player must not reintroduce it).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Implementation notes (for the later Compose transcription)</h2>
+    <div class="subtle">Non-binding until freeze; captures the transcription intent. No backend touched.</div>
+  </div></div>
+  <ul class="tight">
+    <li><b>Loading:</b> replace the single <code>Text</code> (<code>PlayerScreen.kt:209</code>) with a poster-first Box: poster if <code>entryPoster != null</code>, else a grace-gated (<code>--loading-grace</code>) token spinner + label. Spinner is reduce-motion-gated.</li>
+    <li><b>Unavailable:</b> replace the Back-only card (<code>PlayerScreen.kt:220</code>) with the triad card + a pure <code>PlayerUnavailableAction.of(@StringRes)</code> classifier deciding Retry-vs-Back. Classifier is a pure JVM-tested helper (M9 precedent) — <b>no resolver change</b>.</li>
+    <li><b>Retry:</b> add a <code>retry()</code> on <code>PlayerViewModel</code> that re-enters the existing resolve/attach path (not_finished/init_failed) or calls <code>ownedPlayer()?.prepare()</code> at last position (playback_failed). No new lease/engine capability (ADR-0038 unchanged).</li>
+    <li><b>Runtime flip:</b> on <code>onPlayerError</code>, do <b>not</b> clear the surface — render the card over the frozen frame with a <code>.34</code> dim. Freeze is the absence of <code>clearVideoSurface</code> until Back/Retry.</li>
+    <li><b>Resume cue:</b> a non-modal pill shown when the resolved start position &gt; 0 (read from the existing <code>PlayerResumeMath</code> result); Start over seeks 0 + rewrites the same slot. No new persistence.</li>
+    <li><b>A11y:</b> add a state <code>liveRegion</code> (polite Loading/Ready, assertive Unavailable) + resume state on the Play label. Re-arm touch-exploration on toggle.</li>
+    <li><b>R6:</b> extend <code>PlayerPosterHandoff.set</code> to Vault/legacy/deep-link entries (or accept the grace-gated cold cue as the graceful fallback).</li>
+    <li><b>Strings:</b> add the §09 strings to <code>values/</code> + <code>values-es/</code> together.</li>
+    <li><b>Tests / gate:</b> the classifier + any contrast pin go into the existing pure-JVM test family — <b>no new gate</b> (protection = pure helper tests + the core scrim-composite pin, per the ADR-0036/0038 precedent). Card ink pairs ride the core over-media contrast pin (§07 of player-core); a solid <code>--pin-surface</code> card is the easy case (opaque, already Trust-swept).</li>
+    <li><b>Backbone read-only:</b> <code>PlayerUriResolver</code> (ADR-0037), <code>PlayerEngine</code>/<code>Ledger</code> (ADR-0038), <code>ResumePolicy</code>/<code>WallClockTimeline</code> (ADR-0032) are untouched. This spec is chrome + presentation only.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Frozen boundary — what states does NOT decide</h2>
+    <div class="subtle">Layers on core; hands off to the later specs.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Owned elsewhere</th><th>Not decided here</th></tr></thead>
+    <tbody>
+      <tr><td><code>player-core</code></td><td>Token families, three-zone layout, immersive chrome policy, control/timeline placement — inherited, not redrawn.</td></tr>
+      <tr><td><code>player-gestures</code></td><td>Double-tap ±seek, drag-scrub detail, swipe-down-dismiss, whether entry auto-plays vs waits for press.</td></tr>
+      <tr><td><code>player-actions</code></td><td>Share-from-player, inline keep/mark-for-discard, overflow. (States designs failure/loading only, not review actions.)</td></tr>
+      <tr><td><code>player-dualshot</code></td><td>Angle-swap (gated on the RK3 minter decision). States designs the swapped stream's own Loading/Unavailable when it lands, not the swap itself.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">This document is the canonical spec for player states.</div>
+    <span class="stagenote">Once frozen: no state redesign except via HTML-first re-approval. Later specs may <i>reach</i> these states
+    (a failed share, a swapped angle that won't resolve) but they render <b>this</b> Loading/Unavailable/resume design; they
+    do not redraw it. Any change routes back through this HTML first.</span>
+  </div>
+  <p class="subtle" style="margin-top:18px">Authored from <code>rova-player-discovery.md</code> + current source (read-only:
+  <code>PlayerUiState</code>, <code>PlayerUriResolver</code>, <code>PlayerViewModel</code>, <code>ResumePolicy</code>,
+  <code>PlayerScreen</code>) + a focused playback-states interaction study (Google Photos · Apple Photos · Blackmagic Camera ·
+  Samsung Gallery). Layers on the frozen <code>player-core.html</code>. Repository unchanged apart from this file.
+  Next — critique → freeze → <code>player-gestures.html</code> — pending owner go-ahead.</p>
+</section>
+
+</div>
+
+<script>
+  function setState(s, btn){
+    document.getElementById('phone').setAttribute('data-state', s);
+    document.querySelectorAll('.seg .tog').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true');
+  }
+  function toggleRm(){
+    var b=document.getElementById('tRm');
+    var on=document.documentElement.getAttribute('data-rm')==='1';
+    document.documentElement.setAttribute('data-rm', on?'0':'1');
+    b.setAttribute('aria-pressed', String(!on));
+  }
+</script>
+</body>
+</html>

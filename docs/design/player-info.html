@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Info</title>
+<style>
+  /* ==================================================================
+     PLAYER-INFO — the canonical RECORDING-INFORMATION specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE) + player-gestures.html (FROZEN) + player-actions.html
+     (FROZEN) + player-sharing.html (FROZEN CANDIDATE). player-actions
+     defined Info as the SECOND permanent player action and DEFERRED
+     the contents to this document.
+
+     This spec owns everything that happens AFTER Info is pressed:
+       what information is presented · which fields · provenance ·
+       DualShot representation · recovery explanation · unavailable
+       fields · where every field comes from · accessibility · motion.
+
+     It DOES NOT redesign the layout, transport, gestures, states,
+     sharing, or editing. Only WHAT information is shown.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (resolver sole minter; transported not
+         reconstructed; fails closed)
+       ADR-0038 lifecycle (fresh player per lease; nav-pop unchanged)
+       ADR-0032 wall-clock playhead (approx mask)
+       ADR-0025 vault (app-private, no public copy, FLAG_SECURE)
+       NO autoplay · NO new backend capability · Media3 1.4.1.
+
+     GROUND TRUTH (verified in source via a repo fact-sweep, NOT memory):
+       SessionManifest (SessionManifest.kt, SCHEMA_VERSION 13): top-level
+         sessionId, startedAt, config(SessionConfig), segments(List<
+         SegmentRecord>), exportTier, exportState, terminated(Terminated?),
+         terminatedAt, stopReason(StopReason), audioMode, vaultState,
+         vault/portrait/landscape per-side triples, schedule fields.
+         NO top-level duration/size/resolution/fps/bitrate/codec/orientation.
+       SegmentRecord: filename, durationMs, sizeBytes, sha1, side
+         (VideoSide?), effectiveTargetRotation(Int?), startedAtWallClock.
+         NO per-segment resolution/fps/bitrate/codec.
+       SessionConfig: durationSeconds, intervalSeconds, resolution(String
+         = the REQUESTED picker label "SD/HD/FHD/4K", NOT what the device
+         delivered), loopCount, captureTopology, orientationPolicy,
+         orientationLockRotation, legacyMode.
+       PlayerUiState.Ready ALREADY holds: mediaUri, sessionId, startedAt,
+         segmentDurationsMs, perClipDurationMs, totalClips,
+         totalDurationFromSegmentsMs, segmentWallStartsMs,
+         wallStartIsApproxMask.  (PlayerUiState.kt:28-58)
+       PlayerViewModel DISCARDS the manifest after resolve — it keeps
+         only Ready + sessionId. Any manifest field not in Ready needs a
+         re-load via sessionStore.loadManifest(sessionId): cheap disk
+         JSON, no decode.  (PlayerViewModel.kt)
+       Enums: Terminated{USER_STOPPED,COMPLETED,KILLED_BY_SYSTEM,
+         KILLED_FORCE_STOP,MULTI_SEGMENT_KEPT}; StopReason{USER,
+         LOW_STORAGE,PERMISSION_REVOKED,INIT_FAILED,THERMAL,
+         SCHEDULE_WINDOW,NONE}; VideoSide{PORTRAIT,LANDSCAPE}.
+       Technical metadata: the ONLY file-decode read in the app is
+         VideoMetadataUtils.extractMetadata → MediaMetadataRetriever
+         width/height → "SD/HD/FHD/4K" label + a thumbnail; used by the
+         LIBRARY/VAULT rows, NEVER by the player. fps / codec / bitrate
+         are NEVER extracted or stored anywhere.  (VideoMetadataUtils.kt:
+         49-74, HistoryMetadataLoader.kt:34-46)
+       Sidecar LibraryMetadataEntry: favorite, customTitle, lastPlayedAt,
+         positionsBySide — NO technical metadata.  (LibraryMetadataEntry.kt)
+       Date/recency labels: HistoryRowFormatters.formatPrimaryDateTime,
+         LibraryDateLabels, RelativeTimeLabels — pure, from startedAt.
+     Sources above + competitive metadata-presentation research (Google
+     Photos · Apple Photos · Samsung Gallery · Blackmagic Camera · DJI
+     Mimo — principles only, no visual copying).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── NO NEW info tokens are introduced. ──
+       Info reuses the inherited pinned surface, over-media ink trio, the
+       48dp target (owned by player-actions), the container/exit timings,
+       and the same swipe-down-dismiss sheet the gesture spec defines. A
+       field row that needs a NEW token needs a design change in
+       player-core/player-actions first. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     INFO SPECIMEN — an over-media frame with the Info sheet drawn
+     onto the inherited three-zone layout. Illustrative, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-a="single"] .a-single,
+  .phone[data-a="dual"]   .a-dual,
+  .phone[data-a="recov"]  .a-recov{display:block}
+
+  .ctop{position:absolute;left:0;right:0;top:0;height:80px;background:var(--scrim-top)}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:150px;background:var(--scrim-bottom)}
+
+  .toprow{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;gap:10px}
+  .slot{width:40px;height:40px;border-radius:50%;background:var(--glyph-fill);display:flex;
+        align-items:center;justify-content:center;color:var(--media-ink);font:600 9px/1.1 inherit;
+        text-align:center;flex:none;position:relative}
+  .slot.hot{outline:2px solid var(--stage-accent);outline-offset:2px}
+  .idtext{flex:1;min-width:0}
+  .idtext .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idtext .t2{font:500 10px/1.2 inherit;color:var(--media-ink-body)}
+
+  .slotlabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  /* Rova-owned Info sheet — pinned surface, over-media ink */
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--pin-surface);
+        border-top:1px solid var(--media-edge-top);border-radius:16px 16px 0 0;padding:12px 16px 20px;
+        max-height:78%;overflow:hidden}
+  .handle{width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);margin:0 auto 12px}
+  .sh-title{font:600 13px/1.3 inherit;color:var(--media-ink);margin-bottom:1px}
+  .sh-sub{font:500 10px/1.3 inherit;color:var(--media-ink-body);margin-bottom:12px}
+  .grp{margin-bottom:12px}
+  .grp-h{font:600 8.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;color:var(--media-ink-dim);margin-bottom:6px}
+  .irow{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)}
+  .irow .ik{font:500 10.5px/1.3 inherit;color:var(--media-ink-body);flex:none}
+  .irow .iv{font:600 10.5px/1.3 inherit;color:var(--media-ink);text-align:right}
+  .irow .iv.muted{color:var(--media-ink-dim);font-weight:500;font-style:italic}
+  .prov{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);
+        border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:9px 11px;margin-bottom:10px}
+  .prov .pv-ic{width:26px;height:26px;border-radius:7px;background:var(--glyph-fill);flex:none;
+        display:flex;align-items:center;justify-content:center;color:var(--media-ink);font:600 12px/1 inherit}
+  .prov .pv-t{font:600 10.5px/1.3 inherit;color:var(--media-ink)}
+  .prov .pv-s{font:500 9px/1.3 inherit;color:var(--media-ink-body)}
+  .prov.warn{background:color-mix(in srgb,var(--note) 10%,transparent);border-color:color-mix(in srgb,var(--note) 30%,transparent)}
+
+  .flabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Info — the recording-information contract</h1>
+  <p class="stagenote">
+    Everything that happens <b>after Info is pressed</b>. <code>player-actions.html</code> defined Info as the
+    <b>second permanent action</b> and deferred its contents here. This spec <b>layers on the frozen
+    <code>player-core</code> / <code>player-states</code> / <code>player-gestures</code> / <code>player-actions</code> /
+    <code>player-sharing</code></b> and inherits every token, layout, state, gesture, action, and the sheet idiom — it
+    <b>never redraws them</b>. It decides <b>what information is shown, and where each field comes from</b>. Grounded in
+    current source (the player already holds durations/clips/wall-starts; the manifest holds the rest; <b>fps/codec/bitrate
+    are never stored and are rejected, not designed-around</b>) + competitive metadata research — <b>not memory</b>.
+    Preserves ADR-0037/0038/0032/0025, and <b>adds no backend capability</b>.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Info layer</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('single',this)">Single recording</button>
+        <button class="tog" aria-pressed="false" onclick="setA('dual',this)">DualShot</button>
+        <button class="tog" aria-pressed="false" onclick="setA('recov',this)">Recovery / interrupted</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Model &amp; boundary — what Info is, and what it must not touch</h2>
+    <div class="subtle">The one-line model, the backbone it preserves, and the redesign lines it may not cross.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The model in one line</div>
+      <p style="margin:0 0 8px">Info = <b>a calm, read-only account of what this recording is and how it came to be</b>, drawn from data the app already has. It is a review aid — <b>provenance and context first, technical trivia last (or never)</b> — not a camera-app spec sheet.</p>
+      <p style="margin:0">It is a <b>read, not a probe</b>: everything shown is already in memory (the player's state) or one cheap disk read away (the manifest). Info performs <b>no file decode by default</b>, invents no metadata, and never writes anything.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">What this spec must NOT do</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Not move or restyle</b> the Info affordance, the Share slot, transport, timeline, layout, tokens, states, or gestures — those are the five frozen specs.</li>
+        <li><b>Not invent backend</b>: no new persistence, no new schema field, no metadata the app doesn't already produce, no MediaSession.</li>
+        <li><b>Not design</b> sharing (player-sharing), editing/trim, or DualShot playback controls — Info only <i>describes</i>.</li>
+        <li><b>Not change</b> the resolver, export tiers, the vault model, or identity transport.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · Info adds NO backend capability</div>
+    <p style="margin:0">Every field routes something that already exists: the player's <code>PlayerUiState.Ready</code> (durations, clip count, wall-starts, session start), or a cheap re-read of <code>manifest.json</code> via <code>sessionStore.loadManifest(sessionId)</code> (mode, orientation policy, size, terminal/stop reason, vault state, per-side fields). The player gains exactly one new capability boundary — <b>an Info entry point that re-loads the manifest and renders it read-only</b> — and it remains <b>PROPOSED</b>, gated on owner sign-off (the same gate <code>player-actions</code> put on the Info action).</p>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — the Info sheet, three recording kinds</h2>
+    <div class="subtle">Toggle the layers above. The sheet is Rova-owned (pinned surface, inherited ink, swipe-down-dismiss); fields are grouped provenance → basics → capture.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="single" id="phone">
+      <div class="footage"></div>
+      <div class="ctop"></div>
+
+      <!-- SINGLE -->
+      <div class="layer a-single">
+        <div class="toprow">
+          <div class="slot hot">ⓘ<span class="slotlabel" style="top:44px;left:0">INFO pressed</span></div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM</div><div class="t2">Single · 3 clips</div></div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Recording details</div>
+          <div class="sh-sub">Today, 2:14 PM · 3 clips · 1m 20s</div>
+          <div class="prov">
+            <div class="pv-ic">✓</div>
+            <div><div class="pv-t">Completed normally</div><div class="pv-s">Ran to the end of its loop</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Basics</div>
+            <div class="irow"><div class="ik">Started</div><div class="iv">Today, 2:14 PM</div></div>
+            <div class="irow"><div class="ik">Length</div><div class="iv">1m 20s</div></div>
+            <div class="irow"><div class="ik">Clips</div><div class="iv">3</div></div>
+            <div class="irow"><div class="ik">Size</div><div class="iv">42.6 MB</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Capture</div>
+            <div class="irow"><div class="ik">Mode</div><div class="iv">Single · Portrait</div></div>
+            <div class="irow"><div class="ik">Quality (requested)</div><div class="iv">FHD</div></div>
+            <div class="irow"><div class="ik">Interval</div><div class="iv">Every 30s · 3 loops</div></div>
+            <div class="irow"><div class="ik">Audio</div><div class="iv">On</div></div>
+          </div>
+        </div>
+        <div class="flabel" style="top:120px;right:14px">Rova-owned · inherited ink</div>
+      </div>
+
+      <!-- DUALSHOT -->
+      <div class="layer a-dual">
+        <div class="toprow">
+          <div class="slot">ⓘ</div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM · P+L</div><div class="t2">Portrait angle</div></div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Recording details</div>
+          <div class="sh-sub">Today, 2:14 PM · P+L · two angles</div>
+          <div class="prov">
+            <div class="pv-ic">✓</div>
+            <div><div class="pv-t">Completed normally</div><div class="pv-s">Both angles captured</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Basics</div>
+            <div class="irow"><div class="ik">Started</div><div class="iv">Today, 2:14 PM</div></div>
+            <div class="irow"><div class="ik">Length</div><div class="iv">1m 20s</div></div>
+            <div class="irow"><div class="ik">Clips per angle</div><div class="iv">3</div></div>
+            <div class="irow"><div class="ik">Size · total</div><div class="iv">81.2 MB</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Angles</div>
+            <div class="irow"><div class="ik">Portrait <span class="mono">(reviewing)</span></div><div class="iv">40.8 MB · FHD</div></div>
+            <div class="irow"><div class="ik">Landscape</div><div class="iv">40.4 MB · FHD</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RECOVERY / INTERRUPTED -->
+      <div class="layer a-recov">
+        <div class="toprow">
+          <div class="slot">ⓘ</div>
+          <div class="idtext"><div class="t1">Yesterday, 9:03 AM</div><div class="t2">Kept clips · 2 clips</div></div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="sh-title">Recording details</div>
+          <div class="sh-sub">Yesterday, 9:03 AM · 2 clips kept</div>
+          <div class="prov warn">
+            <div class="pv-ic">!</div>
+            <div><div class="pv-t">Stopped by the system</div><div class="pv-s">Clips before the stop were kept and are playable</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Basics</div>
+            <div class="irow"><div class="ik">Started</div><div class="iv">Yesterday, 9:03 AM</div></div>
+            <div class="irow"><div class="ik">Length kept</div><div class="iv">40s</div></div>
+            <div class="irow"><div class="ik">Clips kept</div><div class="iv">2</div></div>
+            <div class="irow"><div class="ik">Size</div><div class="iv">21.0 MB</div></div>
+          </div>
+          <div class="grp">
+            <div class="grp-h">Capture</div>
+            <div class="irow"><div class="ik">Mode</div><div class="iv">Single · Portrait</div></div>
+            <div class="irow"><div class="ik">Quality (requested)</div><div class="iv">HD</div></div>
+            <div class="irow"><div class="ik">Combined file</div><div class="iv muted">not created</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Trigger</div><div class="v"><b>Info ⓘ</b>, the second permanent action (owned by <code>player-actions</code>). This spec starts the moment it is pressed.</div></div>
+      <div class="row"><div class="k">Surface</div><div class="v"><b>One pinned sheet</b>, inherited ink + swipe-down-dismiss (the gesture/sharing sheet idiom). Read-only; no controls.</div></div>
+      <div class="row"><div class="k">Order</div><div class="v"><b>Provenance banner → Basics → Capture</b> (→ Angles for DualShot). What-happened first; trivia last.</div></div>
+      <div class="row"><div class="k">Source</div><div class="v"><b>Ready + one manifest re-read.</b> No file decode by default. Every field's origin is §03.</div></div>
+      <div class="row"><div class="k">Unavailable</div><div class="v">Shown as <i>italic muted</i> ("not created", "unknown"), never fabricated, never a blank. §07 / rules in §03.</div></div>
+      <div class="row"><div class="k">Rejected</div><div class="v"><span class="tag t-fail">fps · codec · bitrate</span> never stored → not shown (§04).</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Information philosophy — provenance over spec-sheet</h2>
+    <div class="subtle">First principles for a background-recorder's review player, filtered through "no backend / calm / truthful."</div>
+  </div></div>
+  <p>Rova records <b>unattended, in the background, in periodic clips</b>. The user did not frame a shot — they set it running and came back. So the first question Info must answer is not "what codec" but <b>"is this recording whole, and what happened while I was away?"</b> Competitive galleries and pro-camera apps sit at two poles:</p>
+  <table>
+    <thead><tr><th>Source</th><th>What they show</th><th>Principle Rova takes</th></tr></thead>
+    <tbody>
+      <tr><td>Google Photos / Apple Photos</td><td>Date, time, size, resolution, a map, device — light, human, one screen.</td><td><span class="tag t-pass">Adopt</span> lead with human facts (when, how long, how big); keep it to one calm sheet.</td></tr>
+      <tr><td>Samsung Gallery</td><td>Same, plus an expandable "Details" with path/resolution.</td><td><span class="tag t-pass">Adopt</span> progressive: the everyday facts up top, the technical few below — never a wall.</td></tr>
+      <tr><td>Blackmagic Camera / DJI Mimo</td><td>Codec, bitrate, fps, ISO, shutter, white balance, LUT — a production sheet.</td><td><span class="tag t-fail">Reject</span> Rova is not a cine tool; it doesn't capture or store these, and a background clip has no framing intent to report.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen philosophy</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Provenance is the headline.</b> The first thing in the sheet is <i>what happened to this recording</i> — completed, stopped by you, stopped by the system, force-stopped, or clips-kept-after-interruption. That is the fact a background recorder's user most needs.</li>
+      <li><b>Human facts before technical facts.</b> When, how long, how many clips, how big — then mode/quality/interval. Codec-tier trivia is rejected outright (§04), not merely buried.</li>
+      <li><b>Only what the app truthfully knows.</b> Every field is a real value from Ready or the manifest. Nothing is inferred, estimated, or fabricated to fill a row; unknown is shown as unknown (§03).</li>
+      <li><b>Read-only and calm.</b> No controls in the sheet, no probing the file, no writes. Info describes; other specs act.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Field inventory — every field, and exactly where it comes from</h2>
+    <div class="subtle">Each field labelled ALREADY-LOADED · CHEAP-READ · EXPENSIVE-READ · REJECTED, per the repo fact-sweep. Nothing here needs new backend.</div>
+  </div></div>
+  <div class="warnbox">
+    <div class="caption">Critical · the player threw the manifest away</div>
+    <p style="margin:0"><code>PlayerViewModel</code> keeps only <code>PlayerUiState.Ready</code> + <code>sessionId</code> after resolving; it does <b>not</b> retain the full <code>SessionManifest</code>. So Info renders ALREADY-LOADED fields from <code>Ready</code> immediately, and re-loads the manifest once (<code>sessionStore.loadManifest(sessionId)</code> — <b>cheap disk JSON, no decode</b>) for the CHEAP-READ fields. That single re-read is the entire "backend" Info adds. No field below requires a schema change.</p>
+  </div>
+  <table>
+    <thead><tr><th>Field</th><th>Source</th><th>Availability</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td><b>Started (date · time)</b></td><td><code>Ready.startedAt</code> → <code>HistoryRowFormatters.formatPrimaryDateTime</code></td><td><span class="tag t-pass">Already-loaded</span></td><td>Show. The headline timestamp, same formatter the top-bar uses.</td></tr>
+      <tr><td><b>Length (total)</b></td><td><code>Ready.totalDurationFromSegmentsMs</code></td><td><span class="tag t-pass">Already-loaded</span></td><td>Show. Authoritative sum of segment durations.</td></tr>
+      <tr><td><b>Clips</b></td><td><code>Ready.totalClips</code></td><td><span class="tag t-pass">Already-loaded</span></td><td>Show. For DualShot this is per-angle (side-filtered).</td></tr>
+      <tr><td><b>Interval · loops</b></td><td><code>Ready.perClipDurationMs</code> + manifest <code>config.intervalSeconds</code>/<code>loopCount</code></td><td><span class="tag t-note">Cheap-read</span></td><td>Show. The recording schedule the user set. "Every 30s · 3 loops."</td></tr>
+      <tr><td><b>Size</b></td><td><code>manifest.segments[].sizeBytes</code> summed → <code>StorageFormat.size</code></td><td><span class="tag t-note">Cheap-read</span></td><td>Show. Sum from the manifest; DualShot sums per side + total (§06).</td></tr>
+      <tr><td><b>Mode (topology)</b></td><td><code>config.captureTopology</code> ("Single" / "DualShot")</td><td><span class="tag t-note">Cheap-read</span></td><td>Show. "Single" / "P+L".</td></tr>
+      <tr><td><b>Orientation</b></td><td><code>config.orientationPolicy</code> (+ <code>orientationLockRotation</code>); per-clip <code>effectiveTargetRotation</code></td><td><span class="tag t-note">Cheap-read</span></td><td>Show the <i>policy</i> ("Portrait" / "Landscape" / "Follows device"). Per-clip rotation is informational, not surfaced.</td></tr>
+      <tr><td><b>Quality (requested)</b></td><td><code>config.resolution</code> ("SD/HD/FHD/4K")</td><td><span class="tag t-note">Cheap-read</span></td><td>Show, <b>labelled "requested"</b> — it is the picker choice, not what the device delivered (§04).</td></tr>
+      <tr><td><b>Audio</b></td><td><code>manifest.audioMode</code> (VIDEO_AUDIO / VIDEO_ONLY)</td><td><span class="tag t-note">Cheap-read</span></td><td>Show. "On" / "Off".</td></tr>
+      <tr><td><b>Provenance (what happened)</b></td><td><code>manifest.terminated</code> + <code>stopReason</code> (+ <code>terminatedAt</code>)</td><td><span class="tag t-note">Cheap-read</span></td><td>Show as the headline banner (§05 / §07).</td></tr>
+      <tr><td><b>Vault state</b></td><td><code>manifest.vaultState</code> (VM already derives <code>isVaulted</code>)</td><td><span class="tag t-note">Cheap-read</span></td><td>A vaulted session still plays (under FLAG_SECURE), so Info opens on it like any resolved artifact — the action is <b>not</b> suppressed here (presence is <code>player-actions</code>'). May be surfaced as a "Private" row or omitted; FLAG_SECURE keeps the display protected either way (§05).</td></tr>
+      <tr><td>Actual resolution (W×H / SD-4K)</td><td><code>VideoMetadataUtils</code> → <code>MediaMetadataRetriever</code></td><td><span class="tag t-fail">Expensive-read</span></td><td><b>Deferred, not shown by default.</b> Requires a file decode the player never runs; the requested label covers the need. A future opt-in could show it (§04).</td></tr>
+      <tr><td>fps</td><td>— none —</td><td><span class="tag t-fail">Does-not-exist</span></td><td><b>Rejected.</b> Never extracted or stored anywhere in the app (§04).</td></tr>
+      <tr><td>Codec / bitrate</td><td>— none —</td><td><span class="tag t-fail">Does-not-exist</span></td><td><b>Rejected.</b> Never stored; not meaningful for a background clip (§04).</td></tr>
+      <tr><td>Location / GPS</td><td>— none —</td><td><span class="tag t-fail">Does-not-exist</span></td><td><b>Rejected.</b> Rova captures no location; inventing a map would be a new permission + backend.</td></tr>
+      <tr><td>Device / camera model</td><td>— none —</td><td><span class="tag t-fail">Does-not-exist</span></td><td><b>Rejected for v1</b> (the app never records which lens/model produced the file). A future field if ever wanted; not designed-around here.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · availability drives inclusion</div>
+    <p style="margin:0">A field appears in Info <b>iff</b> it is ALREADY-LOADED or CHEAP-READ. EXPENSIVE-READ (actual resolution) is <b>deferred</b> behind a possible future opt-in, never run just to fill the sheet. DOES-NOT-EXIST fields (fps/codec/bitrate/location/device) are <b>rejected</b> — the honest answer to "why isn't fps here" is "the app never captured it," and Info does not fabricate. Any field that would need new capture or storage is a future ADR, not a row added here.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Technical metadata — what's honest to show, what's rejected</h2>
+    <div class="subtle">The one place a spec-sheet instinct meets the repository. The repository wins: most of it does not exist.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Quality — shown, but honestly</div>
+      <p style="margin:0 0 8px"><code>config.resolution</code> is the <b>requested picker label</b> ("SD/HD/FHD/4K"). The manifest's own KDoc is explicit: it is <b>not updated to reflect what the device actually delivered</b>. So Info shows it labelled <b>"Quality (requested)"</b> — truthful about being an intent, not a measurement.</p>
+      <p style="margin:0">The <b>actual</b> delivered resolution exists only via a <code>MediaMetadataRetriever</code> decode (<code>VideoMetadataUtils</code>), which today runs only for Library/Vault rows, <b>never in the player</b>. Surfacing it here would mean a file decode on every Info open — rejected as the default. It is <span class="tag t-note">deferred</span> to a possible future "verify actual quality" opt-in, decoded on demand and cached, never eagerly.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">fps · codec · bitrate — rejected</div>
+      <div class="rejbox" style="margin:0">
+        <div class="caption">Not stored, not shown</div>
+        <ul class="tight" style="margin-bottom:0">
+          <li><b>fps</b> — never extracted, never stored, anywhere in the app.</li>
+          <li><b>codec</b> — only a record-time <code>VideoCodec{H264}</code> enum exists in the dual-recorder types; it is <b>not written to the manifest</b> and does not describe the merged output.</li>
+          <li><b>bitrate</b> — never extracted or stored.</li>
+        </ul>
+      </div>
+      <p style="margin:8px 0 0">Showing any of these means <b>either</b> a per-file decode (cost, jank) <b>or</b> a fabricated constant (a lie). Both are rejected. A background recorder's user gains nothing from a codec string; the calm sheet is worth more than the completeness.</p>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · reject, don't design-around</div>
+    <p style="margin:0">Info shows <b>requested quality</b> (labelled as such) and no other technical field. fps, codec, and bitrate are <b>rejected</b> — the app does not have them, and Info never invents data. Actual delivered resolution is <b>deferred</b> to a future decode-on-demand opt-in with its own decision; it is not part of v1 Info. This keeps Info truthful, instant, and jank-free.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Recording provenance — the headline the sheet leads with</h2>
+    <div class="subtle">A background clip's most important fact is what happened to it. Mapped from the real terminal enums.</div>
+  </div></div>
+  <p>The provenance banner is a plain-language reading of <code>manifest.terminated</code> (and, for stops, <code>stopReason</code>). These are the <b>actual</b> enum values — no invented states:</p>
+  <table>
+    <thead><tr><th><code>terminated</code></th><th>Banner (plain language)</th><th>Detail line (from <code>stopReason</code> where relevant)</th></tr></thead>
+    <tbody>
+      <tr><td><code>COMPLETED</code></td><td>Completed normally</td><td>"Ran to the end of its loop." Neutral/positive tone.</td></tr>
+      <tr><td><code>USER_STOPPED</code></td><td>Stopped by you</td><td>"You ended this recording early." (<code>stopReason.USER</code>)</td></tr>
+      <tr><td><code>KILLED_BY_SYSTEM</code></td><td>Stopped by the system</td><td>Reason-specific: low storage / thermal / permission revoked / schedule window ended — mapped from <code>stopReason</code>.</td></tr>
+      <tr><td><code>KILLED_FORCE_STOP</code></td><td>Force-stopped</td><td>"The app was force-stopped during recording."</td></tr>
+      <tr><td><code>MULTI_SEGMENT_KEPT</code></td><td>Clips kept after an interruption</td><td>"Clips recorded before the stop were kept and are playable." (§07)</td></tr>
+      <tr><td><code>null</code> (still live — not reachable in the player)</td><td>—</td><td>The player only opens finalized/kept recordings; a live session is never in Info.</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:10px"><b>StopReason → detail</b> (for system/early stops): <code>LOW_STORAGE</code> "Storage ran low" · <code>THERMAL</code> "The device got too warm" · <code>PERMISSION_REVOKED</code> "A permission was turned off" · <code>INIT_FAILED</code> "The camera couldn't start" · <code>SCHEDULE_WINDOW</code> "The recording window ended" · <code>USER</code> "You ended it" · <code>NONE</code> no detail line.</p>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Provenance leads the sheet</b> — one banner, plain language, tone matched to the outcome (neutral for completed, gently informative for interrupted, never alarming).</li>
+      <li><b>Every banner maps to a real enum</b> (<code>Terminated</code> × <code>StopReason</code>). No state is invented; an unmapped combination falls back to a neutral "Recording finished."</li>
+      <li><b>Vault is not an interruption</b> — a vaulted session is a normal, playable recording rendered under FLAG_SECURE. Its provenance banner is its real <code>terminated</code> outcome like any other. Info is read-only and leaks no file, so it opens on vault like any resolved artifact; whether the Info <i>action</i> is present at all is <code>player-actions</code>' presence rule (which today says actions ride with the resolved artifact), not this spec's to override.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>DualShot information — two angles, one recording, no invented identity</h2>
+    <div class="subtle">The player opened one side. Info describes both, reading existing per-side manifest fields — it reconstructs nothing.</div>
+  </div></div>
+  <p>A DualShot session is <b>two finalized files</b> — portrait and landscape — sharing one <code>sessionId</code>, with segments interleaved in one list discriminated by <code>SegmentRecord.side</code>, and parallel per-side manifest fields (<code>portrait*</code>/<code>landscape*</code>). The player is reviewing <b>one</b> side (its transported <code>PlaybackIdentity.side</code>). Info adds an <b>Angles</b> group so the whole recording is legible without leaving the reviewed side.</p>
+  <table>
+    <thead><tr><th>What Info shows for DualShot</th><th>Source</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td><b>"P+L · two angles"</b> in the header + a two-row Angles group</td><td><code>config.captureTopology</code> + per-side segment sums</td><td><span class="tag t-pass">Show</span> makes the dual nature obvious at a glance.</td></tr>
+      <tr><td><b>Per-angle size</b> (Portrait / Landscape) + <b>total</b></td><td><code>segments</code> summed per <code>side</code>; total = both</td><td><span class="tag t-pass">Show</span> honest per-side + combined; no reconciliation/symmetry assumed (sides settle independently).</td></tr>
+      <tr><td><b>Clips per angle</b>, <b>length</b></td><td>side-filtered <code>Ready</code> values (reviewed side) / manifest (other side)</td><td><span class="tag t-pass">Show</span> the reviewed side from Ready; the other side from the manifest re-read.</td></tr>
+      <tr><td><b>"(reviewing)"</b> marker on the open side</td><td>transported <code>PlaybackIdentity.side</code></td><td><span class="tag t-pass">Show</span> orients the user to which angle is on screen. No identity minted.</td></tr>
+      <tr><td>A merged/side-by-side technical comparison</td><td>—</td><td><span class="tag t-fail">Reject</span> that's an editor concern; Info only lists the two, it doesn't composite them.</td></tr>
+      <tr><td>Per-angle actual resolution/fps</td><td><code>MediaMetadataRetriever</code> / none</td><td><span class="tag t-fail">Reject/defer</span> same as §04 — requested quality only; no per-side decode.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">DualShot Info shows <b>both angles as two rows</b> (size per side + total, clips, length) with the reviewed side marked <code>(reviewing)</code>. All of it reads <b>existing</b> data — side-filtered <code>Ready</code> for the open side, the already-re-read manifest's per-side fields for the other — so it <b>reconstructs no identity</b> (ADR-0037: transported, not reconstructed). If one side has no finalized artifact, its row shows the honest state (e.g. "not finalized") rather than a fabricated size. Info never composites, swaps, or plays the other angle — those belong to <code>player-dualshot</code>.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Recovery &amp; unavailable information — explain the gap, don't hide it</h2>
+    <div class="subtle">Interrupted recordings, kept-raw segments, and any field the app truthfully doesn't have.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Interrupted / kept-raw sessions</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The banner names the interruption</b> (§05) — "Stopped by the system", "Force-stopped", or "Clips kept after an interruption" — from the real <code>terminated</code>/<code>stopReason</code>. The user learns <i>why</i> it's short.</li>
+        <li><b>Kept-raw (<code>MULTI_SEGMENT_KEPT</code>):</b> Basics report <b>what was kept</b> — "Length kept", "Clips kept", size of the kept segments — not a phantom full length. The values come from the segments that actually exist.</li>
+        <li><b>"Combined file: not created"</b> is shown as an honest italic-muted row when no merged output exists — explaining, in the user's terms, why this plays as separate clips.</li>
+        <li>No recovery jargon (<code>DiscardEligibility</code>, <code>TerminalAction</code>) reaches the user; those are internal. Info translates outcome → plain language.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Unavailable fields — the presentation rule</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Known-absent by design</b> (fps/codec/bitrate/location/device): <b>the row does not appear at all.</b> Absence of a row Rova never fills is quieter and more honest than "unknown" on every recording.</li>
+        <li><b>Expected-but-missing for this recording</b> (e.g. combined file for a kept-raw session, a side not finalized): shown as an <b>italic muted value</b> ("not created", "not finalized") — the row is meaningful, the gap is the information.</li>
+        <li><b>Never fabricate, never blank.</b> No estimated durations, no "0 B" standing in for unknown, no guessed resolution.</li>
+        <li>If the manifest re-read itself fails, Info shows the ALREADY-LOADED basics (from Ready) and omits the manifest-only groups — it degrades, it doesn't error.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">Interruptions are <b>explained, not hidden</b>: the banner states the cause and Basics report what was actually kept. Unavailable information follows one rule — <b>never-captured fields are omitted entirely; expected-but-missing fields show an honest muted placeholder; nothing is ever fabricated.</b> A partial manifest degrades to the Ready-backed basics rather than failing. Info's job is to make an imperfect recording <i>legible</i>, calmly.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Accessibility — a read-only sheet, fully reachable</h2>
+    <div class="subtle">Info trigger, the sheet, each field. TalkBack · keyboard · switch · target size · focus · reading order.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Element</th><th>TalkBack</th><th>Keyboard / Switch</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Info ⓘ</b> (trigger)</td><td>Button "Recording details" (owned by <code>player-actions</code>). 48dp.</td><td>Tab + Enter; scan-reachable.</td><td>Opening announces the sheet ("Recording details").</td></tr>
+      <tr><td><b>Info sheet</b></td><td>Focus-trapped sheet; a labelled dismiss (or swipe-down / back). Reading order = provenance → basics → capture → angles.</td><td>Tab cycles; Esc/back closes and returns focus to Info.</td><td>Read-only; no interactive rows to mis-focus.</td></tr>
+      <tr><td><b>Provenance banner</b></td><td>Read as one node: outcome + detail ("Stopped by the system, storage ran low").</td><td>n/a (static).</td><td>Assertive is unnecessary — it's not an alert, just the lead fact.</td></tr>
+      <tr><td><b>Field rows</b></td><td>Each row = "label, value" as one node ("Length, 1 minute 20 seconds"). Muted placeholders read their real words ("Combined file, not created").</td><td>n/a (static).</td><td>Values spelled for speech (durations expanded, sizes read as units).</td></tr>
+      <tr><td><b>Angles group</b> (DualShot)</td><td>Reviewed side announced as "reviewing".</td><td>n/a.</td><td>Two rows, clearly per-side.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen accessibility floor</div>
+    <p style="margin:0">Info is a <b>focus-trapped, read-only dialog</b> with a labelled dismiss that returns focus to the Info trigger; the reading order matches the visual order (provenance first). Every row is a single labelled "label, value" node with speech-friendly values; muted placeholders are read as their real words, not skipped. Nothing is gesture-only — swipe-down-dismiss is mirrored by a back/close path. A field that cannot be announced clearly is reworded, not added.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Motion — reuse the sheet vocabulary, add nothing</h2>
+    <div class="subtle">Info introduces no new motion language; it is the same pinned sheet the gesture/sharing specs already move.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Motion (inherited only)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Sheet enter/exit</b> on the inherited container/exit timings (<code>--t-container</code> / <code>--t-exit</code>, <code>--ease-std</code>) and the same swipe-down-dismiss the gesture spec defines — identical to the sharing side sheet.</li>
+        <li><b>No content animation.</b> Rows appear with the sheet; nothing staggers, counts up, or transitions on its own.</li>
+        <li><b>Chrome interaction:</b> opening Info pauses chrome auto-hide (it's an intentional interaction), consistent with the action framework.</li>
+        <li><b>No new motion token.</b> A row that seems to need motion needs a <code>player-core</code> change first.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Why so little</div>
+      <p style="margin:0">Info is a <b>read</b>. Motion here would be decoration on static text — exactly the noise the philosophy rejects. The one motion that matters (the sheet arriving) is already defined and shared with sharing; Info simply reuses it so the two sheets feel like one idiom.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Reduced motion — animation disappears, information does not</h2>
+    <div class="subtle">The inherited invariant, extended to Info.</div>
+  </div></div>
+  <div class="panel">
+    <ul class="tight" style="margin-bottom:0">
+      <li>Under <code>rememberReduceMotion()</code>, the sheet appears <b>without its slide</b> — it is simply present. Dismiss is instant.</li>
+      <li>Every field, group, banner, and the dismiss control remain in the same place, reachable by the same tap and a11y path.</li>
+      <li><b>No part of Info is discoverable only through motion</b> — there was none to begin with, so reduced motion changes nothing about legibility.</li>
+      <li>Same rule <code>player-gestures</code> / <code>player-actions</code> / <code>player-sharing</code> apply, extended here: <b>animation is the only thing that changes; behavior and content do not.</b></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Frozen boundary — what this spec owns, what stays elsewhere</h2>
+    <div class="subtle">Info owns what information is shown after Info is pressed. Nothing leaks into or out of the neighboring specs.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-info.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>contents of the Info sheet</b> after Info is pressed: which fields, their grouping, and their order.</li>
+        <li>The <b>field inventory</b> and each field's <b>source + availability class</b> (§03) — the "render from Ready + one cheap manifest re-read" contract.</li>
+        <li>The <b>provenance mapping</b> (Terminated × StopReason → plain language) and the <b>recovery / kept-raw</b> explanation.</li>
+        <li>The <b>DualShot Angles</b> representation (describe both, reconstruct nothing).</li>
+        <li>The <b>technical-metadata policy</b> (requested quality shown; fps/codec/bitrate rejected; actual resolution deferred), the <b>unavailable-field rule</b>, and the Info <b>a11y + motion</b> contract.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">NOT owned here (do not design)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The Info affordance itself</b> — placement, target size, presence rule — is <code>player-actions.html</code>. This spec only fills it.</li>
+        <li><code>player-sharing.html</code> — the share flow (Info never shares; it describes).</li>
+        <li><code>player-editing.html</code> — any field that would require a re-render or new capture.</li>
+        <li><code>player-dualshot.html</code> — angle swap / dual playback controls (Info only <i>lists</i> the two angles).</li>
+        <li><b>Actual-resolution decode, device model, location</b> — future capability, each its own decision/ADR, not smuggled in here.</li>
+        <li><b>MediaSession / cloud / accounts</b> — no backend exists; out of scope everywhere.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">This spec may <b>consume</b> the Info action <code>player-actions</code> defined, the identity <code>PlayerUriResolver</code> mints, and the manifest <code>SessionStore</code> loads — but it may not redefine any of them. The information contract — <b>provenance-first, render from Ready + one cheap manifest re-read, requested-quality-only, reject-don't-fabricate; a vaulted session opens Info like any resolved artifact (read-only, FLAG_SECURE-protected) and whether the Info <i>action</i> is present is <code>player-actions</code>' rule, not this spec's</b> — is frozen here; a change routes back through this HTML and is re-approved first, exactly like every other change in the HTML-first workflow. Info remains <b>PROPOSED</b> until the owner signs off the Info action in <code>player-actions</code>; both gate together.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · DualShot</title>
+<style>
+  /* ==================================================================
+     PLAYER-DUALSHOT — the canonical DUALSHOT PLAYBACK specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE) + player-gestures.html (FROZEN) + player-actions.html
+     (FROZEN) + player-sharing.html (FROZEN CANDIDATE) + player-info.html
+     (FROZEN CANDIDATE) + player-editing.html (FROZEN CANDIDATE).
+
+     This spec owns every interaction UNIQUE to DualShot recordings:
+       angle switching · side identity / "which angle am I watching" ·
+       playback continuity across a switch · unavailable angles ·
+       independently-finalized sides · kept-raw DualShot · recovery
+       states · accessibility · motion · architecture ownership.
+
+     It DOES NOT redesign playback, transport, gestures, actions,
+     sharing, info, or editing. Those six specs stay authoritative.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (Library is the SOLE minter; the tuple
+         (sessionId, side?, segmentIndex?) is transported, never
+         reconstructed; the resolver fails closed)
+       ADR-0038 lifecycle (fresh player per lease; the lease key
+         already varies by side; nav-pop unchanged)
+       ADR-0032 wall-clock playhead (both sides share one recording
+         wall-clock via segmentWallStartsMs)
+       ADR-0025 vault (per-side vaultfile:// pointers, FLAG_SECURE)
+       NO autoplay · Media3 1.4.1.
+
+     GROUND TRUTH (verified in source via a fresh repo fact-sweep this
+     session, NOT memory):
+       - PlaybackIdentity is NOT a code type. It is a conceptual tuple
+         defined only in ADR-0037 §1 (docs/adr/0037-*.md:67-71):
+         (sessionId, side?, segmentIndex?), side XOR segmentIndex. It
+         travels as three EXISTING values: nav-route args -> the
+         PlayerViewModel constructor -> resolver params (ADR-0037:
+         113-116). No new type.
+       - THE SOLE-MINTER INVARIANT (ADR-0037:143-158): "no subsystem
+         other than the Library may synthesize a playback identity";
+         HistoryViewModel / HistoryArtifactMapper are the ONLY
+         components that know the session->artifact fan-out; navigation
+         passes identity verbatim and complete.
+       - side : VideoSide? where enum VideoSide { PORTRAIT, LANDSCAPE }
+         (service/dualrecord DualRecorderTypes.kt:12).
+       - side is FIXED AT NAV TIME: a constructor `val` on
+         PlayerViewModel (PlayerViewModel.kt:65) and part of the
+         ExoPlayer lease key "player-$sessionId-${side?.name ?:
+         "single"}-${segmentIndex ?: "merged"}" (PlayerScreen.kt:122) —
+         it varies by side. THERE IS NO switchSide / toggleSide /
+         availableSides / currentSide anywhere in player/** (grep
+         empty). Angle is chosen ONCE, in the Library, at nav time.
+       - Nav route: "player/{sessionId}?side={side}&secure={secure}
+         &seg={seg}" (MainScreen.kt:228); single-mode -> "player/
+         $sessionId" (no side). ONE side is transported per launch.
+       - PlayerUriResolver.resolve(manifest, side?, segmentIndex?)
+         (PlayerUriResolver.kt:105-109) already resolves EITHER side
+         from the SINGLE manifest: isPlusL = config.captureTopology ==
+         "DualShot" (:149); per-side pointer select
+         when(side){PORTRAIT->portraitPendingUri; LANDSCAPE->
+         landscapePendingUri} across vault/Tier1/Tier2-3/SAF
+         (:167-212); per-side segment filter segments.filter{it.side==
+         side} (:231-235). Null-side P+L FAILS CLOSED ("fail closed
+         rather than coin-flip", :150-155). A null per-side pointer ->
+         Unavailable (:214-216).
+       - SessionManifest SCHEMA_VERSION 13 (SessionManifest.kt:191);
+         ONE session-level exportState (:29); NO per-side exportState
+         enum. Per side there are only POINTER fields (portrait/
+         landscape PendingUri/PublicTargetPath/PrivateTempPath/
+         MediaScanCompleted/VaultFilePath/SafTargetDocUri, :76-99).
+         SegmentRecord.side : VideoSide? = null (:334). Both sides are
+         interleaved in the ONE segments list, one record per side per
+         loop (RovaRecordingService.kt:2027; resolver note :217-220).
+       - Sides settle INDEPENDENTLY at record time: DualMuxer per-side
+         SideState(var failed) (DualMuxer.kt:27-33); failSide keeps the
+         live side going (:154-160); stop():Map<VideoSide,File?> returns
+         null for a failed side (:137-152). A failed side -> null
+         pointer -> resolver Unavailable for that side only.
+       - Resume is PER SIDE: LibraryMetadataEntry.positionsBySide keyed
+         by RecordingIdentity.slotFor(side, segmentIndex)
+         (LibraryMetadataEntry.kt:14,38-39; RecordingIdentity.kt:37-38).
+         Sidecar storage, NOT the manifest.
+       - Kept-raw is a SESSION-level state (terminated ==
+         MULTI_SEGMENT_KEPT), resolved per-segment via V2:
+         mediaUri = "keptsegment://"+seg.filename, side=null,
+         segmentIndex!=null, totalClips=1 (PlayerUriResolver.kt:
+         120-144). A kept-raw DualShot session has NO two finalized
+         side files to swap between.
+       - The Library already mints per-side rows for a DualShot session
+         (HistoryViewModel.manifestDrivenArtifacts -> resolveArtifacts
+         PerSide, HistoryViewModel.kt:908 / HistoryArtifactMapper.kt:166;
+         0/1/2 cards depending on finalized sides).
+       - player-core.html:644 + player-states.html:762 BOTH explicitly
+         defer angle-swap to THIS spec, "gated on the RK3 minter-
+         contract decision (settled in discovery, not here)". This spec
+         SETTLES RK3.
+     Sources above + multi-angle playback research (Insta360 · DJI ·
+     GoPro · Blackmagic Camera — interaction principles only, no visual
+     copying).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── NO NEW DualShot tokens are introduced. ──
+       Angle switching reuses the inherited over-media ink trio, the
+       pinned surface, the 48dp target, and the container/exit timings.
+       The angle indicator + switch control are the top-overlay grammar
+       player-core already defines. Anything that would need a NEW token
+       is a design change routed through player-core first, gated behind
+       the RK3 ADR amendment. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     DUALSHOT SPECIMEN — an over-media frame showing the angle
+     IDENTITY (which side is on screen) + the PROPOSED angle-switch
+     control in the top overlay. Illustrative, token-driven, every
+     switch affordance explicitly labelled PROPOSED / future capability.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage.land{background:radial-gradient(120% 80% at 60% 40%, #5a4c3a 0%, #3f342b 55%, #26201a 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-a="dual"]    .a-dual,
+  .phone[data-a="oneside"] .a-oneside,
+  .phone[data-a="kept"]    .a-kept{display:block}
+  /* landscape footage tint only on the dual layer's LANDSCAPE state (static specimen shows portrait active) */
+
+  .ctop{position:absolute;left:0;right:0;top:0;height:112px;background:var(--scrim-top)}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:120px;background:var(--scrim-bottom)}
+
+  .toprow{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;gap:10px}
+  .back{width:34px;height:34px;border-radius:9px;background:var(--glyph-fill);flex:none;
+        display:flex;align-items:center;justify-content:center;color:var(--media-ink);font-size:15px}
+  .idtext{flex:1;min-width:0}
+  .idtext .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idtext .t2{font:500 10px/1.2 inherit;color:var(--media-ink-body)}
+  .propflag{font:600 8.5px/1.1 inherit;letter-spacing:.08em;color:var(--note);
+        background:color-mix(in srgb,var(--note) 14%,transparent);border:1px solid color-mix(in srgb,var(--note) 40%,transparent);
+        border-radius:6px;padding:3px 6px;white-space:nowrap;text-transform:uppercase}
+
+  /* Angle identity + switch — the ONE DualShot-owned top-overlay control */
+  .angwrap{position:absolute;left:12px;right:12px;top:54px;display:flex;flex-direction:column;gap:6px}
+  .angrow{display:flex;align-items:center;gap:8px}
+  .angnow{font:600 9px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:var(--media-ink-dim)}
+  /* segmented Portrait|Landscape selector, over-media ink on pinned chip */
+  .angsel{display:inline-flex;background:rgba(11,13,20,.66);border:1px solid var(--media-edge-top);
+          border-radius:var(--r-pill);padding:3px;gap:3px}
+  .angsel .opt{min-height:34px;display:flex;align-items:center;gap:5px;padding:0 12px;border-radius:var(--r-pill);
+        font:600 10.5px/1 inherit;color:var(--media-ink-body);white-space:nowrap}
+  .angsel .opt .g{font-size:11px;opacity:.8}
+  .angsel .opt.on{background:rgba(255,255,255,.14);color:var(--media-ink)}
+  .angsel .opt.gone{color:var(--media-ink-dim);opacity:.5;text-decoration:line-through}
+  .anghint{font:500 9.5px/1.3 inherit;color:var(--media-ink-body);max-width:230px}
+
+  .flabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  /* bottom: inherited transport proxy + clip ticks, drawn faint (owned elsewhere) */
+  .transport{position:absolute;left:16px;right:16px;bottom:26px}
+  .tl{height:3px;border-radius:2px;background:rgba(255,255,255,.22);position:relative;overflow:hidden}
+  .tl .fill{position:absolute;left:0;top:0;bottom:0;width:38%;background:var(--media-ink)}
+  .tl .tick{position:absolute;top:-2px;width:1px;height:7px;background:rgba(255,255,255,.35)}
+  .tmeta{display:flex;justify-content:space-between;font:500 9px/1.3 inherit;color:var(--media-ink-body);margin-top:7px}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player DualShot — the two-angle playback contract</h1>
+  <p class="stagenote">
+    Everything <b>unique to a DualShot (P+L) recording</b> in the player: how you know <b>which angle</b> you're watching,
+    how you <b>switch</b> to the other, what happens when a side is <b>unavailable</b>, how <b>continuity</b> and per-side
+    <b>resume</b> behave, and how <b>kept-raw</b> DualShot is treated. Its load-bearing job is to <b>settle RK3</b> — the
+    minter-contract decision <code>player-core</code> and <code>player-states</code> both defer here. The answer, forced by
+    the repo: a DualShot session is <b>two independent files under one <code>sessionId</code></b>, and switching angle is an
+    <b>artifact-selection over a Library-minted pair</b> — <b>never</b> an in-player synthesis of identity (that would break
+    the ADR-0037 sole-minter invariant) and <b>never</b> a render (no compositor exists). It layers on the seven frozen
+    specs, preserves ADR-0037/0038/0032/0025, and the in-player switch is <b>PROPOSED, gated behind an RK3 ADR amendment</b>
+    that widens the transport — no schema change, no backend invented.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">DualShot state</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('dual',this)">Both sides · switch</button>
+        <button class="tog" aria-pressed="false" onclick="setA('oneside',this)">One side unavailable</button>
+        <button class="tog" aria-pressed="false" onclick="setA('kept',this)">Kept-raw (no swap)</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Model &amp; boundary — what a DualShot recording is, and the wall it stands behind</h2>
+    <div class="subtle">The one-line model, the sole-minter invariant it must not break, the backbone it preserves, and the lines it may not cross.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The model in one line</div>
+      <p style="margin:0 0 8px">A DualShot recording is <b>two independent video files — Portrait and Landscape — that share one <code>sessionId</code></b>, recorded together but finalized separately. The player always shows <b>exactly one side at a time</b>; this spec owns <b>knowing which</b> and <b>switching between them</b>.</p>
+      <p style="margin:0">Switching angle is <b>choosing which already-resolved artifact to play</b> — an <b>artifact-selection problem, not a rendering problem</b>. Nothing is composited, stitched, or re-encoded; the two files are never combined.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">The hard constraint — the sole-minter invariant</div>
+      <div class="rejbox" style="margin:0 0 8px">
+        <div class="caption">Identity is transported, never reconstructed</div>
+        <p style="margin:0">ADR-0037: <b>only the Library may mint a playback identity</b>. The player receives <code>(sessionId, side?, segmentIndex?)</code> and passes it verbatim; it may <b>not synthesize</b> the sibling side itself. So "switch to the other angle" cannot be the player quietly flipping <code>side</code> — that would be the player minting identity.</p>
+      </div>
+      <p style="margin:0">This is the whole of RK3 (§03). The resolution: the <b>Library</b> mints <b>both</b> side identities and transports them as a pair; the player only <b>selects</b> the active member. In-player synthesis is <b>Rejected</b>.</p>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · what DualShot playback may NOT touch</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Never reconstruct identity.</b> The player never synthesizes the sibling side; both identities are Library-minted and transported (ADR-0037). Switching selects a pre-minted member — it does not derive one.</li>
+      <li><b>Never composite / render.</b> No side-by-side, no picture-in-picture, no stitched stream — the app has no compositor or transcode (that is the Rejected editor). One side plays; the other waits.</li>
+      <li><b>Never redesign</b> the player, transport, timeline, gestures, actions, sharing, info, or editing — those are the seven frozen specs. This spec adds only the angle indicator + switch and the DualShot-specific states.</li>
+      <li><b>Never invent backend.</b> No new manifest schema field, no per-side <code>exportState</code> enum, no new dependency. The switch reuses the existing resolver, per-side pointers, per-side resume, and the side-keyed lease.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — the angle indicator &amp; the PROPOSED switch, three states</h2>
+    <div class="subtle">Toggle the states above. The switch control is labelled PROPOSED. It lives in the top overlay (player-core's grammar), is quiet, and never blocks playback.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="dual" id="phone">
+      <div class="footage" id="foot"></div>
+      <div class="ctop"></div>
+      <div class="cbot"></div>
+
+      <!-- BOTH SIDES · SWITCH -->
+      <div class="layer a-dual">
+        <div class="toprow">
+          <div class="back">‹</div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM · P+L</div><div class="t2">2 angles · 1m 20s</div></div>
+          <div class="propflag">Switch: proposed</div>
+        </div>
+        <div class="angwrap">
+          <div class="angrow">
+            <span class="angnow">Angle</span>
+            <div class="angsel" role="tablist" aria-label="Recording angle">
+              <div class="opt on"   role="tab" aria-selected="true"><span class="g">▯</span> Portrait</div>
+              <div class="opt"      role="tab" aria-selected="false"><span class="g">▭</span> Landscape</div>
+            </div>
+          </div>
+          <div class="anghint">Watching <b>Portrait</b>. Tap Landscape to switch — the playhead stays at the same moment.</div>
+        </div>
+        <div class="transport">
+          <div class="tl"><div class="fill"></div>
+            <div class="tick" style="left:24%"></div><div class="tick" style="left:52%"></div><div class="tick" style="left:78%"></div></div>
+          <div class="tmeta"><span>0:30</span><span>1:20</span></div>
+        </div>
+        <div class="flabel" style="top:120px;right:14px">Rova-owned · top-overlay grammar</div>
+      </div>
+
+      <!-- ONE SIDE UNAVAILABLE -->
+      <div class="layer a-oneside">
+        <div class="toprow">
+          <div class="back">‹</div>
+          <div class="idtext"><div class="t1">Yesterday, 6:41 PM · P+L</div><div class="t2">Portrait only · Landscape didn't finish</div></div>
+          <div class="propflag">Switch: proposed</div>
+        </div>
+        <div class="angwrap">
+          <div class="angrow">
+            <span class="angnow">Angle</span>
+            <div class="angsel" aria-label="Recording angle">
+              <div class="opt on"><span class="g">▯</span> Portrait</div>
+              <div class="opt gone" aria-disabled="true"><span class="g">▭</span> Landscape</div>
+            </div>
+          </div>
+          <div class="anghint">The <b>Landscape</b> angle didn't finish recording, so there's nothing to switch to. Playing Portrait.</div>
+        </div>
+        <div class="transport">
+          <div class="tl"><div class="fill"></div>
+            <div class="tick" style="left:40%"></div></div>
+          <div class="tmeta"><span>0:19</span><span>0:48</span></div>
+        </div>
+      </div>
+
+      <!-- KEPT-RAW · NO SWAP -->
+      <div class="layer a-kept">
+        <div class="toprow">
+          <div class="back">‹</div>
+          <div class="idtext"><div class="t1">Mon, 9:03 AM · P+L</div><div class="t2">Interrupted · clip 2 of 3</div></div>
+          <div class="propflag">No angle swap</div>
+        </div>
+        <div class="angwrap">
+          <div class="anghint" style="max-width:250px">This recording was <b>interrupted before the angles were finalized</b>, so there are no two finished sides to switch between. You're watching the <b>kept clips</b> in order — move between them with the clip controls.</div>
+        </div>
+        <div class="transport">
+          <div class="tl"><div class="fill"></div>
+            <div class="tick" style="left:33%"></div><div class="tick" style="left:66%"></div></div>
+          <div class="tmeta"><span>Clip 2 of 3</span><span>0:20</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Status</div><div class="v"><span class="tag t-note">Proposed</span> The angle <b>indicator</b> (which side is on screen) is a small, honest display; the in-player <b>switch</b> is the future capability RK3 unlocks (§03–§04).</div></div>
+      <div class="row"><div class="k">Where</div><div class="v"><b>Top overlay</b>, the wayfinding band player-core owns — not a sheet. Quiet, ink-dim, auto-hides with the rest of the chrome (player-gestures).</div></div>
+      <div class="row"><div class="k">Switch</div><div class="v"><b>Select the other pre-minted side</b> at the same moment (§05). Two files, one at a time — never both, never combined.</div></div>
+      <div class="row"><div class="k">Unavailable</div><div class="v"><b>Absent, not disabled-looking.</b> A side that never finalized has no option to switch to; the control degrades to a plain "Portrait only" statement (§06).</div></div>
+      <div class="row"><div class="k">Kept-raw</div><div class="v"><b>No angle swap at all.</b> An interrupted P+L session has no two finalized side files; its interleaved kept clips are navigated as clips, not angles (§06).</div></div>
+      <div class="row"><div class="k">Backend</div><div class="v"><span class="tag t-fail">Future</span> the pair-transport does not exist today; §04 classifies it. In-player identity synthesis is <span class="tag t-fail">Rejected</span>.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>DualShot philosophy — two truths, never a fake third</h2>
+    <div class="subtle">First principles for a recorder that captured two real angles the user didn't frame — filtered through "one at a time · never fabricate · never combine."</div>
+  </div></div>
+  <p>DualShot exists because the user asked Rova to keep <b>two vantage points</b> of the same unattended moment. Both are real footage; neither is primary. The player's duty is to make both <b>reachable and legible</b> without ever pretending they are one thing. Multi-angle products split on how honest they are about the seams:</p>
+  <table>
+    <thead><tr><th>Source</th><th>What they do</th><th>Principle Rova takes</th></tr></thead>
+    <tbody>
+      <tr><td>Insta360 / GoPro (multi-lens)</td><td>Reframe/switch angle at the same timestamp; one continuous view, the other angle a tap away.</td><td><span class="tag t-pass">Adopt</span> <b>same-moment angle switch</b> — the playhead is preserved, switching feels like turning your head, not opening a new video.</td></tr>
+      <tr><td>DJI (dual/multi-cam)</td><td>Offer explicit per-camera clips; each is its own file you pick from.</td><td><span class="tag t-pass">Adopt</span> <b>each angle is its own artifact</b> — exactly Rova's two-file truth; switching is selection, not synthesis.</td></tr>
+      <tr><td>Blackmagic Camera</td><td>Single high-craft stream; no consumer multi-angle switch.</td><td><span class="tag t-note">Note</span> confirms multi-angle is a <b>consumer review</b> affordance, not a production one — keep it calm and few-tap.</td></tr>
+      <tr><td>Any "grid / side-by-side" multi-view</td><td>Render both angles at once in a composed layout.</td><td><span class="tag t-fail">Reject</span> a composed render Rova cannot produce (no compositor) and does not want — it dilutes both angles and invents a third artifact.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen philosophy</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Two real files, one on screen.</b> The player shows one angle at a time. Switching selects the other; it never composites, splits the screen, or plays both.</li>
+      <li><b>Same moment across the switch.</b> Switching preserves the playhead (both sides share one recording wall-clock, ADR-0032) — you keep watching the same instant from the other angle (§05).</li>
+      <li><b>Never fabricate a missing side.</b> Sides finalize independently; if one didn't finish, the player says so plainly and offers no switch — it never shows a black or fabricated frame for it (§06).</li>
+      <li><b>Selection, never minting.</b> The two identities are Library-minted and transported; the player chooses between them. This is the RK3 line and it is non-negotiable (§03).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Identity model — settling RK3, the minter-contract decision</h2>
+    <div class="subtle">The question player-core deferred here: who mints the sibling-side identity on a switch? Answer, forced by the repo: the Library, as a transported pair. Never the player.</div>
+  </div></div>
+  <p>The repo fact is blunt: <b><code>PlaybackIdentity</code> is not a type</b> — it is the tuple <code>(sessionId, side?, segmentIndex?)</code> travelling as three real values from the Library's nav call, through the <code>PlayerViewModel</code> constructor, into the resolver. <code>side</code> is <b>fixed at construction</b> and is part of the ExoPlayer <b>lease key</b>. There is <b>no <code>switchSide</code> anywhere</b>. So an in-player angle switch is a genuinely new capability, and its <b>only</b> real design question is <i>who is allowed to produce the second side's identity</i>.</p>
+  <table>
+    <thead><tr><th>RK3 option</th><th>Mechanism</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td><b>Player flips <code>side</code> itself</b></td><td>On a switch, the player sets <code>side = the other value</code> and re-resolves from the already-loaded manifest.</td><td><span class="tag t-fail">Rejected</span> This is the <b>player synthesizing identity</b> — the exact thing ADR-0037:143-158 forbids ("no subsystem other than the Library may synthesize a playback identity"). Convenient, but it breaks the invariant. Not adopted.</td></tr>
+      <tr><td><b>Library mints &amp; transports the PAIR</b></td><td>When a DualShot session is opened, the Library (which already knows the session→artifact fan-out and already mints per-side rows) mints <b>both</b> side identities and transports them together, one marked active. The player holds the pair and <b>selects</b> the active member on switch.</td><td><span class="tag t-pass">Adopt</span> Identity stays <b>Library-minted and transported whole</b> (ADR-0037 intact); switching is pure <b>selection</b>, no synthesis. This is the RK3 resolution.</td></tr>
+      <tr><td>Bounce to the Library to re-open the other side</td><td>No in-player switch; the user backs out and opens the sibling row.</td><td><span class="tag t-keep">Interim</span> Correct and shippable <b>today</b> with zero change — the Library already renders per-side rows. This is the honest behavior <b>until</b> the pair-transport lands.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · RK3 settled</div>
+    <p style="margin:0"><b>In-player angle switching is an artifact-selection over a Library-minted, transported pair of identities.</b> The Library — the sole minter — produces both <code>(sessionId, PORTRAIT)</code> and <code>(sessionId, LANDSCAPE)</code> and hands them to the player together; the player <b>selects</b> the active side and never synthesizes the sibling. The player <b>flipping <code>side</code> on its own is Rejected</b> as a sole-minter violation. Until the pair-transport is built, the <b>interim, shipping-honest behavior</b> is: no in-player switch — the user returns to the Library (which already lists both sides) to open the other angle. Either way, <b>identity is transported, never reconstructed.</b></p>
+  </div>
+  <div class="warnbox">
+    <div class="caption">Why the pair, not a URI (the sharing/info precedent doesn't transfer)</div>
+    <p style="margin:0"><code>player-sharing</code> and <code>player-info</code> read the <b>other side's manifest pointer</b> for a <b>one-shot</b> action (send a URI / show a size) without minting a full identity — and that is correct <b>for them</b>. Angle switch is different: it <b>plays</b> the other side, which needs a full leased player keyed on that side's identity (ADR-0038). A played side must be a <b>real transported identity</b>, not a URI the player conjured — so it must come from the Library. That asymmetry is the whole reason RK3 needed settling here rather than being borrowed from sharing.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Angle switching — the interaction, and the one honest capability gap</h2>
+    <div class="subtle">Where the control lives, what it does, and exactly what must be built (classified Existing · Future · Rejected) to ship it.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The interaction</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>A segmented Portrait | Landscape selector</b> in the top overlay (player-core's wayfinding band), reading the current side from the active transported identity. Quiet, ink-dim, auto-hides with the chrome.</li>
+        <li><b>Tap the other side → play it from the same moment</b> (§05). One tap, no confirmation — switching is safe and reversible (tap back).</li>
+        <li><b>The indicator is always shown for P+L; the switch is shown only when both sides are playable.</b> One-sided → it degrades to a plain "Portrait only" label (§06). Present-not-disabled, exactly like the sharing side sheet.</li>
+        <li><b>Single-mode recordings show none of this</b> — no angle chrome at all. This is strictly a P+L surface.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">What must be built — classified</div>
+      <table>
+        <tbody>
+          <tr><td>Per-side resolve from one manifest</td><td><span class="tag t-pass">Existing</span></td><td><code>resolve(manifest, side)</code> already returns each side (PlayerUriResolver.kt:167-212).</td></tr>
+          <tr><td>Side-keyed leased player</td><td><span class="tag t-pass">Existing</span></td><td>The lease key already varies by <code>side</code> (ADR-0038; PlayerScreen.kt:120-123).</td></tr>
+          <tr><td>Per-side resume storage</td><td><span class="tag t-pass">Existing</span></td><td><code>positionsBySide</code> keyed by <code>slotFor(side, …)</code>.</td></tr>
+          <tr><td><b>Library mints + transports BOTH sides</b></td><td><span class="tag t-note">Future (light)</span></td><td>Extends the <b>transport</b> (nav args / VM inputs) to carry the pair. <b>No schema change</b> — the manifest already holds both sides' pointers. RK3 ADR amendment + owner sign-off.</td></tr>
+          <tr><td>Player-synthesizes-sibling-side</td><td><span class="tag t-fail">Rejected</span></td><td>Sole-minter violation (§03).</td></tr>
+          <tr><td>Composite / side-by-side / PiP output</td><td><span class="tag t-fail">Rejected</span></td><td>A render Rova can't do; two files stay two files (§02).</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision · the switch is selection, and the only new part is transport</div>
+    <p style="margin:0">Everything the switch <i>plays</i> already exists — the resolver, the side-keyed lease, per-side resume. The <b>only</b> new machinery is the Library <b>minting and transporting both side identities</b> so the player can select between them without synthesizing one. That is a <b>transport widening, not a schema change and not a backend</b>, and it is the sole thing gating in-player switching. It is <b>Future, behind the RK3 ADR amendment + owner sign-off</b>; the angle <b>indicator</b> and the Library-bounce interim ship without it.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Playback continuity &amp; resume — same moment, two independent streams</h2>
+    <div class="subtle">What happens to the playhead, the lease, and stored resume when you switch. Both sides share one recording wall-clock; each is its own file.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Concern</th><th>Behavior on switch</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><b>Playhead</b></td><td>The <b>current moment is carried across</b>: the new side opens seeked to the same recording wall-clock instant, clamped to that side's own duration.</td><td><span class="tag t-pass">Continuity</span> Both same-loop sides share one start stamp (<code>SegmentRecord.startedAtWallClock</code>; ADR-0032 — the resolver surfaces it as <code>segmentWallStartsMs</code>) — "the same moment" is well-defined. Clamp because sides settle independently and may differ in length.</td></tr>
+      <tr><td><b>The player instance</b></td><td>A switch is a <b>fresh lease on the other side's identity</b> (its lease key differs by <code>side</code>), seeked to the carried position. The old side's lease is released by the normal lifecycle.</td><td><span class="tag t-pass">ADR-0038</span> The holder already keys leases by side; switching is a re-lease, not a new lifecycle owner. No autoplay — it resumes in the same play/pause state.</td></tr>
+      <tr><td><b>Stored per-side resume</b></td><td>An <b>explicit switch uses the carried live playhead</b>, not the other side's saved resume. The stored <code>positionsBySide</code> value is for <b>re-opening from the Library</b>, and each side keeps writing its own.</td><td><span class="tag t-pass">Honest</span> A same-moment switch is "keep watching here from the other angle," not "jump to where I last left that side." Both interpretations exist in the code (per-side positions); the switch picks the continuity one deliberately.</td></tr>
+      <tr><td><b>Beyond the shorter side's end</b></td><td>If the carried moment is past the other side's end (it finished earlier), the new side opens <b>at its final frame, paused</b> — never a fabricated tail.</td><td><span class="tag t-pass">No fabrication</span> Independent finalization means unequal lengths are normal; the player shows the real end, not padding.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · continuity by wall-clock, resume stays per-side</div>
+    <p style="margin:0">Switching angle <b>carries the live playhead</b> to the other side (same wall-clock moment, clamped to its duration) via a <b>fresh side-keyed lease</b> (ADR-0038), preserving play/pause and never autoplaying. It does <b>not</b> consult the other side's stored resume — that value stays reserved for <b>re-opening from the Library</b>, and each side continues to persist its own <code>positionsBySide</code> entry. Unequal side lengths are shown truthfully (final frame, paused), never padded. This spec adds <b>no new persistence</b>; it only defines which existing position a switch reads.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Recovery &amp; unavailable sides — say which angle is missing, never fake it</h2>
+    <div class="subtle">One side failed, one side vaulted, or the whole session kept-raw. Each degrades to an honest state the resolver already produces.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Situation</th><th>What the player does</th><th>Backed by</th></tr></thead>
+    <tbody>
+      <tr><td><b>One side never finalized</b> (failed at record time)</td><td>Play the good side; the switch degrades to a plain "<b>Portrait only · Landscape didn't finish</b>" — the missing option is <b>absent</b>, not a dead button.</td><td>A failed side yields a null per-side pointer → resolver <b>Unavailable</b> for that side (PlayerUriResolver.kt:214-216). Sides settle independently (DualMuxer.kt:154-160).</td></tr>
+      <tr><td><b>Neither side finalized</b></td><td>The session isn't opened as merged playback at all — it is handled as kept-raw (below) or Unavailable by the states spec. This spec adds no angle chrome to a non-playable session.</td><td>Session-level <code>exportState</code> / <code>terminated</code>; the resolver fails closed on null-side P+L (:150-155).</td></tr>
+      <tr><td><b>Kept-raw DualShot</b> (interrupted, <code>MULTI_SEGMENT_KEPT</code>)</td><td><b>No angle swap.</b> There are no two finalized side files — only the interleaved kept segments. The user navigates them as <b>clips</b> (player-core/gestures), each resolved by its <code>segmentIndex</code>.</td><td>Kept-raw is a <b>session-level</b> state resolved per-segment via V2 (<code>keptsegment://</code>, <code>side=null</code>, one clip each; PlayerUriResolver.kt:120-144). No per-side merged artifact exists to switch to.</td></tr>
+      <tr><td><b>Vaulted DualShot</b></td><td>Angle switch works the same, over the per-side <code>vaultfile://</code> pointers; the whole surface is <b>FLAG_SECURE</b> and Share stays suppressed (player-actions/sharing).</td><td>Per-side vault pointers <code>portraitVaultFilePath</code>/<code>landscapeVaultFilePath</code> (SessionManifest.kt:98-99); resolver vault branch (:167-177). ADR-0025.</td></tr>
+      <tr><td><b>Mid-switch resolve failure</b> (target side turns Unavailable)</td><td>The switch <b>fails closed</b>: stay on the current side, surface the states spec's Unavailable messaging for the attempted side; never a black frame.</td><td>Resolver returns <code>Unavailable</code> for any malformed/empty shape; the player treats it as "can't switch," not "switched to nothing."</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · missing angles are named, kept-raw has no swap</div>
+    <p style="margin:0">A side with no finalized artifact is <b>absent</b> from the switch (present-not-disabled, mirroring the sharing side sheet), and the player states plainly which angle is missing and why — it <b>never fabricates a frame</b> for it. <b>Kept-raw DualShot offers no angle switch at all</b>: an interrupted session has no two finalized side files, so its interleaved kept clips are navigated as <b>clips</b> (each a V2 <code>keptsegment://</code> resolve), not angles. Every unavailable path routes through the resolver's <b>existing fail-closed</b> Unavailable state; this spec invents no new recovery machinery and no new terminal state.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Accessibility — the angle you're on, spoken; the switch, non-gesture</h2>
+    <div class="subtle">Angle indicator, switch control, unavailable state, the switch announcement. TalkBack · keyboard · switch · target size · focus.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Element</th><th>TalkBack</th><th>Keyboard / Switch</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Angle indicator</b></td><td>The current side is in the header semantics ("Portrait angle, 1 of 2") so the user always knows which angle is on screen without acting.</td><td>n/a (status).</td><td>Read as part of the top-overlay wayfinding, not a separate stop.</td></tr>
+      <tr><td><b>Portrait | Landscape switch</b></td><td>A labelled control ("Recording angle, Portrait selected"); each option a button naming the side; selection change announces "Switched to Landscape, same moment."</td><td><b>Fully operable without gesture</b> — Tab/scan to each option, Enter selects. 48dp targets.</td><td>The critical requirement: switching angle is never drag- or swipe-only.</td></tr>
+      <tr><td><b>Unavailable side</b></td><td>Announced as a state, not a control: "Landscape angle didn't finish; Portrait only." Not focusable as a button.</td><td>Skipped in focus order (it isn't actionable).</td><td>Present-not-disabled: the absent option is stated, not offered as a dead target.</td></tr>
+      <tr><td><b>After switch</b></td><td>The new side and preserved position are announced; play/pause state is unchanged and stated if relevant.</td><td>Focus stays on the switch control for an immediate switch back.</td><td>No focus loss across the re-lease.</td></tr>
+      <tr><td><b>Kept-raw</b></td><td>No angle control is present; the clip position ("clip 2 of 3") is announced by the existing transport semantics.</td><td>Clip navigation is the existing (accessible) transport.</td><td>Nothing DualShot-specific to operate.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen accessibility floor</div>
+    <p style="margin:0">Which angle is on screen is <b>always available to TalkBack</b> from the header, without acting. The switch is a <b>real, non-gesture control</b> — labelled options, 48dp targets, keyboard/switch operable, with the new side + preserved moment announced on change. An unavailable side is announced as a <b>state, not offered as a dead button</b>. Focus survives the re-lease and returns to the switch for an immediate reverse. A control that could only be operated by swipe is not shipped — it is reworked until it isn't.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Motion — a cut between angles, not a transition between videos</h2>
+    <div class="subtle">Switching should feel instant and same-moment. Reuse the inherited chrome timings; add no bespoke transition.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Motion (inherited only)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The angle switch is a hard cut</b> at the same moment — no crossfade, slide, or flip. Turning your head is instantaneous; so is this.</li>
+        <li><b>The selector's selected pill</b> moves on the inherited micro timing (<code>--t-micro</code>, <code>--ease-std</code>) — the same small state-change motion the rest of the chrome uses.</li>
+        <li><b>The top overlay itself</b> auto-hides/shows on player-gestures' existing chrome motion — the angle control rides that, adding nothing.</li>
+        <li><b>No new motion token.</b> Anything that seems to need one is a <code>player-core</code> change first, gated behind the RK3 ADR.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Why a cut, not a transition</div>
+      <p style="margin:0">A crossfade would imply the two angles are being <b>blended</b> — the exact composited-render idea §02 rejects. A hard cut says "same moment, other camera," which is the truth. It also sidesteps any illusion that a switch is loading a <i>new</i> video; it is selecting an already-resolved one at the same instant.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Reduced motion — nothing to remove, because there was nothing to add</h2>
+    <div class="subtle">The inherited invariant, trivially satisfied: the switch is already a cut.</div>
+  </div></div>
+  <div class="panel">
+    <ul class="tight" style="margin-bottom:0">
+      <li>Under <code>rememberReduceMotion()</code>, the angle switch is <b>unchanged</b> — it was already an instant cut, with no animation to strip.</li>
+      <li>The selected-pill micro-motion becomes an <b>instant state change</b>; the pill still shows the current side.</li>
+      <li>The top-overlay show/hide follows the reduced-motion rule the gesture spec already defines (appears without slide).</li>
+      <li><b>No part of angle switching is discoverable only through motion</b> — which side is on screen, and which you can switch to, are legible from static state alone. Same rule as every other player spec: animation changes, behavior and content do not.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Frozen boundary — what this spec owns, what stays elsewhere, what needs an ADR</h2>
+    <div class="subtle">DualShot playback owns the angle indicator, the switch, and the two-angle states. The transport widening is Future behind the RK3 ADR.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-dualshot.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>angle identity display</b> — which side is on screen — in the top overlay.</li>
+        <li>The <b>angle-switch interaction</b> (§04): the Portrait|Landscape selector, one-tap same-moment switch, present-not-disabled.</li>
+        <li>The <b>RK3 resolution</b> (§03): switch = selection over a Library-minted transported pair; in-player synthesis Rejected.</li>
+        <li>The <b>continuity + per-side resume semantics</b> across a switch (§05) and the <b>unavailable-side / kept-raw</b> DualShot states (§06).</li>
+        <li>The DualShot <b>a11y + motion</b> contract for the above.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">NOT owned here (do not design)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Transport, timeline, gestures, auto-hide, the core layout</b> — <code>player-core</code> / <code>player-gestures</code>. The angle control rides them.</li>
+        <li><b>The Loading/Unavailable stream states</b> a switched-to side may enter — <code>player-states</code> (it designs the swapped stream's own states when this lands).</li>
+        <li><b>Which side(s) to share</b> — <code>player-sharing</code>'s side sheet. <b>Describing both sides</b> — <code>player-info</code>'s Angles group. <b>Trimming one side</b> — <code>player-editing</code>.</li>
+        <li><b>The Library's per-side rows</b> and the actual pair-minting code — Library layer (ADR-0037 owner). This spec specifies the transported <i>contract</i>, not its implementation.</li>
+        <li>Any <b>composited/multi-view</b> surface — Rejected, not deferred.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">This spec settles <b>RK3</b> and defines the <b>experience</b> of watching and switching between a DualShot session's two angles, so that — <i>if approved</i> — it drops onto Rova's real grain (two files, one <code>sessionId</code>, one manifest with per-side pointers, per-side resume, side-keyed leases). It <b>consumes</b> the Library-minted identities (ADR-0037), the leased player (ADR-0038), and the wall-clock playhead (ADR-0032) — and <b>redefines none of them</b>. The DualShot contract — <b>two independent files · one on screen · switch = selection over a Library-minted transported pair · never synthesize identity · never composite · same-moment continuity · per-side resume · unavailable sides named not faked · kept-raw has no swap</b> — is frozen here; a change routes back through this HTML and is re-approved first. <b>The angle indicator and the Library-bounce interim ship today; the in-player switch remains PROPOSED, gated behind the RK3 ADR amendment (Library pair-transport — a transport widening, no schema change) and owner sign-off before any Compose work.</b></p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    // kept-raw footage stays portrait-tinted; leave the shared footage as-is
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

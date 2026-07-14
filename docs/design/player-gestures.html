@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Gestures &amp; Interaction</title>
+<style>
+  /* ==================================================================
+     PLAYER-GESTURES — the canonical INTERACTION specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE). Inherits the token model, three-zone layout, band
+     substrate, immersive policy, a11y floor, and every STATE face.
+     It DOES NOT redraw layout, controls, states, hierarchy, or tokens.
+     It defines ONLY how a touch becomes an action.
+
+     Scope: single tap · double tap · timeline drag/scrub · play/pause ·
+     swipe · long-press · gesture-conflict priority · auto-hide ·
+     accessibility (TalkBack / keyboard / switch) · motion · reduced
+     motion · frozen boundary.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (resolver fails closed; Library sole minter)
+       ADR-0038 lifecycle (fresh player per lease; ownedPlayer() lease-gate;
+                 dismiss routes the EXISTING nav-pop → deferred release)
+       ADR-0032 wall-clock playhead
+       NO autoplay · NO new backend capability.
+
+     Media3 is pinned 1.4.1 → NO MediaSession (deliberate, PlayerScreen.kt:156).
+     This spec therefore does NOT design headset / lock-screen / media-key
+     transport — that is a future backend decision, explicitly out of scope.
+
+     Grounded in current source (AutoHideChromePolicy · EdgeSeekZones ·
+     PlaybackSpeedPolicy · SegmentedTimeline · PlayerScreen · PlayerViewModel)
+     + rova-player-discovery.md + competitive interaction research
+     (Google Photos · Apple Photos · Samsung Gallery · Blackmagic Camera ·
+     Instagram Reels — principles only). NOT memory.
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── INHERITED interaction constants (already in the codebase — NOT new) ──
+       Restated here for reference; this spec MUST NOT redesign their values. */
+    --auto-hide:3000ms;      /* AutoHideChromePolicy.DEFAULT_TIMEOUT_MS = 3_000L */
+    --seek-delta:10s;        /* EdgeSeekZones · SEEK_DELTA_MS = 10_000L (PlayerScreen.kt:749) */
+    --edge-third:33.333%;    /* EdgeSeekZones leftFraction = rightFraction = 1f/3f */
+
+    /* ── NEW · interaction-timing tokens (presentation constants only) ──
+       Same class of constant as --auto-hide: they gate WHEN a touch resolves
+       into a gesture, never WHAT the resolver/lifecycle decides. No backend. */
+    --dbl-tap-window:300ms;  /* single-vs-double disambiguation window (platform
+                                detectTapGestures default; single-tap fires after
+                                this — accepted industry-wide, PlayerScreen.kt:328). */
+    --touch-slop:~8dp;       /* platform ViewConfiguration slop: move past this before
+                                release ⇒ drag, not tap. Not a literal token — the
+                                framework owns it; named for the priority matrix. */
+    --dismiss-commit:120dp;  /* PROPOSED swipe-down-dismiss commit distance (§07) —
+                                generous so a mid-review vertical nudge never ejects. */
+    --dismiss-velocity:800dp/s; /* PROPOSED fling shortcut for dismiss (§07). */
+    --haptic-tick:CLOCK_TICK; /* PROPOSED boundary haptic (§05) — performHapticFeedback,
+                                 no new dependency. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+
+  /* ============================================================
+     GESTURE SPECIMEN — a real over-media frame with the touch
+     zones drawn over it. Illustrative, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-g="tap"]     .g-tap,
+  .phone[data-g="scrub"]   .g-scrub,
+  .phone[data-g="swipe"]   .g-swipe,
+  .phone[data-g="a11y"]    .g-a11y{display:block}
+
+  /* tap-zone thirds */
+  .zones{position:absolute;inset:0;display:flex}
+  .zone{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
+        border-right:1px dashed rgba(255,255,255,.14);color:var(--media-ink-dim);text-align:center;padding:8px}
+  .zone:last-child{border-right:none}
+  .zone .zt{font:600 10px/1.2 inherit;letter-spacing:.04em;color:var(--media-ink)}
+  .zone .zs{font:500 10px/1.3 inherit;color:var(--media-ink-body)}
+  .zone.mid{background:rgba(91,157,255,.06)}
+  .zone.side{background:rgba(255,255,255,.02)}
+
+  /* chrome hint (top + bottom scrims with labels) */
+  .ctop{position:absolute;left:0;right:0;top:0;height:64px;background:var(--scrim-top);
+        display:flex;align-items:flex-end;padding:0 14px 8px;color:var(--media-ink);font:600 11px/1.2 inherit}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:120px;background:var(--scrim-bottom)}
+  .tline{position:absolute;left:16px;right:16px;bottom:64px;height:3px;border-radius:2px;background:rgba(255,255,255,.28)}
+  .tline .fill{position:absolute;left:0;top:0;bottom:0;width:42%;background:var(--media-ink);border-radius:2px}
+  .tline .thumb{position:absolute;left:42%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+        background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .ticks{position:absolute;left:16px;right:16px;bottom:64px;height:3px}
+  .ticks i{position:absolute;top:-1px;width:1px;height:5px;background:rgba(255,255,255,.35)}
+  .transport{position:absolute;left:0;right:0;bottom:82px;display:flex;align-items:center;justify-content:center;gap:22px}
+  .tbtn{width:44px;height:44px;border-radius:50%;background:var(--glyph-fill);display:flex;align-items:center;
+        justify-content:center;color:var(--media-ink);font:600 10px/1 inherit}
+  .tbtn.big{width:52px;height:52px}
+
+  /* swipe-dismiss illustration */
+  .swipearrow{position:absolute;left:50%;top:38%;transform:translateX(-50%);display:flex;flex-direction:column;
+        align-items:center;gap:4px;color:var(--media-ink)}
+  .swipearrow .cap{font:600 11px/1.2 inherit}
+  .swipearrow .arw{font-size:26px;animation:slide 1.4s var(--ease-std) infinite}
+  @keyframes slide{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(16px);opacity:1}}
+  .shrinkframe{position:absolute;inset:0;border:2px solid rgba(91,157,255,.5);border-radius:22px;
+        transform:scale(.9) translateY(24px);opacity:.5}
+
+  /* a11y focus illustration */
+  .focusring{position:absolute;border:2px solid var(--stage-accent);border-radius:12px}
+  .a11ynote{position:absolute;left:14px;right:14px;bottom:150px;background:var(--pin-surface);
+        border:1px solid var(--media-edge-top);border-radius:10px;padding:10px 12px;
+        font:500 10.5px/1.4 inherit;color:var(--media-ink-body)}
+  .a11ynote b{color:var(--media-ink)}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Gestures — the interaction contract</h1>
+  <p class="stagenote">
+    Every interaction with the player: <b>single tap</b>, <b>double tap</b>, <b>timeline scrub</b>,
+    <b>play/pause</b>, <b>swipe</b>, <b>long-press</b>, the <b>gesture-conflict priority matrix</b>, <b>auto-hide</b>,
+    and the full <b>accessibility</b> + <b>reduced-motion</b> equivalents. This spec <b>layers on the frozen
+    <code>player-core.html</code></b> and the frozen-candidate <b><code>player-states.html</code></b> — it inherits
+    tokens, layout, controls, states and the a11y floor, and <b>never redraws them</b>. It defines only how a touch
+    becomes an action. Grounded in current source (<code>AutoHideChromePolicy</code>, <code>EdgeSeekZones</code>,
+    <code>SegmentedTimeline</code>, <code>PlaybackSpeedPolicy</code>, <code>PlayerViewModel</code>) + competitive
+    interaction research — <b>not memory</b>. Preserves ADR-0037/0038/0032, the fail-closed resolver, and NO autoplay.
+    <b>No new backend capability</b>; Media3 is pinned 1.4.1 so there is <b>no MediaSession</b> — headset / media-key
+    transport is explicitly out of scope.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Gesture layer</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setG('tap',this)">Tap zones</button>
+        <button class="tog" aria-pressed="false" onclick="setG('scrub',this)">Timeline scrub</button>
+        <button class="tog" aria-pressed="false" onclick="setG('swipe',this)">Swipe-dismiss</button>
+        <button class="tog" aria-pressed="false" onclick="setG('a11y',this)">A11y focus</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Interaction model — principles &amp; boundary</h2>
+    <div class="subtle">What every gesture must satisfy, and what this spec is NOT allowed to touch.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Seven properties every interaction must satisfy</div>
+      <ul class="tight">
+        <li><b>Predictable</b> — same touch, same result, everywhere. No mode-dependent surprises.</li>
+        <li><b>Low cognitive load</b> — a gesture never requires the user to remember state.</li>
+        <li><b>Discoverable</b> — nothing load-bearing is gesture-only; every gesture mirrors a visible control.</li>
+        <li><b>Reversible</b> — every gesture has an obvious undo (seek back, tap again, Back).</li>
+        <li><b>Consistent</b> — matches platform + gallery convention; no bespoke idioms to learn.</li>
+        <li><b>Minimal</b> — the fewest gestures that cover the job. Every unused gesture stays unbound.</li>
+        <li><b>Calm</b> — this is <i>reviewing your own recordings</i>, not consuming a feed. No feed idioms.</li>
+      </ul>
+      <div class="rejbox"><div class="caption" style="color:#ff9494">The anti-goal</div>
+        Rova is not a social video feed. We reject vertical-swipe-to-next-clip and hold-to-2× outright (§07/§08):
+        feed-skimming affordances that fight a review posture and collide with the gestures we <i>do</i> keep.</div>
+    </div>
+    <div class="panel">
+      <div class="caption">Frozen boundary — inputs this spec builds ON, never edits</div>
+      <ul class="tight">
+        <li><b>player-core.html</b> (FROZEN) — layout, controls, chrome policy, tokens, motion vocabulary.</li>
+        <li><b>player-states.html</b> (FROZEN CANDIDATE) — Loading, Unavailable, Retry, resume/start-over faces.</li>
+        <li><b>ADR-0037</b> — playback identity; resolver fails closed; Library sole minter. <i>Read-only.</i></li>
+        <li><b>ADR-0038</b> — lifecycle; fresh player per lease; <code>ownedPlayer()</code> lease-gate; dismiss uses
+          the <i>existing</i> nav-pop → 400 ms deferred release. No new teardown path.</li>
+        <li><b>ADR-0032</b> — wall-clock playhead. Scrub reads/writes position through the existing path.</li>
+        <li><b>Media3 1.4.1 / no MediaSession</b> — no headset, lock-screen, or media-key transport is designed here.</li>
+      </ul>
+      <div class="frozen"><div class="caption">This spec adds NO backend capability</div>
+        Every gesture resolves to a call that already exists: <code>onSingleTap</code>, <code>onTogglePlay</code>,
+        <code>onSeekRelative</code>, <code>onScrubStart/Update/End</code>, <code>onSetSpeed</code>, nav-pop. Two
+        interactions are <i>proposed additions</i> (boundary haptic §05, swipe-dismiss §07) — both pure UI, no backend,
+        clearly marked and gated behind owner sign-off before Compose.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — the touch map</h2>
+    <div class="subtle">One frame, four gesture layers. Toggle above. Reduce-motion strips animation, never behavior.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" id="ph" data-g="tap">
+      <div class="footage"></div>
+
+      <!-- TAP ZONES -->
+      <div class="layer g-tap">
+        <div class="zones">
+          <div class="zone side"><div class="zt">Left third</div><div class="zs">double-tap<br>− 10 s</div></div>
+          <div class="zone mid"><div class="zt">Center third</div><div class="zs">double-tap<br>play / pause</div><div class="zs" style="margin-top:8px;color:var(--media-ink-dim)">single tap<br>reveal chrome</div></div>
+          <div class="zone side"><div class="zt">Right third</div><div class="zs">double-tap<br>+ 10 s</div></div>
+        </div>
+      </div>
+
+      <!-- TIMELINE SCRUB -->
+      <div class="layer g-scrub">
+        <div class="ctop">0:42 · Segment 2 / 4</div>
+        <div class="cbot"></div>
+        <div class="ticks"><i style="left:18%"></i><i style="left:46%"></i><i style="left:72%"></i></div>
+        <div class="tline"><div class="fill"></div><div class="thumb"></div></div>
+        <div class="transport">
+          <div class="tbtn">−10</div><div class="tbtn big">❚❚</div><div class="tbtn">+10</div>
+        </div>
+      </div>
+
+      <!-- SWIPE DISMISS -->
+      <div class="layer g-swipe">
+        <div class="shrinkframe"></div>
+        <div class="swipearrow"><div class="cap">swipe down</div><div class="arw">↓</div><div class="cap" style="color:var(--media-ink-body)">release to close</div></div>
+      </div>
+
+      <!-- A11Y FOCUS -->
+      <div class="layer g-a11y">
+        <div class="ctop">Back · Segment 2 / 4</div>
+        <div class="cbot"></div>
+        <div class="tline"><div class="fill"></div><div class="thumb"></div></div>
+        <div class="focusring" style="left:14px;bottom:60px;right:14px;height:16px"></div>
+        <div class="transport">
+          <div class="tbtn">−10</div><div class="tbtn big">❚❚</div><div class="tbtn">+10</div>
+        </div>
+        <div class="a11ynote"><b>Timeline = adjustable slider.</b> TalkBack swipe-up/down seeks;
+          custom actions jump segment; ±10 s buttons mirror double-tap; Back = dismiss.</div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Single tap</div><div class="v"><b>Reveals</b> chrome (idempotent) + re-arms auto-hide. Never hides, never pauses. §02</div></div>
+      <div class="row"><div class="k">Double tap</div><div class="v">Edge thirds seek <b>±10 s</b>; center third toggles play. Fires after the 300 ms window. §03</div></div>
+      <div class="row"><div class="k">Timeline</div><div class="v">Tap-to-seek + drag-scrub with clip-boundary snap; the <b>spine</b> of playback. §04</div></div>
+      <div class="row"><div class="k">Play / Pause</div><div class="v">Center button (primary) + center double-tap (shortcut). VM owns state. §05</div></div>
+      <div class="row"><div class="k">Swipe down</div><div class="v"><b>PROPOSED</b> interactive dismiss → existing nav-pop. Region-owned, generous threshold. §07</div></div>
+      <div class="row"><div class="k">Long press</div><div class="v"><b>REJECTED</b> — unbound. Reserved for the future system layer. §08</div></div>
+      <div class="row"><div class="k">Auto-hide</div><div class="v">3 s while playing; pinned while paused / scrubbing / TalkBack. §09</div></div>
+      <div class="row"><div class="k">Every gesture</div><div class="v">has a TalkBack + keyboard + switch path — none is gesture-only. §10</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Single tap — reveal chrome</h2>
+    <div class="subtle">Idempotent reveal + auto-hide re-arm. The one true "show me the controls" gesture.</div>
+  </div></div>
+  <p class="stagenote">A single tap anywhere on the video body calls <code>onSingleTap()</code>, which sets
+    <code>chromeVisible = AutoHideChromePolicy.onUserTap(chromeVisible)</code> and bumps <code>interactionTick</code>
+    to re-arm the auto-hide timer (<code>PlayerScreen.kt:301–304</code>). <code>onUserTap</code> <b>always returns
+    <code>true</code></b> — a tap <i>reveals</i> chrome and never hides it (<code>AutoHideChromePolicy.kt:26–27</code>).</p>
+  <div class="frozen"><div class="caption">Canonical: tap reveals, auto-hide hides</div>
+    Hiding is owned solely by the auto-hide timer (while playing) — <b>not</b> by a toggle. This is deliberate and
+    matches the gallery convention (Google Photos, Samsung Gallery): the user never has to guess whether a tap will
+    show or hide. On a paused frame chrome is already pinned, so a tap is a harmless no-op that re-confirms visibility.</div>
+  <ul class="tight">
+    <li><b>Priority:</b> a tap that lands on a real control (button, timeline) is consumed by that control; the
+      body-tap sits z-below the chrome (<code>PlayerScreen.kt:333–339</code>). No ambiguity — region ownership (§08).</li>
+    <li><b>Disambiguation:</b> single-tap fires only after the ~300 ms double-tap window closes (platform
+      <code>detectTapGestures</code>). This latency is inherent to coexisting with double-tap-seek and is accepted
+      industry-wide. See §03 for the short-clip note.</li>
+    <li><b>A11y:</b> the body carries <code>Role.Button</code> + <code>onClick</code> semantics with
+      <code>player_show_controls_cd</code> (<code>PlayerScreen.kt:353–357</code>) — TalkBack double-tap reveals chrome
+      identically.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Double tap — edge seek / center toggle</h2>
+    <div class="subtle">Adopted. YouTube-family edge-seek, tuned by region. Already shipped (PR #143).</div>
+  </div></div>
+  <p class="stagenote"><code>detectTapGestures.onDoubleTap</code> reads the tap x against
+    <code>EdgeSeekZones.zoneFor(offset.x, surfaceWidthPx)</code> (<code>PlayerScreen.kt:343–350</code>):
+    left third → <code>onSeekRelative(−10 s)</code>, right third → <code>onSeekRelative(+10 s)</code>, center third →
+    <code>onTogglePlay()</code>; then <code>onSingleTap()</code> reveals chrome. Zone split is
+    <code>leftFraction = rightFraction = 1f/3f</code>; degenerate width or negative x falls back to TOGGLE
+    (<code>EdgeSeekZones.kt:17–35</code>). Seek distance <code>SEEK_DELTA_MS = 10_000L</code>.</p>
+  <div class="frozen"><div class="caption">Accepted interaction (unchanged from shipped)</div>
+    Edge-thirds double-tap seek + center-toggle is kept verbatim. Chained taps accumulate and are reversible; each
+    jump reveals chrome so the position lands in view. Center-third double-tap duplicates the play/pause button — an
+    intentional convenience shortcut, consistent with Google Photos.</div>
+  <div class="warnbox"><div class="caption">Open question (owner sign-off — NOT changed here)</div>
+    Research (Google Photos) uses a <b>5 s</b> hop on short clips where a 10 s jump overshoots, and disables the
+    gesture below a minimum clip length. Rova ships <b>±10 s</b> today. This spec <b>does not silently change it</b>:
+    the constant lives in <code>SEEK_DELTA_MS</code> and is owner-frozen. Flagged as a candidate — either a shorter hop
+    or a length-gated disable — for a future decision. If double-tap-seek were ever disabled on very short clips, the
+    single-tap chrome reveal could become <i>instant</i> there (no double-tap window to wait on) — a predictability win.</div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Timeline — the spine of playback</h2>
+    <div class="subtle">Tap-to-seek + drag-scrub + clip-boundary snap. Already the richest control; kept as the anchor.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Current behavior (kept)</div>
+      <ul class="tight">
+        <li><b>Tap-to-seek:</b> <code>detectTapGestures</code> → <code>onSeek(positionFromFraction(x/width))</code>,
+          clamped 0..1 (<code>SegmentedTimeline.kt:127–132</code>).</li>
+        <li><b>Drag-scrub:</b> a separate <code>detectDragGestures</code> block; <code>onDragStart</code> →
+          <code>onScrubStart()</code>, per-move <code>change.consume()</code> + <code>onScrubUpdate</code>,
+          <code>onDragEnd/Cancel</code> → <code>onScrubEnd</code> (<code>:133–164</code>).</li>
+        <li><b>Clip-boundary snap:</b> <code>snapIfNear</code> within <code>snapWindowMs =
+          (totalMs/50).coerceIn(150, 1500)</code> — magnetically catches segment edges (<code>:118</code>,
+          <code>SegmentedTimelineMath.kt:141–147</code>). Segment ticks are drawn at cumulative offsets.</li>
+        <li><b>Coalescing:</b> scrub-update emits only when the snapped target changes (<code>:159–162</code>) — no
+          flooding the player with sub-pixel seeks.</li>
+        <li><b>Edge behavior:</b> fractions clamp to 0..1; position clamps to 0..total. No wrap, and an over-drag on
+          the bar never triggers dismiss (§07 region ownership).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Evaluated additions — reasoned decisions</div>
+      <ul class="tight">
+        <li><b>Boundary haptic — RECOMMEND (proposed, no backend).</b> A single <code>performHapticFeedback</code>
+          (<code>CLOCK_TICK</code>) as a scrub crosses a clip boundary / hits 0:00 or end. Reinforces "reversible,
+          predictable"; composes with the existing snap; no dependency. Reduced-motion / system-haptics-off respected.</li>
+        <li><b>Vertical fine-scrub — DEFER (reject for now).</b> Drag-away-to-slow-precision is premium but (a) needs a
+          second axis on the same pointer, which directly collides with swipe-dismiss (§07), and (b) segment snap
+          already gives frame-adjacent precision on short recordings. YAGNI until users demand it.</li>
+        <li><b>Thumbnail scrub-preview — OUT (backend capability).</b> A frame preview above the thumb needs
+          frame-at-time retrieval Media3 1.4.1 does not give us for free — that is <i>new backend capability</i>,
+          forbidden here. Recorded as a future spec item, not designed.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen"><div class="caption">A11y — the timeline is already a real slider</div>
+    The gesture box exposes <code>progressBarRangeInfo</code>, <code>stateDescription</code> (segment n/n + mm:ss),
+    <code>setProgress</code> (TalkBack swipe-up/down + keyboard adjust), and two <code>CustomAccessibilityAction</code>s
+    (prev/next segment), plus a polite <code>liveRegion</code> announcing segment changes
+    (<code>SegmentedTimeline.kt:165–181, 239–254</code>). This is the accessible seek path — no gesture-only scrubbing.</div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Play / Pause &amp; speed</h2>
+    <div class="subtle">Dedicated button primary, center-tap shortcut secondary. State owned by the ViewModel.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Behavior (kept)</div>
+      <ul class="tight">
+        <li><b>Primary:</b> center 48 dp <code>Surface(onClick = onTogglePlay)</code> in <code>ControlsRow</code>
+          (<code>PlayerScreen.kt:674–689</code>) — labelled, Role.Button, always the accessible path.</li>
+        <li><b>Shortcut:</b> center-third double-tap also toggles (§03). A convenience, never the contract.</li>
+        <li><b>Skip:</b> Replay-10 / Forward-10 <code>IconButton</code>s mirror the double-tap edge-seek for
+          TalkBack + discoverability (<code>:667–696</code>).</li>
+        <li><b>Speed:</b> the PR-7 chip cycles <code>0.5× / 1× / 1.5× / 2×</code> via
+          <code>PlaybackSpeedPolicy.next</code> (session-only, <code>PlaybackSpeedPolicy.kt:23–24</code>), applied
+          through <code>setPlaybackSpeed</code> gated on <code>COMMAND_SET_SPEED_AND_PITCH</code>. Explicit + reversible.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">State ownership</div>
+      <p class="stagenote"><code>PlayerViewModel.togglePlayPause()</code> owns transport
+        (<code>PlayerViewModel.kt:306–310</code>): pause persists position, play resumes;
+        <code>isPlaying</code> flows out via <code>PlaybackProgress</code>. The gesture layer never mutates ExoPlayer
+        directly — it calls the VM, which is lease-gated by <code>ownedPlayer()</code> (ADR-0038).</p>
+      <div class="rejbox"><div class="caption" style="color:#ff9494">Out of scope — no backend</div>
+        No MediaSession (Media3 1.4.1, deliberate: <code>PlayerScreen.kt:156</code>). Therefore <b>no headset button,
+        no Bluetooth transport, no lock-screen / notification controls, no hardware media keys</b>. This is a known
+        gap, not a gesture this spec may design — it requires backend capability we are forbidden to invent. Keyboard
+        Enter/DPAD-center still activates the focused on-screen button (§10).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Swipe — evaluate from first principles</h2>
+    <div class="subtle">Swipe-down-to-dismiss: adopt (proposed). Vertical-swipe-to-next: reject. Edge-swipe: system.</div>
+  </div></div>
+  <div class="frozen"><div class="caption">Swipe-down-to-dismiss — ADOPT (proposed, owner sign-off before Compose)</div>
+    <p class="stagenote">The reversible, expected gallery exit (Google Photos / Apple Photos / Samsung Gallery all do
+      it). A vertical drag that <b>begins on the media body</b> rubber-bands the frame with the finger; releasing past
+      <code>--dismiss-commit</code> (≈120 dp) <b>or</b> a downward fling ≥ <code>--dismiss-velocity</code> commits the
+      dismiss, otherwise it springs back. Commit routes the <b>existing nav-pop</b> — the same path as Back — so
+      ADR-0038 teardown (park → 400 ms deferred release) is unchanged. <b>No new lifecycle, no new backend.</b></p>
+    <ul class="tight">
+      <li><b>Not present today</b> (no swipe/drag-to-dismiss found in <code>PlayerScreen.kt</code>). This is a genuine
+        addition — hence proposed + gated, not asserted as existing.</li>
+      <li><b>Accidental-dismissal mitigations:</b> generous distance threshold; interactive rubber-band (you see it
+        coming and can abort by dragging back); directional axis-lock in the first few px; velocity shortcut only on a
+        deliberate fling.</li>
+    </ul>
+  </div>
+  <div class="warnbox"><div class="caption">Conflict with the timeline — resolved by region ownership</div>
+    A vertical drag that <b>starts on the timeline or a control</b> belongs to that control (scrub / no-op), never to
+    dismiss (§08 priority matrix). Because Rova <b>defers vertical fine-scrub</b> (§04), a vertical drag on the media
+    body is unambiguous — it can only mean dismiss. Keeping fine-scrub out is what makes swipe-dismiss safe.</div>
+  <div class="rejbox"><div class="caption" style="color:#ff9494">Vertical-swipe-to-next-clip — REJECT</div>
+    Reels/TikTok map vertical swipe to next/previous item. That is feed navigation: it fights swipe-dismiss head-on,
+    it fights fine-scrub, and it is the opposite of a calm review posture. Rejected outright. Moving between recordings
+    happens in the Library, not by swiping inside the player. Edge-swipe stays the OS system-back gesture (which already
+    routes the same nav-pop) — this spec does not intercept it.</div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Long press — evaluate, then reject</h2>
+    <div class="subtle">Unbound on the player surface. Reserved.</div>
+  </div></div>
+  <p class="stagenote">Long-press is unbound today (<code>NOT FOUND</code> in <code>PlayerScreen.kt</code>). The only
+    common player use is <b>hold-to-2×</b> (Reels/TikTok/YouTube) — a feed-skimming affordance: undiscoverable,
+    un-calm, and useless for frame-accurate review of your own footage. Photos/Gallery reserve long-press for
+    Motion-photo / selection, not playback.</p>
+  <div class="rejbox"><div class="caption" style="color:#ff9494">REJECT — leave unbound (YAGNI)</div>
+    Speed already has an explicit, reversible chip (§05); a hidden hold gesture would duplicate it worse. Leaving
+    long-press unbound keeps it free for a future <b>system</b> gesture (e.g. share / scrub-lock) without retraining
+    users, and removes one more thing that can fire by accident during a calm review. No accessibility cost — nothing
+    is lost because nothing was bound.</div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Gesture-conflict priority matrix</h2>
+    <div class="subtle">The most important section. Nothing is ambiguous. Resolution order is fixed.</div>
+  </div></div>
+  <p class="stagenote">Every raw touch resolves top-down. The first rule that matches wins; it never reclassifies.</p>
+  <table>
+    <thead><tr><th>#</th><th>Rule</th><th>Wins for</th><th>Loses / deferred</th><th>Mechanism</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Region ownership</b> — where the touch <i>begins</i></td>
+        <td>Controls &amp; timeline own their gestures (button click, scrub)</td>
+        <td>Body-only gestures (tap-chrome, double-tap-seek, swipe-dismiss) never fire from a control</td>
+        <td>z-order: chrome above body; timeline drag <code>change.consume()</code> (<code>SegmentedTimeline.kt:150</code>)</td></tr>
+      <tr><td>2</td><td><b>Axis lock</b> — first move vector past slop classifies drag axis</td>
+        <td>Strong-vertical on body → swipe-dismiss; horizontal on bar → scrub</td>
+        <td>A locked axis never converts (a scrub can't become a dismiss)</td>
+        <td>directional lock in first few px (proposed dismiss detector); scrub already horizontal-only</td></tr>
+      <tr><td>3</td><td><b>Tap vs drag</b> — movement past touch-slop before release</td>
+        <td>Past slop ⇒ drag/scrub</td><td>Within slop ⇒ tap</td>
+        <td>platform <code>ViewConfiguration</code> touch-slop (<code>~8dp</code>)</td></tr>
+      <tr><td>4</td><td><b>Single vs double tap</b> — second tap within the window</td>
+        <td>2nd tap ⇒ double-tap-seek/toggle</td><td>No 2nd tap ⇒ single-tap-chrome (fires after the window)</td>
+        <td><code>detectTapGestures</code> ~300 ms window (<code>PlayerScreen.kt:328</code>)</td></tr>
+      <tr><td>5</td><td><b>TalkBack override</b> — touch-exploration active</td>
+        <td>Semantics tree (focus + activate + slider actions)</td><td>ALL raw gestures suspended; auto-hide off</td>
+        <td><code>isTouchExplorationEnabled</code> read once (<code>PlayerScreen.kt:271–275, 284</code>)</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen"><div class="caption">Every pairwise conflict, explicitly</div>
+    <ul class="tight">
+      <li><b>Timeline drag vs body swipe-dismiss</b> → Rule 1 (region: drag started on the bar) then Rule 2 (axis).</li>
+      <li><b>Single-tap vs double-tap</b> → Rule 4 (window). Single-tap accepts the ~300 ms latency by design.</li>
+      <li><b>Double-tap-seek vs swipe-dismiss</b> → Rule 3 (a tap has no slop travel) — a double-tap is two taps, never a drag.</li>
+      <li><b>Button press vs body tap</b> → Rule 1 (the button consumes; body-tap is z-below).</li>
+      <li><b>Any gesture vs TalkBack</b> → Rule 5 wins unconditionally.</li>
+    </ul></div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Auto-hide interaction</h2>
+    <div class="subtle">Builds directly on AutoHideChromePolicy. Timing is frozen — 3 s — and NOT redesigned.</div>
+  </div></div>
+  <p class="stagenote">The policy is pure: <code>shouldRunHideTimer(isPlaying, isScrubbing, chromeVisible,
+    speedMenuOpen) = isPlaying &amp;&amp; !isScrubbing &amp;&amp; chromeVisible &amp;&amp; !speedMenuOpen</code>
+    (<code>AutoHideChromePolicy.kt:19–24</code>). The consumer runs a <code>delay(3000); chromeVisible = false</code>
+    effect keyed on <code>(isPlaying, isScrubbing, chromeVisible, interactionTick)</code>
+    (<code>PlayerScreen.kt:283–292</code>). This spec defines the <i>interaction contract</i> over that timer; it does
+    not touch the 3 s value.</p>
+  <table>
+    <thead><tr><th>Event</th><th>Effect on timer</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Single tap / seek / speed / segment-jump</td><td class="mono">RESET (re-arm)</td>
+        <td><code>interactionTick++</code> restarts the delay — a fresh 3 s to read the controls</td></tr>
+      <tr><td>Playback paused</td><td class="mono">CANCEL + reveal (pinned)</td>
+        <td><code>onPlaybackPaused()=true</code>; you're inspecting a still — nothing should vanish</td></tr>
+      <tr><td>Scrub in progress</td><td class="mono">PAUSE (suspended)</td>
+        <td><code>isScrubbing</code> falsifies the guard; chrome stays up for the whole drag</td></tr>
+      <tr><td>Speed menu open</td><td class="mono">PAUSE (suspended)</td><td><code>speedMenuOpen</code> falsifies the guard</td></tr>
+      <tr><td>TalkBack (touch-exploration) active</td><td class="mono">DISABLED</td>
+        <td>timer never runs; controls must not disappear from a screen-reader user (<code>:284</code>)</td></tr>
+      <tr><td>Playing, untouched 3 s</td><td class="mono">FIRE → hide</td><td>the only path that hides chrome</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen"><div class="caption">Contract</div>
+    Chrome hides <b>only</b> by this timer, and <b>only</b> while playing, idle, non-scrubbing, non-TalkBack. Every
+    other state pins it. No gesture hides chrome directly (§02).</div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Accessibility — no interaction is gesture-only</h2>
+    <div class="subtle">Every gesture maps to a TalkBack path, a keyboard path, and a switch-access path.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Gesture</th><th>TalkBack</th><th>Keyboard</th><th>Switch access</th></tr></thead>
+    <tbody>
+      <tr><td>Reveal chrome (single tap)</td><td>Double-tap the video (Role.Button + <code>player_show_controls_cd</code>)</td>
+        <td>Focus surface → Enter</td><td>Scan to surface → select</td></tr>
+      <tr><td>Play / Pause (double-tap / button)</td><td>Focus the center button → activate</td>
+        <td>Tab to button → Enter/Space</td><td>Scan to button → select</td></tr>
+      <tr><td>Seek ±10 s (double-tap edge)</td><td>±10 s <code>IconButton</code>s (mirrored, <code>:667–696</code>)</td>
+        <td>Focus skip button → Enter</td><td>Scan to skip button → select</td></tr>
+      <tr><td>Scrub (timeline drag)</td><td>Focus slider → swipe up/down; <code>setProgress</code></td>
+        <td>Focus slider → arrow keys (<code>setProgress</code>)</td><td>Scan to slider → adjust</td></tr>
+      <tr><td>Jump segment</td><td>Custom actions (prev/next segment)</td><td>via slider custom actions</td><td>via slider custom actions</td></tr>
+      <tr><td>Dismiss (swipe down)</td><td>System Back + on-screen Back button</td><td>Esc / Back → nav-pop</td><td>Scan to Back → select</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen"><div class="caption">The rule that makes the minimal aesthetic safe</div>
+    The visible skip / play / Back / slider controls <b>are</b> the accessibility layer. Gestures are shortcuts over
+    them, never replacements. The minimal look may never delete a visible control — doing so would strand every
+    non-gesture input path. Announcements: the timeline's polite <code>liveRegion</code> speaks segment changes;
+    state changes (Loading/Ready/Unavailable) are announced by player-states §08, not re-specified here.</div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Motion &amp; reduced motion</h2>
+    <div class="subtle">Reuse player-core's vocabulary. No new motion language. Reduced motion strips animation, keeps behavior.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Motion — inherited only</div>
+      <ul class="tight">
+        <li><b>Chrome show/hide:</b> <code>fadeIn/fadeOut</code> via <code>AnimatedVisibility</code>
+          (<code>PlayerScreen.kt:400–403, 477–482</code>). No new easing.</li>
+        <li><b>Timeline fill:</b> <code>RovaMotion.containerSpring()</code>, snapping during active scrub
+          (<code>SegmentedTimeline.kt:191–199</code>).</li>
+        <li><b>Double-tap feedback:</b> if a seek arc/ripple is added, it uses <code>--ease-std</code> +
+          <code>--t-micro/--t-small</code> from FAMILY 3 — no bespoke curve.</li>
+        <li><b>Swipe-dismiss (proposed):</b> the frame follows the finger 1:1 (no easing while dragging); spring-back
+          uses <code>containerSpring()</code>; commit hands off to the nav transition.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Reduced motion — behavior survives, animation dies</div>
+      <ul class="tight">
+        <li>Gate: <code>rememberReduceMotion()</code> (<code>PlayerScreen.kt:264</code>, <code>ReducedMotion.kt:46</code>).</li>
+        <li>Chrome appears/disappears <b>instantly</b> (<code>EnterTransition.None</code>) — the reveal still happens.</li>
+        <li>Timeline fill <b>snaps</b> to position — the seek still lands.</li>
+        <li>Double-tap seek: the jump is instant with no arc; the ±10 s still applies.</li>
+        <li>Swipe-dismiss: still tracks the finger (that's function, not decoration); only spring-back easing is dropped.</li>
+        <li>Boundary haptic (proposed) is <b>not</b> motion — it stays, gated separately by system haptics settings.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen"><div class="caption">Invariant</div>
+    Reduced motion changes <b>how</b> a gesture animates, never <b>whether</b> it works or <b>what</b> it does. Every
+    interaction in §02–§09 is fully usable with all animation removed.</div>
+</section>
+
+<!-- ============================================================ 12 -->
+<section>
+  <div class="sechead"><div class="secnum">12</div><div>
+    <h2>Frozen boundary — what later specs own</h2>
+    <div class="subtle">This document owns interaction only. It hands off cleanly.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">This spec OWNS</div>
+      <ul class="tight">
+        <li>Every touch → action mapping: tap, double-tap, scrub, play/pause, swipe, long-press.</li>
+        <li>The gesture-conflict priority matrix (§08).</li>
+        <li>Auto-hide interaction contract over the frozen 3 s timer (§09).</li>
+        <li>The accessibility + reduced-motion equivalents of every gesture (§10–§11).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Later specs OWN (NOT here)</div>
+      <ul class="tight">
+        <li><b>player-actions.html</b> — share / export / delete / vault actions, overflow menu, their confirmations.</li>
+        <li><b>player-sharing.html</b> — the share sheet, target selection, SAF flows.</li>
+        <li><b>player-dualshot.html</b> — P+L dual-side selection + any side-switch interaction in the player.</li>
+        <li><b>MediaSession / transport</b> — headset, lock-screen, media keys: a future backend decision, not a gesture spec.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen"><div class="caption">Read-only backbone (restated)</div>
+    ADR-0037 identity / fail-closed resolver · ADR-0038 lifecycle (dismiss = existing nav-pop) · ADR-0032 wall-clock ·
+    NO autoplay · no new backend capability. Media3 1.4.1 → no MediaSession. Compose transcribes this spec; it never
+    diverges. Any interaction change is made here first and re-approved before code.</div>
+</section>
+
+</div>
+
+<script>
+  function setG(g, btn){
+    document.getElementById('ph').setAttribute('data-g', g);
+    btn.parentElement.querySelectorAll('.tog').forEach(b=>b.setAttribute('aria-pressed', b===btn?'true':'false'));
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm')==='1';
+    document.documentElement.setAttribute('data-rm', on?'0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on?'false':'true');
+  }
+</script>
+</body>
+</html>
