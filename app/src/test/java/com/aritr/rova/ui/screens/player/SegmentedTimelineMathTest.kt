@@ -163,4 +163,34 @@ class SegmentedTimelineMathTest {
         assertEquals(0.50f, w[1], 0.0001f)
         assertEquals(0.25f, w[2], 0.0001f)
     }
+
+    // ========== player-gestures.html §04/§05 — boundary set for the haptic ==========
+
+    @Test fun boundariesMs_isZeroCumulativeAndTotal() {
+        // segs = 1000/2000/1000 → {0, 1000, 3000, 4000}.
+        assertEquals(listOf(0L, 1000L, 3000L, 4000L), SegmentedTimelineMath.boundariesMs(segs))
+    }
+
+    @Test fun isOnBoundary_trueOnlyForEdges() {
+        // 0:00, each segment edge, and the end all fire; interior does not.
+        assertTrue(SegmentedTimelineMath.isOnBoundary(0L, segs))
+        assertTrue(SegmentedTimelineMath.isOnBoundary(1000L, segs))
+        assertTrue(SegmentedTimelineMath.isOnBoundary(3000L, segs))
+        assertTrue(SegmentedTimelineMath.isOnBoundary(4000L, segs)) // end
+        assertEquals(false, SegmentedTimelineMath.isOnBoundary(500L, segs))
+        assertEquals(false, SegmentedTimelineMath.isOnBoundary(2000L, segs))
+        assertEquals(false, SegmentedTimelineMath.isOnBoundary(3999L, segs))
+    }
+
+    @Test fun isOnBoundary_matchesWhatSnapReturns() {
+        // The haptic is fed the SNAPPED target; whatever snapIfNear returns near
+        // a boundary must register as on-boundary (equality is exact by design).
+        val snapped = SegmentedTimelineMath.snapIfNear(1080L, segs, 200L)
+        assertEquals(1000L, snapped)
+        assertTrue(SegmentedTimelineMath.isOnBoundary(snapped, segs))
+        // A target that did NOT snap (outside the window) stays interior.
+        val unsnapped = SegmentedTimelineMath.snapIfNear(1500L, segs, 200L)
+        assertEquals(1500L, unsnapped)
+        assertEquals(false, SegmentedTimelineMath.isOnBoundary(unsnapped, segs))
+    }
 }

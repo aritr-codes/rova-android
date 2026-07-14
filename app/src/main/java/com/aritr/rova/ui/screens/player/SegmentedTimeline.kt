@@ -20,9 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aritr.rova.R
 import com.aritr.rova.ui.components.rememberReduceMotion
+import com.aritr.rova.ui.theme.PlayerTokens
 import com.aritr.rova.ui.theme.RovaMotion
 import com.aritr.rova.ui.theme.RovaTokens
 import java.util.concurrent.TimeUnit
@@ -54,9 +55,12 @@ import java.util.concurrent.TimeUnit
  *  - thin boundary **ticks** at the cumulative [SegmentedTimelineMath.cellWeights]
  *    offsets so segment edges stay legible.
  *
- * Colors stay literal `Color.White.copy(alpha = …)` against the dark
- * camera-overlay backdrop (the player is dark-only per UI_DESIGN_TOKENS §1),
- * matching the original `.clip-seg` mockup intent.
+ * Colours come from [com.aritr.rova.ui.theme.PlayerTokens] (`barTrack` .18 /
+ * `barFill` .90 / `barFillScrub` 1.0 / `barTick` .40) — the over-media Family 2
+ * bar tokens transcribed from `docs/design/player-core.html` §02. The player is
+ * a dark-only over-media surface; these are the pinned white-on-dark bar values
+ * (Δ0 from the pre-migration literals), contrast proven by
+ * `PlayerOverlayContrastTest`.
  *
  * Interaction (the VM owns ExoPlayer; this composable is pure-presentational
  * + callbacks — Task-1 math only, no new math, no persistence):
@@ -117,6 +121,18 @@ internal fun SegmentedTimeline(
 
     val snapWindowMs = (totalMs / 50).coerceIn(150L, 1500L)
 
+    // player-gestures.html §04/§05 — the boundary haptic. A single
+    // performHapticFeedback(CLOCK_TICK) as a scrub target snaps onto a clip
+    // boundary (0:00 / a segment edge / the end). Reuses the platform haptic
+    // system (View.performHapticFeedback — the spec's named `--haptic-tick`,
+    // no new dependency, no new abstraction); the OS gates it on the system
+    // haptics setting automatically. Deliberately NOT gated on
+    // rememberReduceMotion: §11 is explicit that the boundary haptic "is not
+    // motion — it stays, gated separately by system haptics settings" (this is
+    // the authoritative reduced-motion clause; §04's looser "reduced-motion …
+    // respected" is reconciled to it — the haptic survives reduced motion).
+    val view = LocalView.current
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -159,6 +175,13 @@ internal fun SegmentedTimeline(
                     if (snapped.toInt() != lastEmittedMs) {
                         lastEmittedMs = snapped.toInt()
                         onScrubUpdate(snapped)
+                        // §04/§05 — one CLOCK_TICK per fresh landing on a clip
+                        // boundary. Coalescing above guarantees at-most-once per
+                        // boundary crossing (a drag pinned inside the snap window
+                        // re-emits the same value and is filtered here).
+                        if (SegmentedTimelineMath.isOnBoundary(snapped, segmentDurationsMs)) {
+                            view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                        }
                     }
                 }
             }
@@ -206,14 +229,14 @@ internal fun SegmentedTimeline(
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .clearAndSetSemantics {}
-                .background(Color.White.copy(alpha = 0.18f))
+                .background(PlayerTokens.barTrack)
         ) {
             // Playback fill — duration-proportional over the whole bar.
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(fillFraction)
-                    .background(Color.White.copy(alpha = if (isScrubbing) 1.0f else 0.90f))
+                    .background(if (isScrubbing) PlayerTokens.barFillScrub else PlayerTokens.barFill)
             )
             // Boundary ticks at cumulative cell-weight offsets (skip the
             // leading 0 and trailing 1 — those are the bar ends).
@@ -225,7 +248,7 @@ internal fun SegmentedTimeline(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width1px(at)
-                        .background(Color.White.copy(alpha = 0.40f))
+                        .background(PlayerTokens.barTick)
                 )
             }
         }

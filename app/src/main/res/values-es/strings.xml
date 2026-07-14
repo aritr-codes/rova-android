@@ -351,6 +351,85 @@
     <string name="player_loading">Cargando…</string>
     <string name="player_back">Atrás</string>
     <string name="player_back_cd">Atrás</string>
+    <!-- player-sharing.html §01/§08/§09 — Player Share flow -->
+    <string name="player_share_cd">Compartir grabación</string>
+    <string name="player_share_not_ready">No se puede compartir esta grabación en este momento</string>
+    <!-- player-sharing.html §04 — DualShot side-choice sheet -->
+    <string name="player_share_sheet_title">¿Qué ángulo quieres compartir?</string>
+    <string name="player_share_sheet_subtitle">Esta grabación capturó dos ángulos.</string>
+    <string name="player_share_option_this_angle">Este ángulo · %1$s</string>
+    <string name="player_share_option_this_angle_sub">El que estás revisando</string>
+    <string name="player_share_option_other_angle">Ángulo %1$s</string>
+    <string name="player_share_option_other_angle_sub">El otro lado</string>
+    <string name="player_share_option_both">Ambos ángulos</string>
+    <string name="player_share_option_both_sub">Dos archivos</string>
+    <!-- player-info.html (Phase 4) — la hoja de información de solo lectura -->
+    <string name="player_info_cd">Detalles de la grabación</string>
+    <string name="player_info_title">Detalles de la grabación</string>
+    <string name="player_info_two_angles">dos ángulos</string>
+    <!-- procedencia (§05) -->
+    <string name="player_info_prov_completed">Completada con normalidad</string>
+    <string name="player_info_prov_user_stopped">Detenida por ti</string>
+    <string name="player_info_prov_system">Detenida por el sistema</string>
+    <string name="player_info_prov_force_stop">Forzada a detenerse</string>
+    <string name="player_info_prov_kept">Clips guardados tras una interrupción</string>
+    <string name="player_info_prov_finished">Grabación finalizada</string>
+    <!-- líneas de detalle de procedencia (§05) -->
+    <string name="player_info_detail_completed">Llegó al final de su programación</string>
+    <string name="player_info_detail_user">Terminaste esta grabación antes de tiempo</string>
+    <string name="player_info_detail_force_stop">La app se forzó a detenerse durante la grabación</string>
+    <string name="player_info_detail_kept">Los clips grabados antes de la interrupción se guardaron y se pueden reproducir</string>
+    <string name="player_info_reason_low_storage">El almacenamiento se agotó</string>
+    <string name="player_info_reason_thermal">El dispositivo se calentó demasiado</string>
+    <string name="player_info_reason_permission">Se desactivó un permiso</string>
+    <string name="player_info_reason_init_failed">La cámara no pudo iniciarse</string>
+    <string name="player_info_reason_schedule">La ventana de grabación terminó</string>
+    <!-- encabezados de grupo -->
+    <string name="player_info_group_basics">Básicos</string>
+    <string name="player_info_group_capture">Captura</string>
+    <string name="player_info_group_angles">Ángulos</string>
+    <!-- etiquetas de fila -->
+    <string name="player_info_row_started">Iniciada</string>
+    <string name="player_info_row_length">Duración</string>
+    <string name="player_info_row_length_kept">Duración guardada</string>
+    <string name="player_info_row_clips">Clips</string>
+    <string name="player_info_row_clips_kept">Clips guardados</string>
+    <string name="player_info_row_clips_per_angle">Clips por ángulo</string>
+    <string name="player_info_row_size">Tamaño</string>
+    <string name="player_info_row_size_total">Tamaño · total</string>
+    <string name="player_info_row_mode">Modo</string>
+    <string name="player_info_row_quality">Calidad (solicitada)</string>
+    <string name="player_info_row_interval">Intervalo</string>
+    <string name="player_info_row_audio">Audio</string>
+    <string name="player_info_row_combined">Archivo combinado</string>
+    <!-- valores -->
+    <string name="player_info_mode_single">Individual</string>
+    <string name="player_info_mode_dual">P+L</string>
+    <string name="player_info_orientation_portrait">Vertical</string>
+    <string name="player_info_orientation_landscape">Horizontal</string>
+    <string name="player_info_orientation_follow">Sigue al dispositivo</string>
+    <string name="player_info_audio_on">Activado</string>
+    <string name="player_info_audio_off">Desactivado</string>
+    <string name="player_info_combined_not_created">no creado</string>
+    <string name="player_info_side_not_finalized">no finalizado</string>
+    <!-- %1$s = tamaño · calidad p.ej. "40.8 MB · FHD" -->
+    <string name="player_info_angle_reviewing_label">%1$s (en revisión)</string>
+    <!-- %1$s = intervalo p.ej. "30s", %2$d = número de ciclos -->
+    <plurals name="player_info_interval">
+        <item quantity="one">Cada %1$s · %2$d vez</item>
+        <item quantity="other">Cada %1$s · %2$d veces</item>
+    </plurals>
+    <plurals name="player_info_clips_kept">
+        <item quantity="one">%d clip guardado</item>
+        <item quantity="other">%d clips guardados</item>
+    </plurals>
+    <!-- player-dualshot.html §01/§06/§07 — indicador de ángulo (solo lectura) -->
+    <string name="player_dualshot_side_portrait">Vertical</string>
+    <string name="player_dualshot_side_landscape">Horizontal</string>
+    <string name="player_dualshot_indicator_both">%1$s · %2$d de 2 ángulos</string>
+    <string name="player_dualshot_indicator_only">Solo %1$s · %2$s no se completó</string>
+    <string name="player_dualshot_angle_cd_both">Ángulo %1$s, %2$d de 2</string>
+    <string name="player_dualshot_angle_cd_only">El ángulo %1$s no se completó; solo %2$s</string>
     <string name="player_play_cd">Reproducir</string>
     <string name="player_pause_cd">Pausar</string>
     <string name="player_rewind_cd">Retroceder 10 segundos</string>
@@ -379,6 +458,18 @@
     <string name="player_unavailable_incomplete">Grabación incompleta</string>
     <string name="player_unavailable_playback_failed">Falló la reproducción</string>
     <string name="player_unavailable_init_failed">Falló la inicialización de la reproducción</string>
+    <!-- Player state system (player-states.html §09) -->
+    <string name="player_retry">Reintentar</string>
+    <string name="player_start_over">Empezar de nuevo</string>
+    <string name="player_resuming">Reanudando</string>
+    <!-- Anuncio de accesibilidad del aviso de reanudación: %1$s = posición MM:SS -->
+    <string name="player_resume_cd">Reanudando en %1$s</string>
+    <string name="player_unavailable_not_finished_detail">Aún se está terminando. Inténtalo de nuevo en un momento.</string>
+    <string name="player_unavailable_playback_failed_detail">Algo interrumpió la reproducción.</string>
+    <string name="player_unavailable_init_failed_detail">No se pudo iniciar el reproductor.</string>
+    <string name="player_unavailable_not_available_detail">Esta grabación no se puede abrir.</string>
+    <string name="player_unavailable_file_not_found_detail">Es posible que el archivo se haya movido o eliminado.</string>
+    <string name="player_unavailable_incomplete_detail">Esta grabación no terminó de guardarse.</string>
     <!-- PR-6b (ADR-0032) wall-clock playhead -->
     <string name="player_wallclock_gap_minutes">+%1$d min de intervalo</string>
     <string name="player_wallclock_gap_seconds">+%1$d s de intervalo</string>
