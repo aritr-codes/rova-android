@@ -11,6 +11,27 @@ findings were then cross-checked against `player-core.html` directly. No spec wa
 
 ---
 
+> **Stewardship addendum — as-shipped (2026-07-14, PR #190 → merge `c2e14f94`).** The Player redesign was
+> transcribed to Compose and merged to master. **Phases 1–4 + the accessibility contract shipped in full.**
+> Two intentional deferrals hold exactly as §6 requires: **player-editing** produced **no** implementation
+> (dedicated editing ADR still gates it) and the **in-player DualShot angle switch** was **not** built (the
+> passive indicator shipped; RK3/ADR-0037 amendment still gates the switch).
+>
+> **Reconciled contradiction (surfaced per HTML-first rule, HTML unchanged):** the §1 status table and §6
+> inventory mark **sharing, info, swipe-down-dismiss, and the boundary haptic** as *PROPOSED / owner-sign-off-
+> gated / "not present today."* All four **shipped** — the owner's completion directive is that sign-off, so
+> gating them off would reopen a completed milestone. Their design-time labels above are left **as authored**
+> (this report and the frozen `player-*.html` specs are historical/canonical design records); the authoritative
+> **as-shipped** status lives in the living docs (`CLAUDE.md` → "Player Redesign V1", `docs/BACKLOG.md`
+> 2026-07-14 update, `memory/project_player_redesign_v1.md`). §6's contrast pin (built), title grouping (built),
+> state announcer (built), sheet focus trap (built via `ModalBottomSheet`), and reduce-transparency wiring
+> (built) are all delivered; the top-band 96dp→min-height floor remains the one owed refinement, correctly
+> routed through a future player-core HTML re-approval (C5). One Required Fix from independent review was
+> reconciled at merge — the dead `PlayerActionFramework` (its "no Share, no Info … declined this milestone"
+> docstring was falsified by the shipped Info/Share; zero consumers) was deleted, not fixed in place.
+
+---
+
 ## 1. Package overview
 
 The Player redesign is a **nine-document design system** built HTML-first, foundation-first. One shell
