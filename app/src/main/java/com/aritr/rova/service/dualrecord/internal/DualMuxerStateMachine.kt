@@ -13,10 +13,14 @@ import com.aritr.rova.service.dualrecord.VideoSide
  *  - STOPPING: stop requested; encoders draining final samples.
  *  - RELEASED: stopped + released. Terminal.
  *
- * Per-side failure: a `SideFailed` event while STARTED records the side
- * in `failedSides` but does not change overall state — the live side
- * keeps writing. When BOTH sides fail, the state advances to STOPPING
- * (the stop path then transitions to RELEASED).
+ * Per-side failure: a `SideFailed` event records the side in `failedSides`
+ * without changing overall state — the live side keeps writing. It is valid
+ * in any non-terminal state (a muxer can throw during `setOrientationHint`,
+ * `addTrack`, or `start()` — all of which run while ADDING_TRACKS — as well
+ * as during writes while STARTED). Only when BOTH sides have failed AND the
+ * machine is STARTED does the state advance to STOPPING (the stop path then
+ * transitions to RELEASED). A both-sides pre-START failure stays in the
+ * current state; the caller's `stop()` releases the muxers regardless.
  *
  * Invalid transitions throw `IllegalStateException` synchronously.
  */
@@ -49,9 +53,7 @@ internal class DualMuxerStateMachine {
     }
 
     private fun handleSideFailed(side: VideoSide): State {
-        check(state == State.STARTED || state == State.STOPPING) {
-            "SideFailed only valid in STARTED/STOPPING; was $state"
-        }
+        check(state != State.RELEASED) { "SideFailed not valid after RELEASED" }
         _failedSides.add(side)
         return if (_failedSides.size == 2 && state == State.STARTED) State.STOPPING else state
     }
