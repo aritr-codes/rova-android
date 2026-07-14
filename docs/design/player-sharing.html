@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Sharing</title>
+<style>
+  /* ==================================================================
+     PLAYER-SHARING — the canonical SHARING-FLOW specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE) + player-gestures.html (FROZEN) + player-actions.html
+     (FROZEN). player-actions defined the Share SLOT (proposed, trailing,
+     bottom-trailing) and DEFERRED the entire flow to this document.
+
+     This spec owns everything that happens AFTER Share is pressed:
+       what artifact is shared · which URI · DualShot side choice ·
+       preparation · the system chooser · every failure path ·
+       feedback transitions · accessibility · motion · security.
+
+     It DOES NOT move Share, redesign Info, redesign the action set,
+     the layout, transport, gestures, or states. Only the flow.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (resolver sole minter; transported not
+         reconstructed; fails closed)
+       ADR-0038 lifecycle (fresh player per lease; nav-pop unchanged)
+       ADR-0032 wall-clock playhead
+       ADR-0025 vault (app-private, no public copy, FLAG_SECURE)
+       ADR-0036 delete-then-discard (unrelated; sharing never deletes)
+       NO autoplay · NO new backend capability · Media3 1.4.1 (no MediaSession).
+
+     GROUND TRUTH (verified in source, NOT memory):
+       ShareUriResolver.safeShareUri(context, file:File?, shareUri:Uri?):Uri?
+         — prefers a caller-supplied content:// URI, else FileProvider
+         .getUriForFile(ctx, "${packageName}.provider", file), catches
+         IllegalArgumentException → null.  (ShareUriResolver.kt:29-39)
+       Callers add FLAG_GRANT_READ_URI_PERMISSION on the Intent and launch
+         Intent.createChooser(ACTION_SEND / ACTION_SEND_MULTIPLE, "video/mp4").
+         (PreviewActivity.kt:142-165, LibraryScreen.kt:281-298)
+       PlayerViewModel has NO share method; PlayerUiState carries NO
+         shareable field — Ready.mediaUri is a PLAYBACK string that may be
+         a keptsegment:// / vaultfile:// SENTINEL, NOT a shareable URI.
+         (PlayerViewModel.kt, PlayerUiState.kt:25-61, PlayerUriResolver.kt)
+       Shareable artifact must be resolved from the MANIFEST, never from
+         mediaUri, via the EXISTING pipeline the Library uses:
+         resolveShareUri (content:// tiers) + resolveArtifactFile/-Segment
+         (File) + queryMediaStoreUriByPath (Tier2/3 _DATA lookup) +
+         safeShareUri. resolveShareUri ALONE returns null for Tier2/3 and
+         kept-raw — the fallback query/File steps complete the resolution.
+       Vault (VAULTED): app-private, "no public copy", FLAG_SECURE — no
+         share path touches it today.  (SessionManifest.kt:456-462)
+       DualShot = TWO independent output files (portrait + landscape),
+         VideoSide field per segment/side.  (DualRecorderTypes.kt:12,
+         SessionManifest.kt:98-99, HistoryArtifactMapper.kt:139-148)
+     Sources above + competitive sharing research (Google Photos · Apple
+     Photos · Samsung Gallery · Blackmagic Camera · DJI Mimo — principles
+     only, no visual copying).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── INHERITED action/interaction constants (already in the codebase) ── */
+    --auto-hide:3000ms;   /* AutoHideChromePolicy.DEFAULT_TIMEOUT_MS = 3_000L */
+
+    /* ── NO NEW sharing tokens are introduced. ──
+       Sharing reuses inherited over-media ink, the 48dp Share target
+       (owned by player-actions), the chrome fade, and the container/exit
+       timings. The share SHEET the OS draws is system-owned; Rova styles
+       nothing past the handoff. A share step that needs a NEW token needs
+       a design change in player-core/player-actions first. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     SHARING SPECIMEN — an over-media frame with the share handoff,
+     the DualShot side choice, and a failure toast drawn onto the
+     inherited three-zone layout. Illustrative, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-a="handoff"] .a-handoff,
+  .phone[data-a="dual"]    .a-dual,
+  .phone[data-a="fail"]    .a-fail{display:block}
+
+  /* chrome scrims */
+  .ctop{position:absolute;left:0;right:0;top:0;height:80px;background:var(--scrim-top)}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:150px;background:var(--scrim-bottom)}
+
+  /* top row + transport reused for context (from player-actions specimen) */
+  .toprow{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;gap:10px}
+  .slot{width:40px;height:40px;border-radius:50%;background:var(--glyph-fill);display:flex;
+        align-items:center;justify-content:center;color:var(--media-ink);font:600 9px/1.1 inherit;
+        text-align:center;flex:none;position:relative}
+  .slot.hot{outline:2px solid var(--stage-accent);outline-offset:2px}
+  .idtext{flex:1;min-width:0}
+  .idtext .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idtext .t2{font:500 10px/1.2 inherit;color:var(--media-ink-body)}
+  .tline{position:absolute;left:16px;right:16px;bottom:96px;height:3px;border-radius:2px;background:rgba(255,255,255,.28)}
+  .tline .fill{position:absolute;left:0;top:0;bottom:0;width:42%;background:var(--media-ink);border-radius:2px}
+  .transport{position:absolute;left:0;right:0;bottom:40px;display:flex;align-items:center;justify-content:center;gap:20px}
+  .tbtn{width:44px;height:44px;border-radius:50%;background:var(--glyph-fill);display:flex;align-items:center;
+        justify-content:center;color:var(--media-ink);font:600 10px/1 inherit}
+  .tbtn.big{width:54px;height:54px;background:var(--media-ink);color:var(--stage-ink)}
+  .trailslot{position:absolute;right:16px;bottom:46px}
+
+  .slotlabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  /* system share sheet mock (system-owned; drawn dimmed to signal "not ours") */
+  .sysdim{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+  .syssheet{position:absolute;left:0;right:0;bottom:0;background:#1b1d24;border-top:1px solid rgba(255,255,255,.08);
+        border-radius:16px 16px 0 0;padding:14px 16px 22px}
+  .syssheet .sh-h{font:600 11px/1.2 inherit;color:rgba(255,255,255,.85);margin-bottom:3px}
+  .syssheet .sh-s{font:500 9.5px/1.3 inherit;color:rgba(255,255,255,.45);margin-bottom:12px}
+  .sh-apps{display:flex;gap:14px}
+  .sh-app{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none}
+  .sh-ic{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12)}
+  .sh-nm{font:500 8px/1 inherit;color:rgba(255,255,255,.5)}
+  .sysband{position:absolute;left:14px;right:14px;top:64px;font:600 8.5px/1.3 inherit;letter-spacing:.06em;
+        text-transform:uppercase;color:rgba(255,255,255,.4);text-align:center}
+
+  /* Rova-owned side-choice sheet (this IS ours — pinned surface, over-media ink) */
+  .choice{position:absolute;left:14px;right:14px;bottom:150px;background:var(--pin-surface);
+        border:1px solid var(--media-edge-top);border-radius:14px;padding:14px}
+  .choice .ch-h{font:600 12px/1.3 inherit;color:var(--media-ink);margin-bottom:2px}
+  .choice .ch-s{font:500 10px/1.4 inherit;color:var(--media-ink-body);margin-bottom:12px}
+  .ch-opt{display:flex;align-items:center;gap:11px;padding:10px 4px;border-top:1px solid rgba(255,255,255,.06)}
+  .ch-opt .ch-ic{width:30px;height:30px;border-radius:8px;background:var(--glyph-fill);flex:none;
+        display:flex;align-items:center;justify-content:center;color:var(--media-ink);font:600 12px/1 inherit}
+  .ch-opt .ch-lbl{font:600 11px/1.3 inherit;color:var(--media-ink)}
+  .ch-opt .ch-sub{font:500 9px/1.2 inherit;color:var(--media-ink-dim)}
+
+  /* failure toast (inherited snackbar idiom; NOT over the action bar) */
+  .toast{position:absolute;left:16px;right:16px;bottom:150px;background:var(--pin-surface);
+        border:1px solid var(--media-edge-top);border-radius:12px;padding:11px 13px;
+        font:500 10.5px/1.4 inherit;color:var(--media-ink)}
+  .toast b{color:var(--media-ink)}
+
+  .flabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+
+  /* flow diagram */
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:4px 0 2px}
+  .step{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:10px;
+        padding:9px 11px;flex:1;min-width:120px}
+  .step .sn{font:700 9px/1 inherit;letter-spacing:.1em;color:var(--stage-accent);text-transform:uppercase}
+  .step .sb{font:500 11px/1.35 inherit;color:var(--stage-dim);margin-top:4px}
+  .step .sb b{color:var(--stage-hi)}
+  .arrow{align-self:center;color:var(--stage-faint);font-size:15px;flex:none}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Sharing — the share-flow contract</h1>
+  <p class="stagenote">
+    Everything that happens <b>after Share is pressed</b>. <code>player-actions.html</code> defined the Share
+    <b>slot</b> (proposed, trailing) and deferred the flow here. This spec <b>layers on the frozen
+    <code>player-core</code> / <code>player-states</code> / <code>player-gestures</code> / <code>player-actions</code></b>
+    and inherits every token, layout, state, gesture, and the action framework — it <b>never redraws them</b>, and it
+    <b>does not move Share or redesign Info</b>. Grounded in current source (the reusable primitive is
+    <code>ShareUriResolver.safeShareUri</code>; the player has <b>zero share plumbing today</b>; the playback
+    <code>mediaUri</code> is <b>not</b> a shareable URI) + competitive sharing research — <b>not memory</b>.
+    Preserves ADR-0037/0038/0032/0025/0036, the fail-closed resolver, NO autoplay, and <b>adds no backend capability</b>.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Share layer</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('handoff',this)">Handoff (single)</button>
+        <button class="tog" aria-pressed="false" onclick="setA('dual',this)">DualShot side choice</button>
+        <button class="tog" aria-pressed="false" onclick="setA('fail',this)">Failure toast</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Model &amp; boundary — what sharing is, and what it must not touch</h2>
+    <div class="subtle">The one-line model, the backbone it preserves, and the redesign lines it may not cross.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The model in one line</div>
+      <p style="margin:0 0 8px">Share = <b>hand the OS a read-only copy of the exact artifact the user just reviewed</b>, via the system chooser, and get out of the way. Rova resolves the shareable URI, sets a temporary read grant, launches the chooser, and owns nothing past the handoff.</p>
+      <p style="margin:0">It is a <b>route, not a build</b>: the artifact already exists on disk (export ran automatically, or the raw segments were kept). Sharing performs <b>no transcode, no merge, no copy-to-public, no upload</b>. The one reusable primitive — <code>ShareUriResolver.safeShareUri</code> — already backs Library and Preview sharing.</p>
+    </div>
+    <div class="panel">
+      <div class="caption">What this spec must NOT do</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Not move or restyle</b> the Share slot, the Info affordance, transport, timeline, layout, tokens, states, or gestures — those are the four frozen specs.</li>
+        <li><b>Not invent backend</b>: no new persistence, no new schema field, no cloud/upload/account, no MediaSession, no custom share targets or tracking.</li>
+        <li><b>Not design</b> editing/trim, DualShot angle-swap, fit/fill, or the Info sheet contents — future specs (§12).</li>
+        <li><b>Not change</b> the resolver, the export tiers, SAF behavior, the vault privacy model, or the delete transaction.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · sharing adds NO backend capability</div>
+    <p style="margin:0">Every step routes something that already exists: the artifact (already exported or kept), the resolution (<code>HistoryArtifactMapper.resolveShareUri</code> logic + <code>safeShareUri</code>), the grant (<code>FLAG_GRANT_READ_URI_PERMISSION</code>, as Library/Preview already set), and the chooser (<code>Intent.createChooser</code>). The player gains exactly one new capability boundary — <b>a Share entry point that resolves from the manifest and calls the existing primitive</b> — and it remains <b>PROPOSED</b>, gated on owner sign-off (the same gate <code>player-actions</code> put on the Share slot itself).</p>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — handoff, DualShot choice, failure</h2>
+    <div class="subtle">Toggle the layers above. The dimmed sheet is <b>system-owned</b> (Rova styles nothing there); the pinned sheet/toast is Rova-owned and reuses inherited ink.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="handoff" id="phone">
+      <div class="footage"></div>
+      <div class="ctop"></div>
+      <div class="cbot"></div>
+
+      <!-- HANDOFF (single artifact) -->
+      <div class="layer a-handoff">
+        <div class="toprow">
+          <div class="slot">◄</div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM</div><div class="t2">3 clips · 1m 20s</div></div>
+        </div>
+        <div class="tline"><div class="fill"></div></div>
+        <div class="transport">
+          <div class="tbtn">−10</div><div class="tbtn big">▮▮</div><div class="tbtn">+10</div>
+        </div>
+        <div class="trailslot"><div class="slot hot">⤴<span class="slotlabel" style="bottom:44px;right:0">SHARE pressed</span></div></div>
+        <div class="sysdim"></div>
+        <div class="sysband">▽ system chooser — Rova styles nothing below</div>
+        <div class="syssheet">
+          <div class="sh-h">Share video</div>
+          <div class="sh-s">1 item · video/mp4 · read permission for this share only</div>
+          <div class="sh-apps">
+            <div class="sh-app"><div class="sh-ic"></div><div class="sh-nm">Messages</div></div>
+            <div class="sh-app"><div class="sh-ic"></div><div class="sh-nm">Drive</div></div>
+            <div class="sh-app"><div class="sh-ic"></div><div class="sh-nm">Mail</div></div>
+            <div class="sh-app"><div class="sh-ic"></div><div class="sh-nm">More</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DUALSHOT SIDE CHOICE (Rova-owned) -->
+      <div class="layer a-dual">
+        <div class="toprow">
+          <div class="slot">◄</div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM · P+L</div><div class="t2">Portrait angle</div></div>
+        </div>
+        <div class="choice">
+          <div class="ch-h">Share which angle?</div>
+          <div class="ch-s">This recording captured two angles.</div>
+          <div class="ch-opt"><div class="ch-ic">▯</div><div><div class="ch-lbl">This angle · Portrait</div><div class="ch-sub">the one you're reviewing (default)</div></div></div>
+          <div class="ch-opt"><div class="ch-ic">▭</div><div><div class="ch-lbl">Landscape angle</div><div class="ch-sub">the other side</div></div></div>
+          <div class="ch-opt"><div class="ch-ic">⧉</div><div><div class="ch-lbl">Both angles</div><div class="ch-sub">two files · <span class="mono">ACTION_SEND_MULTIPLE</span></div></div></div>
+        </div>
+        <div class="flabel" style="bottom:150px;left:14px;transform:translateY(-14px)">Rova-owned · inherited ink</div>
+      </div>
+
+      <!-- FAILURE TOAST -->
+      <div class="layer a-fail">
+        <div class="toprow">
+          <div class="slot">◄</div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM</div><div class="t2">3 clips · 1m 20s</div></div>
+        </div>
+        <div class="tline"><div class="fill"></div></div>
+        <div class="transport">
+          <div class="tbtn">−10</div><div class="tbtn big">▮▮</div><div class="tbtn">+10</div>
+        </div>
+        <div class="trailslot"><div class="slot">⤴</div></div>
+        <div class="toast"><b>Can't share this recording right now.</b> The player is unchanged — playback continues, nothing left the device.<span class="flabel" style="top:-26px;left:0">fail-closed · never crashes</span></div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Trigger</div><div class="v"><b>Share ⤴</b> in the trailing slot (owned by <code>player-actions</code>). This spec starts the moment it is pressed.</div></div>
+      <div class="row"><div class="k">Resolve</div><div class="v">Shareable URI comes from the <b>manifest</b> (not <code>mediaUri</code>) via existing <code>resolveShareUri</code> + <code>safeShareUri</code>. §03 / §05.</div></div>
+      <div class="row"><div class="k">DualShot</div><div class="v"><b>Rova-owned side sheet</b> — This angle (default) / other / both. Only when two sides exist. §04.</div></div>
+      <div class="row"><div class="k">Chooser</div><div class="v"><b>System-owned.</b> <code>Intent.createChooser</code>, <code>video/mp4</code>, temporary read grant. Rova styles nothing. §07.</div></div>
+      <div class="row"><div class="k">Failure</div><div class="v"><b>Fail-closed toast</b>, artifact untouched, playback continues. Never a crash. §08.</div></div>
+      <div class="row"><div class="k">Vault</div><div class="v"><span class="tag t-fail">Never shared</span> app-private, no public copy, FLAG_SECURE — the Share slot is absent. §05 / §10.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Share philosophy — route the existing primitive, own nothing past handoff</h2>
+    <div class="subtle">First principles for a review player, filtered through "no backend / calm / reversible."</div>
+  </div></div>
+  <p>Competitive sharing (Google Photos, Apple Photos, Samsung Gallery, Blackmagic Camera, DJI Mimo) converges on four principles worth keeping and one worth rejecting:</p>
+  <table>
+    <thead><tr><th>Principle</th><th>Rova stance</th></tr></thead>
+    <tbody>
+      <tr><td><b>Share the artifact as-is; don't re-encode inline.</b></td><td><span class="tag t-pass">Adopt</span> Rova already has the finished file. Share routes it directly — no transcode, no quality picker, no size dialog. Fastest, calmest path.</td></tr>
+      <tr><td><b>Hand off to the OS chooser; don't build an in-app target grid.</b></td><td><span class="tag t-pass">Adopt</span> the system chooser is universal, accessible, and already used by Library/Preview. Rova adds no bespoke share UI.</td></tr>
+      <tr><td><b>Temporary, scoped read permission per share.</b></td><td><span class="tag t-pass">Adopt</span> <code>FLAG_GRANT_READ_URI_PERMISSION</code> on the Intent — the exact grant Library/Preview set. No persisted access.</td></tr>
+      <tr><td><b>One clear default; ask only when there is a real choice.</b></td><td><span class="tag t-pass">Adopt</span> single artifact = zero prompts, straight to chooser. DualShot = the only genuine choice (two files), so the only Rova-owned prompt (§04).</td></tr>
+      <tr><td>Pro apps: export presets, watermark, resolution ladder, "share to project."</td><td><span class="tag t-fail">Reject</span> these are editor/library features, not review, and all are new backend. Rova shares the recording, not a re-render.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">Sharing is a <b>thin router over an existing primitive</b>. The player resolves the shareable URI from the already-loaded manifest, applies the temporary read grant, and launches the system chooser. It never re-encodes, never copies to a public location it did not already export to, never uploads, and draws no UI past its own optional side-choice sheet. Everything downstream of the chooser is the OS's job.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Artifact selection rules — which file is shared, per recording kind</h2>
+    <div class="subtle">The playback URI is NOT the share URI. Sharing resolves from the manifest, per kind, exactly as the Library already does.</div>
+  </div></div>
+  <div class="warnbox">
+    <div class="caption">Critical · <code>mediaUri</code> is not shareable</div>
+    <p style="margin:0"><code>PlayerUiState.Ready.mediaUri</code> is a <b>playback string</b> that, for vault and kept-raw, is a custom <b>sentinel</b> (<code>vaultfile://…</code>, <code>keptsegment://…</code>) that only the in-app resolver understands — an external app cannot read it. Sharing MUST resolve the shareable artifact from the <b>manifest</b> (the same object the resolver already loaded), reusing the Library's existing resolution <b>pipeline</b> — <code>resolveShareUri</code> for the content:// tiers, plus <code>resolveArtifactFile</code>/<code>-Segment</code> + <code>queryMediaStoreUriByPath</code> for the File/Tier2-3 cases, then <code>safeShareUri</code> (<code>resolveShareUri</code> alone returns null for Tier2/3 and kept-raw). It must never pass <code>mediaUri</code> to an <code>ACTION_SEND</code> Intent.</p>
+  </div>
+  <table>
+    <thead><tr><th>Recording kind</th><th>Shareable target</th><th>How resolved (existing capability)</th><th>Shareable?</th></tr></thead>
+    <tbody>
+      <tr><td><b>Merged · Tier1 (API 29+)</b></td><td><code>manifest.pendingUri</code> — MediaStore <code>content://</code></td><td>Already a content URI; <code>safeShareUri</code> returns it as-is.</td><td><span class="tag t-pass">Yes</span></td></tr>
+      <tr><td><b>Merged · SAF destination</b></td><td><code>safTargetDocUri</code> — DocumentsProvider <code>content://</code></td><td>Already a content URI; returned as-is.</td><td><span class="tag t-pass">Yes</span></td></tr>
+      <tr><td><b>Merged · Tier2/3 (pre-Q)</b></td><td>the public <code>Movies/Rova/&lt;name&gt;.mp4</code> via a MediaStore <code>_DATA</code> lookup → <code>content://</code></td><td><b>Existing path:</b> the Library resolves Tier2/3 by querying MediaStore for the <code>_DATA</code> row; the player reuses that resolution. <span class="tag t-note">reuse, not new</span></td><td><span class="tag t-pass">Yes (via lookup)</span></td></tr>
+      <tr><td><b>Kept-raw segment</b> (<code>MULTI_SEGMENT_KEPT</code>)</td><td>the resolved segment <code>File</code> under the app-private session dir → FileProvider <code>content://</code></td><td>Resolve the segment File the same way playback does (<code>sessionDir</code> + filename), pass the File to <code>safeShareUri</code> → FileProvider.</td><td><span class="tag t-pass">Yes</span></td></tr>
+      <tr><td><b>Interrupted / recovery output</b></td><td>whatever it <i>settled to</i>: a FINALIZED merged file (→ merged rows above) or kept-raw segments (→ row above)</td><td>Recovery produces one of the settled shapes; share follows that shape. No special "interrupted" artifact.</td><td>iff a finalized/kept artifact exists</td></tr>
+      <tr><td><b>Not yet FINALIZED</b> (still muxing/copying/failed with no output)</td><td>— none</td><td>No shareable file exists.</td><td><span class="tag t-fail">No → slot absent</span></td></tr>
+      <tr><td><b>Vault</b> (VAULTED)</td><td>— none (deliberately)</td><td>App-private, "no public copy," FLAG_SECURE. Sharing would defeat the vault. <b>Rejected</b> (§10).</td><td><span class="tag t-fail">Never</span></td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0"><b>Share targets the exact identity being reviewed</b> (ADR-0037 — transported, not reconstructed): the merged file for a merged session, <i>this</i> segment for a kept-raw segment, <i>this</i> side for DualShot (§04). If no shareable artifact exists (pre-finalize, or vault), the Share slot is <b>absent</b>, per the present-not-disabled rule from <code>player-actions §05</code>. The resolution reuses the Library's existing manifest→share-URI logic; the player introduces no new resolution path.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>DualShot sharing — one Rova-owned choice, defaulting to the reviewed side</h2>
+    <div class="subtle">Two independent output files exist. Choose? Automatic? Both? Grounded in ADR-0037, no invented identity.</div>
+  </div></div>
+  <p>A DualShot session has <b>two separate finalized files</b> — portrait and landscape — represented by parallel per-side manifest fields, each addressed by a <code>VideoSide</code>. The player opened <b>one</b> side; its <code>PlaybackIdentity.side</code> is already minted by the Library and transported in. That is the only side whose identity the player holds — but the sibling side's shareable file is a <b>per-side field on the same already-loaded manifest</b> (<code>landscapePendingUri</code> / <code>landscapePublicTargetPath</code> / …), so resolving it reads existing data, it does not reconstruct identity.</p>
+  <table>
+    <thead><tr><th>Option</th><th>Verdict</th><th>Why / mechanism</th></tr></thead>
+    <tbody>
+      <tr><td><b>Share the reviewed side (default)</b></td><td><span class="tag t-pass">Primary path</span></td><td>The user is watching one angle; sharing it needs zero thought. <code>ACTION_SEND</code>, single URI resolved for <code>identity.side</code>. This is the top, pre-selected option.</td></tr>
+      <tr><td><b>Offer the other side</b></td><td><span class="tag t-note">In the sheet</span></td><td>Resolve the sibling side from the manifest's per-side field → single-URI <code>ACTION_SEND</code>. Cheap, honest, no new identity.</td></tr>
+      <tr><td><b>Share both</b></td><td><span class="tag t-note">In the sheet</span></td><td><code>ACTION_SEND_MULTIPLE</code> with two URIs — the <i>exact</i> Intent Library already uses for multi-item share. Two files, one grant.</td></tr>
+      <tr><td>Auto-pick without asking</td><td><span class="tag t-fail">Reject</span></td><td>Silently choosing (or silently sending both) surprises the user and can leak the angle they didn't mean to send. A real fork deserves a one-tap choice.</td></tr>
+      <tr><td>A merged side-by-side / stitched export</td><td><span class="tag t-fail">Reject</span></td><td>That is a new render = new backend + editor feature. Out of scope; belongs to editing if ever.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Single-side sessions: no prompt.</b> Share goes straight to the chooser. The side sheet appears <b>only</b> when the session is DualShot and both sides have a shareable artifact.</li>
+      <li><b>The side sheet is the one Rova-owned surface in this flow</b> — a lightweight pinned sheet (inherited ink, swipe-down-dismiss), three options, the reviewed side pre-selected. It is not a chooser; picking an option then launches the system chooser.</li>
+      <li><b>No identity is reconstructed.</b> The reviewed side uses the transported <code>PlaybackIdentity</code>; the other side / both read the manifest's existing per-side fields. If a side has no finalized artifact yet, its option is absent (not disabled).</li>
+      <li><b>Detailed layout of the side sheet is confirmed here as owned by this spec</b>; its final pixels are transcribed at Compose time from this frozen HTML, like every other surface.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>URI ownership — who resolves, who grants, who launches</h2>
+    <div class="subtle">Exact class responsibilities. No backend invention; the playback URI and the share URI are different objects.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Responsibility</th><th>Owner (existing / proposed)</th><th>Contract</th></tr></thead>
+    <tbody>
+      <tr><td>Mint playback identity + playback URI</td><td><code>PlayerUriResolver</code> <span class="tag t-pass">existing</span></td><td>Sole minter (ADR-0037), fails closed. Produces <code>mediaUri</code> for ExoPlayer only — <b>not</b> for sharing.</td></tr>
+      <tr><td>Resolve the <b>shareable</b> URI from the manifest</td><td>Library resolution <b>pipeline</b> <span class="tag t-pass">existing</span></td><td><code>resolveShareUri</code> (content:// tiers) + <code>resolveArtifactFile</code>/<code>-Segment</code> + <code>queryMediaStoreUriByPath</code> (Tier2/3 <code>_DATA</code> lookup) as in §03. Reused by the player; not re-implemented. (<code>resolveShareUri</code> alone returns null for Tier2/3 &amp; kept-raw — the File/query steps complete it.)</td></tr>
+      <tr><td>File → shareable content URI</td><td><code>ShareUriResolver.safeShareUri</code> <span class="tag t-pass">existing</span></td><td>Prefers a supplied <code>content://</code>; else <code>FileProvider.getUriForFile(ctx, "${packageName}.provider", file)</code>; catches <code>IllegalArgumentException</code> → null.</td></tr>
+      <tr><td>Grant temporary read + launch chooser</td><td>the player Share entry point <span class="tag t-note">proposed</span></td><td><code>Intent(ACTION_SEND[_MULTIPLE])</code>, <code>type="video/mp4"</code>, <code>EXTRA_STREAM</code>, <code>addFlags(FLAG_GRANT_READ_URI_PERMISSION)</code>, <code>createChooser</code> — the identical shape Library/Preview use.</td></tr>
+      <tr><td>Player lifecycle during share</td><td><code>PlayerEngine</code> / nav <span class="tag t-pass">existing, ADR-0038</span></td><td>Unchanged. Launching the chooser starts an external Activity; the player is backgrounded (<code>ON_STOP</code> → <code>pauseForBackground()</code>) and resumes on return. Sharing adds no lifecycle path.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · two URIs, never confused</div>
+    <p style="margin:0">The <b>playback URI</b> (<code>mediaUri</code>, possibly a sentinel) and the <b>share URI</b> (a real <code>content://</code>) are distinct objects resolved by distinct paths. The share entry point resolves the share URI from the manifest and hands it to <code>safeShareUri</code>; it never shares <code>mediaUri</code>. The FileProvider authority (<code>${packageName}.provider</code>, allowlisted to the <code>videos/</code> path in <code>file_paths.xml</code>) is the only file-exposure surface — the same one playback uses for kept/vault via its own FileProvider detour.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Share preparation — near-instant; there is nothing to build</h2>
+    <div class="subtle">Because the artifact already exists, "preparing" is at most a URI resolution, not an export.</div>
+  </div></div>
+  <div class="flow">
+    <div class="step"><div class="sn">1 · Trigger</div><div class="sb"><b>Share pressed.</b> Chrome is up (auto-hide paused on interaction).</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="sn">2 · Fork</div><div class="sb"><b>DualShot?</b> Yes → side sheet (§04). No → straight on.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="sn">3 · Resolve</div><div class="sb"><b>Manifest → share URI</b> (§03/§05). Synchronous for content/FileProvider; a MediaStore <code>_DATA</code> query only for Tier2/3.</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="sn">4 · Launch</div><div class="sb"><b>Grant + <code>createChooser</code>.</b> System sheet appears.</div></div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="panel">
+      <div class="caption">Why there is no long "preparing" state</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Merged (Tier1/SAF):</b> the content URI already exists — resolution is a field read. Instant.</li>
+        <li><b>Kept-raw:</b> FileProvider mint from a known File — synchronous. Instant.</li>
+        <li><b>Merged (Tier2/3):</b> one MediaStore <code>_DATA</code> query — sub-second, off the main thread. A brief indeterminate indicator is allowed only if it exceeds a frame; otherwise none.</li>
+        <li><b>No transcode / merge / copy ever happens at share time.</b> Export already ran automatically; sharing routes its output.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Feedback transitions (every one)</div>
+      <table>
+        <thead><tr><th>State</th><th>What the user sees</th></tr></thead>
+        <tbody>
+          <tr><td><b>Idle</b></td><td>Share slot present (artifact exists). No indicator.</td></tr>
+          <tr><td><b>Preparing</b> (Tier2/3 only, if &gt;1 frame)</td><td>Brief indeterminate spinner on the Share glyph; inherited motion, no blocking modal.</td></tr>
+          <tr><td><b>Ready</b></td><td>System chooser slides up (system-animated).</td></tr>
+          <tr><td><b>Cancelled</b></td><td>Chooser dismissed → return to player at the same position. Silent, no toast (nothing failed).</td></tr>
+          <tr><td><b>Success</b></td><td>Target app takes over. On return, player resumes. No Rova success toast (the target app is the confirmation).</td></tr>
+          <tr><td><b>Failure</b></td><td>Fail-closed toast (§08). Playback untouched.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0"><b>Sharing never blocks playback and never shows a heavy progress UI</b>, because there is no heavy work. At most a sub-second resolution. Cancellation and success are <b>silent</b> (the system and target app are the feedback); only failure speaks, and only to say the artifact is unchanged. This matches the calm, review-first product line.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>System chooser — Rova stops at the handoff</h2>
+    <div class="subtle">The chooser is the OS's surface. Rova sets the Intent and owns nothing after createChooser.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The Intent Rova builds (identical to Library/Preview)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><code>ACTION_SEND</code> for one artifact; <code>ACTION_SEND_MULTIPLE</code> for DualShot "both".</li>
+        <li><code>type = "video/mp4"</code>.</li>
+        <li><code>EXTRA_STREAM</code> = the resolved <code>content://</code> URI(s).</li>
+        <li><code>addFlags(FLAG_GRANT_READ_URI_PERMISSION)</code> — temporary, per-share.</li>
+        <li>launched via <code>Intent.createChooser(...)</code> so the OS always shows the picker.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">What Rova does NOT do</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>No custom in-app target grid, no "recent contacts," no per-target shortcuts.</li>
+        <li>No <code>ChooserTargetService</code>, no direct-share tuning, no analytics on which target was picked.</li>
+        <li>No persisted grant, no <code>takePersistableUriPermission</code>. The grant dies with the task.</li>
+        <li>No styling of the sheet — it is drawn dimmed in the specimen precisely to signal "not ours."</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">Rova's responsibility ends at <code>createChooser</code>. The chooser's appearance, target list, ordering, and post-pick behavior are the platform's. This keeps sharing universal, accessible by construction, and free of any bespoke surface to maintain — consistent with Library/Preview, which the user may already recognize.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Failure handling — fail closed, artifact untouched, never crash</h2>
+    <div class="subtle">Every failure mode, its cause, and the (calm) response. Sharing can never damage the recording.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Failure</th><th>Cause in code</th><th>Response</th></tr></thead>
+    <tbody>
+      <tr><td><b>URI can't be resolved</b></td><td><code>safeShareUri</code> returns null (no file, no content URI) — e.g. <code>IllegalArgumentException</code> from FileProvider caught internally.</td><td>Toast "Can't share this recording right now." No chooser. Playback continues. (Mirrors <code>preview_share_not_ready</code>.)</td></tr>
+      <tr><td><b>File disappeared</b> since resolve</td><td>FileProvider throws / target app can't read the granted URI.</td><td>Same not-ready toast if caught pre-launch; if the target app fails post-handoff, that is the target app's error surface, not Rova's. Rova's copy of the artifact is unchanged.</td></tr>
+      <tr><td><b>SAF doc URI stale/refused</b></td><td>The <code>content://</code> DocumentsProvider URI is no longer valid.</td><td>Not-ready toast (resolution yields an unusable URI). No crash, no partial send.</td></tr>
+      <tr><td><b>No app can handle the share</b></td><td><code>ActivityNotFoundException</code> on chooser launch.</td><td>Toast "No app available to share video." (Mirrors <code>history_share_no_app</code>.)</td></tr>
+      <tr><td><b>Provider unavailable</b></td><td>FileProvider authority missing / misconfigured (should never happen; it is the shipped authority).</td><td>Caught → not-ready toast. Defensive only.</td></tr>
+      <tr><td><b>Chooser cancelled</b></td><td>User backs out of the system sheet.</td><td><b>Not a failure.</b> Silent return to the player at the same position. Nothing left the device.</td></tr>
+      <tr><td><b>DualShot side has no artifact</b></td><td>The sibling side isn't finalized.</td><td>That option is <b>absent</b> from the side sheet (present-not-disabled). If neither side is shareable, the Share slot itself is absent.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · sharing is non-destructive by construction</div>
+    <p style="margin:0">Every failure path ends in <b>the recording unchanged, playback continuing, and at most one calm toast</b> — never a crash, never a half-sent state, never a mutation. Cancellation is silent (nothing failed). The toast reuses the inherited snackbar idiom and must not overlap the action bar. There is no retry stack and no error dialog; the user simply presses Share again if they wish.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Accessibility — the whole flow, three input paths</h2>
+    <div class="subtle">Share trigger, the side sheet, the toast. TalkBack · keyboard · switch · target size · focus · announcements.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Element</th><th>TalkBack</th><th>Keyboard / Switch</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Share ⤴</b> (trigger)</td><td>Button "Share recording" (owned by <code>player-actions</code>). 48dp.</td><td>Tab + Enter; scan-reachable.</td><td>Opening the flow announces either the chooser (single) or the side sheet (DualShot).</td></tr>
+      <tr><td><b>Side sheet</b> (DualShot)</td><td>Focus-trapped sheet; each option a labelled button ("Share this angle, Portrait" / "Landscape angle" / "Both angles"); reviewed side announced as default.</td><td>Tab cycles options; Enter selects; Esc/back closes and returns focus to Share.</td><td>Announced on open ("Share which angle"); dismiss returns to playback position.</td></tr>
+      <tr><td><b>System chooser</b></td><td>Platform-accessible by construction.</td><td>Platform-handled.</td><td>Rova adds nothing; inherits full OS a11y.</td></tr>
+      <tr><td><b>Preparing indicator</b> (rare)</td><td>Announce "Preparing to share" via a polite live region if shown.</td><td>n/a (transient).</td><td>Only appears if resolution exceeds a frame (Tier2/3).</td></tr>
+      <tr><td><b>Failure toast</b></td><td>Assertive live-region announcement of the message.</td><td>Auto-dismiss; not focus-stealing.</td><td>Message states the artifact is unchanged.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen accessibility floor</div>
+    <p style="margin:0">Nothing in the share flow is gesture-only. The Share trigger and every side-sheet option are real 48dp labelled controls; the sheet is a focus-trapped dialog with a labelled dismiss that returns focus to Share; every state change worth knowing (preparing, failure) is announced. Cancellation and success need no announcement (the system/target app is the feedback). A share step that cannot meet this floor is not adopted.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Security &amp; privacy — temporary grants, vault never leaves</h2>
+    <div class="subtle">Temporary permissions, vault behavior, private/FLAG_SECURE recordings, no accidental leakage.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Grant model</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Per-share, read-only, temporary.</b> <code>FLAG_GRANT_READ_URI_PERMISSION</code> on the Intent — the grant is scoped to the chosen target and revoked by the system when the task ends.</li>
+        <li><b>No persisted access.</b> No <code>takePersistableUriPermission</code>, no long-lived grant, no re-grant across shares.</li>
+        <li><b>Single exposure surface.</b> Files reach other apps only through the FileProvider authority allowlisted to the <code>videos/</code> path; nothing else is exposed.</li>
+        <li><b>Content URIs (Tier1/SAF)</b> carry the OS's own scoped permission; Rova grants read on them the same way.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Vault &amp; private recordings — the hard line</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Vault recordings are never shareable from the player.</b> A vaulted session is app-private with "no public copy" and renders under <code>FLAG_SECURE</code>. The Share slot is <b>absent</b> for it — there is no target to resolve, and sharing would defeat the vault's purpose.</li>
+        <li><b>No accidental leak of the wrong DualShot side</b> — the reviewed side is the default and the fork is explicit; nothing is sent without a tap.</li>
+        <li><b>FLAG_SECURE is a display protection, not a share gate</b> — but for vault it coincides with "no share slot," so a secure recording is never handed out.</li>
+        <li><b>If vault sharing is ever wanted</b>, it is a <b>new capability requiring an explicit ADR</b> (a "temporarily de-secure and expose an app-private file" decision) — out of scope here, and deliberately not designed around.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0">Sharing grants the <b>minimum</b> access (temporary read on exactly the shared URI[s]) and the vault is <b>categorically excluded</b> — no vault artifact can leave via the player. There is no path by which a private recording is shared without the user explicitly selecting a shareable, non-vault artifact and a target. Any future vault-sharing is gated behind its own ADR, not smuggled in here.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Motion &amp; reduced motion — reuse the vocabulary, add nothing</h2>
+    <div class="subtle">The share flow introduces no new motion language; reduced motion changes animation, never behavior.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Motion (inherited only)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>Side sheet</b> enters/exits on the inherited container/exit timings (<code>--t-container</code> / <code>--t-exit</code>, <code>--ease-std</code>) and the same swipe-down-dismiss the gesture spec defines. No bespoke transition.</li>
+        <li><b>System chooser</b> is system-animated; Rova animates nothing for it.</li>
+        <li><b>Preparing indicator</b> (rare) uses the inherited indeterminate style; no new spinner.</li>
+        <li><b>Failure toast</b> uses the inherited snackbar entrance. No custom shake/bounce.</li>
+        <li><b>No new motion token.</b> A step that seems to need one needs a <code>player-core</code> change first.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Reduced motion (inherited invariant)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>Under <code>rememberReduceMotion()</code>, the side sheet appears without its slide, the toast without its transition — <b>animation disappears, behavior does not</b>.</li>
+        <li>Every option, the chooser, and the toast remain present, in the same place, reachable by the same tap and a11y path.</li>
+        <li>No part of the share flow is discoverable only through motion.</li>
+        <li>Same rule <code>player-gestures</code>/<code>player-actions</code> apply, extended to sharing.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 12 -->
+<section>
+  <div class="sechead"><div class="secnum">12</div><div>
+    <h2>Frozen boundary — what this spec owns, what stays elsewhere</h2>
+    <div class="subtle">Sharing owns the flow after Share is pressed. Nothing leaks into or out of the neighboring specs.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-sharing.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>share flow</b> after Share is pressed: trigger → (DualShot fork) → resolve → grant → chooser.</li>
+        <li>The <b>artifact-selection rules</b> per recording kind (§03) and the "resolve from manifest, not <code>mediaUri</code>" contract.</li>
+        <li>The <b>DualShot side-choice sheet</b> (this-side default / other / both) — the one Rova-owned surface in the flow.</li>
+        <li>The <b>URI-ownership map</b>, <b>preparation/feedback transitions</b>, <b>failure handling</b>, and <b>the vault-exclusion + grant security model</b>.</li>
+        <li>The <b>a11y + motion contract</b> for the share flow.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">NOT owned here (do not design)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>The Share slot itself</b> — placement, target size, presence rule — is <code>player-actions.html</code>. This spec only fills it.</li>
+        <li><code>player-info.html</code> — the Info sheet and any metadata. Untouched.</li>
+        <li><code>player-editing.html</code> — trim/edit, and any re-render/stitched export (rejected here as new backend).</li>
+        <li><code>player-dualshot.html</code> — angle swap and DualShot playback controls (this spec touches DualShot only for <i>which file to share</i>).</li>
+        <li><b>Vault sharing</b> — a future <b>ADR</b>, not a spec, since it is new capability.</li>
+        <li><b>MediaSession / cloud / accounts / upload</b> — no backend exists; out of scope everywhere.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">This spec may <b>consume</b> the Share slot that <code>player-actions</code> defined and the identity <code>PlayerUriResolver</code> mints, but it may not redefine either. The share-flow contract — resolve-from-manifest, reviewed-side default, temporary-grant, vault-excluded, fail-closed — is frozen here; a change routes back through this HTML and is re-approved first, exactly like every other change in the HTML-first workflow. Sharing remains <b>PROPOSED</b> until the owner signs off the Share slot in <code>player-actions</code>; both gate together.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

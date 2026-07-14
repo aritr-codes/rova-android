@@ -54,10 +54,9 @@ import kotlinx.coroutines.withContext
  * runs on Dispatchers.IO because [com.aritr.rova.data.SessionStore.loadManifest]
  * does synchronous filesystem I/O.
  *
- * Trim / Edit are explicit NO-GO: the screen surfaces buttons but they
- * fire a snackbar at the call site. The VM has no `trim()` / `edit()`
- * entry point — adding one would invite scope creep into the editor
- * NO-GO (UI_NAV_GRAPH §6.2).
+ * There is no in-player editor in V1 (Media3 1.4.1 envelope; editing is its
+ * own later spec). The VM has no `trim()` / `edit()` entry point and the
+ * ControlsRow carries transport only — no editor affordance exists to route.
  */
 class PlayerViewModel(
     application: Application,
@@ -88,6 +87,38 @@ class PlayerViewModel(
     val isVaulted: StateFlow<Boolean> = _isVaulted.asStateFlow()
 
     /**
+     * player-sharing.html §03/§05 — the pure Share target decision for the
+     * reviewed identity (vault-excluded, DualShot fork, present-not-disabled).
+     * Drives the Share slot's PRESENCE (absent when [PlayerSharePlan.Unavailable])
+     * and whether pressing Share opens the DualShot side sheet or launches the
+     * chooser directly. Resolved once in [resolveAndAttach] from the same
+     * manifest read that drives uiState; stays Unavailable until then.
+     */
+    private val _sharePlan = MutableStateFlow<PlayerSharePlan>(PlayerSharePlan.Unavailable)
+    val sharePlan: StateFlow<PlayerSharePlan> = _sharePlan.asStateFlow()
+
+    /**
+     * player-info.html §03 — the read-only recording-info model for the Info
+     * sheet. Built once in [resolveAndAttach] from the ALREADY-LOADED manifest
+     * (retained as [loadedManifest] for sharing) + the Ready fields the player
+     * already holds — so Info adds NO backend beyond the manifest read the
+     * resolver already did (even cheaper than §00's "one cheap re-read"; the
+     * object is in memory). Null until Ready (Loading/Unavailable expose no
+     * Info affordance, per player-actions §05). Drives both the Info slot's
+     * presence and the sheet's contents.
+     */
+    private val _infoModel = MutableStateFlow<PlayerInfoModel?>(null)
+    val infoModel: StateFlow<PlayerInfoModel?> = _infoModel.asStateFlow()
+
+    /**
+     * player-sharing.html §05 — the loaded manifest retained for share URI
+     * resolution ([resolveShareUris]). The share URI is resolved from the
+     * manifest, NOT from the playback mediaUri (which may be a vault/kept
+     * sentinel). Null until the first resolve; read-only for sharing.
+     */
+    private var loadedManifest: SessionManifest? = null
+
+    /**
      * True once ExoPlayer has decoded and pushed the first video frame to the surface. The screen
      * paints a hand-off poster (the Library thumbnail) over the black PlayerView shutter until this
      * flips, so entering the player doesn't flash a black "block" during build/prepare. Reset to
@@ -95,6 +126,29 @@ class PlayerViewModel(
      */
     private val _firstFrameRendered = MutableStateFlow(false)
     val firstFrameRendered: StateFlow<Boolean> = _firstFrameRendered.asStateFlow()
+
+    /**
+     * player-states.html §06 (RK7) — a **runtime** playback failure (an
+     * already-Ready clip whose codec/container errors mid-play). Held
+     * SEPARATELY from [uiState] on purpose: uiState stays [PlayerUiState.Ready]
+     * so the video surface is not torn down (which would hard-cut to black,
+     * the failure mode §06 forbids). The screen keeps the frozen last frame,
+     * dims it, and fades the SAME Unavailable triad card in over it. Non-null
+     * only for the runtime flip; entry-time failures still travel via
+     * [uiState] = Unavailable. Cleared by [retry] (re-prepare from position).
+     */
+    private val _playbackError = MutableStateFlow<UiText?>(null)
+    val playbackError: StateFlow<UiText?> = _playbackError.asStateFlow()
+
+    /**
+     * player-states.html §04 — the quiet resume cue, present when the player
+     * opened mid-clip. Read-only surfacing of the resolved open position
+     * ([PlayerResumeMath], ADR-0032 backbone untouched); the screen renders a
+     * non-modal "Resuming · m:ss / Start over" pill. Null when the clip opened
+     * at 0. Cleared by [startOver].
+     */
+    private val _resumeCue = MutableStateFlow<PlayerResumeCue?>(null)
+    val resumeCue: StateFlow<PlayerResumeCue?> = _resumeCue.asStateFlow()
 
     private var exoPlayer: ExoPlayer? = null
 
@@ -147,17 +201,20 @@ class PlayerViewModel(
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            // ExoPlayer surface error — the artifact is on disk but
-            // unplayable (codec/container issue). Fall back to
-            // Unavailable rather than leaving the user staring at a
-            // blank surface. The screen pops back via the standard
-            // Unavailable path.
+            // ExoPlayer surface error — the artifact is on disk but unplayable
+            // (codec/container issue). player-states.html §06 (RK7): do NOT flip
+            // uiState to Unavailable — that unmounts PlayerReady, tears down the
+            // surface, and hard-cuts to black. Instead publish the failure on the
+            // sibling [_playbackError] flow while uiState STAYS Ready: the surface
+            // keeps its last decoded frame, the screen freezes + dims it, and the
+            // SAME triad card fades in over it (transient — Retry re-prepares from
+            // the failed position; see [retry]).
             RovaLog.w(
                 "PlayerViewModel: playback error for sessionId=$sessionId",
                 error
             )
-            _uiState.value =
-                PlayerUiState.Unavailable(UiText.Str(R.string.player_unavailable_playback_failed))
+            _playbackError.value =
+                UiText.Str(R.string.player_unavailable_playback_failed)
         }
 
         override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
@@ -169,50 +226,154 @@ class PlayerViewModel(
     }
 
     init {
-        viewModelScope.launch {
-            val manifest = withContext(Dispatchers.IO) {
-                runCatching { loadManifest(sessionId) }.getOrNull()
+        viewModelScope.launch { resolveAndAttach() }
+    }
+
+    /**
+     * The resolve → attach pipeline, extracted from `init` so [retry] can
+     * re-enter it verbatim for the entry-time transient causes (`not_finished`
+     * / `init_failed`, player-states.html §05). Re-entry resets uiState to
+     * Loading (§07: Unavailable → Retry → Loading) and clears any stale runtime
+     * error. Introduces no new capability — same resolve / attach path as the
+     * original init body.
+     */
+    private suspend fun resolveAndAttach() {
+        _uiState.value = PlayerUiState.Loading
+        _playbackError.value = null
+        _infoModel.value = null
+        val manifest = withContext(Dispatchers.IO) {
+            runCatching { loadManifest(sessionId) }.getOrNull()
+        }
+        _isVaulted.value =
+            manifest?.vaultState == com.aritr.rova.data.VaultState.VAULTED
+        // player-sharing.html §03/§05 — retain the manifest + resolve the Share
+        // target (pure). Vault → Unavailable → the Share slot never renders (§10).
+        loadedManifest = manifest
+        _sharePlan.value = PlayerSharePlan.resolve(manifest, side, segmentIndex)
+        val resolved = PlayerUriResolver.resolve(manifest, side, segmentIndex)
+        // Task 8 — read the saved resume position before attaching so
+        // ExoPlayer can seek to it as the initial position (no first-frame
+        // flash). totalDurationFromSegmentsMs is available on the Ready
+        // value; use 0L for Unavailable (ResumePolicy returns 0 for that).
+        val totalDurationMs = (resolved as? PlayerUiState.Ready)
+            ?.totalDurationFromSegmentsMs ?: 0L
+        val savedPosition = withContext(Dispatchers.IO) { runCatching { readResume(sessionId, side, segmentIndex) }.getOrNull() }
+        val startMs = PlayerResumeMath.startPositionMs(savedPosition, totalDurationMs)
+        // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
+        // uiState to Ready. The screen's `update` block reads
+        // `viewModel.getOrCreatePlayer()` on every recomposition; if
+        // recomposition fires after `_uiState` becomes Ready but
+        // before `exoPlayer` is assigned, `update` binds a `null`
+        // player on the PlayerView and the surface stays blank
+        // until the next position-poll tick recomposes. Routing
+        // through [PlayerStateEmitter] preserves this ordering
+        // (the helper invokes `attach` synchronously and only
+        // returns the Ready value after it completes — the single
+        // `_uiState.value = …` write therefore still fires *after*
+        // the side effect).
+        //
+        // Audit F#R1 — `attachExoPlayer` can throw (ExoPlayer init
+        // failure, surface error, malformed `MediaItem`, OOM).
+        // Without the catch inside the emitter, uiState wedges on
+        // Loading forever and the user stares at an unresolvable
+        // spinner. The emitter coerces any thrown attach into
+        // [PlayerUiState.Unavailable] so the standard
+        // Unavailable-screen path takes over.
+        _uiState.value = PlayerStateEmitter.emit(resolved) { uri ->
+            attachExoPlayer(uri, startMs)
+        }
+        // Task 4 — capture the per-segment durations once the Ready
+        // value is in hand so the segment-jump helpers can use them.
+        // Stays empty for the Unavailable path (jumps no-op safely).
+        (_uiState.value as? PlayerUiState.Ready)?.let {
+            segmentDurationsMs = it.segmentDurationsMs
+            // player-info.html §03 — build the Info model from the already-loaded
+            // manifest + these Ready fields. Only when a manifest was read (Ready
+            // implies it was) — a null manifest leaves Info absent (§07 degrade).
+            _infoModel.value = manifest?.let { m -> PlayerInfoModel.build(m, it, side) }
+            // player-states.html §04 — surface the silent mid-clip resume as a
+            // quiet cue. Only when the resolved open position is > 0 (near-end
+            // saves already reset to 0 in ResumePolicy, so the cue never shows
+            // for a clip that opens at the start). `atEnd` (saved parked at
+            // duration) renders Start-over only.
+            _resumeCue.value = if (startMs > 0L) {
+                PlayerResumeCue(
+                    positionMs = startMs,
+                    atEnd = totalDurationMs > 0L && startMs >= totalDurationMs,
+                )
+            } else {
+                null
             }
-            _isVaulted.value =
-                manifest?.vaultState == com.aritr.rova.data.VaultState.VAULTED
-            val resolved = PlayerUriResolver.resolve(manifest, side, segmentIndex)
-            // Task 8 — read the saved resume position before attaching so
-            // ExoPlayer can seek to it as the initial position (no first-frame
-            // flash). totalDurationFromSegmentsMs is available on the Ready
-            // value; use 0L for Unavailable (ResumePolicy returns 0 for that).
-            val totalDurationMs = (resolved as? PlayerUiState.Ready)
-                ?.totalDurationFromSegmentsMs ?: 0L
-            val savedPosition = withContext(Dispatchers.IO) { runCatching { readResume(sessionId, side, segmentIndex) }.getOrNull() }
-            val startMs = PlayerResumeMath.startPositionMs(savedPosition, totalDurationMs)
-            // Audit F#9 — attach the ExoPlayer instance BEFORE flipping
-            // uiState to Ready. The screen's `update` block reads
-            // `viewModel.getOrCreatePlayer()` on every recomposition; if
-            // recomposition fires after `_uiState` becomes Ready but
-            // before `exoPlayer` is assigned, `update` binds a `null`
-            // player on the PlayerView and the surface stays blank
-            // until the next position-poll tick recomposes. Routing
-            // through [PlayerStateEmitter] preserves this ordering
-            // (the helper invokes `attach` synchronously and only
-            // returns the Ready value after it completes — the single
-            // `_uiState.value = …` write therefore still fires *after*
-            // the side effect).
-            //
-            // Audit F#R1 — `attachExoPlayer` can throw (ExoPlayer init
-            // failure, surface error, malformed `MediaItem`, OOM).
-            // Without the catch inside the emitter, uiState wedges on
-            // Loading forever and the user stares at an unresolvable
-            // spinner. The emitter coerces any thrown attach into
-            // [PlayerUiState.Unavailable] so the standard
-            // Unavailable-screen path takes over.
-            _uiState.value = PlayerStateEmitter.emit(resolved) { uri ->
-                attachExoPlayer(uri, startMs)
-            }
-            // Task 4 — capture the per-segment durations once the Ready
-            // value is in hand so the segment-jump helpers can use them.
-            // Stays empty for the Unavailable path (jumps no-op safely).
-            (_uiState.value as? PlayerUiState.Ready)?.let {
-                segmentDurationsMs = it.segmentDurationsMs
-            }
+        }
+    }
+
+    /**
+     * player-states.html §05 — Retry. Re-enters EXISTING code paths only (no
+     * new backend, no new resolver API, ADR-0037/0038 read-only):
+     *  - runtime `playback_failed` ([_playbackError] set): re-`prepare()` the
+     *    same leased player, which resumes from the failed position (Media3
+     *    re-prepare after error keeps the timeline position — "from the failed
+     *    point, not 0", §06). Guarded by [ownedPlayer] (ADR-0038).
+     *  - entry-time transient (`not_finished` / `init_failed`, uiState =
+     *    Unavailable): re-run [resolveAndAttach] (export may have finalized;
+     *    attach may now succeed).
+     */
+    fun retry() {
+        if (_playbackError.value != null) {
+            // Only clear the error card once we actually have a player to
+            // re-prepare. If the lease was lost mid-error (ownedPlayer() ==
+            // null), keep the card up so Back stays the way out — clearing it
+            // would leave a dimmed, frozen, un-actionable frame (review
+            // Observation). The common path (owner intact) re-prepares from the
+            // failed position and dismisses the card.
+            val p = ownedPlayer() ?: return
+            _playbackError.value = null
+            p.prepare()
+            pushProgress()
+        } else {
+            viewModelScope.launch { resolveAndAttach() }
+        }
+    }
+
+    /**
+     * player-states.html §04 — Start over. Seeks to 0 and rewrites the SAME
+     * exact resume slot (`writeResume` with 0 — no bleed across segments/sides,
+     * ADR-0037 slot semantics) so a later reopen starts fresh, then dismisses
+     * the cue. Guarded by [ownedPlayer]; the slot rewrite mirrors
+     * [persistPosition]. No new persistence.
+     */
+    fun startOver() {
+        val p = ownedPlayer()
+        p?.seekTo(0L)
+        writeResume(sessionId, side, segmentIndex, 0L)
+        _resumeCue.value = null
+        if (p != null) pushProgress()
+    }
+
+    /**
+     * player-sharing.html §05/§06/§08 — resolve the chosen artifact(s) to
+     * shareable `content://` URIs off the main thread (a Tier2/3 `_DATA` query
+     * is the only possibly-slow step, §06). Returns all-or-empty (no partial
+     * send, §08): the screen launches the chooser on a non-empty result and
+     * shows a calm fail-closed toast on empty. Reuses the existing Library
+     * resolution pipeline via [PlayerShareUriResolver]; never touches the
+     * playback mediaUri, and the plan already excluded vault (§10), so no vault
+     * artifact can reach here. Playback is unaffected — this reads the manifest
+     * only, mutating nothing on the leased player.
+     */
+    suspend fun resolveShareUris(artifacts: List<PlayerShareArtifact>): List<Uri> {
+        val manifest = loadedManifest ?: return emptyList()
+        if (artifacts.isEmpty()) return emptyList()
+        val app = getApplication<Application>() as RovaApp
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                PlayerShareUriResolver.resolveAll(
+                    context = app,
+                    manifest = manifest,
+                    sessionDir = app.sessionStore.sessionDir(sessionId),
+                    artifacts = artifacts,
+                )
+            }.getOrElse { emptyList() }
         }
     }
 

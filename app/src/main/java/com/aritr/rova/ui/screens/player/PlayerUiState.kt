@@ -61,6 +61,26 @@ sealed interface PlayerUiState {
 }
 
 /**
+ * player-states.html §04 — the quiet, non-modal resume cue shown when the
+ * player opened mid-clip. Rova resumes **silently** (no interstitial
+ * dialog); this cue only makes the silent restore *visible* (R5) and offers
+ * a Start-over peer. Minted once by [PlayerViewModel] from the resolved
+ * open position ([PlayerResumeMath] / [ResumePolicy], read-only ADR-0032
+ * backbone); cleared on Start over or after the self-dismiss dwell.
+ *
+ * @param positionMs the restored playhead position (> 0 by construction —
+ *   the cue is absent at position 0).
+ * @param atEnd true when the saved position parked at the clip's end
+ *   (`saved >= duration`, ResumePolicy). At end the cue reads **Start over
+ *   only** — there is nothing to "resume" — so the pill drops the
+ *   "Resuming · m:ss" label and its polite announcement.
+ */
+data class PlayerResumeCue(
+    val positionMs: Long,
+    val atEnd: Boolean,
+)
+
+/**
  * Position snapshot fed into the screen at ~250 ms cadence while
  * playback is live, plus a one-shot push on every play/pause/seek so
  * the UI reflects user-driven jumps instantly.

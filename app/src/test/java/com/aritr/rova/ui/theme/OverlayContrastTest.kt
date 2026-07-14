@@ -56,7 +56,12 @@ class OverlayContrastTest {
     @Test
     fun `overlay body text meets AA over the dark-scene reference`() {
         val bodies = mapOf(
-            "player subtitle (0.72)" to 0.72,
+            // The player subtitle now rides the locked mediaInkDim (.48) and is
+            // pinned by PlayerOverlayContrastTest (player-core.html §07). This .72
+            // guard is retained as a generic over-media body-ink assertion — the
+            // value still passes, so keeping it neither weakens coverage nor
+            // misrepresents the shipped subtitle.
+            "over-media body high (0.72)" to 0.72,
             "recovery body (0.65)" to 0.65,
             "merge-complete subtitle (0.87)" to 0.87,
         )

@@ -353,6 +353,96 @@
     <string name="player_loading">Loading…</string>
     <string name="player_back">Back</string>
     <string name="player_back_cd">Back</string>
+    <!-- player-sharing.html §01/§08/§09 — Player Share flow -->
+    <string name="player_share_cd">Share recording</string>
+    <string name="player_share_not_ready">Can\'t share this recording right now</string>
+    <!-- player-sharing.html §04 — DualShot side-choice sheet -->
+    <string name="player_share_sheet_title">Share which angle?</string>
+    <string name="player_share_sheet_subtitle">This recording captured two angles.</string>
+    <string name="player_share_option_this_angle">This angle · %1$s</string>
+    <string name="player_share_option_this_angle_sub">The one you\'re reviewing</string>
+    <string name="player_share_option_other_angle">%1$s angle</string>
+    <string name="player_share_option_other_angle_sub">The other side</string>
+    <string name="player_share_option_both">Both angles</string>
+    <string name="player_share_option_both_sub">Two files</string>
+    <!-- player-info.html (Phase 4) — the read-only Info sheet -->
+    <string name="player_info_cd">Recording details</string>
+    <string name="player_info_title">Recording details</string>
+    <string name="player_info_two_angles">two angles</string>
+    <!-- provenance banners (§05) -->
+    <string name="player_info_prov_completed">Completed normally</string>
+    <string name="player_info_prov_user_stopped">Stopped by you</string>
+    <string name="player_info_prov_system">Stopped by the system</string>
+    <string name="player_info_prov_force_stop">Force-stopped</string>
+    <string name="player_info_prov_kept">Clips kept after an interruption</string>
+    <string name="player_info_prov_finished">Recording finished</string>
+    <!-- provenance detail lines (§05) -->
+    <!-- Frozen §05 reads "Ran to the end of its loop"; "loop" is banned user copy
+         (ADR-0029 §C checkUserCopyVocabulary → clip/session). Reworded to the app's
+         vocabulary; the HTML "loop" wording is a flagged reconciliation item. -->
+    <string name="player_info_detail_completed">Ran to the end of its schedule</string>
+    <string name="player_info_detail_user">You ended this recording early</string>
+    <string name="player_info_detail_force_stop">The app was force-stopped during recording</string>
+    <string name="player_info_detail_kept">Clips recorded before the stop were kept and are playable</string>
+    <string name="player_info_reason_low_storage">Storage ran low</string>
+    <string name="player_info_reason_thermal">The device got too warm</string>
+    <string name="player_info_reason_permission">A permission was turned off</string>
+    <string name="player_info_reason_init_failed">The camera couldn\'t start</string>
+    <string name="player_info_reason_schedule">The recording window ended</string>
+    <!-- group headers -->
+    <string name="player_info_group_basics">Basics</string>
+    <string name="player_info_group_capture">Capture</string>
+    <string name="player_info_group_angles">Angles</string>
+    <!-- row labels -->
+    <string name="player_info_row_started">Started</string>
+    <string name="player_info_row_length">Length</string>
+    <string name="player_info_row_length_kept">Length kept</string>
+    <string name="player_info_row_clips">Clips</string>
+    <string name="player_info_row_clips_kept">Clips kept</string>
+    <string name="player_info_row_clips_per_angle">Clips per angle</string>
+    <string name="player_info_row_size">Size</string>
+    <string name="player_info_row_size_total">Size · total</string>
+    <string name="player_info_row_mode">Mode</string>
+    <string name="player_info_row_quality">Quality (requested)</string>
+    <string name="player_info_row_interval">Interval</string>
+    <string name="player_info_row_audio">Audio</string>
+    <string name="player_info_row_combined">Combined file</string>
+    <!-- values -->
+    <string name="player_info_mode_single">Single</string>
+    <string name="player_info_mode_dual">P+L</string>
+    <string name="player_info_orientation_portrait">Portrait</string>
+    <string name="player_info_orientation_landscape">Landscape</string>
+    <string name="player_info_orientation_follow">Follows device</string>
+    <string name="player_info_audio_on">On</string>
+    <string name="player_info_audio_off">Off</string>
+    <string name="player_info_combined_not_created">not created</string>
+    <string name="player_info_side_not_finalized">not finalized</string>
+    <!-- %1$s = size · quality e.g. "40.8 MB · FHD" -->
+    <string name="player_info_angle_reviewing_label">%1$s (reviewing)</string>
+    <!-- %1$s = interval e.g. "30s", %2$d = loop count -->
+    <!-- Frozen §01 reads "· 3 loops"; "loops" is banned user copy (ADR-0029 §C).
+         Reworded to "times"; the HTML "loops" wording is a flagged reconciliation item. -->
+    <plurals name="player_info_interval">
+        <item quantity="one">Every %1$s · %2$d time</item>
+        <item quantity="other">Every %1$s · %2$d times</item>
+    </plurals>
+    <plurals name="player_info_clips_kept">
+        <item quantity="one">%d clip kept</item>
+        <item quantity="other">%d clips kept</item>
+    </plurals>
+    <!-- player-dualshot.html §01/§06/§07 — the read-only angle INDICATOR (which
+         side is on screen). The in-player angle SWITCH is Future/gated (§03/§04)
+         and ships no strings. -->
+    <string name="player_dualshot_side_portrait">Portrait</string>
+    <string name="player_dualshot_side_landscape">Landscape</string>
+    <!-- Visible indicator, both sides finalized: %1$s = current side, %2$d = position (1 or 2) -->
+    <string name="player_dualshot_indicator_both">%1$s · %2$d of 2 angles</string>
+    <!-- Visible indicator, sibling never finalized (§06): %1$s = current side, %2$s = missing side -->
+    <string name="player_dualshot_indicator_only">%1$s only · %2$s didn\'t finish</string>
+    <!-- TalkBack (§07), both sides: %1$s = current side, %2$d = position -->
+    <string name="player_dualshot_angle_cd_both">%1$s angle, %2$d of 2</string>
+    <!-- TalkBack (§07), sibling missing: %1$s = missing side, %2$s = current side -->
+    <string name="player_dualshot_angle_cd_only">%1$s angle didn\'t finish; %2$s only</string>
     <string name="player_play_cd">Play</string>
     <string name="player_pause_cd">Pause</string>
     <string name="player_rewind_cd">Rewind 10 seconds</string>
@@ -381,6 +471,20 @@
     <string name="player_unavailable_incomplete">Recording incomplete</string>
     <string name="player_unavailable_playback_failed">Playback failed</string>
     <string name="player_unavailable_init_failed">Playback initialization failed</string>
+    <!-- Player state system (player-states.html §09): supporting detail lines,
+         action labels, and resume-cue copy. Titles above stay verbatim; only
+         these detail/action strings are new. -->
+    <string name="player_retry">Retry</string>
+    <string name="player_start_over">Start over</string>
+    <string name="player_resuming">Resuming</string>
+    <!-- Resume-cue accessibility announcement (polite): %1$s = position MM:SS -->
+    <string name="player_resume_cd">Resuming at %1$s</string>
+    <string name="player_unavailable_not_finished_detail">Still finishing up. Try again in a moment.</string>
+    <string name="player_unavailable_playback_failed_detail">Something interrupted playback.</string>
+    <string name="player_unavailable_init_failed_detail">Couldn\'t start the player.</string>
+    <string name="player_unavailable_not_available_detail">This recording can\'t be opened.</string>
+    <string name="player_unavailable_file_not_found_detail">The file may have been moved or deleted.</string>
+    <string name="player_unavailable_incomplete_detail">This recording didn\'t finish saving.</string>
     <!-- PR-6b (ADR-0032) wall-clock playhead -->
     <string name="player_wallclock_gap_minutes">+%1$d min gap</string>
     <string name="player_wallclock_gap_seconds">+%1$d s gap</string>

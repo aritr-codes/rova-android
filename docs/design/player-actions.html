@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rova — Player Spec · Actions &amp; Action Architecture</title>
+<style>
+  /* ==================================================================
+     PLAYER-ACTIONS — the canonical ACTION-ARCHITECTURE specification.
+     LAYERS ON player-core.html (FROZEN) + player-states.html (FROZEN
+     CANDIDATE) + player-gestures.html (FROZEN). Inherits the token
+     model, three-zone layout, immersive policy, every STATE face, and
+     the full interaction/gesture contract. It DOES NOT redraw layout,
+     controls, states, tokens, or gestures.
+
+     It defines ONLY: WHAT actions exist in the player and HOW they are
+     PRESENTED — the slot framework every later player spec plugs into.
+
+     Scope: primary action · secondary actions · overflow philosophy ·
+     context-sensitive visibility · selection/mutation philosophy ·
+     destructive-action policy · review actions · metadata actions ·
+     accessibility · motion · reduced motion · frozen boundary.
+
+     Backbone PRESERVED, read-only:
+       ADR-0037 identity (resolver sole minter; fails closed)
+       ADR-0038 lifecycle (fresh player per lease; ownedPlayer() lease-gate)
+       ADR-0032 wall-clock playhead
+       NO autoplay · NO new backend capability.
+
+     GROUND TRUTH (verified in source, NOT memory):
+       The player today exposes ZERO file-level actions. Its only actions
+       are Back (nav pop) + transport (Replay10 / Play-Pause / Forward10 /
+       speed chip) + the timeline (tap-seek / scrub / segment-jump).
+       There is NO Share, NO Delete, NO Info surface, NO overflow menu in
+       the player. Share capability exists ONLY in Library/Preview
+       (ShareUriResolver.safeShareUri). Delete is Library-only. There is
+       NO favorite / keep / reviewed / archive flag anywhere in the schema.
+       Media3 pinned 1.4.1 → NO MediaSession.
+     Sources: PlayerScreen.kt (ControlsRow 643-721, top bar 424-451),
+     PlayerViewModel.kt (public methods 306-443, no share/delete/edit),
+     ShareUriResolver.kt:29, libs.versions.toml:13 + competitive
+     action-architecture research (Google Photos · Apple Photos · Samsung
+     Gallery · Blackmagic Camera · DJI Mimo — principles only).
+     ================================================================== */
+  :root{
+    /* — stage chrome (this spec PAGE only; NOT app design) — */
+    --stage-accent:#5B9DFF; --stage-ink:#0d1220;
+    --stage-hi:rgba(255,255,255,.94); --stage-dim:rgba(255,255,255,.62); --stage-faint:rgba(255,255,255,.40);
+    --stage-edge:rgba(255,255,255,.10); --stage-bg:#0d0f14; --stage-panel:#151821;
+    --pass:#34D399; --fail:#EF4444; --note:#FBBF24;
+
+    /* ── INHERITED from player-core (FAMILY 1 · over-media ink, LOCKED) ── */
+    --media-ink:rgba(255,255,255,.94);
+    --media-ink-dim:rgba(255,255,255,.48);
+    --media-ink-body:rgba(255,255,255,.55);
+    --media-edge-top:rgba(255,255,255,.12);
+    --pin-surface:#0B0D14;
+    --glyph-fill:rgba(255,255,255,.10);
+    --glyph-fill-press:rgba(255,255,255,.16);
+
+    /* ── INHERITED (FAMILY 2 · scrim + geometry) ── */
+    --scrim-top:linear-gradient(to bottom, rgba(0,0,0,.82), rgba(0,0,0,0));
+    --scrim-bottom:linear-gradient(to top, rgba(0,0,0,.90), rgba(0,0,0,0));
+    --r-sm:10px; --r-md:14px; --r-pill:999px; --r-bar:2px;
+
+    /* ── INHERITED (FAMILY 3 · motion + spacing) ── */
+    --ease-std:cubic-bezier(.2,.8,.2,1);
+    --t-micro:120ms; --t-small:200ms; --t-container:300ms; --t-exit:220ms;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+    --edge-margin:16px; --hair:1px; --focus:2px; --target:48px;
+
+    /* ── INHERITED action/interaction constants (already in the codebase) ──
+       Restated for reference; this spec MUST NOT redesign their values. */
+    --auto-hide:3000ms;   /* AutoHideChromePolicy.DEFAULT_TIMEOUT_MS = 3_000L */
+    --seek-delta:10s;     /* SEEK_DELTA_MS = 10_000L (PlayerScreen.kt:749) */
+
+    /* ── NO NEW action tokens are introduced. ──
+       Every action reuses inherited over-media ink, the 48dp target,
+       the chrome fade motion, and the auto-hide timer. An action that
+       needs a NEW token needs a design change in player-core first. */
+  }
+  :root[data-rm="1"] *, :root[data-rm="1"] *::before, :root[data-rm="1"] *::after{
+    animation:none !important; transition:none !important;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important; transition:none !important}
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage-bg);color:var(--stage-hi);
+       font:400 14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font:600 26px/1.2 inherit;margin:0 0 8px}
+  h2{font:600 16px/1.3 inherit;margin:0 0 4px;letter-spacing:.01em}
+  h3{font:600 12.5px/1.3 inherit;margin:0 0 6px}
+  p{margin:0 0 10px;max-width:74ch}
+  code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px}
+  .kicker{font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;
+          color:var(--stage-accent);margin-bottom:10px}
+  .stagehead{max-width:1080px;margin:0 auto;padding:32px 20px 8px}
+  .stagenote{color:var(--stage-dim);font-size:12.5px;line-height:1.7;max-width:74ch}
+  .stagenote b{color:var(--stage-hi)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px}
+
+  section{margin-top:44px;padding-top:22px;border-top:1px solid var(--stage-edge)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+  .secnum{font:600 11px/1 inherit;letter-spacing:.14em;color:var(--stage-accent);
+          padding-top:3px;min-width:34px}
+  .subtle{color:var(--stage-faint);font-size:12px;margin:2px 0 0}
+
+  .controls{position:sticky;top:0;z-index:60;background:rgba(13,15,20,.94);
+            backdrop-filter:blur(10px);border-bottom:1px solid var(--stage-edge);
+            padding:10px 20px;margin-top:18px}
+  .ctlrow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .ctlgrp{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .ctllbl{font:600 9.5px/1 inherit;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--stage-faint);margin-right:2px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .tog{background:rgba(255,255,255,.05);border:1px solid var(--stage-edge);color:var(--stage-dim);
+       border-radius:7px;padding:6px 11px;font:600 11.5px/1 inherit;cursor:pointer;min-height:32px}
+  .tog[aria-pressed="true"]{background:var(--stage-accent);color:var(--stage-ink);border-color:transparent}
+
+  .panel{background:var(--stage-panel);border:1px solid var(--stage-edge);border-radius:14px;padding:18px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}
+  .caption{font:600 10px/1 inherit;letter-spacing:.12em;text-transform:uppercase;
+           color:var(--stage-faint);margin-bottom:9px}
+  ul.tight{margin:0 0 10px;padding-left:18px}
+  ul.tight li{margin:3px 0;max-width:70ch}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;font:600 9.5px/1.4 inherit;letter-spacing:.11em;text-transform:uppercase;
+     color:var(--stage-faint);padding:7px 9px;border-bottom:1px solid var(--stage-edge);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;font:600 9.5px/1 inherit;letter-spacing:.06em;padding:4px 7px;
+       border-radius:5px;text-transform:uppercase;white-space:nowrap}
+  .t-pass{background:color-mix(in srgb,var(--pass) 18%,transparent);color:var(--pass)}
+  .t-fail{background:color-mix(in srgb,var(--fail) 20%,transparent);color:#ff9494}
+  .t-note{background:color-mix(in srgb,var(--note) 18%,transparent);color:var(--note)}
+  .t-keep{background:color-mix(in srgb,var(--stage-accent) 18%,transparent);color:#9dc4ff}
+
+  .frozen{background:color-mix(in srgb,var(--stage-accent) 8%,transparent);
+          border:1px solid color-mix(in srgb,var(--stage-accent) 30%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .frozen .caption{color:var(--stage-accent)}
+  .warnbox{background:color-mix(in srgb,var(--note) 8%,transparent);
+           border:1px solid color-mix(in srgb,var(--note) 28%,transparent);
+           border-radius:10px;padding:13px 15px;margin:12px 0}
+  .warnbox .caption{color:var(--note)}
+  .rejbox{background:color-mix(in srgb,var(--fail) 7%,transparent);
+          border:1px solid color-mix(in srgb,var(--fail) 26%,transparent);
+          border-radius:10px;padding:13px 15px;margin:12px 0}
+  .rejbox .caption{color:#ff9494}
+
+  /* ============================================================
+     ACTION SPECIMEN — an over-media frame with the action SLOTS
+     drawn onto the three-zone layout. Illustrative, token-driven.
+     ============================================================ */
+  .stageframe{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+  .phone{width:300px;height:640px;border-radius:34px;border:1px solid var(--stage-edge);
+         background:#000;position:relative;overflow:hidden;flex:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .footage{position:absolute;inset:0;
+    background:radial-gradient(120% 80% at 30% 30%, #3a4c66 0%, #26323f 55%, #161d26 100%)}
+  .footage::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.03) 0 2px, transparent 2px 22px)}
+
+  .layer{position:absolute;inset:0;display:none}
+  .phone[data-a="slots"]   .a-slots,
+  .phone[data-a="context"] .a-context,
+  .phone[data-a="a11y"]    .a-a11y{display:block}
+
+  /* chrome scrims */
+  .ctop{position:absolute;left:0;right:0;top:0;height:80px;background:var(--scrim-top)}
+  .cbot{position:absolute;left:0;right:0;bottom:0;height:150px;background:var(--scrim-bottom)}
+
+  /* top row: back (leading) · identity text · info affordance (trailing) */
+  .toprow{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:center;gap:10px}
+  .slot{width:40px;height:40px;border-radius:50%;background:var(--glyph-fill);display:flex;
+        align-items:center;justify-content:center;color:var(--media-ink);font:600 9px/1.1 inherit;
+        text-align:center;flex:none;position:relative}
+  .slot.ghost{background:transparent;border:1px dashed rgba(255,255,255,.22);color:var(--media-ink-dim)}
+  .idtext{flex:1;min-width:0}
+  .idtext .t1{font:600 11px/1.2 inherit;color:var(--media-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idtext .t2{font:500 10px/1.2 inherit;color:var(--media-ink-body)}
+
+  /* bottom: timeline + transport (the PRIMARY) + trailing act slot */
+  .tline{position:absolute;left:16px;right:16px;bottom:96px;height:3px;border-radius:2px;background:rgba(255,255,255,.28)}
+  .tline .fill{position:absolute;left:0;top:0;bottom:0;width:42%;background:var(--media-ink);border-radius:2px}
+  .tline .thumb{position:absolute;left:42%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+        background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+  .transport{position:absolute;left:0;right:0;bottom:40px;display:flex;align-items:center;justify-content:center;gap:20px}
+  .tbtn{width:44px;height:44px;border-radius:50%;background:var(--glyph-fill);display:flex;align-items:center;
+        justify-content:center;color:var(--media-ink);font:600 10px/1 inherit}
+  .tbtn.big{width:54px;height:54px;background:var(--media-ink);color:var(--stage-ink)}
+  .trailslot{position:absolute;right:16px;bottom:46px}
+
+  .slotlabel{position:absolute;font:600 9px/1.1 inherit;letter-spacing:.04em;color:var(--stage-accent);
+        background:rgba(11,13,20,.72);border:1px solid rgba(91,157,255,.4);border-radius:6px;padding:3px 6px;white-space:nowrap}
+
+  /* a11y focus-order rail */
+  .focusnum{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--stage-accent);
+        color:var(--stage-ink);font:700 11px/20px inherit;text-align:center;box-shadow:0 0 0 2px rgba(11,13,20,.6)}
+
+  /* context sheet illustration */
+  .ctxsheet{position:absolute;left:14px;right:14px;bottom:150px;background:var(--pin-surface);
+        border:1px solid var(--media-edge-top);border-radius:12px;padding:12px 14px;
+        font:500 10.5px/1.5 inherit;color:var(--media-ink-body)}
+  .ctxsheet b{color:var(--media-ink)}
+
+  .annot{flex:1;min-width:300px}
+  .annot .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .annot .k{font:600 10px/1.3 inherit;letter-spacing:.04em;color:var(--stage-accent);
+            min-width:120px;flex:none;text-transform:uppercase}
+  .annot .v{color:var(--stage-dim);font-size:12.5px}
+  .annot .v b{color:var(--stage-hi)}
+</style>
+</head>
+<body>
+
+<div class="stagehead">
+  <div class="kicker">Rova · Player Redesign — "Playback to Standard"</div>
+  <h1>Player Actions — the action-architecture contract</h1>
+  <p class="stagenote">
+    <b>WHAT</b> actions exist in the player and <b>HOW</b> they are presented — the slot framework every later
+    player spec plugs into instead of inventing its own controls. This spec <b>layers on the frozen
+    <code>player-core.html</code></b>, the frozen-candidate <b><code>player-states.html</code></b>, and the frozen
+    <b><code>player-gestures.html</code></b> — it inherits tokens, layout, states, and the entire gesture contract,
+    and <b>never redraws them</b>. It defines primary action, secondary actions, overflow philosophy,
+    context-sensitive visibility, the destructive-action policy, and where metadata lives.
+    Grounded in current source (the player has <b>zero file-level actions today</b> — Back + transport + timeline only;
+    no Share, Delete, Info surface, or overflow) + competitive action-architecture research — <b>not memory</b>.
+    Preserves ADR-0037/0038/0032, the fail-closed resolver, NO autoplay, and <b>adds no backend capability</b>.
+  </p>
+</div>
+
+<div class="controls">
+  <div class="ctlrow">
+    <div class="ctlgrp"><span class="ctllbl">Action layer</span>
+      <div class="seg">
+        <button class="tog" aria-pressed="true"  onclick="setA('slots',this)">Slot map</button>
+        <button class="tog" aria-pressed="false" onclick="setA('context',this)">Context variant</button>
+        <button class="tog" aria-pressed="false" onclick="setA('a11y',this)">A11y focus order</button>
+      </div>
+    </div>
+    <div class="ctlgrp" style="margin-left:auto">
+      <button class="tog" id="tRm" aria-pressed="false" onclick="toggleRm()">Reduce motion</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ============================================================ 00 -->
+<section>
+  <div class="sechead"><div class="secnum">00</div><div>
+    <h2>Action model — principles &amp; boundary</h2>
+    <div class="subtle">What every action must satisfy, and what this spec is not allowed to touch.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Seven properties every action must satisfy</div>
+      <ul class="tight">
+        <li><b>Calm</b> — the player is for <i>confidently reviewing your own recordings</i>, not managing a media library. Management verbs belong in the Library.</li>
+        <li><b>Minimal</b> — an action earns a slot only if it is a genuine review verb <i>and</i> uses capability that already exists. Empty is a valid state.</li>
+        <li><b>Obvious</b> — every action is a visible, labelled control. Nothing load-bearing is gesture-only (inherited from <code>player-gestures</code>).</li>
+        <li><b>Review-first</b> — playback/scrub is the true primary; file-level verbs are secondary and few.</li>
+        <li><b>Reversible</b> — no action silently destroys or mutates. Anything destructive is edge-placed, confirmed or undoable, and never in the player at all unless it must be.</li>
+        <li><b>Consistent</b> — matches the gallery convention (Share/Info as peers, delete edge-placed) so nothing new must be learned.</li>
+        <li><b>Low cognitive load</b> — a fixed number of slots in fixed positions; the set never rearranges by mode.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">What this spec must NOT do</div>
+      <ul class="tight">
+        <li>Redesign controls, loading, unavailable, resume, tokens, layout, typography, or visual hierarchy — those are <code>player-core</code> / <code>player-states</code>.</li>
+        <li>Redesign any gesture, auto-hide, or the priority matrix — that is frozen <code>player-gestures</code>.</li>
+        <li>Design the sharing flow, editing/trim, DualShot angle-swap, fit/fill, or the full info sheet contents — those are <b>future specs</b> (§13).</li>
+        <li>Invent backend capability — no new persistence, no new schema field, no favorite/reviewed/archive flag, no MediaSession.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Frozen · this spec adds NO backend capability</div>
+    <p style="margin:0">Every action defined here either (a) is <b>already shipped</b> (transport, timeline), (b) <b>routes an existing capability</b> (<code>ShareUriResolver.safeShareUri</code>, already used by Library/Preview), or (c) is <b>pure presentation of already-loaded data</b> (a details sheet over the manifest the resolver already produced). No action here introduces a new VM method that persists, deletes, or mutates state that does not already have a code path. Two proposals (Share entry point, Info affordance) are marked <b>PROPOSED</b> and gated behind owner sign-off before any Compose work — exactly as <code>player-gestures</code> gated its haptic and swipe-dismiss proposals.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 01 -->
+<section>
+  <div class="sechead"><div class="secnum">01</div><div>
+    <h2>Annotated specimen — the action slots on the three-zone layout</h2>
+    <div class="subtle">Slots mapped onto the inherited layout. Toggle the layers above. Nothing here is a new visual — every slot reuses inherited over-media ink + the 48dp target.</div>
+  </div></div>
+  <div class="stageframe">
+    <div class="phone" data-a="slots" id="phone">
+      <div class="footage"></div>
+      <div class="ctop"></div>
+      <div class="cbot"></div>
+
+      <!-- SLOT MAP -->
+      <div class="layer a-slots">
+        <div class="toprow">
+          <div class="slot">◄<span class="slotlabel" style="top:44px;left:0">BACK · shipped</span></div>
+          <div class="idtext">
+            <div class="t1">Today, 2:14 PM</div>
+            <div class="t2">3 clips · 1m 20s</div>
+          </div>
+          <div class="slot ghost">ⓘ<span class="slotlabel" style="top:44px;right:0">INFO · proposed</span></div>
+        </div>
+        <div class="tline"><div class="fill"></div><div class="thumb"></div></div>
+        <div class="transport">
+          <div class="tbtn">−10</div>
+          <div class="tbtn big">▮▮<span class="slotlabel" style="top:-22px;left:50%;transform:translateX(-50%)">PRIMARY · transport</span></div>
+          <div class="tbtn">+10</div>
+        </div>
+        <div class="trailslot"><div class="slot ghost">⤴<span class="slotlabel" style="bottom:44px;right:0">SHARE · proposed</span></div></div>
+      </div>
+
+      <!-- CONTEXT VARIANT (Unavailable = no file-level actions) -->
+      <div class="layer a-context">
+        <div class="toprow">
+          <div class="slot">◄</div>
+          <div class="idtext"><div class="t1" style="color:var(--media-ink-dim)">Recording unavailable</div></div>
+        </div>
+        <div class="ctxsheet">
+          <b>Context rule (§05).</b> In <b>Unavailable</b> / <b>Loading</b> there is no artifact to act on, so
+          every file-level slot is <b>absent</b> — only Back remains. Slots appear only where the action is
+          <b>possible and meaningful</b>; they are never disabled-but-visible.
+        </div>
+      </div>
+
+      <!-- A11Y FOCUS ORDER -->
+      <div class="layer a-a11y">
+        <div class="toprow">
+          <div class="slot">◄<span class="focusnum" style="top:-8px;left:-8px">1</span></div>
+          <div class="idtext"><div class="t1">Today, 2:14 PM</div><div class="t2">3 clips · 1m 20s</div></div>
+          <div class="slot ghost">ⓘ<span class="focusnum" style="top:-8px;right:-8px">7</span></div>
+        </div>
+        <div class="tline"><div class="fill"></div><div class="thumb"></div></div>
+        <div class="transport">
+          <div class="tbtn">−10<span class="focusnum" style="top:-8px;left:-8px">3</span></div>
+          <div class="tbtn big">▮▮<span class="focusnum" style="top:-8px;left:-8px">4</span></div>
+          <div class="tbtn">+10<span class="focusnum" style="top:-8px;right:-8px">5</span></div>
+          <div class="tbtn" style="font-size:9px">1×<span class="focusnum" style="top:-8px;right:-8px">6</span></div>
+        </div>
+        <div class="trailslot"><div class="slot ghost">⤴<span class="focusnum" style="top:-8px;right:-8px">8</span></div></div>
+        <div class="ctxsheet" style="bottom:150px">Focus order (§10): <b>Back → timeline(2) → −10 → Play/Pause → +10 → speed → Info → Share</b>. Reading order = top-leading to bottom-trailing; the primary sits mid-sequence exactly where the visible cluster is.</div>
+      </div>
+    </div>
+
+    <div class="annot">
+      <div class="row"><div class="k">Primary</div><div class="v"><b>Transport cluster</b> (−10 / Play-Pause / +10 / speed) + the timeline spine. Shipped, frozen in <code>player-core</code>. Media-anchored, not a toolbar button.</div></div>
+      <div class="row"><div class="k">Leading slot</div><div class="v"><b>Info ⓘ</b> — <span class="tag t-note">Proposed</span> opens a details sheet (pure presentation of already-loaded manifest). Top-trailing corner.</div></div>
+      <div class="row"><div class="k">Trailing slot</div><div class="v"><b>Share ⤴</b> — <span class="tag t-note">Proposed</span> routes existing <code>ShareUriResolver</code>. Bottom-trailing, away from the transport cluster.</div></div>
+      <div class="row"><div class="k">Overflow</div><div class="v"><span class="tag t-fail">Empty today</span> the framework defines the slot; Rova populates nothing (§04). No rare action justifies it yet.</div></div>
+      <div class="row"><div class="k">Management verbs</div><div class="v"><span class="tag t-fail">Not here</span> Delete, Keep, Archive, Vault, Favorite, Mark-reviewed → <b>Library</b> (§07, §08).</div></div>
+      <div class="row"><div class="k">Backend added</div><div class="v"><b>None.</b> Two proposals reuse existing capability/data; the rest is shipped.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <div class="sechead"><div class="secnum">02</div><div>
+    <h2>Primary action — playback is the primary; there is no hero CTA</h2>
+    <div class="subtle">Is there a single bottom-anchored primary action? Should there be? When does it disappear?</div>
+  </div></div>
+  <p><b>The primary action is the transport cluster</b> — the shipped bottom-anchored −10 / Play-Pause / +10 controls plus the timeline spine (<code>ControlsRow</code>, <code>SegmentedTimeline</code>). It is the single dominant on-media action, it is already frozen in <code>player-core</code>, and this spec adds nothing above it. The convergent gallery principle holds: in a review player the "primary-ness" belongs to <i>playback</i>, not to any file-level toolbar button. The media is the content; chrome recedes.</p>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>Exactly one primary cluster, always the transport.</b> No Share, Save, or Export button is ever elevated to a hero/FAB. Adding a second primary would compete with playback and break "review-first / calm."</li>
+      <li><b>It never changes identity by context.</b> Play/Pause is Play/Pause everywhere; it does not morph into Retry, Share, or Merge. (State-specific actions like <i>Retry</i> live in their own state face per <code>player-states</code>, not on the transport.)</li>
+      <li><b>When it disappears:</b> only in <b>Loading</b> (no player yet) and <b>Unavailable</b> (nothing to play) — both defined by <code>player-states</code>. In every playable state the primary is present. It hides with the chrome under the auto-hide timer (inherited <code>player-gestures</code>) but is one tap away.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <div class="sechead"><div class="secnum">03</div><div>
+    <h2>Secondary actions — the two-slot ceiling</h2>
+    <div class="subtle">Determine the permanent secondary actions. Every one must justify its existence.</div>
+  </div></div>
+  <p>The gallery convergence is <b>Share + Favorite + Delete + Info</b>, capped at ~4–5 before overflow. Rova is stricter: an action earns a permanent slot only if it is a <b>genuine review verb</b> AND <b>uses capability that already exists</b> (no invented backend) AND is <b>not a library-management verb</b>. Applying that filter to the full candidate list:</p>
+  <table>
+    <thead><tr><th>Candidate</th><th>Verdict</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><b>Info / Details</b></td><td><span class="tag t-note">Accept · Proposed</span></td><td>Pure review verb ("which recording is this, when, how long, how many clips"). Pure presentation of the manifest the resolver already loaded — <b>no backend</b>. Leading slot (top-trailing).</td></tr>
+      <tr><td><b>Share</b></td><td><span class="tag t-note">Accept · Proposed</span></td><td>The one "act on what I just reviewed" verb. Capability already ships (<code>ShareUriResolver.safeShareUri</code>, used by Library/Preview) — the player would <b>route</b> it, not build it. Trailing slot (bottom-trailing).</td></tr>
+      <tr><td>Favorite / Star</td><td><span class="tag t-fail">Reject</span></td><td>No favorite flag exists in the schema. Adding one = new backend. Also an organization verb → Library. (§08)</td></tr>
+      <tr><td>Delete</td><td><span class="tag t-fail">Reject (Library-owned)</span></td><td>Destructive management verb. Deletion is an atomic Library transaction (ADR-0036 delete-then-discard). Belongs in Library; policy defined §07.</td></tr>
+      <tr><td>Keep / Archive / Mark-reviewed</td><td><span class="tag t-fail">Reject</span></td><td>No such flag exists (new backend) and all are library-management, not review. (§08)</td></tr>
+      <tr><td>Move to Vault</td><td><span class="tag t-fail">Reject (Library-owned)</span></td><td>Capability exists (VaultMover) but vault membership is a management move; in the player <code>isVaulted</code> is passive (drives FLAG_SECURE only). (§08)</td></tr>
+      <tr><td>Export / Save copy</td><td><span class="tag t-fail">Reject</span></td><td>Public export already runs automatically (tiered exporters). A manual "save copy" is a new capability with no demonstrated need. Sharing covers "get this out."</td></tr>
+      <tr><td>Open in… / Reveal in Library</td><td><span class="tag t-fail">Reject</span></td><td>The user arrived <i>from</i> the Library; Back returns there. A "reveal" action is circular.</td></tr>
+      <tr><td>Cast / Print / Set-as / Slideshow</td><td><span class="tag t-fail">Reject</span></td><td>System-output integrations, not review actions, and no capability exists. Never in the player (§04).</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision · the secondary set is at most two, and both are proposals</div>
+    <p style="margin:0 0 8px">The permanent secondary set is <b>Info</b> (leading) and <b>Share</b> (trailing) — a hard ceiling of two file-level verbs. This is deliberately below the gallery's 4–5: Rova is review-first, and Delete/Favorite/Archive (the actions that push galleries to 4–5) are all Library-owned here. Two peers, fixed positions, never rearranged.</p>
+    <p style="margin:0"><b>Both are PROPOSED, not shipped.</b> Neither exists in the player today. They are recommended additions gated behind owner sign-off before Compose, on the same discipline <code>player-gestures</code> used. If the owner declines either, the framework still stands — the slot simply stays empty, which §04 already treats as valid.</p>
+  </div>
+  <div class="warnbox">
+    <div class="caption">Open question for the owner — deferred, not silently decided</div>
+    <p style="margin:0">The <b>no-new-features rule</b> says a new feature must replace one or solve a <i>demonstrated</i> usability problem. Info and Share are the two most defensible additions, but they are still additions. This spec <b>recommends</b> them and proves they add no backend; it does not assume the owner wants them. Sign-off is required before either is transcribed to Compose. Until then the player ships as today: transport + timeline + Back only.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <div class="sechead"><div class="secnum">04</div><div>
+    <h2>Overflow philosophy — the slot exists, Rova populates nothing</h2>
+    <div class="subtle">What belongs on-screen, what belongs behind overflow, what never belongs in the player.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">The rule (inherited from gallery convention)</div>
+      <p style="margin:0 0 8px"><b>Frequency × reversibility.</b> The few most-used, safe-or-common actions stay on-bar; everything rare or system-adjacent goes behind "…". Apply it to Rova and the on-bar set is already tiny (Info, Share), and the "rare but real" bucket is <b>empty</b> — there is no Cast, Print, Details-export, or Slideshow capability to demote.</p>
+      <p style="margin:0"><b>So Rova ships no overflow menu today.</b> The framework names the slot so future specs (editing, DualShot) have a defined home for a rare action instead of inventing a new one — but an empty overflow is the correct current state, not a gap. A "…" with one item is worse than no "…".</p>
+    </div>
+    <div class="panel">
+      <div class="caption">Three-tier placement contract</div>
+      <table>
+        <thead><tr><th>Tier</th><th>Rova today</th></tr></thead>
+        <tbody>
+          <tr><td><b>On-media (always)</b></td><td>Transport + timeline (primary). Info + Share (proposed peers).</td></tr>
+          <tr><td><b>Overflow "…"</b></td><td><span class="tag t-fail">Empty</span> reserved; no action qualifies. Future editing/DualShot specs may claim it — via their own HTML, re-approved first.</td></tr>
+          <tr><td><b>Never in the player</b></td><td>Cast · Print · Set-as-wallpaper · Slideshow · library organization (albums/move) · engagement (likes/comments/counts). Not review actions; several have no capability at all.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <div class="sechead"><div class="secnum">05</div><div>
+    <h2>Context-sensitive visibility — slots appear only where meaningful</h2>
+    <div class="subtle">Action visibility across every state. Slots are present-or-absent, never disabled-but-visible.</div>
+  </div></div>
+  <p>Actions bind to <b>state</b> (from <code>player-states</code>) and to <b>artifact shape</b> (from ADR-0037 identity). The governing rule: a slot is shown only when its action is <b>possible and meaningful</b>. Rova never renders a greyed-out action — an absent slot is calmer and unambiguous.</p>
+  <table>
+    <thead><tr><th>State / shape</th><th>Primary</th><th>Info</th><th>Share</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Loading</b></td><td>—</td><td>—</td><td>—</td><td>No player, no manifest resolved. Back only.</td></tr>
+      <tr><td><b>Ready · playing</b></td><td>✓</td><td>✓</td><td>✓</td><td>Full set (chrome auto-hides per <code>player-gestures</code>).</td></tr>
+      <tr><td><b>Ready · paused</b></td><td>✓</td><td>✓</td><td>✓</td><td>Identical to playing. Pause does not add or remove actions.</td></tr>
+      <tr><td><b>Finished</b> (ended)</td><td>✓</td><td>✓</td><td>✓</td><td>Play restarts; no distinct "finished" action set (no autoplay, no "next").</td></tr>
+      <tr><td><b>Unavailable</b> (resolver failed closed)</td><td>—</td><td>—</td><td>—</td><td>Nothing to act on. Back only. Retry, if any, is the state face's own action (<code>player-states</code>), not a file verb.</td></tr>
+      <tr><td><b>Merged artifact</b></td><td>✓</td><td>✓</td><td>✓ single target</td><td>Share resolves the one merged URI. Baseline case.</td></tr>
+      <tr><td><b>Segment / kept-raw</b></td><td>✓</td><td>✓</td><td>✓ this segment</td><td>Share targets the resolved <code>keptsegment://</code> identity — the one being reviewed, transported not reconstructed (ADR-0037).</td></tr>
+      <tr><td><b>DualShot</b></td><td>✓</td><td>✓</td><td>✓ <i>deferred</i></td><td>Which side(s) to share is a real choice — <b>owned by <code>player-sharing.html</code></b> (§13). This spec only guarantees the Share slot is present; it does not design the side-picker.</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <p style="margin:0"><b>Visibility is by presence, not by enabled-state.</b> If an action cannot run in a state, its slot is removed, not disabled. The transport is present in every <i>playable</i> state and absent only in Loading/Unavailable. Info and Share ride with the artifact: present whenever there is a resolved artifact to describe or send, absent otherwise. DualShot keeps the Share slot present but defers <i>how many sides</i> to the sharing spec.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section>
+  <div class="sechead"><div class="secnum">06</div><div>
+    <h2>Selection &amp; mutation philosophy — the player reviews one artifact</h2>
+    <div class="subtle">Should actions mutate immediately? Need confirmation? Sheets? Undo?</div>
+  </div></div>
+  <p>The player is fundamentally <b>reviewing a single artifact</b> — there is no selection model, no multi-select, no batch. From first principles:</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">Mutation rules</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><b>No player action mutates the artifact in place.</b> Transport, scrub, and speed are ephemeral view state (speed is session-only). Info is read-only. Share hands a copy to the OS; it does not alter the recording.</li>
+        <li><b>Nothing needs undo inside the player</b>, because nothing destructive lives inside the player. The reversibility burden is met by <i>not placing</i> destructive actions here (§07).</li>
+        <li><b>Share opens a system surface</b> (the OS share sheet), which is itself cancellable — the user can always back out before anything leaves the device.</li>
+        <li><b>Info opens a sheet, not a screen</b> — a review glance, dismissed with a swipe or Back, returning to the exact playback position.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">First-principles conclusion</div>
+      <p style="margin:0">Because the player holds one artifact and performs no in-place mutation, it needs <b>no confirmation dialogs, no undo stack, and no selection UI</b>. Confirmation and undo become relevant only for destructive actions — and Rova's answer is to keep those in the Library (§07), where the atomic delete-then-discard transaction and the grid-level undo already live. The player stays a calm read-and-send surface.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <div class="sechead"><div class="secnum">07</div><div>
+    <h2>Destructive-action policy — defined here, placed in the Library</h2>
+    <div class="subtle">Delete / Discard / Remove: placement, hierarchy, confirmation, undo, relationship to the Library.</div>
+  </div></div>
+  <p>Galleries converge on delete-in-the-detail-view (edge-placed trash + soft-delete + Undo). Rova <b>diverges deliberately</b>: the product line is "confidently review, not manage a media library," and deletion is an <b>atomic Library transaction</b> (ADR-0036 delete-then-discard, per-session, batch-aware). A single-item player delete would have to re-enter that transaction and mutate the grid the user came from — coupling the calm review surface to library-management state. So:</p>
+  <div class="frozen">
+    <div class="caption">Frozen decision · destruction is Library-owned</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>No Delete / Discard / Remove in the player.</b> The one place to delete a recording is the Library, where the atomic transaction and undo already exist.</li>
+      <li><b>Back is not destructive</b> — leaving the player never deletes; it routes the existing nav-pop (ADR-0038 unchanged, from <code>player-gestures</code>).</li>
+    </ul>
+  </div>
+  <div class="warnbox">
+    <div class="caption">Policy · binding on any future spec that DOES add destruction to a Rova surface</div>
+    <p style="margin:0">If the owner ever decides a destructive action must live in the player, it MUST follow this policy (defined once, here, so future specs comply): <b>(1) Placement</b> — edge of the chrome, never adjacent to Play/Pause or Share; visually separated from the safe cluster. <b>(2) Hierarchy</b> — never the primary; never a hero. <b>(3) Confirmation/undo</b> — because Rova's delete IS recoverable via the ADR-0036 transaction, prefer <i>immediate + Undo snackbar</i> over a blocking dialog — but the snackbar must not overlap the action bar (a documented gallery friction). <b>(4) Library relationship</b> — one shared deletion transaction with the grid; on delete the player pops back and the item is gone from the grid atomically; no "deleted but still shown" state. This is an <b>open owner question</b>, recommended default = keep it Library-only.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section>
+  <div class="sechead"><div class="secnum">08</div><div>
+    <h2>Review actions — which belong in the player, which in the Library</h2>
+    <div class="subtle">Keep · Discard · Archive · Move to Vault · Mark reviewed · Hide.</div>
+  </div></div>
+  <p>These read like "review" verbs but are all <b>organization / lifecycle</b> verbs — they change how the artifact is <i>stored or categorized</i>, not how it is <i>watched</i>. The player watches; the Library organizes.</p>
+  <table>
+    <thead><tr><th>Verb</th><th>Home</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td><b>Keep / Discard</b></td><td>Library / Recovery</td><td>These are <i>recovery-classification</i> outcomes (RecoveryCard: Merge / Keep / Discard), not playback. They already live on the Recovery surface.</td></tr>
+      <tr><td><b>Archive / Hide</b></td><td>Library <span class="tag t-fail">no capability</span></td><td>No archive/hidden state exists in the schema. Adding one = new backend + new management concept. Rejected outright.</td></tr>
+      <tr><td><b>Mark reviewed</b></td><td>— <span class="tag t-fail">no capability</span></td><td>No "reviewed" flag exists. The act of watching is the review; a manual toggle is a feature with no demonstrated need.</td></tr>
+      <tr><td><b>Move to Vault</b></td><td>Library</td><td>VaultMover capability exists but vault membership is a storage move. In the player, vault status is passive (FLAG_SECURE only, <code>isVaulted</code>). Moving in/out is a Library action.</td></tr>
+      <tr><td><b>Favorite</b></td><td>— <span class="tag t-fail">no capability</span></td><td>No favorite flag. New backend + organization verb. Rejected.</td></tr>
+    </tbody>
+  </table>
+  <div class="rejbox">
+    <div class="caption">Rejected from the player — every one</div>
+    <p style="margin:0">None of these are review actions and most have no backing capability. Placing them in the player would (a) invent backend, (b) turn the calm review surface into a management console, and (c) duplicate verbs that already have a correct home (Recovery/Library). The player's only lifecycle relationship to the artifact is <b>read it</b> (Info) and <b>send it</b> (Share).</p>
+  </div>
+</section>
+
+<!-- ============================================================ 09 -->
+<section>
+  <div class="sechead"><div class="secnum">09</div><div>
+    <h2>Metadata actions — one Info affordance, a details sheet on demand</h2>
+    <div class="subtle">Should technical detail be shown? Where?</div>
+  </div></div>
+  <p>The universal gallery rule: expose the 1–2 review-relevant facts inline, gate the rest behind <b>one</b> affordance (Apple's <code>ⓘ</code> + swipe-up sheet; Google's details panel). Rova already shows the inline facts — the top bar carries <b>date-time</b> and <b>clip count</b>, and the readout carries <b>wall-clock time-of-day</b> and <b>gap</b> (all display-only, shipped). What is missing is the "tell me more" affordance.</p>
+  <table>
+    <thead><tr><th>Fact</th><th>Where</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Date-time · clip count</td><td>Inline · top bar</td><td><span class="tag t-pass">Shipped</span> display-only</td></tr>
+      <tr><td>Wall-clock time-of-day · gap</td><td>Inline · readout</td><td><span class="tag t-pass">Shipped</span> display-only (ADR-0032)</td></tr>
+      <tr><td>Position · clip N of M</td><td>Inline · info row</td><td><span class="tag t-pass">Shipped</span> display-only</td></tr>
+      <tr><td>Duration · segment count · mode (single/DualShot) · resolution</td><td><b>Details sheet</b> (behind Info ⓘ)</td><td><span class="tag t-note">Proposed</span> already-loaded (state + resolver-loaded <code>manifest.config</code>); no probe</td></tr>
+      <tr><td>Storage size · codec · bitrate · exact file path</td><td>Deeper in the same sheet, if ever</td><td><span class="tag t-keep">Deferred</span> owned by <code>player-info.html</code> (§13) — storage size needs a <code>File.length()</code> stat, codec/bitrate a probe: new reads, out of scope here</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen decision</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li><b>One entry point: the Info ⓘ slot</b> (leading, top-trailing). No metadata is ever added permanently over the frame — the inline facts already present are the ceiling for always-on text.</li>
+      <li><b>It opens a sheet, not a screen</b> — a glance that returns to the exact position. Consistent with the inherited swipe-down-dismiss idiom (<code>player-gestures</code>): a light-weight overlay, not a navigation.</li>
+      <li><b>Contents = already-loaded manifest data only.</b> No probe, no new read, no backend. If the sheet ever needs richer technical data (codec/bitrate), that is a <b>new capability</b> and belongs to a future <code>player-info.html</code>, re-approved first.</li>
+      <li><b>This spec defines only the entry point + that a sheet exists</b>, not its full layout. The sheet's visual design is a future spec's job.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section>
+  <div class="sechead"><div class="secnum">10</div><div>
+    <h2>Accessibility — every action, three input paths</h2>
+    <div class="subtle">No action may exist only as a gesture. TalkBack · keyboard · switch access · target size · focus order.</div>
+  </div></div>
+  <table>
+    <thead><tr><th>Action</th><th>TalkBack</th><th>Keyboard</th><th>Switch access</th><th>Target</th></tr></thead>
+    <tbody>
+      <tr><td><b>Back</b></td><td>Focusable button, "Back" (<code>player_back_cd</code>), role Button</td><td>Tab-focusable · Enter/Space · system Back</td><td>Scan-reachable</td><td>48dp (shipped)</td></tr>
+      <tr><td><b>Transport</b> (−10 / Play-Pause / +10)</td><td>Labelled buttons; Play/Pause state in the label (<code>player_play_cd</code>/<code>player_pause_cd</code>)</td><td>Tab + Enter/Space; Space toggles play</td><td>Scan-reachable</td><td>48dp (shipped)</td></tr>
+      <tr><td><b>Timeline</b></td><td>Real adjustable slider — <code>progressBarRangeInfo</code>, <code>setProgress</code>, custom seek actions, live region (shipped, frozen <code>player-gestures</code>)</td><td>Arrow keys adjust; segment-jump as custom actions</td><td>Adjustable, scan-reachable</td><td>48dp band</td></tr>
+      <tr><td><b>Speed</b></td><td>Button announcing current speed (<code>player_speed_cd</code>)</td><td>Tab + Enter cycles</td><td>Scan-reachable</td><td>48dp (shipped)</td></tr>
+      <tr><td><b>Info ⓘ</b> <span class="tag t-note">proposed</span></td><td>Button "Recording details"; opens sheet; sheet is a focus-trapped dialog with a labelled close</td><td>Tab + Enter; Esc closes; focus returns to the Info button</td><td>Scan-reachable; sheet items scannable</td><td>48dp</td></tr>
+      <tr><td><b>Share ⤴</b> <span class="tag t-note">proposed</span></td><td>Button "Share recording"; hands off to the OS share sheet (system-accessible)</td><td>Tab + Enter</td><td>Scan-reachable</td><td>48dp</td></tr>
+    </tbody>
+  </table>
+  <div class="frozen">
+    <div class="caption">Frozen accessibility floor</div>
+    <p style="margin:0"><b>Every action is a real, labelled, non-gesture control</b> — there are no gesture-only actions in this spec (the gesture-only paths in <code>player-gestures</code>, e.g. double-tap seek, all mirror a visible button). Focus order is the reading order: <b>Back → timeline → −10 → Play/Pause → +10 → speed → Info → Share</b>. The two proposals inherit the 48dp target and the labelled-button contract; a proposal that cannot meet this floor is not adopted. The player's minimal action count is itself an accessibility asset — fewer controls, all reachable.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 11 -->
+<section>
+  <div class="sechead"><div class="secnum">11</div><div>
+    <h2>Motion — reuse the player-core vocabulary, add nothing</h2>
+    <div class="subtle">Action appearance and feedback use the inherited motion ladder only.</div>
+  </div></div>
+  <ul class="tight">
+    <li><b>Slot reveal/hide</b> rides the existing chrome fade — actions appear and disappear <i>with</i> the top bar and bottom panel under the auto-hide timer. No per-action entrance animation.</li>
+    <li><b>Press feedback</b> is the inherited glyph-fill press state (<code>--glyph-fill</code> → <code>--glyph-fill-press</code>), same as every shipped control. No ripple redesign, no bespoke bounce.</li>
+    <li><b>Info sheet</b> uses the inherited container/exit timings (<code>--t-container</code> / <code>--t-exit</code>, <code>--ease-std</code>) and the same swipe-down-dismiss motion the gesture spec already defines for the player.</li>
+    <li><b>Share</b> hands off to the OS immediately; the system animates its own sheet. Rova animates nothing for it.</li>
+    <li><b>No new motion language.</b> An action that seems to need one needs a design change in <code>player-core</code> first.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 12 -->
+<section>
+  <div class="sechead"><div class="secnum">12</div><div>
+    <h2>Reduced motion — actions appear instantly, behavior identical</h2>
+    <div class="subtle">Reuse the existing reduced-motion philosophy from player-gestures.</div>
+  </div></div>
+  <div class="frozen">
+    <div class="caption">Invariant</div>
+    <p style="margin:0">Under reduced motion (<code>rememberReduceMotion()</code>, inherited), the chrome fade is replaced by an instant show/hide and the Info sheet appears without its slide — <b>animation disappears, behavior does not</b>. Every action remains present, in the same slot, reachable by the same tap and the same a11y path. No action is <i>only</i> discoverable through motion; nothing about the action set changes when animation is off. This is the same rule <code>player-gestures</code> applies to gestures, extended to action presentation.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 13 -->
+<section>
+  <div class="sechead"><div class="secnum">13</div><div>
+    <h2>Frozen boundary — what this spec owns, what later specs own</h2>
+    <div class="subtle">The action framework is defined here once; every later player spec plugs into it. Nothing leaks across.</div>
+  </div></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="caption">player-actions.html OWNS</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li>The <b>slot framework</b>: primary cluster + leading/trailing secondary slots + the (empty) overflow slot.</li>
+        <li>The <b>primary-action rule</b> (transport is the sole primary; no hero CTA).</li>
+        <li>The <b>secondary ceiling</b> (Info + Share, both proposed) and every accept/reject verdict.</li>
+        <li>The <b>overflow philosophy</b> (frequency×reversibility; empty is valid).</li>
+        <li>The <b>context-visibility rule</b> (present-not-disabled) across states/shapes.</li>
+        <li>The <b>destructive-action policy</b> (defined here; placed in Library).</li>
+        <li>The <b>a11y + motion contract</b> for actions.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="caption">Later specs OWN (do not design here)</div>
+      <ul class="tight" style="margin-bottom:0">
+        <li><code>player-sharing.html</code> — the Share <b>flow</b>: targets, SAF, and the DualShot which-side(s) picker. This spec only guarantees the Share slot.</li>
+        <li><code>player-info.html</code> — the details sheet's full <b>contents &amp; layout</b> (and any richer technical data, which would be new capability). This spec only defines the Info entry point + that a sheet exists.</li>
+        <li><code>player-editing.html</code> — trim / edit UI. Not an action in this spec; if adopted it claims the reserved overflow slot, via its own HTML, re-approved first.</li>
+        <li><code>player-dualshot.html</code> — angle swap and any DualShot-only control.</li>
+        <li><code>player-fit-fill.html</code> — fit/fill display toggle.</li>
+        <li><b>MediaSession / media-key / lock-screen transport</b> — a future backend decision (Media3 1.4.1 has none today). Out of scope everywhere until the backend exists.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="frozen">
+    <div class="caption">Boundary rule</div>
+    <p style="margin:0">A later spec may <b>populate</b> a slot this framework defines (Share fills the trailing slot; editing may fill overflow), but it may <b>not</b> redefine the framework — the primary rule, the two-slot ceiling, the present-not-disabled visibility rule, and the destructive policy are frozen here. A change to any of those routes back through this HTML and is re-approved first, exactly like every other design change in the HTML-first workflow.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+  function setA(name, btn){
+    document.getElementById('phone').setAttribute('data-a', name);
+    btn.parentNode.querySelectorAll('.tog').forEach(function(b){ b.setAttribute('aria-pressed', b===btn ? 'true':'false'); });
+  }
+  function toggleRm(){
+    var on = document.documentElement.getAttribute('data-rm') === '1';
+    document.documentElement.setAttribute('data-rm', on ? '0':'1');
+    document.getElementById('tRm').setAttribute('aria-pressed', on ? 'false':'true');
+  }
+</script>
+</body>
+</html>

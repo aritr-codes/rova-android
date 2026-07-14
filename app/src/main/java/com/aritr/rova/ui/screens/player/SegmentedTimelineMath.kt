@@ -146,6 +146,27 @@ internal object SegmentedTimelineMath {
         return if (kotlin.math.abs(nearest - positionMs) <= snapWindowMs) nearest else positionMs
     }
 
+    /**
+     * player-gestures.html §04/§05 — the clip-boundary set {0, each cumulative
+     * segment edge, total}. The scrub-boundary haptic fires when a snapped scrub
+     * target lands exactly on one of these (see [isOnBoundary]). Coincides by
+     * construction with the values [snapIfNear] snaps to.
+     */
+    fun boundariesMs(durations: List<Long>): List<Long> {
+        val out = ArrayList<Long>(durations.size + 1).apply { add(0L) }
+        var acc = 0L
+        for (d in durations) { acc += d.coerceAtLeast(0L); out.add(acc) }
+        return out
+    }
+
+    /**
+     * True when [positionMs] sits exactly on a clip boundary (0:00, a segment
+     * edge, or the end). Fed the SNAPPED scrub target, so equality is exact —
+     * [snapIfNear] returns the boundary value verbatim when within the window.
+     */
+    fun isOnBoundary(positionMs: Long, durations: List<Long>): Boolean =
+        boundariesMs(durations).contains(positionMs)
+
     fun cellWeights(durations: List<Long>): List<Float> {
         val total = totalDurationMs(durations)
         if (total <= 0L) return durations.map { 1f / durations.size.coerceAtLeast(1) }
